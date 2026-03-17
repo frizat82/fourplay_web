@@ -1,0 +1,66 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build server",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "Server/FourPlayWebApp.Server.csproj"],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "run server",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["run", "--project", "Server/FourPlayWebApp.Server.csproj"],
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": ".",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Building",
+          "endsPattern": "Now listening on"
+        }
+      }
+    },
+    {
+      "label": "dev react",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source \"$NVM_DIR/nvm.sh\" 2>/dev/null || source \"$HOME/.nvm/nvm.sh\"; npm run dev"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/Client.React",
+        "env": {
+          "NVM_DIR": "${env:HOME}/.nvm"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": ".",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE v",
+          "endsPattern": "Local:"
+        }
+      }
+    }
+  ]
+}

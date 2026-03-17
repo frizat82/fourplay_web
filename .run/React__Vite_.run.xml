@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="React (Vite)" type="js.build_tools.npm" factoryName="npm">
+    <option name="packageJsonPath" value="$PROJECT_DIR$/Client.React/package.json" />
+    <option name="command" value="run" />
+    <option name="scripts" value="dev" />
+    <option name="workingDir" value="$PROJECT_DIR$/Client.React" />
+    <method v="2" />
+  </configuration>
+</component>
