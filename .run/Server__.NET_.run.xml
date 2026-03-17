@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Server (.NET)" type="DotNetProject" factoryName=".NET Project">
+    <option name="PROJECT_PATH" value="$PROJECT_DIR$/Server/FourPlayWebApp.Server.csproj" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/Server" />
+    <option name="CONFIGURATION" value="Debug" />
+    <option name="RUNNING_PLATFORM" value="NetCore" />
+    <option name="ENV_VARIABLES" value="ASPNETCORE_ENVIRONMENT=Development" />
+    <method v="2">
+      <option name="Build" />
+    </method>
+  </configuration>
+</component>

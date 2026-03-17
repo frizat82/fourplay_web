@@ -1,0 +1,32 @@
+name: DB Migrate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Server/Migrations/**'
+      - 'Server/Data/**'
+
+jobs:
+  migrate:
+    name: Run EF migrations (prod)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install EF tools
+        run: dotnet tool install --global dotnet-ef
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Migrate
+        run: |
+          dotnet ef database update \
+            --project Server \
+            --connection "${{ secrets.NEON_PROD_CONNECTION_STRING }}"
