@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <!-- Focus coverage on testable business logic only.
+               Excludes auto-generated migrations, infrastructure bootstrapping,
+               controllers (require integration test setup), and jobs (require Quartz setup). -->
+          <ExcludeByFile>
+            **/Migrations/**,
+            **/Program.cs,
+            **/Data/ApplicationDbContext.cs
+          </ExcludeByFile>
+          <Exclude>
+            [FourPlayWebApp.Server]FourPlayWebApp.Server.Controllers.*,
+            [FourPlayWebApp.Server]FourPlayWebApp.Server.Jobs.*,
+            [FourPlayWebApp.Server]FourPlayWebApp.Server.Models.Identity.*
+          </Exclude>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

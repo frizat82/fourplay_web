@@ -1,0 +1,42 @@
+{
+    "iisSettings": {
+      "windowsAuthentication": false,
+      "anonymousAuthentication": true,
+      "iisExpress": {
+        "applicationUrl": "http://localhost:36927",
+        "sslPort": 44383
+      }
+    },
+    "profiles": {
+      "FourPlayWebApp.Server": {
+        "commandName": "Project",
+        "dotnetRunMessages": true,
+        "launchBrowser": true,
+        "inspectUri": "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}",
+        "applicationUrl": "https://localhost:7209;http://localhost:5142",
+        "environmentVariables": {
+          "ASPNETCORE_ENVIRONMENT": "Development",
+          "ADMIN_PASSWORD": "qPEMIPJ578e5Ne!",
+          "POSTGRES_CONNECTION_STRING": "Server=10.0.1.5;Port=5432;User Id=root;Password=password;Database=fourplay;Include Error Detail=true",
+          "ConnectionStrings__POSTGRES_CONNECTION_STRING": "Server=10.0.1.5;Port=5432;User Id=root;Password=password;Database=fourplay;Include Error Detail=true",
+          "ADMIN_EMAIL": "fourplaywebbetty@gmail.com",
+          "ADMIN_USERNAME": "fourplaywebbetty",
+          "FOURPLAY_EMAIL_PASS": "zgde vpau zebb hwsp",
+          "FOURPLAY_EMAIL_USER": "fourplaywebbetty@gmail.com",
+          "Jwt__Audience": "FourPlayWebAppClient",
+          "Jwt__ExpiresMinutes": "1000",
+          "Jwt__Issuer": "FourPlayWebApp",
+          "Jwt__Key": "b7d0QyLWkxl8l4sQpEavhKxN2l3aZfS6kW8wqN4e0fY=",
+          "APP_URL": "https://fourplaywebapp.azurewebsites.net"
+        }
+      },
+      "IIS Express": {
+        "commandName": "IISExpress",
+        "launchBrowser": true,
+        "inspectUri": "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}",
+        "environmentVariables": {
+          "ASPNETCORE_ENVIRONMENT": "Development"
+        }
+      }
+    }
+  }

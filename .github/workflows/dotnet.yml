@@ -1,0 +1,76 @@
+# CI/CD Pipeline for .NET Backend and React Frontend
+name: Build & Test
+
+on:
+  push:
+    branches: [ "feat/react-migration" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # Frontend tests - React with vitest
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: Client.React/package-lock.json
+    - name: Install dependencies
+      run: cd Client.React && npm ci
+    - name: Build
+      run: cd Client.React && npm run build
+    - name: Run tests
+      run: cd Client.React && npm run test -- --run --coverage
+    - name: Upload coverage
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./Client.React/coverage/coverage-final.json
+        flags: frontend
+        fail_ci_if_error: false
+
+  # Backend tests - .NET with coverlet
+  backend:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore
+
+    ## Remove stale coverage output before collecting fresh results
+    - name: Remove stale coverage
+      uses: JesseTG/rm@b0586afffd89db69f7309bd44cc90209173fdbbe
+      with:
+        path: ./coverage
+
+    - name: Unit Tests
+      run: >
+        dotnet test
+        --no-build
+        --settings Server.UnitTests/coverlet.runsettings
+        --verbosity m
+        --collect:"XPlat Code Coverage"
+        --results-directory ./coverage
+        --logger:trx
+      shell: bash
+
+    - name: Code Coverage
+      uses: bibipkins/dotnet-test-reporter@v1.5.4
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        comment-title: 'Backend Unit Test Results'
+        results-path: 'coverage/*.trx'
+        coverage-path: 'coverage/**/coverage.cobertura.xml'
+        coverage-threshold: 30
+        coverage-type: cobertura
