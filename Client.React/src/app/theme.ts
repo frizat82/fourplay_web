@@ -190,6 +190,11 @@ export function createAppTheme(mode: 'light' | 'dark') {
         },
       },
     },
+    MuiCircularProgress: {
+      defaultProps: {
+        color: isDark ? 'secondary' : 'primary',
+      },
+    },
     MuiTableCell: {
       styleOverrides: {
         head: {
