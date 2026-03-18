@@ -238,6 +238,7 @@ builder.Services.AddScoped<IInvitationService, InvitationService>();
 builder.Services.AddScoped<ISpreadCalculatorBuilder, SpreadCalculatorBuilder>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
 builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
+builder.Services.AddSingleton<IGameScheduleService, GameScheduleService>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 
