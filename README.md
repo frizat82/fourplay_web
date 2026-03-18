@@ -1,6 +1,6 @@
 # Fourplay
 
-A fantasy sports picks app for NFL leagues. Players make weekly spread picks, compete on a leaderboard, and get locked out once games kick off.
+A fantasy sports picks app for NFL and other leagues. Players make weekly spread picks, compete on a leaderboard, and get locked out once games kick off.
 
 ## Stack
 
