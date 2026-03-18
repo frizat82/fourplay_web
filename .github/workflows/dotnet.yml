@@ -5,7 +5,10 @@ on:
   push:
     branches: [ "feat/react-migration" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "dev" ]
+
+permissions:
+  pull-requests: write
 
 jobs:
   # Frontend tests - React with vitest
