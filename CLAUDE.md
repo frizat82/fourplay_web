@@ -55,7 +55,8 @@ A bead is closeable ONLY when:
   - `npx playwright test` (Playwright e2e, 28+ tests)
 - All functional gates verified
 - No regressions introduced
-- A PR has been opened, all CI checks pass, and the PR is merged
+- A PR has been opened to `dev`, all CI checks pass, and the PR is merged to `dev`
+- A PR has been opened from `dev` to `main`, all CI checks pass, and the PR is merged to `main`
 
 ---
 
