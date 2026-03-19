@@ -238,7 +238,6 @@ builder.Services.AddScoped<IInvitationService, InvitationService>();
 builder.Services.AddScoped<ISpreadCalculatorBuilder, SpreadCalculatorBuilder>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
 builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
-builder.Services.AddSingleton<IGameScheduleService, GameScheduleService>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 
@@ -336,12 +335,14 @@ q.ScheduleJob<NflScoresJob>(trigger => trigger
         x => x.WithMisfireHandlingInstructionFireAndProceed()
             .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
 // Missing Picks Job - Sundays at 11:00 AM CST
-q.ScheduleJob<MissingPicksJob>(trigger => trigger
-    .WithIdentity("Missing Picks Job")
-    .WithDescription("Sends reminder emails to users missing required picks")
-    .WithCronSchedule("0 0 11 ? * SUN",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+// MissingPicksJob trigger disabled — frizat-z5h deferred.
+// Plan: fire at 2:45pm CST Sat+Sun, gate send with HasGamesTodayAsync, replace hardcoded "noon CST" copy.
+// q.ScheduleJob<MissingPicksJob>(trigger => trigger
+//     .WithIdentity("Missing Picks Job")
+//     .WithDescription("Sends reminder emails to users missing required picks")
+//     .WithCronSchedule("0 0 11 ? * SUN",
+//         x => x.WithMisfireHandlingInstructionFireAndProceed()
+//               .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
 });
 
 
