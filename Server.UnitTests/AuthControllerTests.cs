@@ -99,10 +99,7 @@ public class AuthControllerTests
         new() { Id = id, UserName = userName, Email = $"{userName}@example.com" };
 
     private static ClaimsPrincipal BuildPrincipal(string userId) =>
-        new(new ClaimsIdentity(
-        [
-            new Claim(ClaimTypes.NameIdentifier, userId),
-        ], "Test"));
+        TestPrincipalFactory.Build(userId);
 
     // ── Test 1: User not found → Unauthorized ────────────────────────────────
 
