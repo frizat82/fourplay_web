@@ -65,10 +65,7 @@ public class PicksTests
     }
 
     private static ClaimsPrincipal BuildPrincipal(string userId) =>
-        new(new ClaimsIdentity(
-        [
-            new Claim(ClaimTypes.NameIdentifier, userId),
-        ], "Test"));
+        TestPrincipalFactory.Build(userId);
 
     /// <summary>
     /// Builds a minimal ESPN scores payload with two games:
