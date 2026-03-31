@@ -42,7 +42,8 @@ public class NflSpreadJobTests
         TypeName statusName = TypeName.StatusScheduled,
         string homeAbbr = "KC",
         string awayAbbr = "BUF",
-        string eventId = "401547605")
+        string eventId = "401547605",
+        bool emptyEvents = false)
     {
         var competition = new Competition
         {
@@ -77,7 +78,7 @@ public class NflSpreadJobTests
         {
             Season = new Season { Year = year, Type = seasonType },
             Week = new Week { Number = weekNumber },
-            Events = new[]
+            Events = emptyEvents ? [] : new[]
             {
                 new Event
                 {
@@ -439,22 +440,10 @@ public class NflSpreadJobTests
     // Bye week detection (Super Bowl off-week — zero scheduled competitions)
     // -----------------------------------------------------------------------
 
-    private static EspnScores BuildByeWeekScoreboard(int weekNumber = 3, int seasonType = (int)TypeOfSeason.PostSeason) =>
-        new()
-        {
-            Season = new Season { Year = 2024, Type = seasonType },
-            Week = new Week { Number = weekNumber },
-            Events = []  // no events = bye week
-        };
-
-    /// <summary>
-    /// frizat-84r: when ESPN returns zero events (Super Bowl bye week),
-    /// the job must skip upsert and log a clear message — not silently do nothing.
-    /// </summary>
     [Fact]
     public async Task Execute_WhenZeroCompetitions_ByeWeekDetected_NoSpreadsAdded()
     {
-        _espnApi.GetScores().Returns(BuildByeWeekScoreboard());
+        _espnApi.GetScores().Returns(BuildScoreboard(emptyEvents: true));
 
         await BuildJob().Execute(_context);
 
@@ -465,7 +454,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenZeroCompetitions_JobCompletesWithoutException()
     {
-        _espnApi.GetScores().Returns(BuildByeWeekScoreboard());
+        _espnApi.GetScores().Returns(BuildScoreboard(emptyEvents: true));
 
         var exception = await Record.ExceptionAsync(() => BuildJob().Execute(_context));
 
@@ -475,7 +464,6 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_RegularSeasonWeekWithGames_IsNotTreatedAsByeWeek()
     {
-        // Regular season week with a scheduled game — must proceed normally
         _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 5, seasonType: (int)TypeOfSeason.RegularSeason));
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem());
@@ -486,9 +474,8 @@ public class NflSpreadJobTests
     }
 
     [Fact]
-    public async Task Execute_PostSeasonWeekWithGames_IsNotTreatedAsByeWeek()
+    public async Task Execute_PostSeasonConferenceChampionshipWeek_IsNotTreatedAsByeWeek()
     {
-        // Conference Championship (post-season week 3) with games — must proceed normally
         _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 3, seasonType: (int)TypeOfSeason.PostSeason));
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem());
