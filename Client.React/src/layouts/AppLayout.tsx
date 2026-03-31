@@ -26,6 +26,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import AddToPhotosIcon from '@mui/icons-material/AddToPhotos';
 import ScoreboardIcon from '@mui/icons-material/Scoreboard';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -206,6 +207,17 @@ export default function AppLayout() {
                 <LeaderboardIcon />
               </ListItemIcon>
               <ListItemText primary="Leaderboard" />
+            </ListItemButton>
+            <ListItemButton
+              component={NavLink}
+              to="/rules"
+              sx={navItemSx}
+              onClick={() => handleNavClick('/rules')}
+            >
+              <ListItemIcon>
+                <MenuBookIcon />
+              </ListItemIcon>
+              <ListItemText primary="Rules" />
             </ListItemButton>
           </List>
           {showAdmin && (
