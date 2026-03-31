@@ -34,6 +34,7 @@ import AdminUserManagementPage from './pages/admin/UserManagementPage';
 import AdminInvitationsPage from './pages/admin/InvitationsPage';
 import LogoutPage from './pages/LogoutPage';
 import AuthPage from './pages/AuthPage';
+import RulesPage from './pages/RulesPage';
 
 export default function App() {
   return (
@@ -114,6 +115,7 @@ export default function App() {
         <Route path="/account/manage/changepassword" caseSensitive={false} element={<ChangePasswordPage />} />
       </Route>
 
+      <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
       <Route path="/account" element={<Navigate to="/account/login" replace />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
