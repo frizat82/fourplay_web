@@ -42,7 +42,8 @@ public class NflSpreadJobTests
         TypeName statusName = TypeName.StatusScheduled,
         string homeAbbr = "KC",
         string awayAbbr = "BUF",
-        string eventId = "401547605")
+        string eventId = "401547605",
+        bool emptyEvents = false)
     {
         var competition = new Competition
         {
@@ -77,7 +78,7 @@ public class NflSpreadJobTests
         {
             Season = new Season { Year = year, Type = seasonType },
             Week = new Week { Number = weekNumber },
-            Events = new[]
+            Events = emptyEvents ? [] : new[]
             {
                 new Event
                 {
@@ -433,6 +434,55 @@ public class NflSpreadJobTests
         // Second game's spread should be persisted
         await _repo.Received(1).AddNewNflSpreadsAsync(
             Arg.Is<List<NflSpreads>>(l => l.Count == 1 && l[0].HomeTeam == "SF"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Bye week detection (Super Bowl off-week — zero scheduled competitions)
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Execute_WhenZeroCompetitions_ByeWeekDetected_NoSpreadsAdded()
+    {
+        _espnApi.GetScores().Returns(BuildScoreboard(emptyEvents: true));
+
+        await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _oddsService.DidNotReceive().GetEventsWithOddsAsync(Arg.Any<int>(), Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task Execute_WhenZeroCompetitions_JobCompletesWithoutException()
+    {
+        _espnApi.GetScores().Returns(BuildScoreboard(emptyEvents: true));
+
+        var exception = await Record.ExceptionAsync(() => BuildJob().Execute(_context));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public async Task Execute_RegularSeasonWeekWithGames_IsNotTreatedAsByeWeek()
+    {
+        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 5, seasonType: (int)TypeOfSeason.RegularSeason));
+        _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
+                    .Returns(BuildOddsItem());
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+    }
+
+    [Fact]
+    public async Task Execute_PostSeasonConferenceChampionshipWeek_IsNotTreatedAsByeWeek()
+    {
+        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 3, seasonType: (int)TypeOfSeason.PostSeason));
+        _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
+                    .Returns(BuildOddsItem());
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
     }
 
     // -----------------------------------------------------------------------

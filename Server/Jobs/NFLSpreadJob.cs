@@ -20,6 +20,11 @@ public class NflSpreadJob(IEspnCoreOddsService sportsOdds, IEspnApiService espn,
         var newGames = scoreboard?.Events.SelectMany(x => x.Competitions, (x, y) => new CompetitionBySeason { Id = int.Parse(x.Id), Season = x.Season, Competition = y }).Where(y => y.Competition.Status.Type.Name == TypeName.StatusScheduled).ToList();
         if (newGames is null)
             return;
+        if (newGames.Count == 0)
+        {
+            Log.Information("Bye week detected — no scheduled games found, skipping spread ingestion at {Time}", DateTime.UtcNow);
+            return;
+        }
         var week = GameHelpers.GetWeekFromEspnWeek(scoreboard.Week.Number, isPostSeason);
         var spreads = new List<NflSpreads>();
         foreach (var games in newGames) {
