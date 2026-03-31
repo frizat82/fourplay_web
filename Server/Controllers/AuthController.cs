@@ -306,8 +306,8 @@ public class AuthController(
 
         var user = await userManager.FindByEmailAsync(model.Email);
         if (user == null)
-            return BadRequest("Invalid request.");
-        
+            return Ok(); // Don't reveal whether the email exists
+
         var token = await userManager.GeneratePasswordResetTokenAsync(user);
         var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
         var callbackUrl = $"{model.ResetUrl}?code={code}";
