@@ -1,5 +1,5 @@
 import type { Competition, Competitor, EspnScores, Event, TypeName, HomeAway, EspnRecordType } from '../types/espn';
-import { toCstDisplay } from './time';
+import { toLocalDisplay } from './time';
 import type { PickType } from '../types/picks';
 
 export function getWeekFromEspnWeek(week: number, isPostSeason = false) {
@@ -51,7 +51,7 @@ function isStatus(status: TypeName | string | number, code: number, text: string
 export function displayDetails(competition: Competition): string {
   const status = competition.status.type.name;
   if (isStatus(status, STATUS_SCHEDULED, 'status_scheduled')) {
-    return toCstDisplay(competition.date, {
+    return toLocalDisplay(competition.date, {
       weekday: 'short',
       hour: 'numeric',
       minute: '2-digit',
