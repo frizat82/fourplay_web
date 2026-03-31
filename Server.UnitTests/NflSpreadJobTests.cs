@@ -436,6 +436,69 @@ public class NflSpreadJobTests
     }
 
     // -----------------------------------------------------------------------
+    // Bye week detection (Super Bowl off-week — zero scheduled competitions)
+    // -----------------------------------------------------------------------
+
+    private static EspnScores BuildByeWeekScoreboard(int weekNumber = 3, int seasonType = (int)TypeOfSeason.PostSeason) =>
+        new()
+        {
+            Season = new Season { Year = 2024, Type = seasonType },
+            Week = new Week { Number = weekNumber },
+            Events = []  // no events = bye week
+        };
+
+    /// <summary>
+    /// frizat-84r: when ESPN returns zero events (Super Bowl bye week),
+    /// the job must skip upsert and log a clear message — not silently do nothing.
+    /// </summary>
+    [Fact]
+    public async Task Execute_WhenZeroCompetitions_ByeWeekDetected_NoSpreadsAdded()
+    {
+        _espnApi.GetScores().Returns(BuildByeWeekScoreboard());
+
+        await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _oddsService.DidNotReceive().GetEventsWithOddsAsync(Arg.Any<int>(), Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task Execute_WhenZeroCompetitions_JobCompletesWithoutException()
+    {
+        _espnApi.GetScores().Returns(BuildByeWeekScoreboard());
+
+        var exception = await Record.ExceptionAsync(() => BuildJob().Execute(_context));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public async Task Execute_RegularSeasonWeekWithGames_IsNotTreatedAsByeWeek()
+    {
+        // Regular season week with a scheduled game — must proceed normally
+        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 5, seasonType: (int)TypeOfSeason.RegularSeason));
+        _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
+                    .Returns(BuildOddsItem());
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+    }
+
+    [Fact]
+    public async Task Execute_PostSeasonWeekWithGames_IsNotTreatedAsByeWeek()
+    {
+        // Conference Championship (post-season week 3) with games — must proceed normally
+        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 3, seasonType: (int)TypeOfSeason.PostSeason));
+        _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
+                    .Returns(BuildOddsItem());
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+    }
+
+    // -----------------------------------------------------------------------
     // Post-season week mapping
     // -----------------------------------------------------------------------
 
