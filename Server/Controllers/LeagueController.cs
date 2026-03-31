@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using System.Net.Mime;
+using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.Controllers;
 
@@ -300,6 +301,9 @@ public class LeagueController(
     public async Task<ActionResult<int>> AddPicks([FromBody] IEnumerable<NflPickDto> picksDto) {
         if (!picksDto.Any())
             return BadRequest("No picks provided");
+        var authenticatedUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(authenticatedUserId))
+            return Unauthorized();
         var weekId = await repo.GetNflWeeksAsync(picksDto.First().Season);
         var picksList = new List<NflPicks>();
         foreach (var pick in picksDto) {
@@ -308,7 +312,7 @@ public class LeagueController(
                 return BadRequest("Nfl Week Does Not Exist for the given season");
             picksList.Add((NflPicks)(new NflPicks {
                 LeagueId = pick.LeagueId,
-                UserId = pick.UserId,
+                UserId = authenticatedUserId,
                 Team = pick.Team,
                 Pick = pick.Pick,
                 NflWeek = pick.NflWeek,
@@ -540,6 +544,7 @@ public class LeagueController(
 
     // ---------- Adds for core entities ----------
     [HttpPost("league-user")]
+    [Authorize(Roles = "Administrator")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> AddLeagueUser([FromBody] LeagueUsersDto leagueUserDto) {
         var leagueUser = new LeagueUsers {
@@ -550,6 +555,7 @@ public class LeagueController(
     }
 
     [HttpPost("league-user-mapping")]
+    [Authorize(Roles = "Administrator")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> AddLeagueUserMapping([FromBody] LeagueUserMappingDto mappingDto) {
         var mapping = new LeagueUserMapping {
@@ -562,6 +568,7 @@ public class LeagueController(
     }
 
     [HttpPost("league-info")]
+    [Authorize(Roles = "Administrator")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> AddLeagueInfo([FromBody] LeagueInfoDto leagueInfoDto) {
         var leagueInfo = new LeagueInfo {
@@ -574,6 +581,7 @@ public class LeagueController(
     }
 
     [HttpPost("league-juice-mapping")]
+    [Authorize(Roles = "Administrator")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> AddLeagueJuiceMapping([FromBody] LeagueJuiceMappingDto mappingDto) {
         var mapping = new LeagueJuiceMapping {
