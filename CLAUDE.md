@@ -4,7 +4,6 @@
 - **NEVER push or commit directly to `main`** — all changes go through a PR
 - Branch flow: `feature/*` → PR → `dev` → PR → `main`
 - Always create a feature branch, open a PR to `dev` first
-- **All work is done in `/home/frizat/RiderProjects/fourplay_web`** — never use any other local directory
 
 ## Task Tracking
 - Use `bd` (beads) for all task tracking — `BEADS_DIR=~/.beads ~/go/bin/bd`
@@ -77,7 +76,7 @@ A bead is closeable ONLY when:
 ### Running the Stack Locally
 **Backend** (must start before Vite or proxy breaks):
 ```bash
-cd /home/frizat/RiderProjects/fourplay_web/Server
+cd Server
 ConnectionStrings__POSTGRES_CONNECTION_STRING="..." \
   Jwt__Key="..." Jwt__Issuer="FourPlayWebApp" Jwt__Audience="FourPlayWebAppClient" Jwt__ExpiresMinutes="1000" \
   FOURPLAY_EMAIL_USER="..." FOURPLAY_EMAIL_PASS="..." \
@@ -86,12 +85,12 @@ ConnectionStrings__POSTGRES_CONNECTION_STRING="..." \
   ASPNETCORE_ENVIRONMENT=Development \
   dotnet run --no-launch-profile
 ```
-All env vars are in `/home/frizat/RiderProjects/fourplay_web/.env` — but `source .env` fails because `FOURPLAY_EMAIL_PASS` contains spaces. Pass vars explicitly or write a wrapper script.
+All env vars are in `.env` at the repo root — but `source .env` fails because `FOURPLAY_EMAIL_PASS` contains spaces. Pass vars explicitly or write a wrapper script.
 **IMPORTANT**: Use single quotes for `ADMIN_PASSWORD` — double quotes cause bash to expand `!` as history substitution, garbling the password and causing UserManagerJob to set the wrong hash on startup.
 
 **Frontend**:
 ```bash
-cd /home/frizat/RiderProjects/fourplay_web/Client.React
+cd Client.React
 VITE_API_TARGET=http://localhost:5000 npm run dev -- --port 5173
 ```
 The default `VITE_API_TARGET` is `https://localhost:7209` — if you omit this, all API calls will 500.
