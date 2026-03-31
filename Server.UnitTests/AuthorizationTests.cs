@@ -22,6 +22,11 @@ public class AuthorizationTests
         nameof(LeagueController.AddNewSpreads),
         nameof(LeagueController.RemoveSpreads),
         nameof(LeagueController.RemovePicks),
+        // frizat-8n3: these were missing [Authorize(Roles = "Administrator")]
+        nameof(LeagueController.AddLeagueUser),
+        nameof(LeagueController.AddLeagueUserMapping),
+        nameof(LeagueController.AddLeagueInfo),
+        nameof(LeagueController.AddLeagueJuiceMapping),
     ];
 
     [Theory]

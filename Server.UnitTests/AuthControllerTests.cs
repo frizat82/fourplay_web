@@ -99,10 +99,7 @@ public class AuthControllerTests
         new() { Id = id, UserName = userName, Email = $"{userName}@example.com" };
 
     private static ClaimsPrincipal BuildPrincipal(string userId) =>
-        new(new ClaimsIdentity(
-        [
-            new Claim(ClaimTypes.NameIdentifier, userId),
-        ], "Test"));
+        TestPrincipalFactory.Build(userId);
 
     // ── Test 1: User not found → Unauthorized ────────────────────────────────
 
@@ -393,5 +390,27 @@ public class AuthControllerTests
         var refreshCookie = setCookieHeaders
             .FirstOrDefault(h => h is not null && h.StartsWith("RefreshToken="));
         Assert.NotNull(refreshCookie);
+    }
+
+    /// <summary>
+    /// frizat-8n3: ForgotPassword must return 200 OK even when the email is not found.
+    /// Returning 400 leaks whether an account exists for that email (user enumeration).
+    /// </summary>
+    [Fact]
+    public async Task ForgotPassword_UnknownEmail_ReturnsOk()
+    {
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
+
+        var controller = BuildController(userManager: userManager);
+
+        var result = await controller.ForgotPassword(new ForgotPasswordRequest
+        {
+            Email    = "nobody@example.com",
+            ResetUrl = "https://example.com/reset",
+        });
+
+        // Must return 200, not 400 — leaking user existence is a security issue
+        Assert.IsType<OkResult>(result.Result);
     }
 }
