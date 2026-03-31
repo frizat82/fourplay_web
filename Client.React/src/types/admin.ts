@@ -29,11 +29,6 @@ export interface CreateLeagueModel {
   weeklyCost: number;
 }
 
-export interface MapUserLeagueDto {
-  leagueId: number;
-  userId: string;
-}
-
 export interface UserSummaryDto {
   id: string;
   userName?: string | null;
