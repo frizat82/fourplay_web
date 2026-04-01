@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
@@ -41,7 +42,8 @@ public class PicksTests
     /// </summary>
     private static LeagueController BuildController(
         ILeagueRepository repo,
-        IEspnCacheService espnCacheService)
+        IEspnCacheService espnCacheService,
+        ClaimsPrincipal? principal = null)
     {
         var controller = new LeagueController(
             new MemoryCache(new MemoryCacheOptions()),
@@ -51,12 +53,19 @@ public class PicksTests
             Substitute.For<ISpreadCalculatorBuilder>(),
             espnCacheService);
 
+        var httpContext = new DefaultHttpContext();
+        if (principal is not null)
+            httpContext.User = principal;
+
         controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext()
+            HttpContext = httpContext
         };
         return controller;
     }
+
+    private static ClaimsPrincipal BuildPrincipal(string userId) =>
+        TestPrincipalFactory.Build(userId);
 
     /// <summary>
     /// Builds a minimal ESPN scores payload with two games:
@@ -126,7 +135,7 @@ public class PicksTests
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns(BuildScores(pastKickoff));
 
-        var controller = BuildController(repo, espn);
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
         var picks = new[] { MakePick("BUF") };
 
         // Act
@@ -151,7 +160,7 @@ public class PicksTests
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns(BuildScores(futureKickoff));
 
-        var controller = BuildController(repo, espn);
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
         var picks = new[] { MakePick("BUF") };
 
         // Act
@@ -174,7 +183,7 @@ public class PicksTests
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns((EspnScores?)null);
 
-        var controller = BuildController(repo, espn);
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
         var picks = new[] { MakePick("BUF") };
 
         // Act
@@ -182,5 +191,49 @@ public class PicksTests
 
         // Assert — no ESPN data → fail open, let picks through
         Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    /// <summary>
+    /// frizat-8n3: AddPicks must use the authenticated user's ID from the JWT claim,
+    /// not the UserId in the request DTO. Without the fix, a user can submit picks on
+    /// behalf of another user by setting UserId in the JSON body.
+    /// </summary>
+    [Fact]
+    public async Task AddPicks_UsesJwtClaimUserId_NotDtoUserId()
+    {
+        // Arrange — JWT says "jwt-user-id", but DTO has "attacker-user-id"
+        const string jwtUserId = "jwt-user-id";
+        const string attackerUserId = "attacker-user-id";
+
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        // After the fix the controller will use jwtUserId; set up mock for that userId
+        repo.GetUserNflPicksAsync(jwtUserId, LeagueId, Season, Week).Returns([]);
+        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns((EspnScores?)null);
+
+        var principal = BuildPrincipal(jwtUserId);
+        var controller = BuildController(repo, espn, principal);
+
+        // Pick DTO has attacker's userId
+        var pick = new NflPickDto
+        {
+            LeagueId = LeagueId,
+            UserId   = attackerUserId,
+            Team     = "BUF",
+            Pick     = PickType.Spread,
+            NflWeek  = Week,
+            Season   = Season,
+        };
+
+        // Act
+        var result = await controller.AddPicks([pick]);
+
+        // Assert — picks saved must use the JWT claim userId, not the DTO value
+        await repo.Received(1).AddNflPicksAsync(
+            Arg.Is<IEnumerable<NflPicks>>(picks =>
+                picks.All(p => p.UserId == jwtUserId)));
     }
 }
