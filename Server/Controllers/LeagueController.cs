@@ -1,4 +1,5 @@
-﻿using FourPlayWebApp.Server.Models.Data;
+﻿using FourPlayWebApp.Server.Auth;
+using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using System.Net.Mime;
+using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.Controllers;
 
@@ -298,40 +300,54 @@ public class LeagueController(
     [HttpPost("picks")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult<int>> AddPicks([FromBody] IEnumerable<NflPickDto> picksDto) {
-        if (!picksDto.Any())
+        var picksDtoList = picksDto.ToList();
+        if (picksDtoList.Count == 0)
             return BadRequest("No picks provided");
-        var weekId = await repo.GetNflWeeksAsync(picksDto.First().Season);
+        var authenticatedUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(authenticatedUserId))
+            return Unauthorized();
+
+        // Validate request shape before any I/O
+        if (picksDtoList.Select(x => x.NflWeek).Distinct().Count() > 1)
+            return BadRequest("All picks must be for the same NFL week");
+        if (picksDtoList.Select(x => x.Season).Distinct().Count() > 1)
+            return BadRequest("All picks must be for the same NFL Season");
+        if (picksDtoList.Select(x => x.LeagueId).Distinct().Count() > 1)
+            return BadRequest("All picks must be for the same League");
+
+        var first = picksDtoList[0];
+
+        // Fetch weeks, ESPN scores, and existing picks concurrently
+        var weekTask          = repo.GetNflWeeksAsync(first.Season);
+        var espnTask          = espnCacheService.GetScoresAsync();
+        var existingPicksTask = repo.GetUserNflPicksAsync(authenticatedUserId, first.LeagueId, first.Season, first.NflWeek);
+        await Task.WhenAll(weekTask, espnTask, existingPicksTask);
+
+        var weekId        = weekTask.Result;
+        var espnScores    = espnTask.Result;
+        var existingPicks = existingPicksTask.Result;
+
         var picksList = new List<NflPicks>();
-        foreach (var pick in picksDto) {
+        foreach (var pick in picksDtoList) {
             var week = weekId.FirstOrDefault(x => x.NflWeek == pick.NflWeek);
             if (week is null)
                 return BadRequest("Nfl Week Does Not Exist for the given season");
-            picksList.Add((NflPicks)(new NflPicks {
-                LeagueId = pick.LeagueId,
-                UserId = pick.UserId,
-                Team = pick.Team,
-                Pick = pick.Pick,
-                NflWeek = pick.NflWeek,
-                Season = pick.Season,
+            picksList.Add(new NflPicks {
+                LeagueId    = pick.LeagueId,
+                UserId      = authenticatedUserId,
+                Team        = pick.Team,
+                Pick        = pick.Pick,
+                NflWeek     = pick.NflWeek,
+                Season      = pick.Season,
                 DateCreated = pick.DateCreated,
-                NflWeekId = week.Id
-            }));
+                NflWeekId   = week.Id
+            });
         }
-        if (picksList.Select(x => x.NflWeek).Distinct().Count() > 1)
-            return BadRequest("All picks must be for the same NFL week");
-        if (picksList.Select(x => x.Season).Distinct().Count() > 1)
-            return BadRequest("All picks must be for the same NFL Season");
-        if (picksList.Select(x => x.LeagueId).Distinct().Count() > 1)
-            return BadRequest("All picks must be for the same League");
-        if (picksList.Select(x => x.UserId).Distinct().Count() > 1)
-            return BadRequest("All picks must be for the same User");
+
         // Guard: reject picks for any game that has already kicked off
-        var espnScores = await espnCacheService.GetScoresAsync();
         if (espnScores?.Events is not null)
         {
-            var allCompetitions = espnScores.Events
-                .SelectMany(e => e.Competitions)
-                .ToList();
+            var allCompetitions = espnScores.Events.SelectMany(e => e.Competitions).ToList();
             var now = DateTimeOffset.UtcNow;
             foreach (var pick in picksList)
             {
@@ -342,13 +358,12 @@ public class LeagueController(
             }
         }
 
-        var existingPicks = await repo.GetUserNflPicksAsync(picksList.First().UserId, picksList.First().LeagueId, picksList.First().Season, picksList.First().NflWeek);
-        var newPicks = picksList.Except(existingPicks);
-        var requiredPicks = GameHelpers.GetRequiredPicks(picksList.First().NflWeek);
-        if (newPicks.Count() + existingPicks.Count > requiredPicks)
-            return BadRequest($"Too many picks. Maximum allowed for week {picksList.First().NflWeek} is {requiredPicks}");
+        var newPicks = picksList.Except(existingPicks).ToList();
+        var requiredPicks = GameHelpers.GetRequiredPicks(first.NflWeek);
+        if (newPicks.Count + existingPicks.Count > requiredPicks)
+            return BadRequest($"Too many picks. Maximum allowed for week {first.NflWeek} is {requiredPicks}");
         await repo.AddNflPicksAsync(newPicks);
-        return Ok(newPicks.Count());
+        return Ok(newPicks.Count);
     }
 
     [HttpDelete("picks")]
@@ -540,6 +555,7 @@ public class LeagueController(
 
     // ---------- Adds for core entities ----------
     [HttpPost("league-user")]
+    [Authorize(Roles = AppRoles.Administrator)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> AddLeagueUser([FromBody] LeagueUsersDto leagueUserDto) {
         var leagueUser = new LeagueUsers {
@@ -550,6 +566,7 @@ public class LeagueController(
     }
 
     [HttpPost("league-user-mapping")]
+    [Authorize(Roles = AppRoles.Administrator)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> AddLeagueUserMapping([FromBody] LeagueUserMappingDto mappingDto) {
         var mapping = new LeagueUserMapping {
@@ -562,6 +579,7 @@ public class LeagueController(
     }
 
     [HttpPost("league-info")]
+    [Authorize(Roles = AppRoles.Administrator)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> AddLeagueInfo([FromBody] LeagueInfoDto leagueInfoDto) {
         var leagueInfo = new LeagueInfo {
@@ -574,6 +592,7 @@ public class LeagueController(
     }
 
     [HttpPost("league-juice-mapping")]
+    [Authorize(Roles = AppRoles.Administrator)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> AddLeagueJuiceMapping([FromBody] LeagueJuiceMappingDto mappingDto) {
         var mapping = new LeagueJuiceMapping {
