@@ -131,10 +131,12 @@ export default function ScoresPage() {
       setWeek(selectedWeek);
       setSeason(selectedSeason);
 
-      const oddsExist = await doOddsExist(currentLeague, selectedSeason, selectedWeek);
+      const nflWeek = getWeekFromEspnWeek(selectedWeek, selectedIsPostSeason);
+      const [oddsExist, picksResult] = await Promise.all([
+        doOddsExist(currentLeague, selectedSeason, nflWeek),
+        getLeaguePicks(currentLeague, selectedSeason, nflWeek),
+      ]);
       setHasOdds(oddsExist);
-
-      const picksResult = await getLeaguePicks(currentLeague, selectedSeason, getWeekFromEspnWeek(selectedWeek, selectedIsPostSeason));
       setPicks(picksResult ?? []);
 
       if (oddsExist) {
@@ -552,8 +554,8 @@ export default function ScoresPage() {
                                 competition={competition}
                                 homeSpread={spreadCache[homeAbbr]?.spread ?? null}
                                 awaySpread={spreadCache[awayAbbr]?.spread ?? null}
-                                over={spreadCache[awayAbbr]?.over ?? null}
-                                under={spreadCache[awayAbbr]?.under ?? null}
+                                over={spreadCache[homeAbbr]?.over ?? null}
+                                under={spreadCache[homeAbbr]?.under ?? null}
                                 isPostSeason={isPostSeason}
                               />
                             )}

@@ -20,7 +20,7 @@ const authState = {
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/auth', () => ({ useAuth: () => authState }));
 
-vi.mock('../api/espn', () => ({ getScores: vi.fn(), loadScoresWithRetry: vi.fn() }));
+vi.mock('../api/espn', () => ({ getScores: vi.fn(), loadScoresWithRetry: vi.fn(), getWeekScores: vi.fn() }));
 vi.mock('../api/league', () => ({
   calculateSpreadBatch: vi.fn(),
   doOddsExist: vi.fn(),
@@ -32,12 +32,13 @@ vi.mock('../utils/time', async (importOriginal) => {
   return { ...actual, isPastNoonCst: vi.fn().mockReturnValue(false) };
 });
 
-import { getScores, loadScoresWithRetry } from '../api/espn';
+import { getScores, loadScoresWithRetry, getWeekScores } from '../api/espn';
 import { calculateSpreadBatch, doOddsExist, getLeaguePicks } from '../api/league';
 import { getNextSpreadJob } from '../services/spreadRelease';
 
 const mockedGetScores = vi.mocked(getScores);
 const mockedLoadScoresWithRetry = vi.mocked(loadScoresWithRetry);
+const mockedGetWeekScores = vi.mocked(getWeekScores);
 const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetLeaguePicks = vi.mocked(getLeaguePicks);
 const mockedCalculateSpreadBatch = vi.mocked(calculateSpreadBatch);
@@ -84,6 +85,7 @@ describe('ScoresPage', () => {
     sessionState.currentLeague = 1;
     mockedGetScores.mockReset();
     mockedLoadScoresWithRetry.mockReset();
+    mockedGetWeekScores.mockReset();
     mockedDoOddsExist.mockReset();
     mockedGetLeaguePicks.mockReset();
     mockedCalculateSpreadBatch.mockReset();
@@ -380,6 +382,21 @@ describe('ScoresPage', () => {
     const { getByTestId } = await renderPage();
     const badge = getByTestId('badge-BUF-spread');
     expect(badge.querySelector('.MuiBadge-badge')).toHaveTextContent('3');
+  });
+
+  it('loadHistoricalWeek calls doOddsExist with internal week not raw ESPN week', async () => {
+    // oddsExist:true required so the full page renders and WeekYearSelector is visible
+    await setupDefaults({ week: 1, postSeason: true, oddsExist: true });
+    mockedCalculateSpreadBatch.mockResolvedValue({ results: {} });
+    await renderPage();
+
+    mockedGetWeekScores.mockResolvedValue(createScores({ week: 2, postSeason: true, gameStarted: true }));
+    await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+    await waitFor(() => {
+      // ESPN week 2 postseason → internal week 20 (getWeekFromEspnWeek(2, true))
+      expect(mockedDoOddsExist).toHaveBeenCalledWith(1, expect.any(Number), 20);
+    });
   });
 
   it('toggles to matrix view', async () => {
