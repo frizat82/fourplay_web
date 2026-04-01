@@ -229,6 +229,71 @@ public class NflScoresJobTests
     }
 
     // -----------------------------------------------------------------------
+    // Calendar null-guard — no RegularSeason or PostSeason entry
+    // -----------------------------------------------------------------------
+
+    private static EspnScores BuildSeasonScores(bool includeRegularSeason, bool includePostSeason)
+    {
+        var entries = new List<EspnCalendar>();
+        if (includeRegularSeason)
+        {
+            entries.Add(new EspnCalendar
+            {
+                Value = (long)TypeOfSeason.RegularSeason,
+                Entries = new[]
+                {
+                    new CalendarEntry { Value = 1, StartDate = new DateTimeOffset(2025, 9, 4, 0, 0, 0, TimeSpan.Zero), EndDate = new DateTimeOffset(2025, 9, 10, 0, 0, 0, TimeSpan.Zero) }
+                }
+            });
+        }
+        if (includePostSeason)
+        {
+            entries.Add(new EspnCalendar
+            {
+                Value = (long)TypeOfSeason.PostSeason,
+                Entries = new[]
+                {
+                    new CalendarEntry { Value = 1, StartDate = new DateTimeOffset(2026, 1, 11, 0, 0, 0, TimeSpan.Zero), EndDate = new DateTimeOffset(2026, 1, 19, 0, 0, 0, TimeSpan.Zero) }
+                }
+            });
+        }
+
+        return new EspnScores
+        {
+            Leagues = new[]
+            {
+                new EspnLeague
+                {
+                    Season = new LeagueSeason { Year = 2025 },
+                    Calendar = entries.ToArray()
+                }
+            }
+        };
+    }
+
+    [Fact]
+    public async Task Execute_WhenCalendarHasNoRegularSeasonEntry_DoesNotThrow()
+    {
+        _espnApi.GetSeasonScores(Arg.Any<int>())
+                .Returns(BuildSeasonScores(includeRegularSeason: false, includePostSeason: true));
+
+        // Should not throw NullReferenceException when regularSeason is null.
+        // The job continues and processes postSeason entries.
+        var exception = await Record.ExceptionAsync(() => BuildJob().Execute(_context));
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public async Task Execute_WhenCalendarHasNoPostSeasonEntry_DoesNotThrow()
+    {
+        _espnApi.GetSeasonScores(Arg.Any<int>())
+                .Returns(BuildSeasonScores(includeRegularSeason: true, includePostSeason: false));
+
+        // Should not throw NullReferenceException when postSeason is null
+        await BuildJob().Execute(_context);
+    }
+
+    // -----------------------------------------------------------------------
     // Season week mapping — correct NflWeek assigned
     // -----------------------------------------------------------------------
 

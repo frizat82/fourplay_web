@@ -43,10 +43,11 @@ public class PicksTests
     private static LeagueController BuildController(
         ILeagueRepository repo,
         IEspnCacheService espnCacheService,
-        ClaimsPrincipal? principal = null)
+        ClaimsPrincipal? principal = null,
+        IMemoryCache? cache = null)
     {
         var controller = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
+            cache ?? new MemoryCache(new MemoryCacheOptions()),
             repo,
             NullLogger<LeagueController>.Instance,
             BuildUserManager(),
@@ -235,5 +236,37 @@ public class PicksTests
         await repo.Received(1).AddNflPicksAsync(
             Arg.Is<IEnumerable<NflPicks>>(picks =>
                 picks.All(p => p.UserId == jwtUserId)));
+    }
+
+    /// <summary>
+    /// frizat-8n3: After AddPicks writes successfully, the picks cache for that
+    /// league/season/week must be invalidated so the next read reflects the new picks.
+    /// </summary>
+    [Fact]
+    public async Task AddPicks_AfterSuccessfulWrite_InvalidatesPicksCache()
+    {
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var cacheKey = $"picks_{LeagueId}_{Season}_{Week}";
+
+        // Prime the cache with a stale list
+        cache.Set(cacheKey, new List<NflPickDto> { new() { Team = "STALE" } });
+        Assert.True(cache.TryGetValue(cacheKey, out _), "Cache must be primed before AddPicks");
+
+        var futureKickoff = DateTimeOffset.UtcNow.AddHours(2);
+
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
+        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns(BuildScores(futureKickoff));
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId), cache);
+
+        await controller.AddPicks([MakePick("BUF")]);
+
+        // Cache entry must be removed so subsequent reads reload from DB
+        Assert.False(cache.TryGetValue(cacheKey, out _), "Cache must be cleared after AddPicks");
     }
 }
