@@ -363,6 +363,7 @@ public class LeagueController(
         if (newPicks.Count + existingPicks.Count > requiredPicks)
             return BadRequest($"Too many picks. Maximum allowed for week {first.NflWeek} is {requiredPicks}");
         await repo.AddNflPicksAsync(newPicks);
+        memoryCache.Remove($"picks_{first.LeagueId}_{first.Season}_{first.NflWeek}");
         return Ok(newPicks.Count);
     }
 
