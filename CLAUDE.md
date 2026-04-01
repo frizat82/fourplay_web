@@ -1,5 +1,11 @@
 # Project Instructions
 
+## CRITICAL: TDD Is the Primary Development Methodology
+- **Write failing tests FIRST, then implement** — no exceptions
+- Red → Green → Refactor is the only acceptable order
+- Never write implementation code before the test that proves it works
+- If you catch yourself writing code without a failing test, stop and write the test first
+
 ## CRITICAL: Branch Rules
 - **NEVER push or commit directly to `main`** — all changes go through a PR
 - Branch flow: `feature/*` → PR → `dev` → PR → `main`
