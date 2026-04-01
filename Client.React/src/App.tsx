@@ -113,9 +113,8 @@ export default function App() {
         />
         <Route path="/account/manage" element={<ManageAccountPage />} />
         <Route path="/account/manage/changepassword" caseSensitive={false} element={<ChangePasswordPage />} />
+        <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
       </Route>
-
-      <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
       <Route path="/account" element={<Navigate to="/account/login" replace />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

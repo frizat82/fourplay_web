@@ -1,5 +1,6 @@
 import { Box, Container, Divider, Paper, Stack, Typography } from '@mui/material';
 import { getEspnRequiredPicks } from '../utils/gameHelpers';
+import PageHeader from '../components/PageHeader';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -29,16 +30,9 @@ export default function RulesPage() {
   const superBowlPicks = getEspnRequiredPicks(5, true);
 
   return (
-    <Container maxWidth="sm" sx={{ py: 4 }}>
+    <Container maxWidth="sm" sx={{ py: 2 }}>
+      <PageHeader title="How FourPlay Works" subtitle="Everything you need to know before making your picks." />
       <Stack spacing={3}>
-        <Box>
-          <Typography variant="h4" fontWeight={700}>
-            How FourPlay Works
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Everything you need to know before making your picks.
-          </Typography>
-        </Box>
 
         <Section title="How Picks Work">
           <Rule>

@@ -70,24 +70,25 @@ public class UserManagerJob(
     /// </summary>
     /// <param name="emailAddress">email</param>
     internal async Task CreateUser(string emailAddress) {
-        // Ensure user exists
+        var adminPassword = configuration["ADMIN_PASSWORD"] ?? throw new InvalidOperationException("ADMIN_PASSWORD not set");
         var adminUser = await userManager.FindByEmailAsync(emailAddress);
-        if (adminUser == null)
+        if (adminUser != null) {
+            return;
+        }
+
+        adminUser = new ApplicationUser()
         {
-            adminUser = new ApplicationUser()
-            {
-                UserName = configuration["ADMIN_USERNAME"] ?? throw new InvalidOperationException("ADMIN_USERNAME configuration is required"),
-                Email = emailAddress,
-                EmailConfirmed = true
-            };
-            var result = await userManager.CreateAsync(adminUser, configuration["ADMIN_PASSWORD"] ?? throw new Exception("ADMIN_PASSWORD not set"));
-            if (!result.Succeeded)
-            {
-                Log.Error("Failed to create admin user {Email}. Errors: {Errors}",
-                    emailAddress,
-                    string.Join(", ", result.Errors.Select(e => e.Description)));
-                throw new Exception("Failed to create admin user.");
-            }
+            UserName = configuration["ADMIN_USERNAME"] ?? throw new InvalidOperationException("ADMIN_USERNAME configuration is required"),
+            Email = emailAddress,
+            EmailConfirmed = true
+        };
+        var result = await userManager.CreateAsync(adminUser, adminPassword);
+        if (!result.Succeeded)
+        {
+            Log.Error("Failed to create admin user {Email}. Errors: {Errors}",
+                emailAddress,
+                string.Join(", ", result.Errors.Select(e => e.Description)));
+            throw new InvalidOperationException("Failed to create admin user.");
         }
     }
 
