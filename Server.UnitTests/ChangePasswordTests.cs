@@ -57,12 +57,7 @@ public class ChangePasswordTests
     }
 
     private static ClaimsPrincipal BuildPrincipal(string userId, string email) =>
-        new(new ClaimsIdentity(
-        [
-            new Claim(ClaimTypes.NameIdentifier, userId),
-            new Claim(ClaimTypes.Email, email),
-            new Claim(ClaimTypes.Name, email),
-        ], "Test"));
+        TestPrincipalFactory.Build(userId, email);
 
     [Fact]
     public async Task ChangePassword_UsesJwtClaim_NotBodyEmail()
