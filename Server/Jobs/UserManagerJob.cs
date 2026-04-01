@@ -73,9 +73,11 @@ public class UserManagerJob(
         var adminPassword = configuration["ADMIN_PASSWORD"] ?? throw new InvalidOperationException("ADMIN_PASSWORD not set");
         var adminUser = await userManager.FindByEmailAsync(emailAddress);
         if (adminUser != null) {
+            Log.Information("Admin user {Email} already exists — skipping create", emailAddress);
             return;
         }
 
+        Log.Warning("Admin user {Email} not found — creating new user. If this is unexpected, check why the user was deleted or the DB was reset.", emailAddress);
         adminUser = new ApplicationUser()
         {
             UserName = configuration["ADMIN_USERNAME"] ?? throw new InvalidOperationException("ADMIN_USERNAME configuration is required"),

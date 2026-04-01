@@ -1,5 +1,11 @@
 import { http } from './http';
 import type { EspnScores } from '../types/espn';
+import type { LiveGame } from '../types/liveGame';
+
+export async function getLiveGames(): Promise<LiveGame[]> {
+  const { data } = await http.get<LiveGame[]>('/api/espn/livegames');
+  return data ?? [];
+}
 
 export async function getScores() {
   const { data } = await http.get<EspnScores>('/api/espn/scores');
