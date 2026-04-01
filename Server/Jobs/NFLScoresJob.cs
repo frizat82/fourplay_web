@@ -21,7 +21,7 @@ public class NflScoresJob(IEspnApiService espn, ILeagueRepository leagueReposito
             for (var j = 1; j < 19; j++) {
                 // TODO: how do i know the year?
                 var scores = await espn.GetWeekScores(j, DateTime.UtcNow.AddYears(i).Year);
-                if (scores is null)
+                if (scores is null || scores.Events is null)
                     break;
                 var results = scores.Events.SelectMany(x => x.Competitions,
                         (x, y) => new CompetitionBySeason { Id = int.Parse(x.Id), Season = x.Season, Competition = y })
@@ -36,7 +36,7 @@ public class NflScoresJob(IEspnApiService espn, ILeagueRepository leagueReposito
                     continue; // Skip week 4 as ESPN treats week 4 as the Pro Bowl
                 // TODO: how do i know the year?
                 var scores = await espn.GetWeekScores(j, DateTime.UtcNow.AddYears(i).Year, true);
-                if (scores is null)
+                if (scores is null || scores.Events is null)
                     break;
                 var results = scores.Events.SelectMany(x => x.Competitions,
                         (x, y) => new CompetitionBySeason { Id = int.Parse(x.Id), Season = x.Season, Competition = y })
@@ -57,15 +57,19 @@ public class NflScoresJob(IEspnApiService espn, ILeagueRepository leagueReposito
             if (scores.Leagues is null || scores.Leagues.Length == 0 || scores.Leagues[0].Calendar is null || scores.Leagues[0].Calendar.Length == 0)
                 continue;
             var regularSeason = scores.Leagues[0].Calendar.FirstOrDefault(x => x.Value == (int)TypeOfSeason.RegularSeason);
-            weekList.AddRange(regularSeason.Entries.Select(x => new NflWeeks()
+            if (regularSeason is not null)
             {
-                NflWeek = (int)x.Value,
-                Season = (int)scores.Leagues[0].Season.Year,
-                StartDate = x.StartDate,
-                EndDate = x.EndDate
-            }));
+                weekList.AddRange(regularSeason.Entries.Select(x => new NflWeeks()
+                {
+                    NflWeek = (int)x.Value,
+                    Season = (int)scores.Leagues[0].Season.Year,
+                    StartDate = x.StartDate,
+                    EndDate = x.EndDate
+                }));
+            }
             // Skip week 4 as ESPN treats week 4 as the Pro Bowl
             var postSeason = scores.Leagues[0].Calendar.FirstOrDefault(x => x.Value == (int)TypeOfSeason.PostSeason);
+            if (postSeason is null) continue;
             weekList.AddRange(postSeason.Entries.Where(x => x.Value != 4).Select(x => new NflWeeks()
             {
                 NflWeek = GameHelpers.GetWeekFromEspnWeek(x.Value == 5 ? 4 : x.Value, true),
