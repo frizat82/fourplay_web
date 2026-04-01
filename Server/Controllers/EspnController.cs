@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models;
+using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,6 +25,22 @@ public class EspnController(IEspnApiService espnApiService, IEspnCacheService es
     {
         var scores = await espnCacheService.GetScoresAsync();
         return Ok(scores ?? new EspnScores());
+    }
+
+    [HttpGet("livegames")]
+    [ProducesResponseType(typeof(List<LiveGameDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<LiveGameDto>>> GetLiveGames()
+    {
+        var scores = await espnCacheService.GetScoresAsync();
+        if (scores?.Events is null)
+            return Ok(new List<LiveGameDto>());
+
+        var games = scores.Events
+            .SelectMany(e => e.Competitions)
+            .Select(LiveGameDto.FromCompetition)
+            .ToList();
+
+        return Ok(games);
     }
 /*
     [HttpGet("odds/events/{eventId:int}")]

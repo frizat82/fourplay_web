@@ -20,7 +20,7 @@ const authState = {
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/auth', () => ({ useAuth: () => authState }));
 
-vi.mock('../api/espn', () => ({ getScores: vi.fn(), loadScoresWithRetry: vi.fn(), getWeekScores: vi.fn() }));
+vi.mock('../api/espn', () => ({ getScores: vi.fn(), loadScoresWithRetry: vi.fn(), getWeekScores: vi.fn(), getLiveGames: vi.fn() }));
 vi.mock('../api/league', () => ({
   calculateSpreadBatch: vi.fn(),
   doOddsExist: vi.fn(),
@@ -32,13 +32,14 @@ vi.mock('../utils/time', async (importOriginal) => {
   return { ...actual, isPastNoonCst: vi.fn().mockReturnValue(false) };
 });
 
-import { getScores, loadScoresWithRetry, getWeekScores } from '../api/espn';
+import { getScores, loadScoresWithRetry, getWeekScores, getLiveGames } from '../api/espn';
 import { calculateSpreadBatch, doOddsExist, getLeaguePicks } from '../api/league';
 import { getNextSpreadJob } from '../services/spreadRelease';
 
 const mockedGetScores = vi.mocked(getScores);
 const mockedLoadScoresWithRetry = vi.mocked(loadScoresWithRetry);
 const mockedGetWeekScores = vi.mocked(getWeekScores);
+const mockedGetLiveGames = vi.mocked(getLiveGames);
 const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetLeaguePicks = vi.mocked(getLeaguePicks);
 const mockedCalculateSpreadBatch = vi.mocked(calculateSpreadBatch);
@@ -58,6 +59,7 @@ const setupDefaults = async (options?: {
 
   mockedGetScores.mockResolvedValue(scores);
   mockedLoadScoresWithRetry.mockResolvedValue(scores);
+  mockedGetLiveGames.mockResolvedValue([]);
   mockedDoOddsExist.mockResolvedValue(options?.oddsExist ?? true);
   mockedGetLeaguePicks.mockResolvedValue(options?.picks ?? []);
   mockedGetNextSpreadJob.mockResolvedValue(null);
@@ -86,6 +88,7 @@ describe('ScoresPage', () => {
     mockedGetScores.mockReset();
     mockedLoadScoresWithRetry.mockReset();
     mockedGetWeekScores.mockReset();
+    mockedGetLiveGames.mockReset();
     mockedDoOddsExist.mockReset();
     mockedGetLeaguePicks.mockReset();
     mockedCalculateSpreadBatch.mockReset();
@@ -279,6 +282,7 @@ describe('ScoresPage', () => {
     const scores = createScores({ week: 1, postSeason: true, gameStarted: true });
     mockedGetScores.mockResolvedValue(scores);
     mockedLoadScoresWithRetry.mockResolvedValue(scores);
+    mockedGetLiveGames.mockResolvedValue([]);
     mockedDoOddsExist.mockResolvedValue(true);
     mockedGetLeaguePicks.mockResolvedValue(picks);
     mockedGetNextSpreadJob.mockResolvedValue(null);
@@ -308,6 +312,7 @@ describe('ScoresPage', () => {
     const scores = createScores({ week: 1, postSeason: true, gameStarted: true });
     mockedGetScores.mockResolvedValue(scores);
     mockedLoadScoresWithRetry.mockResolvedValue(scores);
+    mockedGetLiveGames.mockResolvedValue([]);
     mockedDoOddsExist.mockResolvedValue(true);
     mockedGetLeaguePicks.mockResolvedValue(picks);
     mockedGetNextSpreadJob.mockResolvedValue(null);

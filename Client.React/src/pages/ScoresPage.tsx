@@ -25,9 +25,11 @@ import UserPicksMatrix from '../components/UserPicksMatrix';
 import PickDialog from '../components/PickDialog';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { getScores, getWeekScores } from '../api/espn';
+import { getScores, getLiveGames, getWeekScores } from '../api/espn';
 import { calculateSpreadBatch, doOddsExist, getLeaguePicks } from '../api/league';
 import type { EspnScores, Event, Competition } from '../types/espn';
+import type { LiveGame } from '../types/liveGame';
+import FieldPosition from '../components/FieldPosition';
 import type { BatchSpreadCalculationRequest, NflPickDto, SpreadCalculationResponse, PickType } from '../types/picks';
 import {
   displayDetails,
@@ -64,6 +66,7 @@ export default function ScoresPage() {
   const [showOnlyMyPicks, setShowOnlyMyPicks] = useState(false);
   const [isCurrentWeek, setIsCurrentWeek] = useState(true);
   const [hasActiveGames, setHasActiveGames] = useState(false);
+  const [liveGames, setLiveGames] = useState<LiveGame[]>([]);
   const [isPageVisible, setIsPageVisible] = useState(true);
   const [dialogState, setDialogState] = useState<{
     open: boolean;
@@ -155,7 +158,8 @@ export default function ScoresPage() {
     }
 
     setLoading(true);
-    const data = await loadScoresWithRetry();
+    const [data, liveGamesData] = await Promise.all([loadScoresWithRetry(), getLiveGames()]);
+    setLiveGames(liveGamesData ?? []);
     if (!data?.season || !data.week) {
       setScores(null);
       setLoading(false);
@@ -446,11 +450,11 @@ export default function ScoresPage() {
                             </Stack>
 
                             {!isHalfTime(competition) && (
-                              <Paper elevation={0} sx={{ mt: 2, py: 1 }}>
-                                <Typography align="center" className="down-distance">
-                                  {competition.situation?.downDistanceText ?? ''}
-                                </Typography>
-                              </Paper>
+                              <FieldPosition
+                                situation={liveGames.find(
+                                  (g) => g.homeTeam === homeAbbr && g.awayTeam === awayAbbr
+                                )?.situation ?? null}
+                              />
                             )}
 
                             <Stack direction="row" alignItems="center" sx={{ mt: 3, gap: 1.5, px: 1 }}>
