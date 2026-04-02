@@ -85,7 +85,10 @@ builder.Services.AddHttpClient<IEspnCoreOddsService, EspnCoreOddsService>(x => {
 builder.Services.AddHttpClient<IEspnApiService, EspnApiService>(x => {
     x.BaseAddress = new Uri("http://site.api.espn.com");
 });
-builder.Services.AddSingleton<IEspnCacheService, EspnCacheService>();
+if (builder.Configuration["DEMO_MODE"] == "true")
+    builder.Services.AddSingleton<IEspnCacheService, DemoEspnCacheService>();
+else
+    builder.Services.AddSingleton<IEspnCacheService, EspnCacheService>();
 // Add HttpClient for Gridiron Uniforms and register Jersey cache service
 builder.Services.AddHttpClient<IJerseyCacheService, JerseyCacheService>(c => {
     c.BaseAddress = new Uri("https://www.gridiron-uniforms.com/GUD/");

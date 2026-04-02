@@ -11,7 +11,6 @@ import {
   Typography,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
-import SportsFootballIcon from '@mui/icons-material/SportsFootball';
 import GppGoodIcon from '@mui/icons-material/GppGood';
 import GppBadIcon from '@mui/icons-material/GppBad';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
@@ -48,7 +47,6 @@ import {
   isPostSeason as isPostSeasonHelper,
   isRedZone,
   shouldShowGamePicks,
-  hasPossession,
 } from '../utils/gameHelpers';
 
 export default function ScoresPage() {
@@ -440,13 +438,11 @@ export default function ScoresPage() {
                         <Grid size={{ xs: 12, md: 6, lg: 4 }} key={`${competition.id}-${awayAbbr}-${homeAbbr}`}>
                           <Paper className={isRedZone(competition) ? 'red-zone-border' : ''} sx={{ p: 2 }}>
                             <Stack direction="row" alignItems="center" justifyContent="space-between">
-                              {hasPossession(competition, awayAbbr) ? <SportsFootballIcon /> : <span />}
                               <img src={getAwayTeamLogo(competition)} width={50} />
                               <Typography variant="h6">{getAwayTeamScore(competition)}</Typography>
                               <Typography variant="body2">{displayDetails(competition)}</Typography>
                               <Typography variant="h6">{getHomeTeamScore(competition)}</Typography>
                               <img src={getHomeTeamLogo(competition)} width={50} />
-                              {hasPossession(competition, homeAbbr) ? <SportsFootballIcon /> : <span />}
                             </Stack>
 
                             {!isHalfTime(competition) && (
