@@ -24,10 +24,7 @@ public class DemoEspnCacheService : IEspnCacheService
         }
 
         var json = File.ReadAllText(path);
-        _scores = JsonSerializer.Deserialize<EspnScores>(json, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
+        _scores = JsonSerializer.Deserialize<EspnScores>(json, EspnApiServiceJsonConverter.Settings);
         Log.Information("DEMO_MODE: Loaded {Count} events from sample_espn_nfl.json",
             _scores?.Events?.Length ?? 0);
     }
