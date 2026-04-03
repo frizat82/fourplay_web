@@ -86,7 +86,10 @@ builder.Services.AddHttpClient<IEspnApiService, EspnApiService>(x => {
     x.BaseAddress = new Uri("http://site.api.espn.com");
 });
 if (builder.Configuration["DEMO_MODE"] == "true")
+{
     builder.Services.AddSingleton<IEspnCacheService, DemoEspnCacheService>();
+    builder.Services.AddScoped<DemoDataSeeder>();
+}
 else
     builder.Services.AddSingleton<IEspnCacheService, EspnCacheService>();
 // Add HttpClient for Gridiron Uniforms and register Jersey cache service
@@ -371,9 +374,14 @@ try
 }
 catch (Exception ex)
 {
-    
     Log.Error(ex, "Error Upgrading DB");
     throw;
+}
+
+if (app.Configuration["DEMO_MODE"] == "true")
+{
+    using var demoScope = app.Services.CreateScope();
+    await demoScope.ServiceProvider.GetRequiredService<DemoDataSeeder>().SeedAsync();
 }
 
 
