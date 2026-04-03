@@ -100,7 +100,15 @@ ConnectionStrings__POSTGRES_CONNECTION_STRING="Host=localhost;Port=5432;Username
   ASPNETCORE_ENVIRONMENT=Development \
   dotnet run --no-launch-profile --urls http://localhost:5000
 ```
-DEMO_MODE seeds: 16 spreads (week 8 2023), NflWeek row, and a Demo League. ESPN data comes from `sample_espn_nfl.json` (frozen). League creation completes ~2 min after startup when UserManagerJob fires.
+DEMO_MODE seeds (all idempotent):
+- 16 spreads for 2023 week 8
+- NflWeek row
+- "Demo League" with admin as member
+- 5 fake users (Alice, Bob, Carlos, Dana, Eve) with picks across all 16 games
+- ESPN data comes from `sample_espn_nfl.json` (frozen): 3 in-progress games (BUF/TB Q1, DEN/KC Q4, CIN/SF Q3 red zone), 4 finals (DAL/LAR, GB/MIN, MIA/NE, WAS/PHI), 9 pre-game
+- League + users complete ~2 min after startup when UserManagerJob fires
+
+**Easiest way to start**: `./scripts/start-demo.sh` (sources `.env.backend`, starts postgres + backend + frontend)
 
 **IMPORTANT**: Use single quotes for `ADMIN_PASSWORD` — double quotes cause bash to expand `!` as history substitution, garbling the password and causing UserManagerJob to set the wrong hash on startup.
 
