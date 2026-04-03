@@ -1,6 +1,7 @@
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
+using FourPlayWebApp.Server.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Quartz;
@@ -12,11 +13,18 @@ public class UserManagerJob(
     RoleManager<IdentityRole> roleManager,
     UserManager<ApplicationUser> userManager,
     IConfiguration configuration,
-    ApplicationDbContext db)
+    ApplicationDbContext db,
+    IServiceProvider services)
     : IJob {
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("Executing UserManagerJob");
         await CreateRolesAndAdminUser();
+
+        if (configuration["DEMO_MODE"] == "true")
+        {
+            using var scope = services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().SeedAsync();
+        }
     }
 
     private async Task CreateRolesAndAdminUser() {
@@ -27,9 +35,10 @@ public class UserManagerJob(
         foreach (var roleName in roleNames) {
             await CreateRole(roleName);
         }
-        
+
         var adminUserEmail = configuration["ADMIN_EMAIL"] ?? throw new InvalidOperationException("ADMIN_EMAIL configuration is required");
         await CreateUser(adminUserEmail);
+        await SyncAdminPassword(adminUserEmail);
         await CreateBaseLeagueUser(adminUserEmail);
         await AddUserToRole(adminUserEmail, adminRoleName);
         Log.Information("UserManagerJob completed successfully");
@@ -50,6 +59,21 @@ public class UserManagerJob(
         catch (Exception ex) {
             Log.Error(ex, "Unable to create base user {UserName}", userEmail);
         }
+    }
+
+    /// <summary>
+    /// Sync admin password from configuration on every startup so env var changes take effect on redeploy.
+    /// </summary>
+    internal async Task SyncAdminPassword(string emailAddress) {
+        var adminPassword = configuration["ADMIN_PASSWORD"] ?? throw new InvalidOperationException("ADMIN_PASSWORD not set");
+        var adminUser = await userManager.FindByEmailAsync(emailAddress);
+        if (adminUser == null) return;
+        await userManager.RemovePasswordAsync(adminUser);
+        var result = await userManager.AddPasswordAsync(adminUser, adminPassword);
+        if (result.Succeeded)
+            Log.Information("Admin password synced for {Email}", emailAddress);
+        else
+            Log.Error("Failed to sync admin password: {Errors}", string.Join(", ", result.Errors.Select(e => e.Description)));
     }
 
     /// <summary>
