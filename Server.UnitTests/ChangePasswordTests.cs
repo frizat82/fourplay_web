@@ -95,7 +95,6 @@ public class ChangePasswordTests
 
         var model = new ChangePassword
         {
-            Email           = victimEmail,   // attacker tries to target victim
             CurrentPassword = "OldPass!1",
             Password        = "NewPass!2",
         };
@@ -126,7 +125,6 @@ public class ChangePasswordTests
 
         var result = await controller.ChangePassword(new ChangePassword
         {
-            Email           = "ghost@example.com",
             CurrentPassword = "Old!1",
             Password        = "New!2",
         });

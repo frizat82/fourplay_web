@@ -144,6 +144,7 @@ public class LeagueController(
     }
 
     [HttpGet("users")]
+    [Authorize(Roles = AppRoles.Administrator)]
     [ProducesResponseType(typeof(List<UserSummaryDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<UserSummaryDto>>> GetUsers() {
 
@@ -282,6 +283,11 @@ public class LeagueController(
     [HttpGet("{leagueId:int}/picks/{season:int}/{week:int}/user/{userId}")]
     [ProducesResponseType(typeof(List<NflPickDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<NflPickDto>>> GetUserPicks(string userId, int leagueId, int season, int week) {
+        var authenticatedUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) &&
+            !string.Equals(authenticatedUserId, userId, StringComparison.Ordinal))
+            return Forbid();
+
         var picks = await repo.GetUserNflPicksAsync(userId, leagueId, season, week);
         var dtoPicks = picks.Select(p => new NflPickDto {
             Id = p.Id,
@@ -316,6 +322,11 @@ public class LeagueController(
             return BadRequest("All picks must be for the same League");
 
         var first = picksDtoList[0];
+
+        // Verify the authenticated user is a member of the target league
+        var isMember = await repo.UserExistsInLeagueAsync(authenticatedUserId, first.LeagueId);
+        if (!isMember)
+            return Forbid();
 
         // Fetch weeks, ESPN scores, and existing picks concurrently
         var weekTask          = repo.GetNflWeeksAsync(first.Season);
@@ -358,7 +369,12 @@ public class LeagueController(
             }
         }
 
-        var newPicks = picksList.Except(existingPicks).ToList();
+        var existingKeys = existingPicks
+            .Select(p => (p.Team, p.NflWeek, p.Season, p.LeagueId))
+            .ToHashSet();
+        var newPicks = picksList
+            .Where(p => !existingKeys.Contains((p.Team, p.NflWeek, p.Season, p.LeagueId)))
+            .ToList();
         var requiredPicks = GameHelpers.GetRequiredPicks(first.NflWeek);
         if (newPicks.Count + existingPicks.Count > requiredPicks)
             return BadRequest($"Too many picks. Maximum allowed for week {first.NflWeek} is {requiredPicks}");
