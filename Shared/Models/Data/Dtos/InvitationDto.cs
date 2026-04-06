@@ -17,4 +17,6 @@ public class InvitationDto
     public string? RegisteredUserName { get; set; }
     public bool IsExpired { get; set; }
     public bool IsValid { get; set; }
+    public int? LeagueId { get; set; }
+    public string? LeagueName { get; set; }
 }

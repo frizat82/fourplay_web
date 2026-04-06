@@ -20,7 +20,9 @@ public static class InvitationMapper
             RegisteredUserId = invitation.RegisteredUserId,
             RegisteredUserName = invitation.RegisteredUser?.UserName, // from ApplicationUser
             IsExpired = invitation.IsExpired,
-            IsValid = invitation.IsValid
+            IsValid = invitation.IsValid,
+            LeagueId = invitation.LeagueId,
+            LeagueName = invitation.League?.LeagueName
         };
     }
 

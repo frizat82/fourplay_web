@@ -28,9 +28,9 @@ public class InvitationController(IInvitationService invitationService, IEmailSe
     }
 
     [HttpPost]
-    public async Task<ActionResult<InvitationDto>> Create([FromQuery] string email, [FromQuery] string invitedByUserId)
+    public async Task<ActionResult<InvitationDto>> Create([FromQuery] string email, [FromQuery] string invitedByUserId, [FromQuery] int? leagueId = null)
     {
-        var invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId);
+        var invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId, leagueId);
         return CreatedAtAction(nameof(GetAll), new { id = invitation.Id }, invitation.ToDto());
     }
 
