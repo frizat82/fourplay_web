@@ -130,6 +130,10 @@ public class LeagueController(
     [HttpGet("user-mappings/by-user/{userId}")]
     [ProducesResponseType(typeof(List<LeagueUserMappingDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<LeagueUserMappingDto>>> GetLeagueUserMappingsForUser(string userId) {
+        var authenticatedUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) &&
+            !string.Equals(authenticatedUserId, userId, StringComparison.Ordinal))
+            return Forbid();
         var mappings = await repo.GetLeagueUserMappingsAsync(new ApplicationUser() {Id = userId});
         var dtoMappings = mappings.Select(m => new LeagueUserMappingDto {
             Id = m.Id,
@@ -356,7 +360,11 @@ public class LeagueController(
         }
 
         // Guard: reject picks for any game that has already kicked off
-        if (espnScores?.Events is not null)
+        if (espnScores?.Events is null)
+        {
+            logger.LogWarning("AddPicks: ESPN cache is unavailable — kickoff guard skipped for user {UserId} league {LeagueId}", authenticatedUserId, first.LeagueId);
+        }
+        else if (espnScores.Events is not null)
         {
             var allCompetitions = espnScores.Events.SelectMany(e => e.Competitions).ToList();
             var now = DateTimeOffset.UtcNow;
