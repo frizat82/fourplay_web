@@ -421,4 +421,27 @@ public class AuthControllerTests
         // Must return 200, not 400 — leaking user existence is a security issue
         Assert.IsType<OkResult>(result.Result);
     }
+
+    /// <summary>
+    /// frizat-8n3: ResetPassword must return 200 OK even when the email is not found.
+    /// Returning 400 leaks whether an account exists for that email (user enumeration).
+    /// </summary>
+    [Fact]
+    public async Task ResetPassword_UnknownEmail_ReturnsOk()
+    {
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
+
+        var controller = BuildController(userManager: userManager);
+
+        var result = await controller.ResetPassword(new ResetPasswordRequest
+        {
+            Email    = "nobody@example.com",
+            Token    = "sometoken",
+            Password = "NewPass1!",
+        });
+
+        // Must return 200, not 400 — leaking user existence is a security issue
+        Assert.IsType<OkResult>(result.Result);
+    }
 }
