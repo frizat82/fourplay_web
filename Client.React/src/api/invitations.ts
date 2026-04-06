@@ -11,10 +11,15 @@ export async function getInvitationsByUser(userId: string) {
   return data;
 }
 
-export async function createInvitation(email: string, invitedByUserId: string) {
+export async function createInvitation(email: string, invitedByUserId: string, leagueId?: number | null) {
   const { data } = await http.post<InvitationDto>('/api/invitations', undefined, {
-    params: { email, invitedByUserId },
+    params: { email, invitedByUserId, ...(leagueId != null ? { leagueId } : {}) },
   });
+  return data;
+}
+
+export async function validateInvitation(code: string) {
+  const { data } = await http.get<InvitationDto | null>(`/api/invitations/validate/${encodeURIComponent(code)}`);
   return data;
 }
 
