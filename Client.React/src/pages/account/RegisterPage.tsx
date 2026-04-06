@@ -1,10 +1,11 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Button, Card, CardActions, CardContent, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Button, Card, CardActions, CardContent, Stack, TextField, Typography } from '@mui/material';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createUser } from '../../api/auth';
+import { validateInvitation } from '../../api/invitations';
 import { useToast } from '../../services/toast';
 
 const schema = z
@@ -34,6 +35,7 @@ export default function RegisterPage() {
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const inviteCode = params.get('inviteCode') ?? '';
   const returnUrl = params.get('returnUrl') ?? '/';
+  const [leagueName, setLeagueName] = useState<string | null>(null);
 
   const {
     register,
@@ -52,7 +54,12 @@ export default function RegisterPage() {
 
   useEffect(() => {
     document.title = 'Register';
-  }, []);
+    if (inviteCode) {
+      void validateInvitation(inviteCode).then((inv) => {
+        if (inv?.leagueName) setLeagueName(inv.leagueName);
+      });
+    }
+  }, [inviteCode]);
 
   const onSubmit = async (values: FormValues) => {
     const result = await createUser({
@@ -74,6 +81,11 @@ export default function RegisterPage() {
   return (
     <Stack spacing={3} sx={{ maxWidth: 640, margin: '0 auto', paddingTop: 6 }}>
       <Typography variant="h4">Register</Typography>
+      {leagueName && (
+        <Alert severity="info">
+          You've been invited to join <strong>{leagueName}</strong>
+        </Alert>
+      )}
       <Card>
         <CardContent>
           <Stack spacing={2} component="form" onSubmit={handleSubmit(onSubmit)}>

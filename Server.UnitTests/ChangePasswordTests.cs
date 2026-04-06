@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Controllers;
+using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Account;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using System.Security.Claims;
@@ -35,6 +37,11 @@ public class ChangePasswordTests
             Substitute.For<IUserClaimsPrincipalFactory<ApplicationUser>>(),
             null, null, null, null);
 
+        var db = new ApplicationDbContext(
+            new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseInMemoryDatabase("ChangePasswordTests_" + Guid.NewGuid())
+                .Options);
+
         var controller = new AuthController(
             userManager,
             signInManager,
@@ -45,7 +52,8 @@ public class ChangePasswordTests
             Substitute.For<IConfiguration>(),
             Substitute.For<IRefreshTokenService>(),
             Substitute.For<IJwtTokenService>(),
-            Substitute.For<IWebHostEnvironment>()
+            Substitute.For<IWebHostEnvironment>(),
+            db
         );
 
         controller.ControllerContext = new ControllerContext
