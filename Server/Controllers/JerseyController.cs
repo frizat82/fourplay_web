@@ -43,6 +43,7 @@ public class JerseysController(IJerseyCacheService jerseyCacheService) : Control
     }
 
     [HttpPost("{season}/{week}/refresh")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<ActionResult> RefreshCache(int season, int week)
     {
