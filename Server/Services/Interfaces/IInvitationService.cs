@@ -15,7 +15,7 @@ public interface IInvitationService
     /// <param name="email">Email to invite</param>
     /// <param name="invitedByUserId">User ID of the person sending the invite</param>
     /// <returns>The created invitation</returns>
-    Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId);
+    Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null);
 
     /// <summary>
     /// Validate if the invitation code is valid
