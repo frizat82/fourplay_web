@@ -1,4 +1,6 @@
-﻿using FourPlayWebApp.Server.Models.Identity;
+﻿using FourPlayWebApp.Server.Data;
+using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Account;
 using FourPlayWebApp.Shared.Models.Account.Dto;
@@ -23,7 +25,7 @@ public class AuthController(
     IEmailSender emailSender, IEmailSender<ApplicationUser> emailSenderApplication,
     IInvitationService invitationService, ILogger<AuthController> logger,
     IConfiguration config, IRefreshTokenService refreshTokenService, IJwtTokenService jwtTokenService,
-    IWebHostEnvironment environment)
+    IWebHostEnvironment environment, ApplicationDbContext db)
     : ControllerBase {
     private readonly TimeSpan _refreshTokenLifetime = TimeSpan.FromDays(14); // 14 days
     private bool UseSecureCookies => !environment.IsDevelopment() || Request.IsHttps;
@@ -276,6 +278,17 @@ public class AuthController(
         // Mark invitation as used
         var invitationResult = await invitationService.MarkInvitationAsUsedAsync(user.Code, newUser.Id);
         if (!invitationResult) return BadRequest("Invalid invitation code or already used/expired.");
+
+        // Auto-assign user to league if invitation specifies one
+        if (invitation.LeagueId.HasValue)
+        {
+            db.LeagueUserMapping.Add(new LeagueUserMapping
+            {
+                LeagueId = invitation.LeagueId.Value,
+                UserId = newUser.Id,
+            });
+            await db.SaveChangesAsync();
+        }
 
         // Send confirmation email server-side — do not rely on client making a second call.
         // Failure is logged but must not prevent the user account from being returned as created.

@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Controllers;
+using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Account;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -70,6 +72,11 @@ public class AuthControllerTests
         refreshTokenService ??= Substitute.For<IRefreshTokenService>();
         environment     ??= BuildDevEnvironment();
 
+        var db = new ApplicationDbContext(
+            new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseInMemoryDatabase("AuthControllerTests_" + Guid.NewGuid())
+                .Options);
+
         var controller = new AuthController(
             userManager,
             signInManager,
@@ -80,7 +87,8 @@ public class AuthControllerTests
             Substitute.For<IConfiguration>(),
             refreshTokenService,
             jwtTokenService,
-            environment
+            environment,
+            db
         );
 
         var httpContext = new DefaultHttpContext();

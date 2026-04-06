@@ -6,8 +6,12 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  FormControl,
   IconButton,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -24,7 +28,9 @@ import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../services/toast';
 import { useAuth } from '../../services/auth';
 import { createInvitation, deleteInvitation, getAllInvitations, sendEmail } from '../../api/invitations';
+import { getLeagueUserMappingsForUser } from '../../api/league';
 import type { InvitationDto } from '../../types/admin';
+import type { LeagueUserMappingDto } from '../../types/league';
 
 export default function AdminInvitationsPage() {
   const [invitations, setInvitations] = useState<InvitationDto[]>([]);
@@ -32,6 +38,8 @@ export default function AdminInvitationsPage() {
   const [showUsed, setShowUsed] = useState(true);
   const [showExpired, setShowExpired] = useState(true);
   const [email, setEmail] = useState('');
+  const [selectedLeagueId, setSelectedLeagueId] = useState<number | ''>('');
+  const [leagues, setLeagues] = useState<LeagueUserMappingDto[]>([]);
   const [creating, setCreating] = useState(false);
   const toast = useToast();
   const { user } = useAuth();
@@ -45,7 +53,12 @@ export default function AdminInvitationsPage() {
 
   useEffect(() => {
     void loadInvitations();
-  }, []);
+    if (user?.userId) {
+      void getLeagueUserMappingsForUser(user.userId).then((mappings) => {
+        setLeagues(mappings ?? []);
+      });
+    }
+  }, [user?.userId]);
 
   const filteredInvitations = useMemo(
     () =>
@@ -102,7 +115,8 @@ export default function AdminInvitationsPage() {
     }
     setCreating(true);
     try {
-      const invitation = await createInvitation(email, user.userId);
+      const leagueId = selectedLeagueId !== '' ? selectedLeagueId : null;
+      const invitation = await createInvitation(email, user.userId, leagueId);
       toast.push(`Invitation created for ${email}`, 'success');
       await sendEmail({
         toEmail: invitation.email,
@@ -186,8 +200,23 @@ export default function AdminInvitationsPage() {
               onChange={(e) => setEmail(e.target.value)}
               fullWidth
             />
+            <FormControl sx={{ minWidth: 180 }}>
+              <InputLabel>League (optional)</InputLabel>
+              <Select
+                value={selectedLeagueId}
+                label="League (optional)"
+                onChange={(e) => setSelectedLeagueId(e.target.value as number | '')}
+              >
+                <MenuItem value=""><em>No league</em></MenuItem>
+                {leagues.map((m) => (
+                  <MenuItem key={m.leagueId} value={m.leagueId}>
+                    {m.leagueName ?? `League ${m.leagueId}`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <Button variant="contained" onClick={handleCreateInvitation} disabled={creating}>
-              {creating ? 'Creating...' : 'Create Invitation'}
+              {creating ? 'Inviting...' : 'Invite'}
             </Button>
           </Stack>
         </CardContent>
@@ -216,6 +245,7 @@ export default function AdminInvitationsPage() {
               <TableRow>
                 <TableCell>Date Created</TableCell>
                 <TableCell>Email</TableCell>
+                <TableCell>League</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Expires</TableCell>
                 <TableCell>Used By</TableCell>
@@ -227,6 +257,7 @@ export default function AdminInvitationsPage() {
                 <TableRow key={invitation.id}>
                   <TableCell>{new Date(invitation.createdAt).toLocaleString()}</TableCell>
                   <TableCell>{invitation.email}</TableCell>
+                  <TableCell>{invitation.leagueName ?? '-'}</TableCell>
                   <TableCell>
                     {invitation.isUsed ? (
                       <Chip size="small" label="Used" color="success" />

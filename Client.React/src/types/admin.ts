@@ -62,6 +62,8 @@ export interface InvitationDto {
   registeredUserName?: string | null;
   isExpired: boolean;
   isValid: boolean;
+  leagueId?: number | null;
+  leagueName?: string | null;
 }
 
 export interface EmailRequest {
