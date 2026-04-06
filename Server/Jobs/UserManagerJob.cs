@@ -1,6 +1,7 @@
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
+using FourPlayWebApp.Server.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Quartz;
@@ -12,11 +13,18 @@ public class UserManagerJob(
     RoleManager<IdentityRole> roleManager,
     UserManager<ApplicationUser> userManager,
     IConfiguration configuration,
-    ApplicationDbContext db)
+    ApplicationDbContext db,
+    IServiceProvider services)
     : IJob {
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("Executing UserManagerJob");
         await CreateRolesAndAdminUser();
+
+        if (configuration["DEMO_MODE"] == "true")
+        {
+            using var scope = services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().SeedAsync();
+        }
     }
 
     private async Task CreateRolesAndAdminUser() {
@@ -27,9 +35,10 @@ public class UserManagerJob(
         foreach (var roleName in roleNames) {
             await CreateRole(roleName);
         }
-        
+
         var adminUserEmail = configuration["ADMIN_EMAIL"] ?? throw new InvalidOperationException("ADMIN_EMAIL configuration is required");
         await CreateUser(adminUserEmail);
+        await SyncAdminPassword(adminUserEmail);
         await CreateBaseLeagueUser(adminUserEmail);
         await AddUserToRole(adminUserEmail, adminRoleName);
         Log.Information("UserManagerJob completed successfully");
@@ -53,6 +62,21 @@ public class UserManagerJob(
     }
 
     /// <summary>
+    /// Sync admin password from configuration on every startup so env var changes take effect on redeploy.
+    /// </summary>
+    internal async Task SyncAdminPassword(string emailAddress) {
+        var adminPassword = configuration["ADMIN_PASSWORD"] ?? throw new InvalidOperationException("ADMIN_PASSWORD not set");
+        var adminUser = await userManager.FindByEmailAsync(emailAddress);
+        if (adminUser == null) return;
+        await userManager.RemovePasswordAsync(adminUser);
+        var result = await userManager.AddPasswordAsync(adminUser, adminPassword);
+        if (result.Succeeded)
+            Log.Information("Admin password synced for {Email}", emailAddress);
+        else
+            Log.Error("Failed to sync admin password: {Errors}", string.Join(", ", result.Errors.Select(e => e.Description)));
+    }
+
+    /// <summary>
     /// Create a role if not exists.
     /// </summary>
     /// <param name="roleName">Role Name</param>
@@ -70,24 +94,27 @@ public class UserManagerJob(
     /// </summary>
     /// <param name="emailAddress">email</param>
     internal async Task CreateUser(string emailAddress) {
-        // Ensure user exists
+        var adminPassword = configuration["ADMIN_PASSWORD"] ?? throw new InvalidOperationException("ADMIN_PASSWORD not set");
         var adminUser = await userManager.FindByEmailAsync(emailAddress);
-        if (adminUser == null)
+        if (adminUser != null) {
+            Log.Information("Admin user {Email} already exists — skipping create", emailAddress);
+            return;
+        }
+
+        Log.Warning("Admin user {Email} not found — creating new user. If this is unexpected, check why the user was deleted or the DB was reset.", emailAddress);
+        adminUser = new ApplicationUser()
         {
-            adminUser = new ApplicationUser()
-            {
-                UserName = configuration["ADMIN_USERNAME"] ?? throw new InvalidOperationException("ADMIN_USERNAME configuration is required"),
-                Email = emailAddress,
-                EmailConfirmed = true
-            };
-            var result = await userManager.CreateAsync(adminUser, configuration["ADMIN_PASSWORD"] ?? throw new Exception("ADMIN_PASSWORD not set"));
-            if (!result.Succeeded)
-            {
-                Log.Error("Failed to create admin user {Email}. Errors: {Errors}",
-                    emailAddress,
-                    string.Join(", ", result.Errors.Select(e => e.Description)));
-                throw new Exception("Failed to create admin user.");
-            }
+            UserName = configuration["ADMIN_USERNAME"] ?? throw new InvalidOperationException("ADMIN_USERNAME configuration is required"),
+            Email = emailAddress,
+            EmailConfirmed = true
+        };
+        var result = await userManager.CreateAsync(adminUser, adminPassword);
+        if (!result.Succeeded)
+        {
+            Log.Error("Failed to create admin user {Email}. Errors: {Errors}",
+                emailAddress,
+                string.Join(", ", result.Errors.Select(e => e.Description)));
+            throw new InvalidOperationException("Failed to create admin user.");
         }
     }
 
