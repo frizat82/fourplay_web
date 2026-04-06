@@ -58,7 +58,8 @@ public class UserManagerJobConfigTests
         var db = new Data.ApplicationDbContext(dbOptions);
 
         var config = BuildConfig(configEmail, configUser);
-        var job = new UserManagerJob(roleManager, userManager, config, db);
+        var services = Substitute.For<IServiceProvider>();
+        var job = new UserManagerJob(roleManager, userManager, config, db, services);
 
         await job.CreateUser(configEmail);
 
@@ -90,7 +91,8 @@ public class UserManagerJobConfigTests
         var db = new Data.ApplicationDbContext(dbOptions);
 
         var config = BuildConfig(configEmail, configUser);
-        var job = new UserManagerJob(roleManager, userManager, config, db);
+        var services = Substitute.For<IServiceProvider>();
+        var job = new UserManagerJob(roleManager, userManager, config, db, services);
 
         await job.CreateUser(configEmail);
 
