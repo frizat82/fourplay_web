@@ -341,12 +341,12 @@ public class AuthController(
 
         var user = await userManager.FindByEmailAsync(model.Email);
         if (user == null)
-            return BadRequest("Invalid request.");
-        
+            return Ok(); // Don't reveal whether the email exists
+
         var result = await userManager.ResetPasswordAsync(user, model.Token, model.Password);
         if (!result.Succeeded)
             return BadRequest("Invalid request.");
-        return Ok();   
+        return Ok();
     }
     [HttpPost("change-password")]
     [Authorize]
@@ -365,18 +365,6 @@ public class AuthController(
             return BadRequest("Invalid request.");
         return Ok();
     }
-    /*
-    [HttpPost("is-email-confirmation")]
-    [AllowAnonymous]
-    public async Task<ActionResult<string>> IsEmailConfirmed(string email)
-    {
-        var user = await userManager.FindByEmailAsync(email);
-        // Always respond the same way
-        if (user == null || !(await userManager.IsEmailConfirmedAsync(user)))
-            return BadRequest("Invalid request.");
-        return Ok();
-    }
-    */
     [HttpPost("request-email-confirmation")]
     [AllowAnonymous]
     public async Task<ActionResult<string>> RequestEmailConfirmation([FromBody] RequestEmailConfirmation request)

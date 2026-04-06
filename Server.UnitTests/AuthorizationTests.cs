@@ -27,6 +27,8 @@ public class AuthorizationTests
         nameof(LeagueController.AddLeagueUserMapping),
         nameof(LeagueController.AddLeagueInfo),
         nameof(LeagueController.AddLeagueJuiceMapping),
+        // security review: email addresses exposed to any authenticated user
+        nameof(LeagueController.GetUsers),
     ];
 
     [Theory]
