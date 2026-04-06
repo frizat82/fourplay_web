@@ -11,7 +11,6 @@ import {
   Typography,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
-import SportsFootballIcon from '@mui/icons-material/SportsFootball';
 import GppGoodIcon from '@mui/icons-material/GppGood';
 import GppBadIcon from '@mui/icons-material/GppBad';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
@@ -25,9 +24,11 @@ import UserPicksMatrix from '../components/UserPicksMatrix';
 import PickDialog from '../components/PickDialog';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { getScores, getWeekScores } from '../api/espn';
+import { getScores, getLiveGames, getWeekScores } from '../api/espn';
 import { calculateSpreadBatch, doOddsExist, getLeaguePicks } from '../api/league';
 import type { EspnScores, Event, Competition } from '../types/espn';
+import type { LiveGame } from '../types/liveGame';
+import FieldPosition from '../components/FieldPosition';
 import type { BatchSpreadCalculationRequest, NflPickDto, SpreadCalculationResponse, PickType } from '../types/picks';
 import {
   displayDetails,
@@ -46,7 +47,6 @@ import {
   isPostSeason as isPostSeasonHelper,
   isRedZone,
   shouldShowGamePicks,
-  hasPossession,
 } from '../utils/gameHelpers';
 
 export default function ScoresPage() {
@@ -64,6 +64,7 @@ export default function ScoresPage() {
   const [showOnlyMyPicks, setShowOnlyMyPicks] = useState(false);
   const [isCurrentWeek, setIsCurrentWeek] = useState(true);
   const [hasActiveGames, setHasActiveGames] = useState(false);
+  const [liveGames, setLiveGames] = useState<LiveGame[]>([]);
   const [isPageVisible, setIsPageVisible] = useState(true);
   const [dialogState, setDialogState] = useState<{
     open: boolean;
@@ -131,10 +132,12 @@ export default function ScoresPage() {
       setWeek(selectedWeek);
       setSeason(selectedSeason);
 
-      const oddsExist = await doOddsExist(currentLeague, selectedSeason, selectedWeek);
+      const nflWeek = getWeekFromEspnWeek(selectedWeek, selectedIsPostSeason);
+      const [oddsExist, picksResult] = await Promise.all([
+        doOddsExist(currentLeague, selectedSeason, nflWeek),
+        getLeaguePicks(currentLeague, selectedSeason, nflWeek),
+      ]);
       setHasOdds(oddsExist);
-
-      const picksResult = await getLeaguePicks(currentLeague, selectedSeason, getWeekFromEspnWeek(selectedWeek, selectedIsPostSeason));
       setPicks(picksResult ?? []);
 
       if (oddsExist) {
@@ -153,7 +156,8 @@ export default function ScoresPage() {
     }
 
     setLoading(true);
-    const data = await loadScoresWithRetry();
+    const [data, liveGamesData] = await Promise.all([loadScoresWithRetry(), getLiveGames()]);
+    setLiveGames(liveGamesData ?? []);
     if (!data?.season || !data.week) {
       setScores(null);
       setLoading(false);
@@ -434,21 +438,19 @@ export default function ScoresPage() {
                         <Grid size={{ xs: 12, md: 6, lg: 4 }} key={`${competition.id}-${awayAbbr}-${homeAbbr}`}>
                           <Paper className={isRedZone(competition) ? 'red-zone-border' : ''} sx={{ p: 2 }}>
                             <Stack direction="row" alignItems="center" justifyContent="space-between">
-                              {hasPossession(competition, awayAbbr) ? <SportsFootballIcon /> : <span />}
                               <img src={getAwayTeamLogo(competition)} width={50} />
                               <Typography variant="h6">{getAwayTeamScore(competition)}</Typography>
                               <Typography variant="body2">{displayDetails(competition)}</Typography>
                               <Typography variant="h6">{getHomeTeamScore(competition)}</Typography>
                               <img src={getHomeTeamLogo(competition)} width={50} />
-                              {hasPossession(competition, homeAbbr) ? <SportsFootballIcon /> : <span />}
                             </Stack>
 
                             {!isHalfTime(competition) && (
-                              <Paper elevation={0} sx={{ mt: 2, py: 1 }}>
-                                <Typography align="center" className="down-distance">
-                                  {competition.situation?.downDistanceText ?? ''}
-                                </Typography>
-                              </Paper>
+                              <FieldPosition
+                                situation={liveGames.find(
+                                  (g) => g.homeTeam === homeAbbr && g.awayTeam === awayAbbr
+                                )?.situation ?? null}
+                              />
                             )}
 
                             <Stack direction="row" alignItems="center" sx={{ mt: 3, gap: 1.5, px: 1 }}>
@@ -552,8 +554,8 @@ export default function ScoresPage() {
                                 competition={competition}
                                 homeSpread={spreadCache[homeAbbr]?.spread ?? null}
                                 awaySpread={spreadCache[awayAbbr]?.spread ?? null}
-                                over={spreadCache[awayAbbr]?.over ?? null}
-                                under={spreadCache[awayAbbr]?.under ?? null}
+                                over={spreadCache[homeAbbr]?.over ?? null}
+                                under={spreadCache[homeAbbr]?.under ?? null}
                                 isPostSeason={isPostSeason}
                               />
                             )}

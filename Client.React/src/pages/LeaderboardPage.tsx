@@ -150,6 +150,9 @@ export default function LeaderboardPage() {
                       {Array.from({ length: maxWeek }).map((_, idx) => {
                         const weekIndex = maxWeek - idx - 1;
                         const weekValue = row.weekResults[weekIndex];
+                        if (!weekValue) {
+                          return <TableCell key={idx} />;
+                        }
                         return (
                           <TableCell key={idx} sx={getWeekSx(weekValue.weekResult)}>
                             {weekValue.score}
