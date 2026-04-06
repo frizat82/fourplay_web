@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Controllers;
+using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Account;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -52,6 +54,11 @@ public class EmailProcessTests
             Substitute.For<IUserClaimsPrincipalFactory<ApplicationUser>>(),
             null, null, null, null);
 
+        var db = new ApplicationDbContext(
+            new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseInMemoryDatabase("EmailProcessTests_" + Guid.NewGuid())
+                .Options);
+
         var controller = new AuthController(
             userManager,
             signInManager,
@@ -62,7 +69,8 @@ public class EmailProcessTests
             Substitute.For<IConfiguration>(),
             Substitute.For<IRefreshTokenService>(),
             Substitute.For<IJwtTokenService>(),
-            Substitute.For<IWebHostEnvironment>()
+            Substitute.For<IWebHostEnvironment>(),
+            db
         );
 
         controller.ControllerContext = new ControllerContext
