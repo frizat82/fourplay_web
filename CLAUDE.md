@@ -1,5 +1,11 @@
 # Project Instructions
 
+## CRITICAL: TDD Is the Primary Development Methodology
+- **Write failing tests FIRST, then implement** — no exceptions
+- Red → Green → Refactor is the only acceptable order
+- Never write implementation code before the test that proves it works
+- If you catch yourself writing code without a failing test, stop and write the test first
+
 ## CRITICAL: Branch Rules
 - **NEVER push or commit directly to `main`** — all changes go through a PR
 - Branch flow: `feature/*` → PR → `dev` → PR → `main`
@@ -74,17 +80,36 @@ A bead is closeable ONLY when:
 - Admin pages are secondary UX — functional over beautiful.
 
 ### Running the Stack Locally
-**Backend** (must start before Vite or proxy breaks, run from `Server/`):
+
+**IMPORTANT: Local dev uses a local Docker PostgreSQL — never connect to Neon directly from a local machine.**
+
+**Step 0 — Start local Postgres** (repo root):
 ```bash
-ConnectionStrings__POSTGRES_CONNECTION_STRING="..." \
-  Jwt__Key="..." Jwt__Issuer="FourPlayWebApp" Jwt__Audience="FourPlayWebAppClient" Jwt__ExpiresMinutes="1000" \
+docker compose up -d
+```
+This starts a local Postgres at `localhost:5432` (DB: `fourplay_dev`, user: `fourplay`, password: `fourplay_local`). Data persists in a Docker volume between restarts.
+
+**Backend with DEMO_MODE** (run from `Server/` — seeds all demo data on first run):
+```bash
+ConnectionStrings__POSTGRES_CONNECTION_STRING="Host=localhost;Port=5432;Username=fourplay;Password=fourplay_local;Database=fourplay_dev" \
+  Jwt__Key="..." Jwt__Issuer="FourPlayWebAppClientDev" Jwt__Audience="FourPlayWebAppClientDev" Jwt__ExpiresMinutes="1000" \
   FOURPLAY_EMAIL_USER="..." FOURPLAY_EMAIL_PASS="..." \
   ADMIN_EMAIL="..." ADMIN_USERNAME="frizat" ADMIN_PASSWORD='...' \
-  APP_URL="https://fourplaywebapp.azurewebsites.net" \
+  APP_URL="http://localhost:5174" \
+  DEMO_MODE="true" \
   ASPNETCORE_ENVIRONMENT=Development \
-  dotnet run --no-launch-profile
+  dotnet run --no-launch-profile --urls http://localhost:5000
 ```
-All env vars are in `.env` at the repo root — but `source .env` fails because `FOURPLAY_EMAIL_PASS` contains spaces. Pass vars explicitly or write a wrapper script.
+DEMO_MODE seeds (all idempotent):
+- 16 spreads for 2023 week 8
+- NflWeek row
+- "Demo League" with admin as member
+- 5 fake users (Alice, Bob, Carlos, Dana, Eve) with picks across all 16 games
+- ESPN data comes from `sample_espn_nfl.json` (frozen): 3 in-progress games (BUF/TB Q1, DEN/KC Q4, CIN/SF Q3 red zone), 4 finals (DAL/LAR, GB/MIN, MIA/NE, WAS/PHI), 9 pre-game
+- League + users complete ~2 min after startup when UserManagerJob fires
+
+**Easiest way to start**: `./scripts/start-demo.sh` (sources `.env.backend`, starts postgres + backend + frontend)
+
 **IMPORTANT**: Use single quotes for `ADMIN_PASSWORD` — double quotes cause bash to expand `!` as history substitution, garbling the password and causing UserManagerJob to set the wrong hash on startup.
 
 **Frontend** (run from `Client.React/`):

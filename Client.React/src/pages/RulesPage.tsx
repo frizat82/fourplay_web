@@ -1,5 +1,8 @@
-import { Box, Container, Divider, Paper, Stack, Typography } from '@mui/material';
+import { Box, Container, Divider, IconButton, Paper, Stack, Typography } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useNavigate } from 'react-router-dom';
 import { getEspnRequiredPicks } from '../utils/gameHelpers';
+import PageHeader from '../components/PageHeader';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -22,6 +25,7 @@ function Rule({ children }: { children: React.ReactNode }) {
 }
 
 export default function RulesPage() {
+  const navigate = useNavigate();
   const regularPicks = getEspnRequiredPicks(1, false);
   const wildCardPicks = getEspnRequiredPicks(1, true);
   const divisionalPicks = getEspnRequiredPicks(3, true);
@@ -29,16 +33,16 @@ export default function RulesPage() {
   const superBowlPicks = getEspnRequiredPicks(5, true);
 
   return (
-    <Container maxWidth="sm" sx={{ py: 4 }}>
-      <Stack spacing={3}>
-        <Box>
-          <Typography variant="h4" fontWeight={700}>
-            How FourPlay Works
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Everything you need to know before making your picks.
-          </Typography>
+    <Container maxWidth="sm" sx={{ py: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+        <IconButton onClick={() => navigate(-1)} sx={{ mr: 1, mt: 0.5 }}>
+          <ArrowBackIcon />
+        </IconButton>
+        <Box sx={{ flex: 1 }}>
+          <PageHeader title="How FourPlay Works" subtitle="Everything you need to know before making your picks." />
         </Box>
+      </Box>
+      <Stack spacing={3}>
 
         <Section title="How Picks Work">
           <Rule>

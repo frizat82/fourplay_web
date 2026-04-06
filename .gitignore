@@ -365,3 +365,6 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
+.vercel
+.env*.local
+.env.backend
