@@ -95,7 +95,6 @@ describe('ChangePasswordPage', () => {
 
     await waitFor(() => {
       expect(mockedChangePassword).toHaveBeenCalledWith({
-        email: 'testuser@example.com',
         currentPassword: 'OldPass1!',
         password: 'NewPass1!',
       });

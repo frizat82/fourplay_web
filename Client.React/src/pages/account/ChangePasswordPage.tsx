@@ -47,7 +47,6 @@ export default function ChangePasswordPage() {
     }
     try {
       await changePassword({
-        email: user.name,
         currentPassword: values.oldPassword,
         password: values.newPassword,
       });

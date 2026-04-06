@@ -73,7 +73,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [persistLeague]);
 
   useEffect(() => {
-    void reloadLeagues();
+    void reloadLeagues().catch((err: unknown) => {
+      console.error('Failed to load leagues', err);
+    });
   }, [reloadLeagues]);
 
   const value = useMemo(

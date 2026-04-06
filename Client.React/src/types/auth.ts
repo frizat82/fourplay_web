@@ -50,7 +50,6 @@ export interface ResetPasswordRequest {
 }
 
 export interface ChangePasswordRequest {
-  email: string;
   currentPassword: string;
   password: string;
 }
