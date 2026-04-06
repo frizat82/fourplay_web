@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
@@ -12,7 +13,7 @@ public class Invitation
 
     [Required]
     public string InvitationCode { get; set; } = Guid.NewGuid().ToString("N");
-    
+
     [Required, EmailAddress]
     public string Email { get; set; } = string.Empty;
 
@@ -20,6 +21,11 @@ public class Invitation
 
     [ForeignKey("InvitedByUserId")]
     public ApplicationUser? InvitedByUser { get; set; }
+
+    public int? LeagueId { get; set; }
+
+    [ForeignKey("LeagueId")]
+    public LeagueInfo? League { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
