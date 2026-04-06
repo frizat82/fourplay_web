@@ -100,4 +100,29 @@ public class UserManagerJobConfigTests
         Assert.Equal(configUser, capturedUser.UserName);  // fails before fix ("frizat" hardcoded)
         Assert.NotEqual("frizat", capturedUser.UserName); // belt-and-suspenders
     }
+
+    /// <summary>
+    /// frizat-uvi: AddUserToRole must not silently succeed when the user is not found.
+    /// Previously logged "Admin User Found" with a null value — now logs an error.
+    /// This test verifies the method returns without calling AddToRoleAsync.
+    /// </summary>
+    [Fact]
+    public async Task AddUserToRole_DoesNotAssignRole_WhenUserNotFound()
+    {
+        var (userManager, roleManager) = BuildMocks();
+        userManager.FindByEmailAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
+
+        var dbOptions = new DbContextOptionsBuilder<Data.ApplicationDbContext>()
+            .UseInMemoryDatabase("UMJobTest_" + Guid.NewGuid())
+            .Options;
+        var db = new Data.ApplicationDbContext(dbOptions);
+        var config = BuildConfig("ghost@example.com", "ghost");
+        var services = Substitute.For<IServiceProvider>();
+        var job = new UserManagerJob(roleManager, userManager, config, db, services);
+
+        // Should not throw, should not call AddToRoleAsync
+        await job.AddUserToRole("ghost@example.com", "Administrator");
+
+        await userManager.DidNotReceive().AddToRoleAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>());
+    }
 }
