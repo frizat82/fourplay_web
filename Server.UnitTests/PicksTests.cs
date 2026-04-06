@@ -131,6 +131,7 @@ public class PicksTests
 
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
 
         var espn = Substitute.For<IEspnCacheService>();
@@ -155,6 +156,7 @@ public class PicksTests
 
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
         repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
 
@@ -178,6 +180,7 @@ public class PicksTests
         // Arrange — ESPN cache cold / unavailable; should not block picks
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
         repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
 
@@ -208,6 +211,7 @@ public class PicksTests
 
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(jwtUserId, LeagueId).Returns(true);
         // After the fix the controller will use jwtUserId; set up mock for that userId
         repo.GetUserNflPicksAsync(jwtUserId, LeagueId, Season, Week).Returns([]);
         repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
@@ -256,6 +260,7 @@ public class PicksTests
 
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
         repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
 
@@ -268,5 +273,59 @@ public class PicksTests
 
         // Cache entry must be removed so subsequent reads reload from DB
         Assert.False(cache.TryGetValue(cacheKey, out _), "Cache must be cleared after AddPicks");
+    }
+
+    /// <summary>
+    /// frizat-8n3: AddPicks must return 403 when the authenticated user is not a member
+    /// of the league they are submitting picks for (IDOR prevention).
+    /// </summary>
+    [Fact]
+    public async Task AddPicks_ReturnsForbid_WhenUserNotInLeague()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(false);
+
+        var espn = Substitute.For<IEspnCacheService>();
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+
+        var result = await controller.AddPicks([MakePick("BUF")]);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await repo.DidNotReceive().AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>());
+    }
+
+    /// <summary>
+    /// frizat-8n3: AddPicks must not insert duplicate picks when the same pick already
+    /// exists — Except() on entity objects uses reference equality and always fails,
+    /// so we now deduplicate by (Team, NflWeek, Season, LeagueId) key.
+    /// </summary>
+    [Fact]
+    public async Task AddPicks_DeduplicatesByKey_NotReferenceEquality()
+    {
+        var existingPick = new NflPicks
+        {
+            LeagueId = LeagueId, UserId = UserId, Team = "BUF",
+            Pick = PickType.Spread, NflWeek = Week, Season = Season,
+            NflWeekId = 1
+        };
+
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([existingPick]);
+        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns((EspnScores?)null);
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+
+        // Submit the same pick that already exists
+        var result = await controller.AddPicks([MakePick("BUF")]);
+
+        // Must be OK (not a bad request) but no new picks inserted
+        Assert.IsType<OkObjectResult>(result.Result);
+        await repo.Received(1).AddNflPicksAsync(
+            Arg.Is<IEnumerable<NflPicks>>(picks => !picks.Any()));
     }
 }
