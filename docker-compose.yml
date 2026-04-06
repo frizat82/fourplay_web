@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: fourplay_dev
+      POSTGRES_USER: fourplay
+      POSTGRES_PASSWORD: fourplay_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - fourplay_pg_data:/var/lib/postgresql/data
+
+volumes:
+  fourplay_pg_data:
