@@ -126,7 +126,7 @@ public class UserManagerJob(
         string roleName) {
         var adminUser = await userManager.FindByEmailAsync(userEmail);
         if (adminUser is null) {
-            Log.Information("Admin User Found {@Identity}", adminUser);
+            Log.Error("AddUserToRole: user {Email} not found — cannot assign role {Role}", userEmail, roleName);
             return;
         }
 

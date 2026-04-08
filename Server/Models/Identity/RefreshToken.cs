@@ -13,10 +13,10 @@ namespace FourPlayWebApp.Server.Models.Identity
         [Required]
         public string Token { get; set; } = null!;
         [Required]
-        public DateTime Expires { get; set; }
+        public DateTimeOffset Expires { get; set; }
         [Required]
-        public DateTime Created { get; set; } = DateTime.UtcNow;
-        public DateTime? Revoked { get; set; }
+        public DateTimeOffset Created { get; set; } = DateTimeOffset.UtcNow;
+        public DateTimeOffset? Revoked { get; set; }
         [ForeignKey("UserId")]
         public ApplicationUser User { get; set; } = null!;
     }

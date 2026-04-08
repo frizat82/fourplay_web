@@ -12,6 +12,6 @@ public class NflScores {
     public string AwayTeam { get; set; }
     public int HomeTeamScore { get; set; }
     public int AwayTeamScore { get; set; }
-    public DateTime GameTime { get; set; }
-    public DateTimeOffset DateCreated { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset GameTime { get; set; }
+    public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
 }

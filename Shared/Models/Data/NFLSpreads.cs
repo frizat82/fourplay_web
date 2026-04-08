@@ -13,6 +13,6 @@ public class NflSpreads {
     public double HomeTeamSpread { get; set; }
     public double AwayTeamSpread { get; set; }
     public double OverUnder { get; set; }
-    public DateTime GameTime { get; set; }
-    public DateTimeOffset DateCreated { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset GameTime { get; set; }
+    public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
 }
