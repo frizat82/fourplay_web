@@ -27,13 +27,13 @@ public class Invitation
     [ForeignKey("LeagueId")]
     public LeagueInfo? League { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
-    public DateTime? ExpiresAt { get; set; } = DateTime.UtcNow.AddDays(7);
+    public DateTimeOffset? ExpiresAt { get; set; } = DateTimeOffset.UtcNow.AddDays(7);
 
     public bool IsUsed { get; set; } = false;
 
-    public DateTime? UsedAt { get; set; }
+    public DateTimeOffset? UsedAt { get; set; }
 
     public string? RegisteredUserId { get; set; }
 
@@ -41,7 +41,7 @@ public class Invitation
     public ApplicationUser? RegisteredUser { get; set; }
 
     [NotMapped]
-    public bool IsExpired => ExpiresAt.HasValue && ExpiresAt.Value < DateTime.UtcNow;
+    public bool IsExpired => ExpiresAt.HasValue && ExpiresAt.Value < DateTimeOffset.UtcNow;
 
     [NotMapped]
     public bool IsValid => !IsUsed && !IsExpired;
