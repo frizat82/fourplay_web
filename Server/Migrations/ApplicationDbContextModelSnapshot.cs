@@ -498,7 +498,7 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.HasIndex("OwnerUserId");
 
-                    b.ToTable("LeagueInfo");
+                    b.ToTable("LeagueInfo", (string)null);
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueJuiceMapping", b =>
@@ -545,7 +545,7 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("LeagueId", "Season")
                         .IsUnique();
 
-                    b.ToTable("LeagueJuiceMapping");
+                    b.ToTable("LeagueJuiceMapping", (string)null);
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueUserMapping", b =>
@@ -575,7 +575,7 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("LeagueId", "UserId")
                         .IsUnique();
 
-                    b.ToTable("LeagueUserMapping");
+                    b.ToTable("LeagueUserMapping", (string)null);
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueUsers", b =>
@@ -595,7 +595,7 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("LeagueUsers");
+                    b.ToTable("LeagueUsers", (string)null);
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.NflPicks", b =>
@@ -643,7 +643,7 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("UserId", "LeagueId", "NflWeek", "Season", "Team", "Pick")
                         .IsUnique();
 
-                    b.ToTable("NflPicks");
+                    b.ToTable("NflPicks", (string)null);
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.NflWeeks", b =>
@@ -676,7 +676,7 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("Season", "NflWeek")
                         .IsUnique();
 
-                    b.ToTable("NflWeeks");
+                    b.ToTable("NflWeeks", (string)null);
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Identity.ApplicationUser", b =>
@@ -779,7 +779,7 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("RefreshTokens");
+                    b.ToTable("RefreshTokens", (string)null);
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Invitation", b =>
@@ -830,7 +830,7 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.HasIndex("RegisteredUserId");
 
-                    b.ToTable("Invitations");
+                    b.ToTable("Invitations", (string)null);
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.NflScores", b =>
@@ -874,7 +874,7 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("Season", "NflWeek", "HomeTeam")
                         .IsUnique();
 
-                    b.ToTable("NflScores");
+                    b.ToTable("NflScores", (string)null);
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.NflSpreads", b =>
@@ -921,7 +921,7 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("Season", "NflWeek", "HomeTeam")
                         .IsUnique();
 
-                    b.ToTable("NflSpreads");
+                    b.ToTable("NflSpreads", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
