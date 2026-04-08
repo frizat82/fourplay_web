@@ -19,9 +19,9 @@ public class MissingPicksJob(ILeagueRepository leagueRepository, IEspnApiService
         await observer.RecordJobStartAsync(jobName);
         try
         {
-            Log.Information("MissingPicksJob started at {Time}", DateTime.UtcNow);
+            Log.Information("MissingPicksJob started at {Time}", DateTimeOffset.UtcNow);
 
-            var nowUtc = DateTime.UtcNow;
+            var nowUtc = DateTimeOffset.UtcNow;
             // Attempt to find the current NFL week from the stored weeks
             var scoreboard = await espiApiService.GetScores();
             if (scoreboard is null) {
@@ -125,7 +125,7 @@ public class MissingPicksJob(ILeagueRepository leagueRepository, IEspnApiService
                 }
             }
 
-            Log.Information("MissingPicksJob finished at {Time}", DateTime.UtcNow);
+            Log.Information("MissingPicksJob finished at {Time}", DateTimeOffset.UtcNow);
             await observer.RecordJobSuccessAsync(jobName, "Completed successfully");
         }
         catch (Exception ex)

@@ -10,5 +10,5 @@ public class LeagueJuiceMappingDto
     public int JuiceDivisional { get; set; }
     public int JuiceConference { get; set; }
     public int WeeklyCost { get; set; }
-    public DateTimeOffset DateCreated { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
 }
