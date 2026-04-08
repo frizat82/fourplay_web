@@ -57,4 +57,35 @@ public class AuthorizationTests
         var attr = typeof(LeagueController).GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(attr);
     }
+
+    /// <summary>
+    /// frizat-uvi: JerseyController.RefreshCache must require authentication to prevent
+    /// unauthenticated callers from triggering backend HTTP fan-out.
+    /// </summary>
+    [Fact]
+    public void JerseyController_RefreshCache_HasAuthorizeAttribute()
+    {
+        var method = typeof(JerseysController).GetMethod(nameof(JerseysController.RefreshCache));
+        Assert.NotNull(method);
+
+        // Method must have [Authorize] — class is [AllowAnonymous] so method-level is required
+        var attr = method.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(attr);
+    }
+
+    /// <summary>
+    /// frizat-uvi: JerseyController GET endpoints must remain anonymous (public jersey images).
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(JerseysController.GetAll))]
+    [InlineData(nameof(JerseysController.GetByTeam))]
+    public void JerseyController_GetEndpoints_RemainAnonymous(string methodName)
+    {
+        var method = typeof(JerseysController).GetMethod(methodName);
+        Assert.NotNull(method);
+
+        // Must NOT have [Authorize] — these are public read endpoints
+        var attr = method!.GetCustomAttribute<AuthorizeAttribute>();
+        Assert.Null(attr);
+    }
 }

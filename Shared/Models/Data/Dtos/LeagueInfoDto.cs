@@ -7,7 +7,7 @@ public class LeagueInfoDto
 {
     public int Id { get; set; }
     public string LeagueName { get; set; } = string.Empty;
-    public DateTimeOffset DateCreated { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
     public string OwnerUserId { get; set; } = string.Empty;
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public LeagueType LeagueType { get; set; } = LeagueType.Nfl;
