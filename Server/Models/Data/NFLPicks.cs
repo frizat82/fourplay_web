@@ -15,7 +15,7 @@ public class NflPicks {
     public PickType Pick { get; set; } = PickType.Spread;
     public int NflWeek { get; set; }
     public int Season { get; set; }
-    public DateTimeOffset DateCreated { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
     // Navigation property
     public NflWeeks NflWeekInfo { get; set; }
     public int NflWeekId { get; set; }

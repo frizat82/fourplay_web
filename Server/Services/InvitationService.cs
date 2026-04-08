@@ -30,8 +30,8 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
             Email = email,
             InvitedByUserId = invitedByUserId,
             LeagueId = leagueId,
-            CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(7)
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
         };
 
         dbContext.Invitations.Add(invitation);
@@ -62,7 +62,7 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
             return null;
         }
 
-        if (invitation.ExpiresAt >= DateTime.UtcNow) return invitation;
+        if (invitation.ExpiresAt >= DateTimeOffset.UtcNow) return invitation;
         Log.Information("Invitation with code {Code} has expired", code);
         return null;
 
@@ -75,14 +75,14 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
         var invitation = await dbContext.Invitations
             .FirstOrDefaultAsync(i => i.InvitationCode == code);
 
-        if (invitation == null || invitation.IsUsed || invitation.ExpiresAt < DateTime.UtcNow)
+        if (invitation == null || invitation.IsUsed || invitation.ExpiresAt < DateTimeOffset.UtcNow)
         {
             Log.Warning("Cannot mark invitation {Code} as used - invalid state", code);
             return false;
         }
 
         invitation.IsUsed = true;
-        invitation.UsedAt = DateTime.UtcNow;
+        invitation.UsedAt = DateTimeOffset.UtcNow;
         invitation.RegisteredUserId = registeredUserId;
 
         await dbContext.SaveChangesAsync();
