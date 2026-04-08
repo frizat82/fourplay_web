@@ -10,7 +10,7 @@ namespace FourPlayWebApp.Shared.Models.Data.Dtos
         public string UserId { get; set; } = string.Empty;
         public string? UserName { get; set; } = string.Empty;
         public string? LeagueName { get; set; } = string.Empty;
-        public DateTimeOffset DateCreated { get; set; } = DateTime.UtcNow;
+        public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
 
         // IEquatable implementation
         public bool Equals(LeagueUserMappingDto? other)

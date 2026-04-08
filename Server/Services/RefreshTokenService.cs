@@ -17,8 +17,8 @@ namespace FourPlayWebApp.Server.Services
             {
                 UserId = user.Id,
                 Token = token,
-                Expires = DateTime.UtcNow.Add(lifetime),
-                Created = DateTime.UtcNow
+                Expires = DateTimeOffset.UtcNow.Add(lifetime),
+                Created = DateTimeOffset.UtcNow
             };
             await using var db = await dbFactory.CreateDbContextAsync();
             db.RefreshTokens.Add(refreshToken);
@@ -32,7 +32,7 @@ namespace FourPlayWebApp.Server.Services
             var refreshToken = await db.RefreshTokens
                 .Include(rt => rt.User)
                 .FirstOrDefaultAsync(rt => rt.Token == token);
-            if (refreshToken == null || refreshToken.Expires < DateTime.UtcNow || refreshToken.Revoked != null)
+            if (refreshToken == null || refreshToken.Expires < DateTimeOffset.UtcNow || refreshToken.Revoked != null)
                 return null;
             return refreshToken;
         }
@@ -41,10 +41,10 @@ namespace FourPlayWebApp.Server.Services
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             var existing = await db.RefreshTokens.FirstOrDefaultAsync(rt => rt.Token == oldToken);
-            if (existing == null || existing.Revoked != null || existing.Expires < DateTime.UtcNow)
+            if (existing == null || existing.Revoked != null || existing.Expires < DateTimeOffset.UtcNow)
                 return null;
             // Revoke old token
-            existing.Revoked = DateTime.UtcNow;
+            existing.Revoked = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
             // Issue new token in its own context
             return await IssueTokenAsync(user, lifetime);
@@ -56,7 +56,7 @@ namespace FourPlayWebApp.Server.Services
             var refreshToken = await db.RefreshTokens.FirstOrDefaultAsync(rt => rt.Token == token);
             if (refreshToken != null && refreshToken.Revoked == null)
             {
-                refreshToken.Revoked = DateTime.UtcNow;
+                refreshToken.Revoked = DateTimeOffset.UtcNow;
                 await db.SaveChangesAsync();
             }
         }
@@ -66,7 +66,7 @@ namespace FourPlayWebApp.Server.Services
             await using var db = await dbFactory.CreateDbContextAsync();
             var tokens = await db.RefreshTokens.Where(rt => rt.UserId == userId && rt.Revoked == null).ToListAsync();
             foreach (var token in tokens)
-                token.Revoked = DateTime.UtcNow;
+                token.Revoked = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
         }
 

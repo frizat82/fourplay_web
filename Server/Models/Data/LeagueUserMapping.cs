@@ -8,5 +8,5 @@ public class LeagueUserMapping {
     // Foreign key to the AspNetUsers table
     public string UserId { get; set; }
     public ApplicationUser User { get; set; } // Navigation property
-    public DateTimeOffset DateCreated { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
 }
