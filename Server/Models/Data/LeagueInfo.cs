@@ -5,7 +5,7 @@ namespace FourPlayWebApp.Server.Models.Data;
 public class LeagueInfo {
     public int Id { get; set; }
     public string LeagueName { get; set; }
-    public DateTimeOffset DateCreated { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
     // Foreign key to the AspNetUsers table
     public string OwnerUserId { get; set; }
     public ApplicationUser Owner { get; set; } // Navigation property

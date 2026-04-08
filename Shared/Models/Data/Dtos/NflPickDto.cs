@@ -14,7 +14,7 @@ public class NflPickDto : IEquatable<NflPickDto>
     public PickType Pick { get; set; }  // Represents PickType enum as int for DTO
     public int NflWeek { get; set; }
     public int Season { get; set; }
-    public DateTimeOffset DateCreated { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
     public override int GetHashCode() {
         return HashCode.Combine(Team, Pick, Season, NflWeek, UserId, LeagueId);
     }
