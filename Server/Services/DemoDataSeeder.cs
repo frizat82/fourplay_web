@@ -57,9 +57,31 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         await SeedSpreadsAsync();
         var league = await SeedLeagueAsync();
         await SeedLeagueMemberAsync(league);
+        await SeedLeagueJuiceMappingAsync(league);
         await SeedDemoUsersAsync(league);
 
         Log.Information("DemoDataSeeder: seed complete");
+    }
+
+    private async Task SeedLeagueJuiceMappingAsync(LeagueInfo? league)
+    {
+        if (league == null) return;
+
+        if (await db.LeagueJuiceMapping.AnyAsync(m => m.LeagueId == league.Id && m.Season == DemoSeason))
+            return;
+
+        db.LeagueJuiceMapping.Add(new LeagueJuiceMapping
+        {
+            LeagueId = league.Id,
+            Season = DemoSeason,
+            Juice = 13,
+            JuiceDivisional = 10,
+            JuiceConference = 6,
+            WeeklyCost = 5,
+            DateCreated = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: created LeagueJuiceMapping for Demo League season {Season}", DemoSeason);
     }
 
     private async Task SeedNflWeekAsync()
