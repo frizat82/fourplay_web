@@ -17,9 +17,10 @@ function buildSituation(overrides?: Partial<GameSituation>): GameSituation {
 }
 
 describe('FieldPosition', () => {
-  it('renders nothing when situation is null', () => {
+  it('renders a placeholder element (not null) when situation is null', () => {
     const { container } = render(<FieldPosition situation={null} />);
-    expect(container.firstChild).toBeNull();
+    expect(container.firstChild).not.toBeNull();
+    expect(screen.queryByTestId('field-position-bar')).toBeNull();
   });
 
   it('renders down and distance text', () => {

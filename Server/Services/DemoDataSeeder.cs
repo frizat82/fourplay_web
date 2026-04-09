@@ -57,9 +57,32 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         await SeedSpreadsAsync();
         var league = await SeedLeagueAsync();
         await SeedLeagueMemberAsync(league);
+        await SeedLeagueJuiceMappingAsync(league);
+        await SeedNflScoresAsync();
         await SeedDemoUsersAsync(league);
 
         Log.Information("DemoDataSeeder: seed complete");
+    }
+
+    private async Task SeedLeagueJuiceMappingAsync(LeagueInfo? league)
+    {
+        if (league == null) return;
+
+        if (await db.LeagueJuiceMapping.AnyAsync(m => m.LeagueId == league.Id && m.Season == DemoSeason))
+            return;
+
+        db.LeagueJuiceMapping.Add(new LeagueJuiceMapping
+        {
+            LeagueId = league.Id,
+            Season = DemoSeason,
+            Juice = 13,
+            JuiceDivisional = 10,
+            JuiceConference = 6,
+            WeeklyCost = 5,
+            DateCreated = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: created LeagueJuiceMapping for Demo League season {Season}", DemoSeason);
     }
 
     private async Task SeedNflWeekAsync()
@@ -163,6 +186,24 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         db.LeagueUserMapping.Add(new LeagueUserMapping { LeagueId = league.Id, UserId = adminUser.Id });
         await db.SaveChangesAsync();
         Log.Information("DemoDataSeeder: added admin to Demo League");
+    }
+
+    private async Task SeedNflScoresAsync()
+    {
+        if (await db.NflScores.AnyAsync(s => s.Season == DemoSeason && s.NflWeek == DemoWeek))
+            return;
+
+        // 4 final games from frozen sample_espn_nfl.json for 2023 week 8
+        var scores = new List<NflScores>
+        {
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "DAL", AwayTeam = "LAR", HomeTeamScore = 28, AwayTeamScore = 20, GameTime = new DateTimeOffset(2023, 10, 29, 17, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "GB",  AwayTeam = "MIN", HomeTeamScore = 17, AwayTeamScore = 24, GameTime = new DateTimeOffset(2023, 10, 29, 17, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "MIA", AwayTeam = "NE",  HomeTeamScore = 31, AwayTeamScore = 17, GameTime = new DateTimeOffset(2023, 10, 29, 17, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "WAS", AwayTeam = "PHI", HomeTeamScore = 7,  AwayTeamScore = 38, GameTime = new DateTimeOffset(2023, 10, 29, 17, 0, 0, TimeSpan.Zero) },
+        };
+        db.NflScores.AddRange(scores);
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: seeded {Count} final NflScores for week {Week}", scores.Count, DemoWeek);
     }
 
     private async Task SeedDemoUsersAsync(LeagueInfo? league)
