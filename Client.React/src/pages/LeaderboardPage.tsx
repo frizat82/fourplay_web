@@ -122,6 +122,11 @@ export default function LeaderboardPage() {
   return (
     <Box>
       <PageHeader title="Leaderboard" />
+      {leaderboard.length === 0 && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 4, textAlign: 'center' }}>
+          No leaderboard data yet for this season.
+        </Typography>
+      )}
       {leaderboard.length > 0 && (
         <Grid container spacing={2}>
           <Grid size={12}>
