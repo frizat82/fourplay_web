@@ -6,7 +6,6 @@ import {
   CardContent,
   CircularProgress,
   Grid,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -132,7 +131,7 @@ export default function LeaderboardPage() {
           <Grid size={12}>
           </Grid>
           <Grid size={12}>
-            <Paper sx={{ p: 2 }}>
+            <Box>
               <Box sx={{ overflowX: 'auto' }}><Table size="small">
                 <TableHead>
                   <TableRow>
@@ -231,7 +230,7 @@ export default function LeaderboardPage() {
                   </Card>
                 </Grid>
               </Grid>
-            </Paper>
+            </Box>
           </Grid>
         </Grid>
       )}
