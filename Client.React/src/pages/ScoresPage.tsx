@@ -445,13 +445,11 @@ export default function ScoresPage() {
                               <img src={getHomeTeamLogo(competition)} width={50} />
                             </Stack>
 
-                            {!isHalfTime(competition) && (
-                              <FieldPosition
-                                situation={liveGames.find(
-                                  (g) => g.homeTeam === homeAbbr && g.awayTeam === awayAbbr
-                                )?.situation ?? null}
-                              />
-                            )}
+                            <FieldPosition
+                              situation={isHalfTime(competition) ? null : (liveGames.find(
+                                (g) => g.homeTeam === homeAbbr && g.awayTeam === awayAbbr
+                              )?.situation ?? null)}
+                            />
 
                             <Stack direction="row" alignItems="center" sx={{ mt: 3, gap: 1.5, px: 1 }}>
                               {getIcon(competition, awayAbbr)}
