@@ -7,9 +7,9 @@ export function createAppTheme(mode: 'light' | 'dark') {
     mode,
     // Professional dark navy primary with vibrant sports orange accent
     primary: {
-      main: '#1a2847', // Professional dark navy
-      dark: '#0f1729',
-      light: '#2a3d5f',
+      main: isDark ? '#3b82f6' : '#1a2847',
+      dark: isDark ? '#2563eb' : '#0f1729',
+      light: isDark ? '#60a5fa' : '#2a3d5f',
       contrastText: '#FFFFFF',
     },
     secondary: {
