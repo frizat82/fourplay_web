@@ -9,7 +9,7 @@ interface FieldPositionProps {
 const YARD_MARKERS = [10, 20, 30, 40, 50, 60, 70, 80, 90];
 
 export default function FieldPosition({ situation }: FieldPositionProps) {
-  if (!situation) return null;
+  if (!situation) return <Box sx={{ mt: 1, height: 24 + 4 + 20, mx: 1 }} />;
 
   const { yardLine, isHomePossession, isRedZone, downDistanceText } = situation;
   const fieldColor = isRedZone ? 'error.dark' : 'success.dark';

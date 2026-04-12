@@ -6,7 +6,6 @@ import {
   CardContent,
   CircularProgress,
   Grid,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -122,12 +121,17 @@ export default function LeaderboardPage() {
   return (
     <Box>
       <PageHeader title="Leaderboard" />
+      {leaderboard.length === 0 && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 4, textAlign: 'center' }}>
+          No leaderboard data yet for this season.
+        </Typography>
+      )}
       {leaderboard.length > 0 && (
         <Grid container spacing={2}>
           <Grid size={12}>
           </Grid>
           <Grid size={12}>
-            <Paper sx={{ p: 2 }}>
+            <Box>
               <Box sx={{ overflowX: 'auto' }}><Table size="small">
                 <TableHead>
                   <TableRow>
@@ -226,7 +230,7 @@ export default function LeaderboardPage() {
                   </Card>
                 </Grid>
               </Grid>
-            </Paper>
+            </Box>
           </Grid>
         </Grid>
       )}
