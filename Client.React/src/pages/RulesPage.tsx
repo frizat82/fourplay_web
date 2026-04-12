@@ -33,7 +33,7 @@ export default function RulesPage() {
   const superBowlPicks = getEspnRequiredPicks(5, true);
 
   return (
-    <Card sx={{ maxWidth: 600, mx: 'auto' }}>
+    <Card sx={{ minHeight: 'calc(100vh - 128px)' }}>
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
           <IconButton onClick={() => navigate(-1)} sx={{ mr: 1, mt: 0.5 }}>
