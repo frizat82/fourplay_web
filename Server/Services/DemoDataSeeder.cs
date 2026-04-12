@@ -60,6 +60,7 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         await SeedLeagueJuiceMappingAsync(league);
         await SeedNflScoresAsync();
         await SeedDemoUsersAsync(league);
+        await SeedHistoricalWeeksAsync(league);
 
         Log.Information("DemoDataSeeder: seed complete");
     }
@@ -280,6 +281,97 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         }
         await db.SaveChangesAsync();
         Log.Information("DemoDataSeeder: seeded picks for {Username}", user.UserName);
+    }
+
+    // Historical weeks 1-7: same 4 games every week, home teams always cover
+    // Winning user picks: KC, DAL, PHI, BUF (all home = all cover)
+    // Losing user picks:  DEN, DAL, PHI, BUF (DEN = wrong = loss)
+    private static readonly string[] HistWinPicks = ["KC", "DAL", "PHI", "BUF"];
+    private static readonly string[] HistLosePicks = ["DEN", "DAL", "PHI", "BUF"];
+
+    // Win pattern per user per week (weeks 1-7, index 0-6); true = win that week
+    // Scoring: WeeklyCost=5. Week 5 = all win → carryover → WeeklyCost=10 for week 6.
+    // Result: Alice +95, frizat +65, Carlos +35, Bob -25, Dana/Eve -85
+    private static readonly Dictionary<string, bool[]> HistWinPatterns = new()
+    {
+        ["Alice"]  = [true,  true,  true,  true,  true, true,  true],
+        ["Bob"]    = [false, true,  false, false, true, true,  false],
+        ["Carlos"] = [true,  false, true,  false, true, true,  true],
+        ["Dana"]   = [false, false, true,  false, true, false, false],
+        ["Eve"]    = [false, false, false, true,  true, false, false],
+    };
+
+    private async Task SeedHistoricalWeeksAsync(LeagueInfo? league)
+    {
+        if (league == null) return;
+        if (await db.NflSpreads.AnyAsync(s => s.Season == DemoSeason && s.NflWeek == 1))
+            return;
+
+        var adminEmail = configuration["ADMIN_EMAIL"] ?? throw new InvalidOperationException("ADMIN_EMAIL required");
+        var adminUser = await userManager.FindByEmailAsync(adminEmail);
+        if (adminUser == null) return;
+
+        // Admin (frizat) win pattern: W W L W W W W
+        bool[] adminWins = [true, true, false, true, true, true, true];
+
+        // Build user list
+        var users = new List<(ApplicationUser User, bool[] Wins)> { (adminUser, adminWins) };
+        foreach (var (username, _) in DemoUsers)
+        {
+            var u = await userManager.FindByNameAsync(username);
+            if (u != null && HistWinPatterns.TryGetValue(username, out var pattern))
+                users.Add((u, pattern));
+        }
+
+        for (int week = 1; week <= 7; week++)
+        {
+            var weekGameTime = new DateTimeOffset(2023, 9, 4, 17, 0, 0, TimeSpan.Zero).AddDays((week - 1) * 7 + 3);
+
+            // NflWeeks
+            if (!await db.NflWeeks.AnyAsync(w => w.Season == DemoSeason && w.NflWeek == week))
+            {
+                var weekStart = new DateTimeOffset(2023, 9, 4, 0, 0, 0, TimeSpan.Zero).AddDays((week - 1) * 7);
+                db.NflWeeks.Add(new NflWeeks { Season = DemoSeason, NflWeek = week, StartDate = weekStart, EndDate = weekStart.AddDays(6) });
+                await db.SaveChangesAsync();
+            }
+            var nflWeek = await db.NflWeeks.FirstAsync(w => w.Season == DemoSeason && w.NflWeek == week);
+
+            // NflSpreads (4 games, home teams favored)
+            db.NflSpreads.AddRange(
+                new NflSpreads { Season = DemoSeason, NflWeek = week, HomeTeam = "KC",  AwayTeam = "DEN", HomeTeamSpread = -7.0, AwayTeamSpread = 7.0, OverUnder = 47.5, GameTime = weekGameTime },
+                new NflSpreads { Season = DemoSeason, NflWeek = week, HomeTeam = "DAL", AwayTeam = "CLE", HomeTeamSpread = -6.0, AwayTeamSpread = 6.0, OverUnder = 44.5, GameTime = weekGameTime },
+                new NflSpreads { Season = DemoSeason, NflWeek = week, HomeTeam = "PHI", AwayTeam = "NYG", HomeTeamSpread = -4.0, AwayTeamSpread = 4.0, OverUnder = 43.5, GameTime = weekGameTime },
+                new NflSpreads { Season = DemoSeason, NflWeek = week, HomeTeam = "BUF", AwayTeam = "NYJ", HomeTeamSpread = -3.0, AwayTeamSpread = 3.0, OverUnder = 46.5, GameTime = weekGameTime }
+            );
+
+            // NflScores (all home teams win and cover)
+            db.NflScores.AddRange(
+                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "KC",  AwayTeam = "DEN", HomeTeamScore = 24, AwayTeamScore = 14, GameTime = weekGameTime },
+                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "DAL", AwayTeam = "CLE", HomeTeamScore = 28, AwayTeamScore = 20, GameTime = weekGameTime },
+                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "PHI", AwayTeam = "NYG", HomeTeamScore = 20, AwayTeamScore = 13, GameTime = weekGameTime },
+                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "BUF", AwayTeam = "NYJ", HomeTeamScore = 17, AwayTeamScore = 10, GameTime = weekGameTime }
+            );
+            await db.SaveChangesAsync();
+
+            // NflPicks
+            int weekIdx = week - 1;
+            foreach (var (user, wins) in users)
+            {
+                var picks = wins[weekIdx] ? HistWinPicks : HistLosePicks;
+                foreach (var team in picks)
+                {
+                    db.NflPicks.Add(new NflPicks
+                    {
+                        UserId = user.Id, LeagueId = league.Id, Team = team,
+                        Pick = PickType.Spread, NflWeek = week, Season = DemoSeason,
+                        NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow,
+                    });
+                }
+            }
+            await db.SaveChangesAsync();
+        }
+
+        Log.Information("DemoDataSeeder: seeded historical weeks 1-7 for {UserCount} users", users.Count);
     }
 
     private static NflSpreads Spread(string home, string away, double homeSpread, double awaySpread, double ou, string gameTimeUtc) =>
