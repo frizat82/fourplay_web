@@ -298,6 +298,8 @@ export default function AppLayout() {
         component="main"
         sx={{
           flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
           p: { xs: 0, sm: 3 },
           width: { xs: '100%', md: `calc(100% - ${open ? drawerWidth : 0}px)` },
           minHeight: '100vh',
@@ -308,7 +310,7 @@ export default function AppLayout() {
         }}
       >
         <Toolbar />
-        <Box className="page-shell">
+        <Box className="page-shell" sx={{ flex: 1 }}>
           <Outlet />
         </Box>
       </Box>
