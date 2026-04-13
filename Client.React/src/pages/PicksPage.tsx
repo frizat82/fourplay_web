@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   CircularProgress,
   Grid,
   Paper,
@@ -343,8 +341,7 @@ export default function PicksPage() {
   if (!hasOdds) return <SpreadRelease />;
 
   return (
-    <Card sx={{ minHeight: 'calc(100vh - 128px)' }}>
-      <CardContent>
+    <Box>
       <PageHeader title="Picks" />
       {scores && (
         <Box sx={{ mb: 3 }}>
@@ -547,7 +544,6 @@ export default function PicksPage() {
             })
         )}
       </Grid>
-      </CardContent>
-    </Card>
+    </Box>
   );
 }
