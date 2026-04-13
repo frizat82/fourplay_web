@@ -2,7 +2,7 @@
 
 :root {
   --bg-1: #f8fafc;
-  --bg-2: #e2e8f0;
+  --bg-2: #f1f4f8;
   --bg-3: #cbd5f5;
   --ink-1: #0f172a;
   --ink-2: #334155;
@@ -39,14 +39,20 @@ body {
   margin: 0;
   font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
   color: var(--ink-1);
-  background: radial-gradient(80% 50% at 10% -10%, var(--bg-3), transparent 60%),
-    radial-gradient(70% 45% at 90% -20%, #fde68a33, transparent 55%),
+  background: radial-gradient(80% 50% at 10% -10%, rgba(203, 213, 245, 0.25), transparent 60%),
+    radial-gradient(70% 45% at 90% -20%, rgba(253, 230, 138, 0.1), transparent 55%),
     linear-gradient(180deg, var(--bg-1), var(--bg-2));
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.3s ease, color 0.3s ease;
+}
+
+[data-theme='dark'] body {
+  background: radial-gradient(80% 50% at 10% -10%, rgba(30, 58, 95, 0.5), transparent 60%),
+    radial-gradient(70% 45% at 90% -20%, rgba(253, 230, 138, 0.04), transparent 55%),
+    linear-gradient(180deg, var(--bg-1), var(--bg-2));
 }
 
 /* iOS safe area support */
