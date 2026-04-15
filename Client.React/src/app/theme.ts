@@ -72,9 +72,9 @@ export function createAppTheme(mode: 'light' | 'dark') {
       fontWeight: 600,
       color: isDark ? '#94a3b8' : '#374151',
     },
-    button: { 
-      textTransform: 'none', 
-      fontWeight: 700, 
+    button: {
+      textTransform: 'none',
+      fontWeight: 700,
       letterSpacing: 0.2 ,
     },
   },

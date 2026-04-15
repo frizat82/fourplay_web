@@ -100,7 +100,7 @@ export default function LeaderboardPage() {
 
   const rowClass = (row: LeaderboardDto) => {
     if (!user?.name) return {};
-    return row.userName === user.name 
+    return row.userName === user.name
       ? { backgroundColor: 'action.hover', fontWeight: 600 }
       : {};
   };

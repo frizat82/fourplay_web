@@ -1,0 +1,17 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^Client\.React/.*\.snap$
+      - id: end-of-file-fixer
+        exclude: ^Client\.React/.*\.snap$
+      - id: check-json
+        exclude: (^Client\.React/.*\.snap$|tsconfig.*\.json$)
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'dev']
