@@ -15,7 +15,7 @@ public static class NavigationHelpers {
             await Task.CompletedTask;
         }
     }
-    public static async Task<int> HandleLeagueCookie(NavigationManager navigationManager, 
+    public static async Task<int> HandleLeagueCookie(NavigationManager navigationManager,
         ILocalStorageService localStorage, bool redirectToHome = true)
     {
         try {

@@ -109,7 +109,7 @@ public class MissingPicksJob(ILeagueRepository leagueRepository, IEspnApiService
                         var messageBody = sb.ToString();
 
                         try {
-                            var templated = GoogleEmailSender.CreateTemplatedBody(subject, messageBody); 
+                            var templated = GoogleEmailSender.CreateTemplatedBody(subject, messageBody);
                             await emailSender.SendEmailAsync(email, subject, templated);
                             Log.Information("MissingPicksJob: Sent aggregated reminder to {Email} for user {UserId}", user.Email, user.Id);
                         }
