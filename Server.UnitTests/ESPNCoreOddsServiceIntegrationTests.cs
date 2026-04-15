@@ -12,7 +12,7 @@ public class EspnCoreOddsServiceLiveApiTests {
         var httpClientBase = new HttpClient {
             BaseAddress = new Uri("http://site.api.espn.com")
         };
-        var baseService = new EspnApiService(httpClientBase, 
+        var baseService = new EspnApiService(httpClientBase,
             new LoggerFactory().CreateLogger<EspnApiService>());
         var setEvents = await baseService.GetWeekScores(10, 2024);
         Assert.NotNull(setEvents);

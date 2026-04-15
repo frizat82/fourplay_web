@@ -171,7 +171,7 @@ public class LeagueController(
     [ProducesResponseType(typeof(List<NflWeeksDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<NflWeeksDto>>> GetScores(int season) {
         var weeks = await repo.GetNflWeeksAsync(season);
-        return Ok(weeks.Select(x => new NflWeeksDto() {Id = x.Id, NflWeek = x.NflWeek, Season = x.Season, 
+        return Ok(weeks.Select(x => new NflWeeksDto() {Id = x.Id, NflWeek = x.NflWeek, Season = x.Season,
             StartDate = x.StartDate, EndDate = x.EndDate, DateCreated = x.DateCreated}));
     }
     // ---------- NFL Scores ----------
@@ -408,7 +408,7 @@ public class LeagueController(
         await repo.RemoveNflPicksAsync(picks);
         return NoContent();
     }
-    
+
     // ---------- Odds Calculations ----------
     [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/didUserWin")]
     [ProducesResponseType(typeof(SpreadCalculationResponse), StatusCodes.Status200OK)]
@@ -426,7 +426,7 @@ public class LeagueController(
 
         if (!calculator.DoOddsExist())
             return NotFound("No odds available");
-        
+
         return Ok(new SpreadCalculationResponse {
             Team = team,
             IsWinner = calculator.DidUserWinPick(team, pickTeamScore, otherTeamScore),
@@ -597,7 +597,7 @@ public class LeagueController(
         var mapping = new LeagueUserMapping {
             LeagueId = mappingDto.LeagueId,
             UserId = mappingDto.UserId,
-            DateCreated = mappingDto.DateCreated, 
+            DateCreated = mappingDto.DateCreated,
         };
         await repo.AddLeagueUserMappingAsync(mapping);
         return NoContent();

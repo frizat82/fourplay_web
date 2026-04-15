@@ -368,3 +368,6 @@ $RECYCLE.BIN/
 .vercel
 .env*.local
 .env.backend
+Client.React/coverage/
+Client.React/playwright-report/
+Client.React/test-results/

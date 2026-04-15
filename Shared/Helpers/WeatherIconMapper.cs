@@ -56,4 +56,3 @@ namespace FourPlayWebApp.Shared.Helpers
         }
     }
 }
-
