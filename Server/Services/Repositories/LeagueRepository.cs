@@ -83,7 +83,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             .Include(li => li.LeagueJuiceMappings)
             .FirstOrDefaultAsync(li => li.LeagueName == leagueName);
     }
-    
+
     // NFL Weeks
     public async Task UpsertNflWeeksAsync(List<NflWeeks> weeks)
     {
@@ -231,7 +231,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             .Include(pick => pick.User)
             .ToListAsync();
     }
-    
+
 
     // Add operations
     public async Task AddLeagueUserAsync(LeagueUsers leagueUser) {
@@ -295,9 +295,9 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         db.NflPicks.RemoveRange(picks);
         await db.SaveChangesAsync();
     }
-    
+
     // Utility methods
-    
+
     public async Task<bool> LeagueExistsAsync(string leagueName, int season) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.LeagueJuiceMapping

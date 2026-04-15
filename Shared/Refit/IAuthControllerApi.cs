@@ -19,7 +19,7 @@ namespace FourPlayWebApp.Shared.Refit
         Task<ApiResponse<string>> ConfirmEmail([Body] ConfirmEmailRequest confirmRequest);
         // Assign a role to a user
         [Post("/api/auth/assign-user-role")]
-        Task<ApiResponse<string>> AssignUserRoleAsync([Body] AssignRoleRequest request); 
+        Task<ApiResponse<string>> AssignUserRoleAsync([Body] AssignRoleRequest request);
 
         [Post("/api/auth/delete-user/{userId}")]
         Task<ApiResponse<string>> DeleteUser(string userId);

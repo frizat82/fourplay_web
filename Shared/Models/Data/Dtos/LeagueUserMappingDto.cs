@@ -23,7 +23,7 @@ namespace FourPlayWebApp.Shared.Models.Data.Dtos
                    string.Equals(LeagueOwnerUserId, other.LeagueOwnerUserId, StringComparison.Ordinal) &&
                    string.Equals(UserId, other.UserId, StringComparison.Ordinal) &&
                    string.Equals(UserName, other.UserName, StringComparison.Ordinal) &&
-                   string.Equals(LeagueName, other.LeagueName, StringComparison.Ordinal); 
+                   string.Equals(LeagueName, other.LeagueName, StringComparison.Ordinal);
         }
 
         public override bool Equals(object? obj)

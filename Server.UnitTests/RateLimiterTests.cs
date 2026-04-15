@@ -73,4 +73,3 @@ public class RateLimiterTests
         Assert.False(denied.IsAcquired);
     }
 }
-

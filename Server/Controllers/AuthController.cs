@@ -128,7 +128,7 @@ public class AuthController(
         }
 
         var user = refreshToken.User;
-        
+
         // Rotate refresh token
         var newRefreshToken = await refreshTokenService.RotateTokenAsync(refreshTokenValue, user, _refreshTokenLifetime);
         if (newRefreshToken == null)
@@ -249,14 +249,14 @@ public class AuthController(
         if (invitation == null) {
             response.IsSuccess = false;
             response.Errors = new List<string> { "Invalid or expired invitation code." };
-            return BadRequest(response);      
+            return BadRequest(response);
         } //
         // Check if the email matches the invitation
         if (!string.Equals(user.Email, invitation.Email, StringComparison.OrdinalIgnoreCase))
         {
             response.IsSuccess = false;
             response.Errors = new List<string> { "Email does not match invitation." };
-            return BadRequest(response);       
+            return BadRequest(response);
         }
         var doesUserExist = await userManager.FindByEmailAsync(user.Email);
         if (doesUserExist != null) {
@@ -327,7 +327,7 @@ public class AuthController(
 
         await emailSenderApplication.SendPasswordResetLinkAsync(user, model.Email, HtmlEncoder.Default.Encode(callbackUrl));
         return Ok();
-    }    
+    }
     [HttpPost("reset-password")]
     [AllowAnonymous] // User is not logged in
     public async Task<ActionResult<string>> ResetPassword([FromBody] ResetPasswordRequest model)

@@ -7,5 +7,5 @@ public interface ILeaderboardApi
 {
     [Get("/api/Leaderboard/{leagueId}/leaderboard/{seasonYear}")]
     Task<ApiResponse<List<LeaderboardDto>>> GetLeaderboard(int leagueId, long seasonYear);
-    
+
 }
