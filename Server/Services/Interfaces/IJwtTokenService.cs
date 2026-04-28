@@ -21,4 +21,3 @@ public interface IJwtTokenService
     /// </summary>
     TokenValidationParameters GetValidationParameters();
 }
-

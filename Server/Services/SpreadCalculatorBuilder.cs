@@ -9,7 +9,7 @@ public class SpreadCalculatorBuilder(ILeagueRepository repository, IMemoryCache 
     private int _leagueId;
     private int _week;
     private int _season;
-    
+
     // Cache key templates
     private const string _spreadsCacheKey = "spreads_{0}_{1}"; // season_week
     private const string _juiceCacheKey = "juice_{0}"; // leagueId
@@ -20,13 +20,13 @@ public class SpreadCalculatorBuilder(ILeagueRepository repository, IMemoryCache 
         _leagueId = leagueId;
         return this;
     }
-    
+
     public ISpreadCalculatorBuilder WithWeek(int week)
     {
         _week = week;
         return this;
     }
-    
+
     public ISpreadCalculatorBuilder WithSeason(int season)
     {
         _season = season;

@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>FourPlayWebApp.Server-9a11fc83-2fc1-4925-a161-f40239453957</UserSecretsId>
   </PropertyGroup>
-    
+
   <ItemGroup>
     <ProjectReference Include="..\Shared\FourPlayWebApp.Shared.csproj" />
   </ItemGroup>

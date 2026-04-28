@@ -251,7 +251,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Assert
             Assert.Null(result);
         }
-        
+
         [Fact]
         public void Constructor_EmptySpreads_CreatesValidCalculator()
         {

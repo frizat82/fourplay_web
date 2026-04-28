@@ -44,7 +44,7 @@ namespace FourPlayWebApp.Server.Migrations
                     table: "NflPicks");
             }
             catch (Exception ex) { }
-            
+
 */
             migrationBuilder.DropColumn(
                 name: "LeagueInfoId",
@@ -83,8 +83,8 @@ namespace FourPlayWebApp.Server.Migrations
                 principalTable: "LeagueInfo",
                 principalColumn: "Id");
 
-            
-            
+
+
             migrationBuilder.AddForeignKey(
                 name: "FK_NflPicks_LeagueInfo_LeagueInfoId",
                 table: "NflPicks",

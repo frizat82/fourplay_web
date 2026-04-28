@@ -68,7 +68,7 @@ public static class GameHelpers {
         if (!isPostSeason) {
             return int.Parse(weekName.Replace("Week ", ""));
         }
-        
+
         return weekName switch {
             "Wild Card" => 1,
             "Divisional Round" => 2,

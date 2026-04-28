@@ -21,4 +21,3 @@ namespace FourPlayWebApp.Server.Models.Identity
         public ApplicationUser User { get; set; } = null!;
     }
 }
-

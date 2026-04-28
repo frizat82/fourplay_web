@@ -21,7 +21,7 @@ public class Event
 {
     [JsonPropertyName("id")]
     public string Id { get; set; }
-    
+
     [JsonPropertyName("season")]
     public Season Season { get; set; }
     [JsonPropertyName("week")]
@@ -52,17 +52,17 @@ public class Competition
 {
     [JsonPropertyName("id")]
     public string Id { get; set; }
-    
+
     [JsonPropertyName("date")]
     public DateTimeOffset Date { get; set; }
     [JsonPropertyName("competitors")]
     public Competitor[] Competitors { get; set; }
     [JsonPropertyName("status")]
     public EspnStatus Status { get; set; }
-    
+
     [JsonPropertyName("odds")]
     public Odd[] Odds { get; set; }
-    
+
     [JsonPropertyName("situation")]
     public EspnSitutation Situation { get; set; }
 
@@ -105,7 +105,7 @@ public class Competitor
 {
     [JsonPropertyName("id")]
     public string Id { get; set; }
-    
+
     [JsonPropertyName("homeAway")]
     public HomeAway HomeAway { get; set; }
     [JsonPropertyName("team")]

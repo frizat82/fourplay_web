@@ -51,7 +51,7 @@ public class NflScoresJob(IEspnApiService espn, ILeagueRepository leagueReposito
         if (scoreList.Count != 0) {
             await leagueRepository.UpsertNflScoresAsync(scoreList);
         }
-        
+
         for (var i = -4; i < 4; i++) {
             var scores = await espn.GetSeasonScores(DateTime.UtcNow.AddYears(i).Year);
             if (scores.Leagues is null || scores.Leagues.Length == 0 || scores.Leagues[0].Calendar is null || scores.Leagues[0].Calendar.Length == 0)
@@ -80,7 +80,7 @@ public class NflScoresJob(IEspnApiService espn, ILeagueRepository leagueReposito
         }
 
 
-        if (weekList.Count != 0) { 
+        if (weekList.Count != 0) {
             await leagueRepository.UpsertNflWeeksAsync(weekList);
         }
 
