@@ -12,7 +12,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.RateLimiting;
 using Quartz;
-using Quartz.Impl.AdoJobStore;
 using Serilog;
 using Serilog.Formatting.Compact;
 using System.Text;
@@ -256,18 +255,6 @@ builder.Services.AddScoped<IJob, UserManagerJob>();
 // Register MissingPicksJob
 builder.Services.AddScoped<IJob, MissingPicksJob>();
 builder.Services.AddQuartz(q => {
-    q.UsePersistentStore(s => {
-        // Use for Postgres database
-        s.UsePostgres(postGresOptions => {
-            postGresOptions.UseDriverDelegate<PostgreSQLDelegate>();
-            postGresOptions.ConnectionString = connectionString;
-            postGresOptions.TablePrefix = "quartz.qrtz_";
-        });
-        s.PerformSchemaValidation = true; // default
-        s.UseProperties = true; // preferred, but not default
-        s.RetryInterval = TimeSpan.FromSeconds(15);
-        s.UseNewtonsoftJsonSerializer();
-    });
     // Setup User at startup
  // User Manager
 q.ScheduleJob<UserManagerJob>(trigger => trigger
@@ -399,7 +386,7 @@ else
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-    
+
 app.UseRouting();
 
 app.UseCors();

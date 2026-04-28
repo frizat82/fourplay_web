@@ -40,4 +40,3 @@ public interface IInvitationApi
     [Post("/api/invitations/send-reset-code")]
     Task<ApiResponse<string>> SendPasswordResetCodeAsync([Body] PasswordResetCodeRequest request);
 }
-
