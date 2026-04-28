@@ -238,8 +238,8 @@ export default function AppLayout() {
                   <ListItemIcon>
                     <AdminPanelSettingsIcon sx={{ color: '#3b82f6' }} />
                   </ListItemIcon>
-                  <ListItemText 
-                    primary="Admin" 
+                  <ListItemText
+                    primary="Admin"
                     primaryTypographyProps={{ fontWeight: 600 }}
                   />
                   {adminOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}

@@ -6,7 +6,7 @@ using FourPlayWebApp.Shared.Models.Enum;
 
 namespace FourPlayWebApp.Server.Services;
 public class SpreadCalculator(List<NflSpreads> odds, LeagueJuiceMapping juiceMapping, int week) : ISpreadCalculator {
-    
+
     public bool DoOddsExist() {
         return odds.Count > 0;
     }

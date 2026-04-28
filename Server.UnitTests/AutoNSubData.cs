@@ -55,7 +55,7 @@ public class DbContextFactoryStub : IDbContextFactory<ApplicationDbContext>
                 score.GameTime = new DateTime(2024, 1, score.NflWeek, 12, 0, 0);
                 return score;
             }).ToList();
-        
+
         _dbContext.NflScores.AddRange(scores);
         // Generate 18 weeks of NFL spreads
         var spreads = fixture.Build<NflSpreads>()
@@ -105,7 +105,7 @@ public class DbContextFactoryStub : IDbContextFactory<ApplicationDbContext>
             var user = fixture.Create<ApplicationUser>();
             _dbContext.Users.Add(user);
             if (!_dbContext.LeagueInfo
-                    .Any()) // Only create league info if it doesn't already exist (for testing purposes 
+                    .Any()) // Only create league info if it doesn't already exist (for testing purposes
             {
                  leagueInfo = new LeagueInfo() {LeagueName = "Test League", OwnerUserId = user.Id};
                 _dbContext.LeagueInfo.Add(leagueInfo);

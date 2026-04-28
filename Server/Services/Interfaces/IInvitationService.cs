@@ -44,5 +44,5 @@ public interface IInvitationService
     /// <param name="userId">User ID who created the invitations</param>
     /// <returns>List of invitations created by the user</returns>
     Task<List<Invitation>> GetInvitationsByUserAsync(string userId);
-    
+
 }
