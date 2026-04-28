@@ -80,13 +80,13 @@ public interface ILeagueApi
 
     [Delete("/api/league/picks")]
     Task<IApiResponse> RemovePicks([Body] IEnumerable<NflPickDto> picks);
-    
+
     // Odds Calculations
     [Get("/api/league/{leagueId}/odds/{season}/{week}/didUserWin")]
     Task<ApiResponse<bool>> DidUserWin(
         int leagueId, int season, int week,
-        string team, 
-        int pickTeamScore, 
+        string team,
+        int pickTeamScore,
         int otherTeamScore);
 
     [Get("/api/league/{leagueId}/odds/{season}/{week}/team/{team}")]
@@ -94,10 +94,10 @@ public interface ILeagueApi
 
     [Get("/api/league/{leagueId}/odds/{season}/{week}/team/{team}/overunder")]
     Task<ApiResponse<double?>> GetOverUnder(
-        int leagueId, 
-        int season, 
-        int week, 
-        string team, 
+        int leagueId,
+        int season,
+        int week,
+        string team,
         PickType pickType = PickType.Spread);
 
     [Get("/api/league/{leagueId}/odds/{season}/{week}/exists")]
@@ -108,15 +108,15 @@ public interface ILeagueApi
 
     [Post("/api/league/{leagueId}/odds/{season}/{week}")]
     Task<ApiResponse<BatchSpreadResponse>> SpreadBatch(
-        int leagueId, 
-        int season, 
-        int week, 
+        int leagueId,
+        int season,
+        int week,
         [Body] BatchSpreadRequest request);
     [Post("/api/league/{leagueId}/odds/{season}/{week}/calculate-batch")]
     Task<ApiResponse<BatchSpreadCalculationResponse>> CalculateSpreadBatch(
-        int leagueId, 
-        int season, 
-        int week, 
+        int leagueId,
+        int season,
+        int week,
         [Body] BatchSpreadCalculationRequest request);
 
     // Utilities
