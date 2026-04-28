@@ -210,7 +210,7 @@ export default function ScoresPage() {
       event.competitions.some((comp) => {
         const statusName = comp.status?.type?.name || '';
         // Active if in-progress or in halftime (not scheduled, final, etc)
-        return statusName === 'status_in_progress' || statusName === 'status_halftime' || 
+        return statusName === 'status_in_progress' || statusName === 'status_halftime' ||
                statusName === 'status_end_period';
       })
     );

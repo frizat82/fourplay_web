@@ -7,7 +7,7 @@ public interface IEspnApi
 {
     [Get("/api/espn/scores/week/{week}/{year}")]
     Task<EspnScores?> GetWeekScores(int week, int year, bool postSeason = false);
-    
+
     [Get("/api/espn/scores")]
     Task<EspnScores?> GetScores();
 
