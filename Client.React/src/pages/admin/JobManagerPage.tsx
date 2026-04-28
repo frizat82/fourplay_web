@@ -130,9 +130,7 @@ export default function AdminJobManagerPage() {
                 <TableCell>Description</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Next Run</TableCell>
-                <TableCell>Last Run</TableCell>
-                <TableCell>Last Started</TableCell>
-                <TableCell>Runs</TableCell>
+                <TableCell>Last Succeeded</TableCell>
                 <TableCell>Last Message</TableCell>
               </TableRow>
             </TableHead>
@@ -145,9 +143,9 @@ export default function AdminJobManagerPage() {
                     <Chip size="small" label={job.status} color={getStatusColor(job.status)} />
                   </TableCell>
                   <TableCell>{job.nextRun ? new Date(job.nextRun).toLocaleString() : 'Not scheduled'}</TableCell>
-                  <TableCell>{job.lastRun ? new Date(job.lastRun).toLocaleString() : 'Never'}</TableCell>
-                  <TableCell>{job.lastStartedUtc ? new Date(job.lastStartedUtc).toLocaleString() : 'Never'}</TableCell>
-                  <TableCell>{job.runCount}</TableCell>
+                  <TableCell sx={{ color: job.lastFailedUtc && (!job.lastSucceededUtc || new Date(job.lastFailedUtc) > new Date(job.lastSucceededUtc)) ? 'error.main' : 'inherit' }}>
+                    {job.lastSucceededUtc ? new Date(job.lastSucceededUtc).toLocaleString() : 'Never'}
+                  </TableCell>
                   <TableCell>{job.lastMessage || '—'}</TableCell>
                 </TableRow>
               ))}

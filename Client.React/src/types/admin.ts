@@ -42,9 +42,8 @@ export interface JobStatusResponse {
   description: string;
   status: string;
   nextRun?: string | null;
-  lastRun?: string | null;
-  lastStartedUtc?: string | null;
-  runCount: number;
+  lastSucceededUtc?: string | null;
+  lastFailedUtc?: string | null;
   lastMessage?: string | null;
 }
 
