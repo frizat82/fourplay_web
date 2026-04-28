@@ -103,23 +103,13 @@ namespace FourPlayWebApp.Server.Controllers {
                         JobName = jobDetail.Key.Name,
                         Description = jobDetail.Description ?? "",
                         Status = await GetJobStatusAsync(scheduler, jobKey),
-                        NextRun = trigger?.GetNextFireTimeUtc(),
-                        LastRun = trigger?.GetPreviousFireTimeUtc(),
-
-                        // Default observer fields - will be overwritten below if we have data
-                        LastStartedUtc = null,
-                        LastSucceededUtc = null,
-                        LastFailedUtc = null,
-                        LastMessage = null,
-                        RunCount = 0
+                        NextRun = trigger?.GetNextFireTimeUtc()
                     };
 
                     if (observerInfos.TryGetValue(status.JobName, out var info)) {
-                        status.LastStartedUtc = info.LastStartedUtc;
                         status.LastSucceededUtc = info.LastSucceededUtc;
                         status.LastFailedUtc = info.LastFailedUtc;
                         status.LastMessage = info.LastMessage;
-                        status.RunCount = info.RunCount;
                     }
 
                     jobStatuses.Add(status);
