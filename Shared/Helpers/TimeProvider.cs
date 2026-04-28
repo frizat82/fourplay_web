@@ -5,7 +5,7 @@ namespace FourPlayWebApp.Shared.Helpers
     public static class PageTimeProvider
     {
         private static Instant? _currentInstant;
-        private static readonly DateTimeZone _cstZone = DateTimeZoneProviders.Tzdb["America/Chicago"]; 
+        private static readonly DateTimeZone _cstZone = DateTimeZoneProviders.Tzdb["America/Chicago"];
         // Works cross-platform (no Windows/Linux ID mismatch)
 
         /// <summary>

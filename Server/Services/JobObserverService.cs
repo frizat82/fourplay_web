@@ -44,4 +44,3 @@ public class JobObserverService : IJobObserverService
         return Task.FromResult<IEnumerable<JobRunInfo>>(copy);
     }
 }
-

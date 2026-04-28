@@ -16,7 +16,7 @@ public class LeaderboardService(
     IServiceScopeFactory scopeFactory,
     ILeagueRepository leagueRepository)
     : ILeaderboardService {
-    
+
 
     private async Task<List<LeaderboardModel>> InteralLeaderboard(int leagueId, long seasonYear) {
         var leaderboard = new List<LeaderboardModel>();
@@ -53,14 +53,14 @@ public class LeaderboardService(
 
         return leaderboard;
     }
-    
+
 
     private async Task<LeaderboardWeekResults> CalculatePicks(int leagueId, long seasonYear,
         List<NflScores> userScores, LeagueUserMapping user, int week) {
         var weekResult = new LeaderboardWeekResults {
             Week = week
         };
-        
+
         await using var scope = scopeFactory.CreateAsyncScope();
         var spreadCalculatorBuilder = scope.ServiceProvider.GetRequiredService<ISpreadCalculatorBuilder>();
         var spreadCalculator = await spreadCalculatorBuilder.WithLeagueId(leagueId).WithWeek(week).WithSeason((int)seasonYear).BuildAsync();
@@ -112,7 +112,7 @@ public class LeaderboardService(
         if (leagueId != 0) {
             return await InteralLeaderboard(leagueId, seasonYear);
         }
-        
+
         logger.LogError("League ID is not set.");
         return [];
     }
@@ -132,7 +132,7 @@ public class LeaderboardService(
         for (int week = 1; week <= maxWeek; week++) {
             var winners = new List<string>();
             var losers = new List<string>();
-            
+
             foreach (var result in leaderboard) {
                 var resultWeek = result.WeekResults.FirstOrDefault(w => w.Week == week);
                 if (resultWeek is null) {

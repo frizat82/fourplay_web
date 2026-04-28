@@ -13,4 +13,3 @@ namespace FourPlayWebApp.Server.Services.Interfaces
         Task RevokeAllUserTokensAsync(string userId);
     }
 }
-
