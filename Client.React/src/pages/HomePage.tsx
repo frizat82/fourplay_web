@@ -91,8 +91,10 @@ export default function HomePage() {
                     size="large"
                     className="hero-secondary-btn"
                     startIcon={<LeaderboardIcon />}
-                    component={RouterLink}
-                    to={isAuthed ? '/leaderboard' : '#how-it-works'}
+                    {...(isAuthed
+                      ? { component: RouterLink, to: '/leaderboard' }
+                      : { onClick: () => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }) }
+                    )}
                   >
                     {isAuthed ? 'View Standings' : 'See How It Works ↓'}
                   </Button>
