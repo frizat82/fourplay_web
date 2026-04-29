@@ -1,6 +1,4 @@
-import { Box, Card, CardContent, Divider, IconButton, Stack, Typography } from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { useNavigate } from 'react-router-dom';
+import { Box, Card, CardContent, Divider, Stack, Typography } from '@mui/material';
 import { getEspnRequiredPicks } from '../utils/gameHelpers';
 import PageHeader from '../components/PageHeader';
 
@@ -25,7 +23,6 @@ function Rule({ children }: { children: React.ReactNode }) {
 }
 
 export default function RulesPage() {
-  const navigate = useNavigate();
   const regularPicks = getEspnRequiredPicks(1, false);
   const wildCardPicks = getEspnRequiredPicks(1, true);
   const divisionalPicks = getEspnRequiredPicks(3, true);
@@ -35,13 +32,8 @@ export default function RulesPage() {
   return (
     <Card sx={{ minHeight: 'calc(100vh - 128px)' }}>
       <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-          <IconButton onClick={() => navigate(-1)} sx={{ mr: 1, mt: 0.5 }}>
-            <ArrowBackIcon />
-          </IconButton>
-          <Box sx={{ flex: 1 }}>
-            <PageHeader title="How FourPlay Works" subtitle="Everything you need to know before making your picks." />
-          </Box>
+        <Box sx={{ mb: 2 }}>
+          <PageHeader title="How FourPlay Works" subtitle="Everything you need to know before making your picks." />
         </Box>
         <Stack spacing={3}>
 
