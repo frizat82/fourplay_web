@@ -1,4 +1,4 @@
-import { Box, Button, Container, Grid, IconButton, Paper, Stack, Typography } from '@mui/material';
+import { Box, Button, Container, Dialog, DialogContent, DialogTitle, Grid, IconButton, Paper, Stack, Typography } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import SportsTennisIcon from '@mui/icons-material/SportsTennis';
@@ -10,6 +10,7 @@ import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import { Link as RouterLink } from 'react-router-dom';
 import { useRef, useState } from 'react';
 import { useAuth } from '../services/auth';
+import { RulesContent } from './RulesPage';
 import './home.css';
 
 const fantasyPains = [
@@ -40,6 +41,7 @@ export default function HomePage() {
   const isAuthed = Boolean(user);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   const toggleMute = () => {
     if (videoRef.current) {
@@ -79,8 +81,8 @@ export default function HomePage() {
                 {!isAuthed && (
                   <Stack spacing={1} sx={{ mb: 3 }}>
                     {heroBullets.map(b => (
-                      <Stack key={b} direction="row" alignItems="center" spacing={1}>
-                        <CheckIcon color="secondary" fontSize="small" />
+                      <Stack key={b} direction="row" alignItems="flex-start" spacing={1}>
+                        <CheckIcon color="secondary" fontSize="small" sx={{ mt: '3px', flexShrink: 0 }} />
                         <Typography variant="body2" className="hero-subtitle">{b}</Typography>
                       </Stack>
                     ))}
@@ -251,8 +253,7 @@ export default function HomePage() {
                 <Button
                   variant="outlined"
                   size="large"
-                  component={RouterLink}
-                  to="/rules"
+                  onClick={() => setRulesOpen(true)}
                 >
                   Read the Full Rules →
                 </Button>
@@ -264,6 +265,18 @@ export default function HomePage() {
           </Container>
         </>
       )}
+
+      <Dialog open={rulesOpen} onClose={() => setRulesOpen(false)} maxWidth="md" fullWidth scroll="paper">
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          How FourPlay Works
+          <IconButton onClick={() => setRulesOpen(false)} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          <RulesContent />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
