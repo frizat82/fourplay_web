@@ -103,7 +103,17 @@ export default function HomePage() {
             </Grid>
             <Grid size={{ xs: 12, md: 6 }} className="hero-image-section">
               <Paper className="hero-image" elevation={8}>
-                <img src="/Images/fourplayhome.jpg" alt="FourPlay" className="hero-image-img" />
+                <video
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  className="hero-image-img"
+                  poster="/Images/fourplayhome.jpg"
+                >
+                  <source src="/Videos/demo.mp4" type="video/mp4" />
+                  <img src="/Images/fourplayhome.jpg" alt="FourPlay" className="hero-image-img" />
+                </video>
               </Paper>
             </Grid>
           </Grid>
