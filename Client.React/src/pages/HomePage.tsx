@@ -1,11 +1,14 @@
-import { Box, Button, Container, Grid, Paper, Stack, Typography } from '@mui/material';
+import { Box, Button, Container, Grid, IconButton, Paper, Stack, Typography } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import SportsTennisIcon from '@mui/icons-material/SportsTennis';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import VolumeOffIcon from '@mui/icons-material/VolumeOff';
+import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import { Link as RouterLink } from 'react-router-dom';
+import { useRef, useState } from 'react';
 import { useAuth } from '../services/auth';
 import './home.css';
 
@@ -35,6 +38,15 @@ const heroBullets = [
 export default function HomePage() {
   const { user } = useAuth();
   const isAuthed = Boolean(user);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [muted, setMuted] = useState(true);
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !videoRef.current.muted;
+      setMuted(videoRef.current.muted);
+    }
+  };
 
   return (
     <div>
@@ -102,8 +114,9 @@ export default function HomePage() {
               </Box>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }} className="hero-image-section">
-              <Paper className="hero-image" elevation={8}>
+              <Paper className="hero-image" elevation={8} sx={{ position: 'relative' }}>
                 <video
+                  ref={videoRef}
                   autoPlay
                   muted
                   loop
@@ -114,6 +127,20 @@ export default function HomePage() {
                   <source src="/Videos/demo.mp4" type="video/mp4" />
                   <img src="/Images/fourplayhome.jpg" alt="FourPlay" className="hero-image-img" />
                 </video>
+                <IconButton
+                  onClick={toggleMute}
+                  size="small"
+                  sx={{
+                    position: 'absolute',
+                    bottom: 10,
+                    right: 10,
+                    bgcolor: 'rgba(0,0,0,0.5)',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
+                  }}
+                >
+                  {muted ? <VolumeOffIcon fontSize="small" /> : <VolumeUpIcon fontSize="small" />}
+                </IconButton>
               </Paper>
             </Grid>
           </Grid>
