@@ -28,16 +28,16 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         ("Eve",    "eve@demo.local"),
     ];
 
-    // Per-user picks: keyed by username, value is list of team abbreviations (one per game, in game order)
-    // Games: BUF/TB, DAL/LAR, GB/MIN, TEN/ATL, IND/NO, MIA/NE, NYG/NYJ, PIT/JAC, WAS/PHI,
-    //        CAR/HOU, SEA/CLE, DEN/KC, ARI/BAL, SF/CIN, LAC/CHI, DET/LV
+    // Per-user picks for week 8: 4 picks each (matching required picks limit)
+    // Games available: BUF/TB, DAL/LAR, GB/MIN, TEN/ATL, IND/NO, MIA/NE, NYG/NYJ, PIT/JAC,
+    //                  WAS/PHI, CAR/HOU, SEA/CLE, DEN/KC, ARI/BAL, SF/CIN, LAC/CHI, DET/LV
     private static readonly Dictionary<string, string[]> DemoPicksMap = new()
     {
-        ["Alice"]  = ["BUF","DAL","MIN","ATL","IND","MIA","NYJ","JAC","PHI","HOU","SEA","KC", "BAL","SF", "LAC","DET"],
-        ["Bob"]    = ["TB", "LAR","MIN","ATL","NO", "NE", "NYG","PIT","WAS","CAR","CLE","DEN","ARI","CIN","CHI","LV" ],
-        ["Carlos"] = ["BUF","DAL","GB", "TEN","IND","MIA","NYG","PIT","PHI","CAR","SEA","KC", "BAL","CIN","LAC","DET"],
-        ["Dana"]   = ["TB", "LAR","GB", "ATL","NO", "MIA","NYJ","JAC","WAS","HOU","CLE","DEN","ARI","SF", "CHI","LV" ],
-        ["Eve"]    = ["BUF","DAL","MIN","TEN","IND","NE", "NYG","JAC","PHI","CAR","SEA","KC", "BAL","SF", "LAC","LV" ],
+        ["Alice"]  = ["BUF", "DAL", "MIN", "MIA"],
+        ["Bob"]    = ["TB",  "LAR", "GB",  "NE" ],
+        ["Carlos"] = ["BUF", "DAL", "IND", "PHI"],
+        ["Dana"]   = ["TB",  "LAR", "NO",  "MIA"],
+        ["Eve"]    = ["BUF", "DAL", "MIN", "NE" ],
     };
 
     // Games in order matching DemoPicksMap columns (mapped abbreviations, home first)
@@ -259,7 +259,7 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
     {
         if (!DemoPicksMap.TryGetValue(user.UserName!, out var picks)) return;
 
-        for (int i = 0; i < DemoGames.Length; i++)
+        for (int i = 0; i < picks.Length; i++)
         {
             var team = picks[i];
             var alreadyExists = await db.NflPicks.AnyAsync(p =>
