@@ -305,8 +305,8 @@ export function RulesContent() {
         <SectionLabel>Live example — final score</SectionLabel>
         <ScenarioExample />
         <InfoCallout>
-          Seattle lost by 10 — not enough to cover their teased line of +8.5. Chicago lost the game
-          but easily covered +17.5 since they only lost by 10, not 18+.
+          Seattle lost by 10 — not enough to cover their teased line of +8.5. Chicago won the game
+          outright by 10, easily covering their teased line of +17.5.
         </InfoCallout>
       </Box>
 
