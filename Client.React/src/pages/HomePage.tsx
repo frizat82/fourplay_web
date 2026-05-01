@@ -1,17 +1,54 @@
-import { Box, Button, Container, Grid, Paper, Stack, Typography } from '@mui/material';
+import { Box, Button, Container, Dialog, DialogContent, DialogTitle, Grid, IconButton, Paper, Stack, Typography } from '@mui/material';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 import SportsTennisIcon from '@mui/icons-material/SportsTennis';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
-import TimelineIcon from '@mui/icons-material/Timeline';
-import GroupIcon from '@mui/icons-material/Group';
-import AnalyticsIcon from '@mui/icons-material/Analytics';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import VolumeOffIcon from '@mui/icons-material/VolumeOff';
+import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import { Link as RouterLink } from 'react-router-dom';
+import { useRef, useState } from 'react';
 import { useAuth } from '../services/auth';
+import { RulesContent } from './RulesPage';
 import './home.css';
+
+const fantasyPains = [
+  '3-hour draft night (every single year)',
+  'Weekly lineup stress all season',
+  'Dead when your QB gets hurt',
+  'Complicated scoring nobody understands',
+  'Over when your team folds in Week 8',
+];
+
+const fourplayWins = [
+  'No draft, ever',
+  'Pick your games, you\'re done',
+  'You pick every game, every week',
+  'Win the spread = point. Simple.',
+  'Goes straight to the Super Bowl',
+];
+
+const heroBullets = [
+  'No season-long roster to manage',
+  'No injuries tanking your lineup',
+  'Picks open Monday, lock at kickoff — 10 minutes a week',
+  "You're competing against real friends, not a fake team",
+];
 
 export default function HomePage() {
   const { user } = useAuth();
   const isAuthed = Boolean(user);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [muted, setMuted] = useState(true);
+  const [rulesOpen, setRulesOpen] = useState(false);
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !videoRef.current.muted;
+      setMuted(videoRef.current.muted);
+    }
+  };
 
   return (
     <div>
@@ -34,138 +71,212 @@ export default function HomePage() {
               </Box>
               <Box className="hero-text-inner">
                 <Typography variant="h2" className="hero-title">
-                  Elevate Your Fantasy Game
+                  {isAuthed ? 'Welcome Back.' : 'Skip the Draft.\nMake Picks.\nBeat Your Friends.'}
                 </Typography>
                 <Typography variant="h6" className="hero-subtitle">
-                  Join the ultimate fantasy sports community. Make picks, climb leaderboards,
-                  and compete with friends across multiple leagues.
+                  {isAuthed
+                    ? 'Your picks are waiting. Check the leaderboard and see where you stand.'
+                    : "FourPlay is what fantasy football should have been — no draft, no waiver wire, no dead lineups. Pick NFL games against the spread each week and watch the leaderboard."}
                 </Typography>
+                {!isAuthed && (
+                  <Stack spacing={1} sx={{ mb: 3 }}>
+                    {heroBullets.map(b => (
+                      <Stack key={b} direction="row" alignItems="flex-start" spacing={1}>
+                        <CheckIcon color="secondary" fontSize="small" sx={{ mt: '3px', flexShrink: 0 }} />
+                        <Typography variant="body2" className="hero-subtitle">{b}</Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
+                )}
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} className="hero-buttons">
                   <Button
                     variant="contained"
                     size="large"
                     color="secondary"
                     className="hero-primary-btn"
-                    startIcon={<SportsTennisIcon />}
+                    startIcon={isAuthed ? <SportsTennisIcon /> : <PersonAddIcon />}
                     component={RouterLink}
-                    to={isAuthed ? '/picks' : '/account/login?returnUrl=%2Fpicks'}
+                    to={isAuthed ? '/picks' : '/account/register'}
                   >
-                    {isAuthed ? 'Make Picks' : 'Log In to Start'}
+                    {isAuthed ? 'Make Picks' : 'Register with Invite'}
                   </Button>
                   <Button
                     variant="outlined"
                     size="large"
                     className="hero-secondary-btn"
                     startIcon={<LeaderboardIcon />}
-                    component={RouterLink}
-                    to={isAuthed ? '/leaderboard' : '/account/register'}
+                    {...(isAuthed
+                      ? { component: RouterLink, to: '/leaderboard' }
+                      : { onClick: () => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }) }
+                    )}
                   >
-                    {isAuthed ? 'View Standings' : 'Create Account'}
+                    {isAuthed ? 'View Standings' : 'See How It Works ↓'}
                   </Button>
                 </Stack>
               </Box>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }} className="hero-image-section">
-              <Paper className="hero-image" elevation={8}>
-                <img src="/Images/fourplayhome.jpg" alt="FourPlay Fantasy Sports" className="hero-image-img" />
+              <Paper className="hero-image" elevation={8} sx={{ position: 'relative' }}>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  className="hero-image-img"
+                  poster="/Images/fourplayhome.jpg"
+                >
+                  <source src="/Videos/demo.mp4" type="video/mp4" />
+                  <img src="/Images/fourplayhome.jpg" alt="FourPlay" className="hero-image-img" />
+                </video>
+                <IconButton
+                  onClick={toggleMute}
+                  size="small"
+                  sx={{
+                    position: 'absolute',
+                    bottom: 10,
+                    right: 10,
+                    bgcolor: 'rgba(0,0,0,0.5)',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
+                  }}
+                >
+                  {muted ? <VolumeOffIcon fontSize="small" /> : <VolumeUpIcon fontSize="small" />}
+                </IconButton>
               </Paper>
             </Grid>
           </Grid>
         </Container>
       </Container>
 
-      <Container maxWidth="lg" sx={{ my: 8 }}>
-        <Typography variant="h4" align="center" sx={{ mb: 4 }}>
-          Why Choose FourPlay?
-        </Typography>
-        <Grid container spacing={4}>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper className="feature-card" elevation={3}>
-              <TimelineIcon color="primary" fontSize="large" />
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                Live Scoring
-              </Typography>
-              <Typography color="text.secondary">
-                Track your picks in real-time with live game updates and instant scoring.
-              </Typography>
-            </Paper>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper className="feature-card" elevation={3}>
-              <GroupIcon color="secondary" fontSize="large" />
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                League Competition
-              </Typography>
-              <Typography color="text.secondary">
-                Create or join leagues with friends and compete for the top spot.
-              </Typography>
-            </Paper>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Paper className="feature-card" elevation={3}>
-              <AnalyticsIcon color="primary" fontSize="large" />
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                Advanced Stats
-              </Typography>
-              <Typography color="text.secondary">
-                Analyze your performance with detailed statistics and trending data.
-              </Typography>
-            </Paper>
-          </Grid>
-        </Grid>
-      </Container>
+      {!isAuthed && (
+        <>
+          <Container maxWidth="lg" sx={{ my: 8 }}>
+            <Typography variant="h4" align="center" fontWeight={700} sx={{ mb: 1 }}>
+              Fantasy Is Complicated. This Isn't.
+            </Typography>
+            <Typography variant="subtitle1" align="center" color="text.secondary" sx={{ mb: 5 }}>
+              You've been on a fantasy team that fell apart by Week 6. FourPlay goes all the way to the Super Bowl.
+            </Typography>
+            <Grid container spacing={3}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Paper elevation={1} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider', height: '100%' }}>
+                  <Typography variant="h6" color="text.secondary" sx={{ mb: 2.5 }}>Fantasy Football</Typography>
+                  <Stack spacing={1.5}>
+                    {fantasyPains.map(item => (
+                      <Stack key={item} direction="row" alignItems="center" spacing={1.5}>
+                        <CloseIcon color="error" fontSize="small" sx={{ flexShrink: 0 }} />
+                        <Typography variant="body2" color="text.secondary">{item}</Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
+                </Paper>
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Paper elevation={3} sx={{ p: 3, borderRadius: 2, border: '2px solid', borderColor: 'secondary.main', height: '100%' }}>
+                  <Typography variant="h6" fontWeight={700} sx={{ mb: 2.5 }}>FourPlay</Typography>
+                  <Stack spacing={1.5}>
+                    {fourplayWins.map(item => (
+                      <Stack key={item} direction="row" alignItems="center" spacing={1.5}>
+                        <CheckIcon color="secondary" fontSize="small" sx={{ flexShrink: 0 }} />
+                        <Typography variant="body2" fontWeight={500}>{item}</Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
+                </Paper>
+              </Grid>
+            </Grid>
+          </Container>
 
-      <Paper className="stats-section" elevation={2}>
-        <Container maxWidth="lg" sx={{ py: 6 }}>
-          <Grid container spacing={4} justifyContent="space-around" textAlign="center">
-            <Grid size={{ xs: 6, md: 3 }}>
-              <Typography variant="h4" className="stats-number">
-                500+
+          <Paper elevation={0} sx={{ py: 8, bgcolor: 'background.default' }} id="how-it-works">
+            <Container maxWidth="lg">
+              <Typography variant="h4" align="center" fontWeight={700} sx={{ mb: 6 }}>
+                How It Works
               </Typography>
-              <Typography color="text.secondary">Active Players</Typography>
-            </Grid>
-            <Grid size={{ xs: 6, md: 3 }}>
-              <Typography variant="h4" className="stats-number">
-                25+
-              </Typography>
-              <Typography color="text.secondary">Active Leagues</Typography>
-            </Grid>
-            <Grid size={{ xs: 6, md: 3 }}>
-              <Typography variant="h4" className="stats-number">
-                10K+
-              </Typography>
-              <Typography color="text.secondary">Picks Made</Typography>
-            </Grid>
-            <Grid size={{ xs: 6, md: 3 }}>
-              <Typography variant="h4" className="stats-number">
-                24/7
-              </Typography>
-              <Typography color="text.secondary">Live Updates</Typography>
-            </Grid>
-          </Grid>
-        </Container>
-      </Paper>
+              <Grid container spacing={4}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Stack alignItems="center" textAlign="center" spacing={2}>
+                    <Box sx={{ p: 2, borderRadius: '50%', bgcolor: 'secondary.main', display: 'inline-flex' }}>
+                      <PersonAddIcon sx={{ fontSize: 36, color: 'secondary.contrastText' }} />
+                    </Box>
+                    <Typography variant="h6" fontWeight={700}>1. Get Invited</Typography>
+                    <Typography color="text.secondary">
+                      Leagues are private. Your commissioner sends you a link — that's the only way in. No public sign-ups, no strangers in your group.
+                    </Typography>
+                  </Stack>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Stack alignItems="center" textAlign="center" spacing={2}>
+                    <Box sx={{ p: 2, borderRadius: '50%', bgcolor: 'secondary.main', display: 'inline-flex' }}>
+                      <SportsTennisIcon sx={{ fontSize: 36, color: 'secondary.contrastText' }} />
+                    </Box>
+                    <Typography variant="h6" fontWeight={700}>2. Pick Against the Spread</Typography>
+                    <Typography color="text.secondary">
+                      Each week pick NFL games — not just who wins, but who <em>covers</em>. Chiefs&nbsp;-6.5 means they need to win by 7 or more. Same lines Vegas uses.
+                    </Typography>
+                  </Stack>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Stack alignItems="center" textAlign="center" spacing={2}>
+                    <Box sx={{ p: 2, borderRadius: '50%', bgcolor: 'secondary.main', display: 'inline-flex' }}>
+                      <EmojiEventsIcon sx={{ fontSize: 36, color: 'secondary.contrastText' }} />
+                    </Box>
+                    <Typography variant="h6" fontWeight={700}>3. Compete All Season</Typography>
+                    <Typography color="text.secondary">
+                      Results update live as games finish. The leaderboard tracks every week — regular season through Wild Card, Divisional, Championship, and the Super Bowl.
+                    </Typography>
+                  </Stack>
+                </Grid>
+              </Grid>
+            </Container>
+          </Paper>
 
-      <Container maxWidth="md" sx={{ my: 8, textAlign: 'center' }}>
-        <Paper className="cta-section" elevation={4}>
-          <Typography variant="h4" className="cta-title">
-            Ready to Start Playing?
-          </Typography>
-          <Typography variant="subtitle1" className="cta-subtitle">
-            Join thousands of fantasy sports enthusiasts making winning picks every week.
-          </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            className="cta-button"
-            startIcon={<PlayArrowIcon />}
-            component={RouterLink}
-            to={isAuthed ? '/dashboard' : '/account/login?returnUrl=%2Fdashboard'}
-          >
-            {isAuthed ? 'Open Dashboard' : 'Get Started Now'}
-          </Button>
-        </Paper>
-      </Container>
+          <Container maxWidth="md" sx={{ my: 8, textAlign: 'center' }}>
+            <Paper className="cta-section" elevation={4}>
+              <Typography variant="h4" className="cta-title">
+                Got an Invite? You're Ready.
+              </Typography>
+              <Typography variant="subtitle1" className="cta-subtitle">
+                FourPlay leagues are private and invite-only. If someone sent you a link, register below and you're in.
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" sx={{ mb: 2 }}>
+                <Button
+                  variant="contained"
+                  size="large"
+                  className="cta-button"
+                  startIcon={<PersonAddIcon />}
+                  component={RouterLink}
+                  to="/account/register"
+                >
+                  Create Account
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="large"
+                  onClick={() => setRulesOpen(true)}
+                >
+                  Read the Full Rules →
+                </Button>
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                No invite? Ask your league commissioner — they control who joins.
+              </Typography>
+            </Paper>
+          </Container>
+        </>
+      )}
+
+      <Dialog open={rulesOpen} onClose={() => setRulesOpen(false)} maxWidth="md" fullWidth scroll="paper">
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          How FourPlay Works
+          <IconButton onClick={() => setRulesOpen(false)} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          <RulesContent />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
