@@ -24,14 +24,14 @@ describe('RulesPage', () => {
 
   it('shows the tease formula chips', () => {
     renderPage();
-    expect(screen.getByText(/vegas line/i)).toBeInTheDocument();
-    expect(screen.getByText(/your line/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/vegas line/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/your line/i)[0]).toBeInTheDocument();
   });
 
   it('shows the Seattle vs Chicago matchup example', () => {
     renderPage();
-    expect(screen.getByText(/seattle seahawks/i)).toBeInTheDocument();
-    expect(screen.getByText(/chicago bears/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/seattle seahawks/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/chicago bears/i)[0]).toBeInTheDocument();
   });
 
   it('shows teased spreads for both teams', () => {
@@ -58,8 +58,8 @@ describe('RulesPage', () => {
 
   it('explains the juice mechanic', () => {
     renderPage();
-    expect(screen.getByText(/juice/i)).toBeInTheDocument();
-    expect(screen.getByText(/earn the juice/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/juice/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/earn the juice/i)[0]).toBeInTheDocument();
   });
 
   it('shows all four playoff rounds', () => {
