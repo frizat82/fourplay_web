@@ -236,7 +236,7 @@ function PlayoffGrid() {
   return (
     <Grid container spacing={1}>
       {rounds.map(({ round, picks }) => (
-        <Grid item xs={6} key={round}>
+        <Grid size={6} key={round}>
           <Box sx={{ bgcolor: 'action.hover', borderRadius: 1.5, p: 1.5 }}>
             <Typography variant="caption" color="text.secondary" display="block">
               {round}
