@@ -22,6 +22,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<CfbSlates> CfbSlates { get; set; }
     public DbSet<CfbSpreads> CfbSpreads { get; set; }
     public DbSet<CfbScores> CfbScores { get; set; }
+    public DbSet<CfbPicks> CfbPicks { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         base.OnModelCreating(modelBuilder);

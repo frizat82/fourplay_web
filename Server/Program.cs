@@ -247,6 +247,7 @@ builder.Services.AddScoped<ISpreadCalculatorBuilder, SpreadCalculatorBuilder>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
 builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
 builder.Services.AddScoped<ICfbRepository, CfbRepository>();
+builder.Services.AddScoped<ICfbPicksRepository, CfbPicksRepository>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 
