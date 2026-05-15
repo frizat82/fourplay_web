@@ -85,7 +85,7 @@ export default function AppLayout() {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            FourPlay
+            IV League
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
             <Typography variant="body2" sx={{ opacity: 0.8 }}>
