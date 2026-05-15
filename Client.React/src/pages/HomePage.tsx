@@ -116,34 +116,38 @@ export default function HomePage() {
               </Box>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }} className="hero-image-section">
-              <Paper className="hero-image" elevation={8} sx={{ position: 'relative' }}>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  className="hero-image-img"
-                  poster="/Images/fourplayhome.jpg"
-                >
-                  <source src="/Videos/demo.mp4" type="video/mp4" />
+              <Stack spacing={2}>
+                <Paper elevation={8} sx={{ position: 'relative', overflow: 'hidden', borderRadius: 2 }}>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    style={{ width: '100%', display: 'block' }}
+                    poster="/Images/fourplayhome.jpg"
+                  >
+                    <source src="/Videos/demo.mp4" type="video/mp4" />
+                  </video>
+                  <IconButton
+                    onClick={toggleMute}
+                    size="small"
+                    sx={{
+                      position: 'absolute',
+                      bottom: 8,
+                      right: 8,
+                      bgcolor: 'rgba(0,0,0,0.5)',
+                      color: 'white',
+                      '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
+                    }}
+                  >
+                    {muted ? <VolumeOffIcon fontSize="small" /> : <VolumeUpIcon fontSize="small" />}
+                  </IconButton>
+                </Paper>
+                <Paper className="hero-image" elevation={8}>
                   <img src="/Images/fourplayhome.jpg" alt="FourPlay" className="hero-image-img" />
-                </video>
-                <IconButton
-                  onClick={toggleMute}
-                  size="small"
-                  sx={{
-                    position: 'absolute',
-                    bottom: 10,
-                    right: 10,
-                    bgcolor: 'rgba(0,0,0,0.5)',
-                    color: 'white',
-                    '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
-                  }}
-                >
-                  {muted ? <VolumeOffIcon fontSize="small" /> : <VolumeUpIcon fontSize="small" />}
-                </IconButton>
-              </Paper>
+                </Paper>
+              </Stack>
             </Grid>
           </Grid>
         </Container>
