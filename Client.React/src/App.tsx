@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage';
 import { useAuth } from './services/auth';
 import { useSportContext } from './services/sport';
 import CfbPicksPage from './pages/CfbPicksPage';
+import CfbScoresPage from './pages/CfbScoresPage';
 
 function RootRedirect() {
   const { user, loading } = useAuth();
@@ -14,6 +15,11 @@ function RootRedirect() {
 function PicksRoute() {
   const { isCfb } = useSportContext();
   return isCfb ? <CfbPicksPage /> : <PicksPage />;
+}
+
+function ScoresRoute() {
+  const { isCfb } = useSportContext();
+  return isCfb ? <CfbScoresPage /> : <ScoresPage />;
 }
 
 import LeaguePickerPage from './pages/LeaguePickerPage';
@@ -73,7 +79,7 @@ export default function App() {
         <Route path="/dashboard" element={<HomePage />} />
         <Route path="/leaguepicker" element={<LeaguePickerPage />} />
         <Route path="/picks" element={<PicksRoute />} />
-        <Route path="/scores" element={<ScoresPage />} />
+        <Route path="/scores" element={<ScoresRoute />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/logout" element={<LogoutPage />} />
