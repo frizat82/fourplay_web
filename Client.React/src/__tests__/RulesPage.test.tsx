@@ -13,7 +13,7 @@ function renderPage() {
 describe('RulesPage', () => {
   it('renders the page title', () => {
     renderPage();
-    expect(screen.getByText(/how fourplay works/i)).toBeInTheDocument();
+    expect(screen.getByText(/how iv league works/i)).toBeInTheDocument();
   });
 
   it('explains the 13-point tease mechanic', () => {

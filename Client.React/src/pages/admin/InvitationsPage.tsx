@@ -96,7 +96,7 @@ export default function AdminInvitationsPage() {
     <h1>You're Invited to Join!</h1>
     <p>Hello,</p>
     <p>
-      You've been invited to join FourPlay at <strong>${window.location.origin}</strong>.
+      You've been invited to join IV League at <strong>${window.location.origin}</strong>.
       Click the button below to create your account and get started.
     </p>
     <a href="${registrationUrl}" class="button">Create Your Account</a>
@@ -120,7 +120,7 @@ export default function AdminInvitationsPage() {
       toast.push(`Invitation created for ${email}`, 'success');
       await sendEmail({
         toEmail: invitation.email,
-        subject: 'FourPlay Invitation',
+        subject: 'IV League Invitation',
         htmlBody: generateInvitationEmailHtml(invitation),
       });
       await loadInvitations();
@@ -147,7 +147,7 @@ export default function AdminInvitationsPage() {
   const handleSendEmail = async (invitation: InvitationDto) => {
     await sendEmail({
       toEmail: invitation.email,
-      subject: 'FourPlay Invitation',
+      subject: 'IV League Invitation',
       htmlBody: generateInvitationEmailHtml(invitation),
     });
     toast.push(`Invitation e-mail sent to ${invitation.email}`, 'success');
