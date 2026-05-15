@@ -82,7 +82,6 @@ export default function GameCard({
           {/* Home team */}
           <Stack alignItems="center" spacing={0.5} sx={{ flex: 1 }}>
             <TeamHelmet abbr={homeTeam} size={56} />
-            <Typography variant="caption" fontWeight={700}>{homeTeam}</Typography>
             {mode === 'pick' ? (
               <Button
                 size="small"
@@ -112,7 +111,6 @@ export default function GameCard({
           {/* Away team */}
           <Stack alignItems="center" spacing={0.5} sx={{ flex: 1 }}>
             <TeamHelmet abbr={awayTeam} size={48} flipped />
-            <Typography variant="caption" fontWeight={700}>{awayTeam}</Typography>
             {mode === 'pick' ? (
               <Button
                 size="small"

@@ -3,13 +3,14 @@ import { getTeamColors } from './teamColors';
 interface TeamHelmetProps {
   abbr: string;
   size?: number;
-  flipped?: boolean; // flip horizontally so away team faces home team
+  flipped?: boolean;
 }
 
 export default function TeamHelmet({ abbr, size = 56, flipped = false }: TeamHelmetProps) {
   const { primary, secondary, text } = getTeamColors(abbr);
-  const facemask = '#9ca3af';
-  const fontSize = abbr.length >= 4 ? 13 : abbr.length === 3 ? 15 : 17;
+  const facemask = '#94a3b8';
+  const id = `hm-${abbr.replace(/[^a-zA-Z0-9]/g, '')}`;
+  const fontSize = abbr.length >= 4 ? 14 : abbr.length === 3 ? 16 : 19;
 
   return (
     <svg
@@ -17,33 +18,32 @@ export default function TeamHelmet({ abbr, size = 56, flipped = false }: TeamHel
       width={size}
       height={size * 0.8}
       xmlns="http://www.w3.org/2000/svg"
-      style={{ transform: flipped ? 'scaleX(-1)' : undefined, display: 'block' }}
       role="img"
       aria-label={abbr}
+      style={{ transform: flipped ? 'scaleX(-1)' : undefined, display: 'block', flexShrink: 0 }}
     >
-      {/* ── Drop shadow ── */}
       <defs>
-        <filter id={`shadow-${abbr}`} x="-10%" y="-10%" width="120%" height="130%">
-          <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.25" />
+        <filter id={`${id}-sh`} x="-5%" y="-5%" width="115%" height="125%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.3" />
         </filter>
       </defs>
 
-      {/* ── Helmet dome (main body) ── */}
+      {/* ── Helmet dome ── */}
       <path
-        d="M 12,62 Q 4,34 18,16 Q 36,0 62,5 Q 84,10 86,36 Q 88,58 68,68 L 22,70 Z"
+        d="M 10,64 Q 2,36 16,18 Q 34,1 62,6 Q 84,11 86,38 Q 88,60 66,70 L 20,72 Z"
         fill={primary}
-        filter={`url(#shadow-${abbr})`}
+        filter={`url(#${id}-sh)`}
       />
 
-      {/* ── Helmet shine highlight ── */}
+      {/* ── Shine ── */}
       <path
-        d="M 22,14 Q 42,4 64,10 Q 50,8 30,18 Z"
-        fill="rgba(255,255,255,0.18)"
+        d="M 20,16 Q 44,5 68,12 Q 50,7 28,20 Z"
+        fill="rgba(255,255,255,0.2)"
       />
 
       {/* ── Top stripe ── */}
       <path
-        d="M 18,22 Q 44,10 72,18"
+        d="M 16,24 Q 44,12 72,20"
         fill="none"
         stroke={secondary}
         strokeWidth="7"
@@ -51,19 +51,19 @@ export default function TeamHelmet({ abbr, size = 56, flipped = false }: TeamHel
         opacity="0.9"
       />
 
-      {/* ── Face opening (darker panel) ── */}
+      {/* ── Face opening shadow ── */}
       <path
-        d="M 68,68 Q 88,58 86,36 Q 84,18 70,10 L 74,10 Q 90,20 90,40 Q 90,62 72,72 Z"
-        fill="rgba(0,0,0,0.22)"
+        d="M 66,70 Q 88,60 86,38 Q 84,18 70,10 L 74,12 Q 90,22 90,42 Q 90,64 70,74 Z"
+        fill="rgba(0,0,0,0.2)"
       />
 
       {/* ── Earhole ── */}
-      <circle cx="20" cy="52" r="6" fill="rgba(0,0,0,0.3)" />
-      <circle cx="20" cy="52" r="3.5" fill={secondary} opacity="0.7" />
+      <circle cx="18" cy="54" r="6.5" fill="rgba(0,0,0,0.28)" />
+      <circle cx="18" cy="54" r="4" fill={secondary} opacity="0.75" />
 
       {/* ── Chin strap ── */}
       <path
-        d="M 22,70 Q 44,78 68,68"
+        d="M 20,72 Q 44,80 66,70"
         fill="none"
         stroke={secondary}
         strokeWidth="5"
@@ -71,39 +71,35 @@ export default function TeamHelmet({ abbr, size = 56, flipped = false }: TeamHel
         opacity="0.85"
       />
 
-      {/* ── Facemask bars ── */}
-      <path d="M 72,22 Q 92,24 94,34" fill="none" stroke={facemask} strokeWidth="4.5" strokeLinecap="round" />
-      <path d="M 72,36 L 95,36"        fill="none" stroke={facemask} strokeWidth="4.5" strokeLinecap="round" />
-      <path d="M 72,50 Q 92,50 94,42"  fill="none" stroke={facemask} strokeWidth="4.5" strokeLinecap="round" />
-      {/* Vertical connector */}
-      <path d="M 94,34 L 94,42"        fill="none" stroke={facemask} strokeWidth="4.5" strokeLinecap="round" />
+      {/* ── Facemask — lower position ── */}
+      <path d="M 72,38 Q 90,34 93,42" fill="none" stroke={facemask} strokeWidth="4" strokeLinecap="round" />
+      <path d="M 72,50 L 94,50"       fill="none" stroke={facemask} strokeWidth="4" strokeLinecap="round" />
+      <path d="M 72,62 Q 90,64 93,56" fill="none" stroke={facemask} strokeWidth="4" strokeLinecap="round" />
+      <path d="M 93,42 L 93,56"       fill="none" stroke={facemask} strokeWidth="4" strokeLinecap="round" />
 
-      {/* ── Team abbreviation — stroke outline for readability ── */}
+      {/* ── Abbreviation — shadow layer ── */}
       <text
-        x="37"
-        y="46"
+        x="36" y="48"
         fontFamily="'Arial Black', Impact, Arial, sans-serif"
         fontWeight="900"
         fontSize={fontSize}
-        fill="rgba(0,0,0,0.4)"
-        textAnchor="middle"
-        dominantBaseline="middle"
+        fill="rgba(0,0,0,0.45)"
         stroke="rgba(0,0,0,0.3)"
         strokeWidth="3"
-        style={{ letterSpacing: '-0.5px' }}
+        textAnchor="middle"
+        dominantBaseline="middle"
       >
         {abbr.toUpperCase()}
       </text>
+      {/* ── Abbreviation — foreground ── */}
       <text
-        x="37"
-        y="46"
+        x="36" y="48"
         fontFamily="'Arial Black', Impact, Arial, sans-serif"
         fontWeight="900"
         fontSize={fontSize}
         fill={text}
         textAnchor="middle"
         dominantBaseline="middle"
-        style={{ letterSpacing: '-0.5px' }}
       >
         {abbr.toUpperCase()}
       </text>
