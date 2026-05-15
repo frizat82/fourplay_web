@@ -84,6 +84,9 @@ builder.Services.AddHttpClient<IEspnCoreOddsService, EspnCoreOddsService>(x => {
 builder.Services.AddHttpClient<IEspnApiService, EspnApiService>(x => {
     x.BaseAddress = new Uri("http://site.api.espn.com");
 });
+builder.Services.AddHttpClient<ICfbApiService, CfbApiService>(x => {
+    x.BaseAddress = new Uri("http://site.api.espn.com");
+});
 if (builder.Configuration["DEMO_MODE"] == "true")
 {
     builder.Services.AddSingleton<IEspnCacheService, DemoEspnCacheService>();
@@ -243,6 +246,7 @@ builder.Services.AddScoped<IInvitationService, InvitationService>();
 builder.Services.AddScoped<ISpreadCalculatorBuilder, SpreadCalculatorBuilder>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
 builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
+builder.Services.AddScoped<ICfbRepository, CfbRepository>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 
@@ -254,6 +258,9 @@ builder.Services.AddScoped<IJob, StartupJob>();
 builder.Services.AddScoped<IJob, UserManagerJob>();
 // Register MissingPicksJob
 builder.Services.AddScoped<IJob, MissingPicksJob>();
+builder.Services.AddScoped<IJob, CfbSlateSeederJob>();
+builder.Services.AddScoped<IJob, CfbSpreadJob>();
+builder.Services.AddScoped<IJob, CfbScoresJob>();
 builder.Services.AddQuartz(q => {
     // Setup User at startup
  // User Manager
@@ -336,6 +343,20 @@ q.ScheduleJob<NflScoresJob>(trigger => trigger
 //     .WithCronSchedule("0 0 11 ? * SUN",
 //         x => x.WithMisfireHandlingInstructionFireAndProceed()
 //               .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+
+// CFB jobs — manual trigger only (no cron), durable so admin can trigger on demand
+q.AddJob<CfbSlateSeederJob>(j => j
+    .WithIdentity("CFB Slate Seeder")
+    .WithDescription("Seeds CFP slate dates for the current season")
+    .StoreDurably());
+q.AddJob<CfbSpreadJob>(j => j
+    .WithIdentity("CFB Spread Job")
+    .WithDescription("Fetches CFP spreads from ESPN Core Odds API")
+    .StoreDurably());
+q.AddJob<CfbScoresJob>(j => j
+    .WithIdentity("CFB Scores Job")
+    .WithDescription("Fetches CFP game scores from ESPN CFB scoreboard")
+    .StoreDurably());
 });
 
 

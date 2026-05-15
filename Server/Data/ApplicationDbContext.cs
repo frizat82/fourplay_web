@@ -20,6 +20,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<LeagueInfo> LeagueInfo { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<CfbSlates> CfbSlates { get; set; }
+    public DbSet<CfbSpreads> CfbSpreads { get; set; }
+    public DbSet<CfbScores> CfbScores { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         base.OnModelCreating(modelBuilder);
