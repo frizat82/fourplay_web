@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import {
-  Box, Button, Card, CardContent, Chip, CircularProgress,
-  Stack, Typography, Paper,
-} from '@mui/material';
+import { Box, Button, Chip, CircularProgress, Grid, Stack, Typography, Paper } from '@mui/material';
 import PageHeader from '../components/PageHeader';
+import GameCard, { type PickState } from '../components/sports/GameCard';
 import { useSession } from '../services/session';
 import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
@@ -13,13 +11,6 @@ const SEASON = 2025;
 
 function gameIsLocked(gameTime: string): boolean {
   return new Date(gameTime) <= new Date();
-}
-
-function statusLabel(score: CfbScoreDto | undefined, gameTime: string): string {
-  if (!score) return new Date(gameTime).toLocaleString();
-  if (score.gameStatus === 'StatusFinal') return 'Final';
-  if (score.gameStatus === 'StatusInProgress') return 'In Progress';
-  return new Date(gameTime).toLocaleString();
 }
 
 export default function CfbPicksPage() {
@@ -161,56 +152,38 @@ export default function CfbPicksPage() {
         {totalPicked}/{requiredPicks} picks submitted
       </Typography>
 
-      <Stack spacing={2}>
+      <Grid container spacing={2}>
         {spreads.map(sp => {
           const score = scoreMap.get(sp.espnEventId);
           const locked = gameIsLocked(sp.gameTime);
           const homeKey = spreadKey(sp.espnEventId, sp.homeTeam);
           const awayKey = spreadKey(sp.espnEventId, sp.awayTeam);
-          const homeSelected = existingPicks.has(homeKey) || userPicks.has(homeKey);
-          const awaySelected = existingPicks.has(awayKey) || userPicks.has(awayKey);
-          const homeSubmitted = existingPicks.has(homeKey);
-          const awaySubmitted = existingPicks.has(awayKey);
+          const homePickState: PickState = existingPicks.has(homeKey) ? 'submitted' : userPicks.has(homeKey) ? 'pending' : 'none';
+          const awayPickState: PickState = existingPicks.has(awayKey) ? 'submitted' : userPicks.has(awayKey) ? 'pending' : 'none';
 
           return (
-            <Card key={sp.espnEventId} elevation={2}>
-              <CardContent>
-                <Typography variant="caption" color="text.secondary">
-                  {statusLabel(score, sp.gameTime)}
-                </Typography>
-                {score && score.gameStatus === 'StatusFinal' && (
-                  <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
-                    {score.homeTeam} {score.homeTeamScore} – {score.awayTeamScore} {score.awayTeam}
-                  </Typography>
-                )}
-                <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
-                  <Button
-                    fullWidth
-                    variant={homeSelected ? 'contained' : 'outlined'}
-                    color={homeSubmitted ? 'success' : 'secondary'}
-                    disabled={locked && !homeSelected}
-                    onClick={() => togglePick(sp.espnEventId, sp.homeTeam)}
-                  >
-                    {sp.homeTeam} {sp.homeTeamSpread > 0 ? `+${sp.homeTeamSpread}` : sp.homeTeamSpread}
-                  </Button>
-                  <Typography variant="body2" color="text.secondary" sx={{ minWidth: 40, textAlign: 'center' }}>
-                    O/U {sp.overUnder}
-                  </Typography>
-                  <Button
-                    fullWidth
-                    variant={awaySelected ? 'contained' : 'outlined'}
-                    color={awaySubmitted ? 'success' : 'secondary'}
-                    disabled={locked && !awaySelected}
-                    onClick={() => togglePick(sp.espnEventId, sp.awayTeam)}
-                  >
-                    {sp.awayTeam} {sp.awayTeamSpread > 0 ? `+${sp.awayTeamSpread}` : sp.awayTeamSpread}
-                  </Button>
-                </Stack>
-              </CardContent>
-            </Card>
+            <Grid key={sp.espnEventId} size={{ xs: 12, sm: 6, md: 4 }}>
+              <GameCard
+                homeTeam={sp.homeTeam}
+                awayTeam={sp.awayTeam}
+                homeSpread={sp.homeTeamSpread}
+                awaySpread={sp.awayTeamSpread}
+                overUnder={sp.overUnder}
+                gameTime={sp.gameTime}
+                mode="pick"
+                gameStatus={score?.gameStatus}
+                homeScore={score?.homeTeamScore}
+                awayScore={score?.awayTeamScore}
+                homePickState={homePickState}
+                awayPickState={awayPickState}
+                locked={locked}
+                onPickHome={() => togglePick(sp.espnEventId, sp.homeTeam)}
+                onPickAway={() => togglePick(sp.espnEventId, sp.awayTeam)}
+              />
+            </Grid>
           );
         })}
-      </Stack>
+      </Grid>
 
       {spreads.length === 0 && (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
