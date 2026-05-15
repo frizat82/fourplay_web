@@ -76,7 +76,7 @@ export default function HomePage() {
                 <Typography variant="h6" className="hero-subtitle">
                   {isAuthed
                     ? 'Your picks are waiting. Check the leaderboard and see where you stand.'
-                    : "FourPlay is what fantasy football should have been — no draft, no waiver wire, no dead lineups. Pick NFL games against the spread each week and watch the leaderboard."}
+                    : "IV League is what fantasy football should have been — no draft, no waiver wire, no dead lineups. Pick NFL games against the spread each week and watch the leaderboard."}
                 </Typography>
                 {!isAuthed && (
                   <Stack spacing={1} sx={{ mb: 3 }}>
@@ -156,7 +156,7 @@ export default function HomePage() {
               Fantasy Is Complicated. This Isn't.
             </Typography>
             <Typography variant="subtitle1" align="center" color="text.secondary" sx={{ mb: 5 }}>
-              You've been on a fantasy team that fell apart by Week 6. FourPlay goes all the way to the Super Bowl.
+              You've been on a fantasy team that fell apart by Week 6. IV League goes all the way to the Super Bowl.
             </Typography>
             <Grid container spacing={3}>
               <Grid size={{ xs: 12, md: 6 }}>
@@ -174,7 +174,7 @@ export default function HomePage() {
               </Grid>
               <Grid size={{ xs: 12, md: 6 }}>
                 <Paper elevation={3} sx={{ p: 3, borderRadius: 2, border: '2px solid', borderColor: 'secondary.main', height: '100%' }}>
-                  <Typography variant="h6" fontWeight={700} sx={{ mb: 2.5 }}>FourPlay</Typography>
+                  <Typography variant="h6" fontWeight={700} sx={{ mb: 2.5 }}>IV League</Typography>
                   <Stack spacing={1.5}>
                     {fourplayWins.map(item => (
                       <Stack key={item} direction="row" alignItems="center" spacing={1.5}>
@@ -237,7 +237,7 @@ export default function HomePage() {
                 Got an Invite? You're Ready.
               </Typography>
               <Typography variant="subtitle1" className="cta-subtitle">
-                FourPlay leagues are private and invite-only. If someone sent you a link, register below and you're in.
+                IV League is private and invite-only. If someone sent you a link, register below and you're in.
               </Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" sx={{ mb: 2 }}>
                 <Button
@@ -268,7 +268,7 @@ export default function HomePage() {
 
       <Dialog open={rulesOpen} onClose={() => setRulesOpen(false)} maxWidth="md" fullWidth scroll="paper">
         <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          How FourPlay Works
+          How IV League Works
           <IconButton onClick={() => setRulesOpen(false)} size="small">
             <CloseIcon />
           </IconButton>

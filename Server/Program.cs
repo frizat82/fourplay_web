@@ -95,7 +95,7 @@ else
 builder.Services.AddHttpClient<IJerseyCacheService, JerseyCacheService>(c => {
     c.BaseAddress = new Uri("https://www.gridiron-uniforms.com/GUD/");
     // Some servers dislike aggressive headers; set a reasonable user agent
-    c.DefaultRequestHeaders.UserAgent.ParseAdd("FourPlayJerseyCache/1.0");
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("IVLeagueJerseyCache/1.0");
     c.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/html"));
 });
 #endregion

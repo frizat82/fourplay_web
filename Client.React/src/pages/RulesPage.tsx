@@ -399,7 +399,7 @@ export default function RulesPage() {
       <CardContent>
         <Box sx={{ mb: 2 }}>
           <PageHeader
-            title="How FourPlay Works"
+            title="How IV League Works"
             subtitle="Pick four teased lines each week. Sounds easy — it isn't."
           />
         </Box>
