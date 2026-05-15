@@ -32,6 +32,16 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         await db.SaveChangesAsync();
     }
 
+    public async Task<IEnumerable<CfbSpreads>> GetSpreadsForSlateAsync(int cfbSlateId) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.CfbSpreads.Where(s => s.CfbSlateId == cfbSlateId).ToListAsync();
+    }
+
+    public async Task<IEnumerable<CfbScores>> GetScoresForSlateAsync(int cfbSlateId) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.CfbScores.Where(s => s.CfbSlateId == cfbSlateId).ToListAsync();
+    }
+
     public async Task UpsertCfbScoresAsync(IEnumerable<CfbScores> scores) {
         await using var db = await dbFactory.CreateDbContextAsync();
         foreach (var score in scores) {
