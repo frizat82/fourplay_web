@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import TeamHelmet from '../components/sports/TeamHelmet';
 import {
   Badge,
   Box,
@@ -438,11 +439,11 @@ export default function ScoresPage() {
                         <Grid size={{ xs: 12, md: 6, lg: 4 }} key={`${competition.id}-${awayAbbr}-${homeAbbr}`}>
                           <Paper className={isRedZone(competition) ? 'red-zone-border' : ''} sx={{ p: 2 }}>
                             <Stack direction="row" alignItems="center" justifyContent="space-between">
-                              <img src={getAwayTeamLogo(competition)} width={50} />
+                              <TeamHelmet abbr={awayAbbr} size={50} />
                               <Typography variant="h6">{getAwayTeamScore(competition)}</Typography>
                               <Typography variant="body2">{displayDetails(competition)}</Typography>
                               <Typography variant="h6">{getHomeTeamScore(competition)}</Typography>
-                              <img src={getHomeTeamLogo(competition)} width={50} />
+                              <TeamHelmet abbr={homeAbbr} size={50} flipped />
                             </Stack>
 
                             <FieldPosition
