@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import TeamHelmet from '../components/sports/TeamHelmet';
 import {
   Box,
   Button,
@@ -402,12 +403,10 @@ export default function PicksPage() {
                     <Paper sx={{ p: 2, mb: 2 }}>
                       <Stack direction="row" alignItems="center" justifyContent="space-between">
                         <Box textAlign="center">
-                          <img src={getTeamImage(competition, true)} width={50} />
-                          {showJerseys && (
-                            <Typography variant="caption" fontWeight={700}>
-                              {awayAbbr}
-                            </Typography>
-                          )}
+                          {showJerseys && jerseyCache[awayAbbr]
+                            ? <img src={jerseyCache[awayAbbr]} width={50} />
+                            : <TeamHelmet abbr={awayAbbr} size={50} />
+                          }
                         </Box>
                         {!isPostSeason && (
                           <Typography variant="subtitle2">{getTeamRecord(getAwayTeam(competition))}</Typography>
@@ -455,12 +454,10 @@ export default function PicksPage() {
                     <Paper sx={{ p: 2 }}>
                       <Stack direction="row" alignItems="center" justifyContent="space-between">
                         <Box textAlign="center">
-                          <img src={getTeamImage(competition, false)} width={50} />
-                          {showJerseys && (
-                            <Typography variant="caption" fontWeight={700}>
-                              {homeAbbr}
-                            </Typography>
-                          )}
+                          {showJerseys && jerseyCache[homeAbbr]
+                            ? <img src={jerseyCache[homeAbbr]} width={50} />
+                            : <TeamHelmet abbr={homeAbbr} size={50} flipped />
+                          }
                         </Box>
                         {!isPostSeason && (
                           <Typography variant="subtitle2">{getTeamRecord(getHomeTeam(competition))}</Typography>

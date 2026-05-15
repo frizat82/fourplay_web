@@ -18,6 +18,7 @@ export default function TeamHelmet({ abbr, size = 56, flipped = false }: TeamHel
       height={size * 0.8}
       xmlns="http://www.w3.org/2000/svg"
       style={{ transform: flipped ? 'scaleX(-1)' : undefined, display: 'block' }}
+      role="img"
       aria-label={abbr}
     >
       {/* ── Drop shadow ── */}
