@@ -1,0 +1,18 @@
+using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Shared.Models;
+using System.Text.Json;
+
+namespace FourPlayWebApp.Server.Services;
+
+public class CfbApiService(HttpClient httpClient) : ICfbApiService {
+    private static readonly JsonSerializerOptions _opts = new() { PropertyNameCaseInsensitive = true };
+
+    public async Task<EspnScores?> GetScoresByDateAsync(DateOnly date) {
+        var dateStr = date.ToString("yyyyMMdd");
+        var url = $"/apis/site/v2/sports/football/college-football/scoreboard?dates={dateStr}&limit=25";
+        var response = await httpClient.GetAsync(url);
+        if (!response.IsSuccessStatusCode) return null;
+        var json = await response.Content.ReadAsStringAsync();
+        return JsonSerializer.Deserialize<EspnScores>(json, _opts);
+    }
+}

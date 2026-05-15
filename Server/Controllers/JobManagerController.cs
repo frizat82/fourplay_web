@@ -77,6 +77,46 @@ namespace FourPlayWebApp.Server.Controllers {
                 return BadRequest(e.Message);
             }
         }
+        [Authorize(Roles = "Administrator")]
+        [HttpPost("run-cfb-slate-seeder")]
+        public async Task<IActionResult> RunCfbSlateSeeder() {
+            try {
+                var scheduler = await schedulerFactory.GetScheduler();
+                await scheduler.TriggerJob(new JobKey("CFB Slate Seeder"));
+                Log.Information("Started CFB Slate Seeder Job");
+                return Ok(new { message = "Started CFB Slate Seeder Job" });
+            }
+            catch (Exception e) {
+                return BadRequest(e.Message);
+            }
+        }
+        [Authorize(Roles = "Administrator")]
+        [HttpPost("run-cfb-spreads")]
+        public async Task<IActionResult> RunCfbSpreads() {
+            try {
+                var scheduler = await schedulerFactory.GetScheduler();
+                await scheduler.TriggerJob(new JobKey("CFB Spread Job"));
+                Log.Information("Started CFB Spread Job");
+                return Ok(new { message = "Started CFB Spread Job" });
+            }
+            catch (Exception e) {
+                return BadRequest(e.Message);
+            }
+        }
+        [Authorize(Roles = "Administrator")]
+        [HttpPost("run-cfb-scores")]
+        public async Task<IActionResult> RunCfbScores() {
+            try {
+                var scheduler = await schedulerFactory.GetScheduler();
+                await scheduler.TriggerJob(new JobKey("CFB Scores Job"));
+                Log.Information("Started CFB Scores Job");
+                return Ok(new { message = "Started CFB Scores Job" });
+            }
+            catch (Exception e) {
+                return BadRequest(e.Message);
+            }
+        }
+
         [Authorize]
         [HttpGet("get-jobs")]
         public async Task<IEnumerable<JobStatusResponse>> GetAllJobsStatusAsync() {
