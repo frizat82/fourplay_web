@@ -62,6 +62,13 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         await SeedDemoUsersAsync(league);
         await SeedHistoricalWeeksAsync(league);
 
+        // CFB demo data
+        var cfbLeague = await SeedCfbLeagueAsync();
+        await SeedCfbLeagueMembersAsync(cfbLeague);
+        var slates = await SeedCfbSlatesAsync();
+        await SeedCfbSpreadsAsync(slates);
+        await SeedCfbScoresAsync(slates);
+
         Log.Information("DemoDataSeeder: seed complete");
     }
 
@@ -386,4 +393,134 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             OverUnder = ou,
             GameTime = DateTime.Parse(gameTimeUtc, null, System.Globalization.DateTimeStyles.RoundtripKind),
         };
+
+    // -----------------------------------------------------------------------
+    // CFB Demo Seeding
+    // -----------------------------------------------------------------------
+
+    private const int CfbDemoSeason = 2025;
+
+    // 2025 CFP matchups (real bracket, all final as of Jan 2026)
+    // (slateIndex, espnEventId, homeAbbr, awayAbbr, homeSpread, awaySpread, ou, homeScore, awayScore, gameTime UTC)
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] CfpGames =
+    [
+        // Slate 1: First Round (Dec 19-20)
+        (1, 401800001, "ORE",  "JMU",  -24.5, 24.5, 52.5, 38, 10, new DateTimeOffset(2025, 12, 19, 20, 0, 0, TimeSpan.Zero)),
+        (1, 401800002, "MISS", "TULN", -17.5, 17.5, 58.0, 35, 17, new DateTimeOffset(2025, 12, 19, 23, 30, 0, TimeSpan.Zero)),
+        (1, 401800003, "TAMU", "MIA",   -7.0,  7.0, 49.5, 24, 17, new DateTimeOffset(2025, 12, 20, 20, 0, 0, TimeSpan.Zero)),
+        (1, 401800004, "OU",   "ALA",   -3.0,  3.0, 51.0, 21, 14, new DateTimeOffset(2025, 12, 20, 23, 30, 0, TimeSpan.Zero)),
+        // Slate 2: Quarterfinals (Dec 31/Jan 1)
+        (2, 401800005, "IU",   "ALA",   -3.5,  3.5, 48.5, 27, 24, new DateTimeOffset(2026, 1, 1, 17, 0, 0, TimeSpan.Zero)),  // Rose Bowl
+        (2, 401800006, "UGA",  "MISS", -10.0, 10.0, 55.0, 35, 21, new DateTimeOffset(2026, 1, 1, 20, 30, 0, TimeSpan.Zero)), // Sugar Bowl
+        (2, 401800007, "ORE",  "TTU",   -3.5,  3.5, 53.0, 31, 20, new DateTimeOffset(2025, 12, 31, 20, 0, 0, TimeSpan.Zero)),// Cotton Bowl
+        (2, 401800008, "MIA",  "OSU",    7.0, -7.0, 56.5, 28, 24, new DateTimeOffset(2025, 12, 31, 23, 30, 0, TimeSpan.Zero)),// Fiesta Bowl (upset)
+        // Slate 3: Semifinals (Jan 8-9)
+        (3, 401800009, "IU",   "ORE",   -3.0,  3.0, 51.5, 34, 27, new DateTimeOffset(2026, 1, 9, 20, 0, 0, TimeSpan.Zero)),  // Peach Bowl
+        (3, 401800010, "MIA",  "UGA",    3.5, -3.5, 50.0, 21, 17, new DateTimeOffset(2026, 1, 8, 20, 0, 0, TimeSpan.Zero)),  // Fiesta Bowl
+        // Slate 4: Championship (Jan 19)
+        (4, 401800011, "IU",   "MIA",   -3.0,  3.0, 46.5, 23, 20, new DateTimeOffset(2026, 1, 19, 23, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private async Task<LeagueInfo?> SeedCfbLeagueAsync()
+    {
+        var existing = await db.LeagueInfo.FirstOrDefaultAsync(l => l.LeagueName == "CFB Demo League");
+        if (existing != null) return existing;
+
+        var adminEmail = configuration["ADMIN_EMAIL"] ?? throw new InvalidOperationException("ADMIN_EMAIL required");
+        var adminUser = await userManager.FindByEmailAsync(adminEmail);
+        if (adminUser == null) return null;
+
+        var league = new LeagueInfo { LeagueName = "CFB Demo League", OwnerUserId = adminUser.Id, LeagueType = LeagueType.Cfb };
+        db.LeagueInfo.Add(league);
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: created CFB Demo League (id={Id})", league.Id);
+        return league;
+    }
+
+    private async Task SeedCfbLeagueMembersAsync(LeagueInfo? league)
+    {
+        if (league == null) return;
+
+        var adminEmail = configuration["ADMIN_EMAIL"] ?? throw new InvalidOperationException("ADMIN_EMAIL required");
+        var adminUser = await userManager.FindByEmailAsync(adminEmail);
+        if (adminUser != null && !await db.LeagueUserMapping.AnyAsync(m => m.LeagueId == league.Id && m.UserId == adminUser.Id))
+        {
+            db.LeagueUserMapping.Add(new LeagueUserMapping { LeagueId = league.Id, UserId = adminUser.Id });
+            await db.SaveChangesAsync();
+        }
+
+        foreach (var (_, email) in DemoUsers)
+        {
+            var user = await userManager.FindByEmailAsync(email);
+            if (user == null) continue;
+            if (!await db.LeagueUserMapping.AnyAsync(m => m.LeagueId == league.Id && m.UserId == user.Id))
+            {
+                db.LeagueUserMapping.Add(new LeagueUserMapping { LeagueId = league.Id, UserId = user.Id });
+                await db.SaveChangesAsync();
+            }
+        }
+        Log.Information("DemoDataSeeder: added all demo users to CFB Demo League");
+    }
+
+    private async Task<List<CfbSlates>> SeedCfbSlatesAsync()
+    {
+        if (await db.CfbSlates.AnyAsync(s => s.Season == CfbDemoSeason))
+            return await db.CfbSlates.Where(s => s.Season == CfbDemoSeason).ToListAsync();
+
+        var slates = new List<CfbSlates>
+        {
+            new() { Season = CfbDemoSeason, SlateNumber = 1, Label = "CFP First Round",          SlateType = "FirstRound",   StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20) },
+            new() { Season = CfbDemoSeason, SlateNumber = 2, Label = "CFP Quarterfinals",        SlateType = "Quarterfinal", StartDate = new DateOnly(2025, 12, 31), EndDate = new DateOnly(2026, 1, 1)  },
+            new() { Season = CfbDemoSeason, SlateNumber = 3, Label = "CFP Semifinals",           SlateType = "Semifinal",    StartDate = new DateOnly(2026, 1, 8),   EndDate = new DateOnly(2026, 1, 9)  },
+            new() { Season = CfbDemoSeason, SlateNumber = 4, Label = "CFP National Championship",SlateType = "Championship", StartDate = new DateOnly(2026, 1, 19),  EndDate = new DateOnly(2026, 1, 19) },
+        };
+        db.CfbSlates.AddRange(slates);
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: seeded 4 CFP slates for {Season}", CfbDemoSeason);
+        return slates;
+    }
+
+    private async Task SeedCfbSpreadsAsync(List<CfbSlates> slates)
+    {
+        if (await db.CfbSpreads.AnyAsync(s => slates.Select(sl => sl.Id).Contains(s.CfbSlateId)))
+            return;
+
+        var spreads = CfpGames.Select(g => new CfbSpreads
+        {
+            CfbSlateId     = slates.First(s => s.SlateNumber == g.SlateIdx).Id,
+            EspnEventId    = g.EventId,
+            HomeTeam       = g.Home,
+            AwayTeam       = g.Away,
+            HomeTeamSpread = g.HomeSpread,
+            AwayTeamSpread = g.AwaySpread,
+            OverUnder      = g.OU,
+            GameTime       = g.GameTime,
+        }).ToList();
+
+        db.CfbSpreads.AddRange(spreads);
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: seeded {Count} CFP spreads", spreads.Count);
+    }
+
+    private async Task SeedCfbScoresAsync(List<CfbSlates> slates)
+    {
+        if (await db.CfbScores.AnyAsync(s => slates.Select(sl => sl.Id).Contains(s.CfbSlateId)))
+            return;
+
+        var scores = CfpGames.Select(g => new CfbScores
+        {
+            CfbSlateId    = slates.First(s => s.SlateNumber == g.SlateIdx).Id,
+            EspnEventId   = g.EventId,
+            HomeTeam      = g.Home,
+            AwayTeam      = g.Away,
+            HomeTeamScore = g.HomeScore,
+            AwayTeamScore = g.AwayScore,
+            GameStatus    = "StatusFinal",
+            GameTime      = g.GameTime,
+        }).ToList();
+
+        db.CfbScores.AddRange(scores);
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: seeded {Count} CFP scores (all final)", scores.Count);
+    }
 }
