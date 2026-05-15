@@ -7,6 +7,7 @@ import App from './App';
 import { createAppTheme } from './app/theme';
 import { AuthProvider } from './services/auth';
 import { SessionProvider } from './services/session';
+import { SportsProvider } from './services/sport';
 import { ToastProvider } from './services/toast';
 import { ThemeModeProvider, useThemeMode } from './services/theme';
 import './app/global.css';
@@ -28,11 +29,13 @@ function ThemedApp() {
       <CssBaseline />
       <BrowserRouter>
         <ToastProvider>
-          <AuthProvider>
-            <SessionProvider>
-              <App />
-            </SessionProvider>
-          </AuthProvider>
+          <SportsProvider>
+            <AuthProvider>
+              <SessionProvider>
+                <App />
+              </SessionProvider>
+            </AuthProvider>
+          </SportsProvider>
         </ToastProvider>
       </BrowserRouter>
     </ThemeProvider>
