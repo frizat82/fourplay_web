@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { getLeagueUserMappingsForUser } from '../api/league';
 import type { LeagueUserMappingDto } from '../types/league';
 import { useAuth } from './auth';
+import { useSportContext } from './sport';
 
 interface SessionContextValue {
   availableLeagues: LeagueUserMappingDto[];
@@ -22,6 +23,7 @@ const loadStoredLeague = () => {
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const { sport } = useSportContext();
   const [availableLeagues, setAvailableLeagues] = useState<LeagueUserMappingDto[]>([]);
   const [currentLeague, setCurrentLeague] = useState<number | null>(() => loadStoredLeague());
 
@@ -41,7 +43,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const leagues = (await getLeagueUserMappingsForUser(user.userId)) ?? [];
+    const allLeagues = (await getLeagueUserMappingsForUser(user.userId)) ?? [];
+    // Filter leagues to match the current sport context (leagueType: 0=NFL, 1=CFB)
+    const leagues = allLeagues.filter((l) =>
+      sport === 'CFB' ? l.leagueType === 1 : l.leagueType === 0
+    );
     setAvailableLeagues(leagues);
 
     const stored = loadStoredLeague();
@@ -56,7 +62,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setCurrentLeague(null);
       persistLeague(null);
     }
-  }, [persistLeague, user]);
+  }, [persistLeague, user, sport]);
 
   const selectLeague = useCallback(
     (leagueId: number) => {

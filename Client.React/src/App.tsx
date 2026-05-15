@@ -2,12 +2,20 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './layouts/AppLayout';
 import HomePage from './pages/HomePage';
 import { useAuth } from './services/auth';
+import { useSportContext } from './services/sport';
+import CfbPicksPage from './pages/CfbPicksPage';
 
 function RootRedirect() {
   const { user, loading } = useAuth();
   if (loading) return null;
   return user ? <Navigate to="/dashboard" replace /> : <HomePage />;
 }
+
+function PicksRoute() {
+  const { isCfb } = useSportContext();
+  return isCfb ? <CfbPicksPage /> : <PicksPage />;
+}
+
 import LeaguePickerPage from './pages/LeaguePickerPage';
 import PicksPage from './pages/PicksPage';
 import ScoresPage from './pages/ScoresPage';
@@ -64,7 +72,7 @@ export default function App() {
       >
         <Route path="/dashboard" element={<HomePage />} />
         <Route path="/leaguepicker" element={<LeaguePickerPage />} />
-        <Route path="/picks" element={<PicksPage />} />
+        <Route path="/picks" element={<PicksRoute />} />
         <Route path="/scores" element={<ScoresPage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/auth" element={<AuthPage />} />
