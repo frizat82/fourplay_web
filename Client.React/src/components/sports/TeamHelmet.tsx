@@ -4,105 +4,95 @@ interface TeamHelmetProps {
   abbr: string;
   size?: number;
   flipped?: boolean;
+  showLabel?: boolean; // show abbreviation below helmet (default true)
 }
 
-export default function TeamHelmet({ abbr, size = 56, flipped = false }: TeamHelmetProps) {
-  const { primary, secondary, text } = getTeamColors(abbr);
+export default function TeamHelmet({ abbr, size = 56, flipped = false, showLabel = true }: TeamHelmetProps) {
+  const { primary, secondary } = getTeamColors(abbr);
   const facemask = '#94a3b8';
-  const id = `hm-${abbr.replace(/[^a-zA-Z0-9]/g, '')}`;
-  const fontSize = abbr.length >= 4 ? 14 : abbr.length === 3 ? 16 : 19;
+  const id = `h${abbr.replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
 
   return (
-    <svg
-      viewBox="0 0 100 80"
-      width={size}
-      height={size * 0.8}
-      xmlns="http://www.w3.org/2000/svg"
-      role="img"
-      aria-label={abbr}
-      style={{ transform: flipped ? 'scaleX(-1)' : undefined, display: 'block', flexShrink: 0 }}
+    <div
+      style={{
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2,
+        flexShrink: 0,
+      }}
     >
-      <defs>
-        <filter id={`${id}-sh`} x="-5%" y="-5%" width="115%" height="125%">
-          <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.3" />
-        </filter>
-      </defs>
-
-      {/* ── Helmet dome ── */}
-      <path
-        d="M 10,64 Q 2,36 16,18 Q 34,1 62,6 Q 84,11 86,38 Q 88,60 66,70 L 20,72 Z"
-        fill={primary}
-        filter={`url(#${id}-sh)`}
-      />
-
-      {/* ── Shine ── */}
-      <path
-        d="M 20,16 Q 44,5 68,12 Q 50,7 28,20 Z"
-        fill="rgba(255,255,255,0.2)"
-      />
-
-      {/* ── Top stripe ── */}
-      <path
-        d="M 16,24 Q 44,12 72,20"
-        fill="none"
-        stroke={secondary}
-        strokeWidth="7"
-        strokeLinecap="round"
-        opacity="0.9"
-      />
-
-      {/* ── Face opening shadow ── */}
-      <path
-        d="M 66,70 Q 88,60 86,38 Q 84,18 70,10 L 74,12 Q 90,22 90,42 Q 90,64 70,74 Z"
-        fill="rgba(0,0,0,0.2)"
-      />
-
-      {/* ── Earhole ── */}
-      <circle cx="18" cy="54" r="6.5" fill="rgba(0,0,0,0.28)" />
-      <circle cx="18" cy="54" r="4" fill={secondary} opacity="0.75" />
-
-      {/* ── Chin strap ── */}
-      <path
-        d="M 20,72 Q 44,80 66,70"
-        fill="none"
-        stroke={secondary}
-        strokeWidth="5"
-        strokeLinecap="round"
-        opacity="0.85"
-      />
-
-      {/* ── Facemask — lower position ── */}
-      <path d="M 72,38 Q 90,34 93,42" fill="none" stroke={facemask} strokeWidth="4" strokeLinecap="round" />
-      <path d="M 72,50 L 94,50"       fill="none" stroke={facemask} strokeWidth="4" strokeLinecap="round" />
-      <path d="M 72,62 Q 90,64 93,56" fill="none" stroke={facemask} strokeWidth="4" strokeLinecap="round" />
-      <path d="M 93,42 L 93,56"       fill="none" stroke={facemask} strokeWidth="4" strokeLinecap="round" />
-
-      {/* ── Abbreviation — shadow layer ── */}
-      <text
-        x="36" y="48"
-        fontFamily="'Arial Black', Impact, Arial, sans-serif"
-        fontWeight="900"
-        fontSize={fontSize}
-        fill="rgba(0,0,0,0.45)"
-        stroke="rgba(0,0,0,0.3)"
-        strokeWidth="3"
-        textAnchor="middle"
-        dominantBaseline="middle"
+      <svg
+        viewBox="0 0 80 68"
+        width={size}
+        height={size * 0.85}
+        xmlns="http://www.w3.org/2000/svg"
+        role="img"
+        aria-label={abbr}
+        style={{ transform: flipped ? 'scaleX(-1)' : undefined, display: 'block' }}
       >
-        {abbr.toUpperCase()}
-      </text>
-      {/* ── Abbreviation — foreground ── */}
-      <text
-        x="36" y="48"
-        fontFamily="'Arial Black', Impact, Arial, sans-serif"
-        fontWeight="900"
-        fontSize={fontSize}
-        fill={text}
-        textAnchor="middle"
-        dominantBaseline="middle"
-      >
-        {abbr.toUpperCase()}
-      </text>
-    </svg>
+        <defs>
+          <filter id={`${id}s`} x="-8%" y="-8%" width="120%" height="130%">
+            <feDropShadow dx="0" dy="2" stdDeviation="1.5" floodOpacity="0.3" />
+          </filter>
+        </defs>
+
+        {/* ── Helmet dome — simple bold D-shape ── */}
+        <path
+          d="M 6,56 Q 2,28 14,13 Q 28,0 50,4 Q 68,8 70,30 Q 72,50 56,60 L 14,62 Z"
+          fill={primary}
+          filter={`url(#${id}s)`}
+        />
+
+        {/* ── Top stripe ── */}
+        <path
+          d="M 13,18 Q 38,7 62,14"
+          fill="none"
+          stroke={secondary}
+          strokeWidth="6"
+          strokeLinecap="round"
+          opacity="0.9"
+        />
+
+        {/* ── Shine ── */}
+        <ellipse cx="30" cy="16" rx="14" ry="7" fill="rgba(255,255,255,0.15)" transform="rotate(-20 30 16)" />
+
+        {/* ── Earhole ── */}
+        <circle cx="14" cy="46" r="5.5" fill="rgba(0,0,0,0.25)" />
+        <circle cx="14" cy="46" r="3" fill={secondary} opacity="0.7" />
+
+        {/* ── Chin strap ── */}
+        <path
+          d="M 14,62 Q 34,68 56,60"
+          fill="none"
+          stroke={secondary}
+          strokeWidth="4"
+          strokeLinecap="round"
+          opacity="0.8"
+        />
+
+        {/* ── Facemask — 3 clean horizontal bars ── */}
+        <path d="M 58,26 Q 74,24 76,32" fill="none" stroke={facemask} strokeWidth="3.5" strokeLinecap="round" />
+        <path d="M 58,38 L 76,38"       fill="none" stroke={facemask} strokeWidth="3.5" strokeLinecap="round" />
+        <path d="M 58,50 Q 74,52 76,44" fill="none" stroke={facemask} strokeWidth="3.5" strokeLinecap="round" />
+        {/* Vertical connector */}
+        <path d="M 76,32 L 76,44"       fill="none" stroke={facemask} strokeWidth="3.5" strokeLinecap="round" />
+      </svg>
+
+      {showLabel && (
+        <span
+          style={{
+            fontSize: size < 40 ? 9 : size < 52 ? 10 : 11,
+            fontWeight: 700,
+            fontFamily: "'Arial Black', Arial, sans-serif",
+            letterSpacing: '0.02em',
+            lineHeight: 1,
+            userSelect: 'none',
+          }}
+        >
+          {abbr.toUpperCase()}
+        </span>
+      )}
+    </div>
   );
 }
