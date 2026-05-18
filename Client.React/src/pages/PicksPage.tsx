@@ -35,7 +35,6 @@ import {
   isAfterKickoff,
   isGameStarted,
   isPostSeason as isPostSeasonHelper,
-  displayDetails,
 } from '../utils/gameHelpers';
 import { useToast } from '../services/toast';
 
@@ -408,7 +407,6 @@ export default function PicksPage() {
                     awaySpread={getSpread(awayAbbr) ?? 0}
                     gameTime={competition.date.toString()}
                     gameStatus={competition.status?.type?.name}
-                    gameDetail={displayDetails(competition)}
                     homeRecord={!isPostSeason ? getTeamRecord(getHomeTeam(competition)) : undefined}
                     awayRecord={!isPostSeason ? getTeamRecord(getAwayTeam(competition)) : undefined}
                     homeJerseyUrl={showJerseys ? jerseyCache[homeAbbr] : undefined}
