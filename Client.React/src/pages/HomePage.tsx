@@ -241,7 +241,7 @@ export default function HomePage() {
                 Got an Invite? You're Ready.
               </Typography>
               <Typography variant="subtitle1" className="cta-subtitle">
-                IV League leagues are private and invite-only. If someone sent you a link, register below and you're in.
+                IV League is private and invite-only. If someone sent you a link, register below and you're in.
               </Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" sx={{ mb: 2 }}>
                 <Button
