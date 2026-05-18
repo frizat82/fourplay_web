@@ -121,31 +121,32 @@ export default function ScoresPage() {
       }
 
       setLoading(true);
-      const data = await getWeekScores(selectedWeek, selectedSeason, selectedIsPostSeason);
-      if (!data?.events || data.events.length === 0) {
-        setScores(null);
+      try {
+        const data = await getWeekScores(selectedWeek, selectedSeason, selectedIsPostSeason);
+        if (!data?.events || data.events.length === 0) {
+          setScores(null);
+          return;
+        }
+
+        setScores(data);
+        setIsPostSeason(selectedIsPostSeason);
+        setWeek(selectedWeek);
+        setSeason(selectedSeason);
+
+        const nflWeek = getWeekFromEspnWeek(selectedWeek, selectedIsPostSeason);
+        const [oddsExist, picksResult] = await Promise.all([
+          doOddsExist(currentLeague, selectedSeason, nflWeek),
+          getLeaguePicks(currentLeague, selectedSeason, nflWeek),
+        ]);
+        setHasOdds(oddsExist);
+        setPicks(picksResult ?? []);
+
+        if (oddsExist) {
+          await loadSpreadCalculations(data, currentLeague, selectedSeason, selectedWeek, selectedIsPostSeason);
+        }
+      } finally {
         setLoading(false);
-        return;
       }
-
-      setScores(data);
-      setIsPostSeason(selectedIsPostSeason);
-      setWeek(selectedWeek);
-      setSeason(selectedSeason);
-
-      const nflWeek = getWeekFromEspnWeek(selectedWeek, selectedIsPostSeason);
-      const [oddsExist, picksResult] = await Promise.all([
-        doOddsExist(currentLeague, selectedSeason, nflWeek),
-        getLeaguePicks(currentLeague, selectedSeason, nflWeek),
-      ]);
-      setHasOdds(oddsExist);
-      setPicks(picksResult ?? []);
-
-      if (oddsExist) {
-        await loadSpreadCalculations(data, currentLeague, selectedSeason, selectedWeek, selectedIsPostSeason);
-      }
-
-      setLoading(false);
     },
     [currentLeague, loadSpreadCalculations]
   );
@@ -389,6 +390,13 @@ export default function ScoresPage() {
             onWeekChange={handleWeekChange}
             onSeasonTypeChange={handleSeasonTypeChange}
           />
+          {!isCurrentWeek && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>
+              <Button size="small" variant="outlined" onClick={() => { setIsCurrentWeek(true); void reload(); }}>
+                Current Week
+              </Button>
+            </Box>
+          )}
         </Box>
       )}
       {scores && (
@@ -423,6 +431,13 @@ export default function ScoresPage() {
             </>
           ) : (
             <>
+              {showOnlyMyPicks && !getScoreEvents(scores).some(e => e.competitions.some(c => didUserPickCompetition(c))) && (
+                <Grid size={12}>
+                  <Paper sx={{ p: 4, textAlign: 'center' }}>
+                    <Typography color="text.secondary">You haven&apos;t made any picks for this week.</Typography>
+                  </Paper>
+                </Grid>
+              )}
               {getScoreEvents(scores)
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
                 .map((scoreEvent: Event) =>
