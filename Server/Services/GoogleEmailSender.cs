@@ -101,7 +101,7 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
     }
 
     /// <summary>
-    /// Send a simple templated notification using the FourPlay template.
+    /// Send a simple templated notification using the IV League template.
     /// Accepts an optional ApplicationUser to personalize the message, but is not required.
     /// </summary>
     public Task SendTemplatedMessageAsync(ApplicationUser? user, string email, string title, string message) {
@@ -116,7 +116,7 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
     #region Private Template Helpers
 
     /// <summary>
-    /// Builds a unified FourPlay email layout with consistent design.
+    /// Builds a unified IV League email layout with consistent design.
     /// </summary>
     private static string BuildEmailTemplate(string title, string message) {
         var sb = new StringBuilder();
@@ -161,7 +161,7 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
     }
 
     /// <summary>
-    /// Public wrapper for external callers that want the FourPlay HTML-wrapped body.
+    /// Public wrapper for external callers that want the IV League HTML-wrapped body.
     /// </summary>
     public static string CreateTemplatedBody(string title, string message) => BuildEmailTemplate(title, message);
 
