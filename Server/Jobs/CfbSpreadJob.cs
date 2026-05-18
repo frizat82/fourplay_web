@@ -11,7 +11,6 @@ namespace FourPlayWebApp.Server.Jobs;
 [DisallowConcurrentExecution]
 public class CfbSpreadJob(ICfbApiService cfbApi, IEspnCoreOddsService oddsService, ICfbRepository repo) : IJob {
     private const int Season = 2025;
-    private const int EspnBetProviderId = 58;
 
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("CfbSpreadJob: fetching CFP spreads at {Time}", DateTime.UtcNow);
@@ -26,7 +25,9 @@ public class CfbSpreadJob(ICfbApiService cfbApi, IEspnCoreOddsService oddsServic
 
         foreach (var slate in slates) {
             for (var date = slate.StartDate; date <= slate.EndDate; date = date.AddDays(1)) {
-                var scoreboard = await cfbApi.GetScoresByDateAsync(date);
+                var scoreboard = CfbSlateHelpers.IsTop25Slate(slate.SlateType)
+                    ? await cfbApi.GetTop25ByDateAsync(date)
+                    : await cfbApi.GetScoresByDateAsync(date);
                 if (scoreboard?.Events is null) continue;
 
                 foreach (var evt in scoreboard.Events) {
@@ -38,9 +39,10 @@ public class CfbSpreadJob(ICfbApiService cfbApi, IEspnCoreOddsService oddsServic
                     var away = comp.Competitors.FirstOrDefault(c => c.HomeAway == HomeAway.Away)?.Team.Abbreviation ?? "";
 
                     try {
-                        var odds = await oddsService.GetEventsWithOddsAsync(eventId, EspnBetProviderId);
+                        // Try DraftKings first (provider 100), fall back to any available provider
+                        var odds = await oddsService.GetCfbEventsWithOddsAsync(eventId, (int)EspnOddsProviders.DraftKings);
                         if (odds is null) {
-                            var allOdds = await oddsService.GetEventsWithOddsAsync(eventId);
+                            var allOdds = await oddsService.GetCfbEventsWithOddsAsync(eventId);
                             if (allOdds is null || allOdds.Count == 0) {
                                 Log.Warning("CfbSpreadJob: no odds for event {EventId} ({Home} vs {Away})", eventId, home, away);
                                 continue;

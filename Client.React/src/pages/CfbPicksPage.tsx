@@ -1,21 +1,31 @@
-import { useEffect, useState } from 'react';
-import { Box, Button, Chip, CircularProgress, Grid, Stack, Typography, Paper } from '@mui/material';
+import { useCallback, useEffect, useState } from 'react';
+import { Box, Button, CircularProgress, Grid, Paper, Stack, Typography } from '@mui/material';
 import PageHeader from '../components/PageHeader';
+import WeekYearSelector from '../components/WeekYearSelector';
 import GameCard, { type PickState } from '../components/sports/GameCard';
 import { useSession } from '../services/session';
 import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import { useAuth } from '../services/auth';
+import { getCfbWeekName, cfbSlateNumberToWeek, cfbWeekToSlateNumber } from '../utils/gameHelpers';
+
 
 const SEASON = 2025;
+const MIN_SEASON = 2025;
+const CFB_REGULAR_WEEKS = Array.from({ length: 14 }, (_, i) => i + 1); // 1-14
+const CFB_POST_WEEKS = [1, 2, 3, 4, 5]; // Conf Champs + 4 CFP rounds
 
 function gameIsLocked(gameTime: string): boolean {
   return new Date(gameTime) <= new Date();
 }
 
 export default function CfbPicksPage() {
-  const { currentLeague } = useSession();
+  const { currentLeague, leaguesLoaded } = useSession();
   const { user } = useAuth();
+
+  const [season, setSeason] = useState(SEASON);
+  const [week, setWeek] = useState(1);
+  const [isPostSeason, setIsPostSeason] = useState(false);
 
   const [slates, setSlates] = useState<CfbSlateDto[]>([]);
   const [activeSlate, setActiveSlate] = useState<CfbSlateDto | null>(null);
@@ -25,46 +35,74 @@ export default function CfbPicksPage() {
   const [userPicks, setUserPicks] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [isCurrentSlate, setIsCurrentSlate] = useState(true);
 
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentLeague]);
+  useEffect(() => { if (leaguesLoaded) void initialLoad(); }, [currentLeague, leaguesLoaded]);
 
-  async function load() {
+  async function initialLoad() {
     setLoading(true);
+    setIsCurrentSlate(true);
     try {
       const allSlates = await getCfbSlates(SEASON);
       setSlates(allSlates);
-
-      // Show the earliest slate that isn't fully completed, or last slate if all done
-      const active = allSlates.find(s => new Date(s.endDate) >= new Date()) ?? allSlates[allSlates.length - 1] ?? null;
-      setActiveSlate(active);
-
-      if (active && currentLeague) {
-        const [sp, sc, picks] = await Promise.all([
-          getCfbSpreads(active.id),
-          getCfbScores(active.id),
-          getCfbUserPicks(currentLeague, active.id),
-        ]);
-        setSpreads(sp);
-        setScores(sc);
-        setExistingPicks(new Set(picks.map(p => pickKey(p))));
+      // Default to most recent active slate
+      const now = new Date();
+      const active = allSlates.find(s => new Date(s.endDate) >= now) ?? allSlates[allSlates.length - 1] ?? null;
+      if (active) {
+        const { week: w, isPostSeason: ps } = cfbSlateNumberToWeek(active.slateNumber);
+        setWeek(w);
+        setIsPostSeason(ps);
+        setActiveSlate(active);
+        await loadSlateData(active);
       }
     } finally {
       setLoading(false);
     }
   }
 
+  async function loadSlateData(slate: CfbSlateDto) {
+    if (!currentLeague) return;
+    const [sp, sc, picks] = await Promise.all([
+      getCfbSpreads(slate.id),
+      getCfbScores(slate.id),
+      getCfbUserPicks(currentLeague, slate.id),
+    ]);
+    setSpreads(sp);
+    setScores(sc);
+    setExistingPicks(new Set(picks.map(pickKey)));
+    setUserPicks(new Set());
+  }
+
+  const handleWeekChange = useCallback(async (newWeek: number, meta?: { isPostSeason?: boolean }) => {
+    const ps = meta?.isPostSeason ?? isPostSeason;
+    setWeek(newWeek);
+    setIsPostSeason(ps);
+    setIsCurrentSlate(false);
+    const slateNum = cfbWeekToSlateNumber(newWeek, ps);
+    const slate = slates.find(s => s.slateNumber === slateNum) ?? null;
+    setActiveSlate(slate);
+    if (slate) await loadSlateData(slate);
+  }, [slates, isPostSeason, currentLeague]);
+
+  const handlePostSeasonChange = useCallback(async (ps: boolean) => {
+    setIsPostSeason(ps);
+    const opts = ps ? CFB_POST_WEEKS : CFB_REGULAR_WEEKS;
+    const newWeek = opts[0];
+    setWeek(newWeek);
+    const slateNum = cfbWeekToSlateNumber(newWeek, ps);
+    const slate = slates.find(s => s.slateNumber === slateNum) ?? null;
+    setActiveSlate(slate);
+    if (slate) await loadSlateData(slate);
+  }, [slates, currentLeague]);
+
   function pickKey(p: CfbPickDto) { return `${p.espnEventId}|${p.team}|${p.pickType}`; }
   function spreadKey(espnEventId: number, team: string) { return `${espnEventId}|${team}|Spread`; }
 
   function togglePick(espnEventId: number, team: string) {
     const key = spreadKey(espnEventId, team);
-    if (existingPicks.has(key)) return; // already submitted
+    if (existingPicks.has(key)) return;
     setUserPicks(prev => {
       const next = new Set(prev);
-      // Remove any existing pick for this event
       spreads.forEach(sp => {
         if (sp.espnEventId === espnEventId) {
           next.delete(spreadKey(sp.espnEventId, sp.homeTeam));
@@ -84,9 +122,9 @@ export default function CfbPicksPage() {
         const [espnEventId, team, pickType] = k.split('|');
         return { espnEventId: Number(espnEventId), team, pickType };
       });
-      await addCfbPicks(currentLeague, activeSlate.id, SEASON, picks);
+      await addCfbPicks(currentLeague, activeSlate.id, season, picks);
       setUserPicks(new Set());
-      await load();
+      if (activeSlate) await loadSlateData(activeSlate);
     } finally {
       setSubmitting(false);
     }
@@ -96,61 +134,61 @@ export default function CfbPicksPage() {
     if (!currentLeague || !activeSlate) return;
     await deleteCfbPicks(currentLeague, activeSlate.id);
     setUserPicks(new Set());
-    await load();
+    if (activeSlate) await loadSlateData(activeSlate);
   }
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>;
-  if (!activeSlate) return <Box p={3}><Typography>No CFP slate data available.</Typography></Box>;
 
   const scoreMap = new Map(scores.map(s => [s.espnEventId, s]));
   const totalPicked = existingPicks.size + userPicks.size;
-  const requiredPicks = spreads.length; // pick every game in the slate
 
   return (
     <Box>
-      <PageHeader
-        title={activeSlate.label}
-        subtitle={`${activeSlate.startDate} – ${activeSlate.endDate} · Season ${SEASON}`}
+      <PageHeader title="CFB Picks" subtitle={`Season ${season}`} />
+
+      <WeekYearSelector
+        season={season}
+        week={week}
+        isPostSeason={isPostSeason}
+        onSeasonChange={setSeason}
+        onWeekChange={handleWeekChange}
+        onSeasonTypeChange={handlePostSeasonChange}
+        regularWeekOptions={CFB_REGULAR_WEEKS}
+        postSeasonWeekOptions={CFB_POST_WEEKS}
+        minSeason={MIN_SEASON}
+        maxSeason={new Date().getFullYear()}
+        maxRegularSeasonWeek={14}
+        weekLabelFn={getCfbWeekName}
       />
+      {!isCurrentSlate && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 2 }}>
+          <Button size="small" variant="outlined" onClick={() => void initialLoad()}>
+            Current Week
+          </Button>
+        </Box>
+      )}
 
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-        {slates.map(s => (
-          <Chip
-            key={s.id}
-            label={s.label}
-            variant={s.id === activeSlate.id ? 'filled' : 'outlined'}
-            color={s.id === activeSlate.id ? 'secondary' : 'default'}
-            onClick={() => {
-              setActiveSlate(s);
-              if (currentLeague) {
-                void Promise.all([
-                  getCfbSpreads(s.id).then(setSpreads),
-                  getCfbScores(s.id).then(setScores),
-                  getCfbUserPicks(currentLeague, s.id).then(p => setExistingPicks(new Set(p.map(pickKey)))),
-                ]);
-              }
-            }}
-          />
-        ))}
-      </Stack>
+      {activeSlate && (
+        <>
+          <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
+            <Button
+              variant="contained"
+              color="secondary"
+              disabled={userPicks.size === 0 || submitting}
+              onClick={handleSubmit}
+            >
+              Submit {userPicks.size > 0 ? `${userPicks.size} Pick${userPicks.size > 1 ? 's' : ''}` : 'Picks'}
+            </Button>
+            <Button variant="outlined" color="error" disabled={existingPicks.size === 0} onClick={handleClear}>
+              Clear My Picks
+            </Button>
+          </Stack>
 
-      <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Button
-          variant="contained"
-          color="secondary"
-          disabled={userPicks.size === 0 || submitting}
-          onClick={handleSubmit}
-        >
-          Submit {userPicks.size > 0 ? `${userPicks.size} Pick${userPicks.size > 1 ? 's' : ''}` : 'Picks'}
-        </Button>
-        <Button variant="outlined" color="error" disabled={existingPicks.size === 0} onClick={handleClear}>
-          Clear My Picks
-        </Button>
-      </Stack>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {totalPicked}/{requiredPicks} picks submitted
-      </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {totalPicked}/{spreads.length} picks submitted
+          </Typography>
+        </>
+      )}
 
       <Grid container spacing={2}>
         {spreads.map(sp => {
@@ -179,6 +217,9 @@ export default function CfbPicksPage() {
                 locked={locked}
                 onPickHome={() => togglePick(sp.espnEventId, sp.homeTeam)}
                 onPickAway={() => togglePick(sp.espnEventId, sp.awayTeam)}
+                weatherDisplayValue={score?.weatherDisplayValue}
+                weatherConditionId={score?.weatherConditionId}
+                weatherTemperatureF={score?.weatherTemperatureF}
               />
             </Grid>
           );
@@ -187,7 +228,7 @@ export default function CfbPicksPage() {
 
       {spreads.length === 0 && (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">No games available for this slate yet.</Typography>
+          <Typography color="text.secondary">No games available for this week yet.</Typography>
         </Paper>
       )}
     </Box>

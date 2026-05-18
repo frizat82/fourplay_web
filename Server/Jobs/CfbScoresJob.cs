@@ -25,7 +25,9 @@ public class CfbScoresJob(ICfbApiService cfbApi, ICfbRepository repo) : IJob {
 
         foreach (var slate in slates) {
             for (var date = slate.StartDate; date <= slate.EndDate; date = date.AddDays(1)) {
-                var scoreboard = await cfbApi.GetScoresByDateAsync(date);
+                var scoreboard = CfbSlateHelpers.IsTop25Slate(slate.SlateType)
+                    ? await cfbApi.GetTop25ByDateAsync(date)
+                    : await cfbApi.GetScoresByDateAsync(date);
                 if (scoreboard?.Events is null) continue;
 
                 foreach (var evt in scoreboard.Events) {
@@ -40,14 +42,17 @@ public class CfbScoresJob(ICfbApiService cfbApi, ICfbRepository repo) : IJob {
                     if (home is null || away is null) continue;
 
                     scores.Add(new CfbScores {
-                        CfbSlateId    = slate.Id,
-                        EspnEventId   = int.Parse(evt.Id),
-                        HomeTeam      = home.Team.Abbreviation,
-                        AwayTeam      = away.Team.Abbreviation,
-                        HomeTeamScore = (int)home.Score,
-                        AwayTeamScore = (int)away.Score,
-                        GameStatus    = status.ToString(),
-                        GameTime      = comp.Date,
+                        CfbSlateId          = slate.Id,
+                        EspnEventId         = int.Parse(evt.Id),
+                        HomeTeam            = home.Team.Abbreviation,
+                        AwayTeam            = away.Team.Abbreviation,
+                        HomeTeamScore       = (int)home.Score,
+                        AwayTeamScore       = (int)away.Score,
+                        GameStatus          = status.ToString(),
+                        GameTime            = comp.Date,
+                        WeatherDisplayValue = evt.Weather?.DisplayValue,
+                        WeatherConditionId  = evt.Weather?.ConditionId,
+                        WeatherTemperatureF = evt.Weather?.Temperature,
                     });
                 }
             }

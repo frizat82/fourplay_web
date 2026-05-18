@@ -92,7 +92,7 @@ public class CfbSpreadJobTests
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([slate]);
         _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 19)).Returns(BuildScoreboard());
         _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 20)).Returns((EspnScores?)null);
-        _oddsService.GetEventsWithOddsAsync(401677183, 58).Returns(BuildOdds());
+        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         await BuildJob().Execute(_context);
 
@@ -107,7 +107,7 @@ public class CfbSpreadJobTests
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([slate]);
         _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 19)).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU"));
         _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 20)).Returns((EspnScores?)null);
-        _oddsService.GetEventsWithOddsAsync(401677183, 58).Returns(BuildOdds("-7.5", "+7.5", 52.5));
+        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds("-7.5", "+7.5", 52.5));
 
         IEnumerable<CfbSpreads>? saved = null;
         await _repo.AddCfbSpreadsAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
@@ -129,8 +129,8 @@ public class CfbSpreadJobTests
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
         _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 19)).Returns(BuildScoreboard());
         _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 20)).Returns((EspnScores?)null);
-        _oddsService.GetEventsWithOddsAsync(Arg.Any<int>(), Arg.Any<int>()).Returns((EspnCoreOddsItem?)null);
-        _oddsService.GetEventsWithOddsAsync(Arg.Any<int>()).Returns((EspnCoreOddsApiResponse?)null);
+        _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>(), 100).Returns((EspnCoreOddsItem?)null);
+        _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>()).Returns((EspnCoreOddsApiResponse?)null);
 
         await BuildJob().Execute(_context);
 

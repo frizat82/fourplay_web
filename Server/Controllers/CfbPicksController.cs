@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
+using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -19,8 +20,24 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         Ok(await cfbRepo.GetSpreadsForSlateAsync(cfbSlateId));
 
     [HttpGet("scores/{cfbSlateId}")]
-    public async Task<IActionResult> GetScores(int cfbSlateId) =>
-        Ok(await cfbRepo.GetScoresForSlateAsync(cfbSlateId));
+    public async Task<IActionResult> GetScores(int cfbSlateId) {
+        var scores = await cfbRepo.GetScoresForSlateAsync(cfbSlateId);
+        var dtos = scores.Select(s => new CfbScoreDto {
+            Id                  = s.Id,
+            CfbSlateId          = s.CfbSlateId,
+            EspnEventId         = s.EspnEventId,
+            HomeTeam            = s.HomeTeam,
+            AwayTeam            = s.AwayTeam,
+            HomeTeamScore       = s.HomeTeamScore,
+            AwayTeamScore       = s.AwayTeamScore,
+            GameStatus          = s.GameStatus,
+            GameTime            = s.GameTime.ToString("O"),
+            WeatherDisplayValue = s.WeatherDisplayValue,
+            WeatherConditionId  = s.WeatherConditionId,
+            WeatherTemperatureF = s.WeatherTemperatureF,
+        });
+        return Ok(dtos);
+    }
 
     private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 

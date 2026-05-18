@@ -127,4 +127,30 @@ describe('WeekYearSelector', () => {
 
     expect(onSeasonTypeChange).toHaveBeenCalledWith(true);
   });
+
+  // -----------------------------------------------------------------------
+  // weekLabelFn prop
+  // -----------------------------------------------------------------------
+
+  it('uses default getWeekName when weekLabelFn not provided', () => {
+    setup({ week: 1, isPostSeason: true, postSeasonWeekOptions: [1, 2, 3, 4] });
+    expect(screen.getByText('Wild Card')).toBeInTheDocument();
+  });
+
+  it('uses custom weekLabelFn when provided (CFB regression guard: week 5 postseason must not throw)', () => {
+    const getCfbWeekName = (w: number, ps: boolean) => {
+      if (!ps) return `Week ${w}`;
+      const labels: Record<number, string> = { 1: 'Conf. Championships', 2: 'CFP First Round', 3: 'CFP Quarterfinals', 4: 'CFP Semifinals', 5: 'CFP Championship' };
+      return labels[w] ?? `Postseason Week ${w}`;
+    };
+    expect(() =>
+      setup({
+        week: 5,
+        isPostSeason: true,
+        postSeasonWeekOptions: [1, 2, 3, 4, 5],
+        weekLabelFn: getCfbWeekName,
+      })
+    ).not.toThrow();
+    expect(screen.getByText('CFP Championship')).toBeInTheDocument();
+  });
 });

@@ -16,6 +16,7 @@ interface WeekYearSelectorProps {
   minSeason?: number;
   maxSeason?: number;
   maxRegularSeasonWeek?: number;
+  weekLabelFn?: (week: number, isPostSeason: boolean) => string;
 }
 
 export default function WeekYearSelector({
@@ -30,6 +31,7 @@ export default function WeekYearSelector({
   minSeason = 2020,
   maxSeason = new Date().getFullYear(),
   maxRegularSeasonWeek = 18,
+  weekLabelFn = getWeekName,
 }: WeekYearSelectorProps) {
   const defaultRegularWeeks = useMemo(() => Array.from({ length: maxRegularSeasonWeek }, (_, idx) => idx + 1), [
     maxRegularSeasonWeek,
@@ -124,7 +126,7 @@ export default function WeekYearSelector({
         >
           {currentOptions.map((w) => (
             <MenuItem key={w} value={w}>
-              {getWeekName(w, isPostSeason)}
+              {weekLabelFn(w, isPostSeason)}
             </MenuItem>
           ))}
         </Select>

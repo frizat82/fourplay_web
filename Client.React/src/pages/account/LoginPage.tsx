@@ -82,7 +82,7 @@ export default function LoginPage() {
             lineHeight: 1,
           }}
         >
-          FOURPLAY
+          IV LEAGUE
         </Typography>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           Log in

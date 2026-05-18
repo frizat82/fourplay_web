@@ -44,6 +44,9 @@ export interface CfbScoreDto {
   awayTeamScore: number;
   gameStatus: string;
   gameTime: string;
+  weatherDisplayValue?: string | null;
+  weatherConditionId?: string | null;
+  weatherTemperatureF?: number | null;
 }
 
 export interface CfbPickDto {

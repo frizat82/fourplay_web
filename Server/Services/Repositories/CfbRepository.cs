@@ -18,6 +18,12 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         await db.SaveChangesAsync();
     }
 
+    public async Task DeleteSlatesAsync(IEnumerable<CfbSlates> slates) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        db.CfbSlates.RemoveRange(slates);
+        await db.SaveChangesAsync();
+    }
+
     public async Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbSlates
@@ -44,15 +50,22 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
 
     public async Task UpsertCfbScoresAsync(IEnumerable<CfbScores> scores) {
         await using var db = await dbFactory.CreateDbContextAsync();
-        foreach (var score in scores) {
-            var existing = await db.CfbScores
-                .FirstOrDefaultAsync(s => s.EspnEventId == score.EspnEventId);
-            if (existing is null)
+        var scoreList = scores.ToList();
+        var ids = scoreList.Select(s => s.EspnEventId).ToHashSet();
+        var existingMap = await db.CfbScores
+            .Where(s => ids.Contains(s.EspnEventId))
+            .ToDictionaryAsync(s => s.EspnEventId);
+
+        foreach (var score in scoreList) {
+            if (!existingMap.TryGetValue(score.EspnEventId, out var existing))
                 db.CfbScores.Add(score);
             else {
-                existing.HomeTeamScore = score.HomeTeamScore;
-                existing.AwayTeamScore = score.AwayTeamScore;
-                existing.GameStatus    = score.GameStatus;
+                existing.HomeTeamScore       = score.HomeTeamScore;
+                existing.AwayTeamScore       = score.AwayTeamScore;
+                existing.GameStatus          = score.GameStatus;
+                existing.WeatherDisplayValue = score.WeatherDisplayValue;
+                existing.WeatherConditionId  = score.WeatherConditionId;
+                existing.WeatherTemperatureF = score.WeatherTemperatureF;
             }
         }
         await db.SaveChangesAsync();
