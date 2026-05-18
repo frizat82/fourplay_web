@@ -511,6 +511,15 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<int>("HomeTeamScore")
                         .HasColumnType("integer");
 
+                    b.Property<string>("WeatherConditionId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WeatherDisplayValue")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("WeatherTemperatureF")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.ToTable("CfbScores");

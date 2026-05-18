@@ -7,21 +7,19 @@ interface TeamHelmetProps {
 
 export default function TeamHelmet({ abbr, size = 56, flipped = false, showLabel = true }: TeamHelmetProps) {
   const src = `/Icons/Helmets/${abbr.toLowerCase()}.svg`;
+  const h = Math.round(size * 1.1);
 
   return (
     <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
       <img
         src={src}
         width={size}
-        height={Math.round(size * 0.82)}
+        height={h}
         alt={abbr}
         role="img"
         aria-label={abbr}
         style={{ transform: flipped ? 'scaleX(-1)' : undefined, display: 'block', objectFit: 'contain' }}
-        onError={(e) => {
-          // Fallback: hide broken image
-          (e.target as HTMLImageElement).style.visibility = 'hidden';
-        }}
+        onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
       />
       {showLabel && (
         <span style={{

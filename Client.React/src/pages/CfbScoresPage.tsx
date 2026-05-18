@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  Badge, Box, Button, Chip, CircularProgress, Grid,
+  Badge, Box, Button, CircularProgress, Grid,
   IconButton, Paper, Stack, Typography,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
@@ -10,18 +10,18 @@ import GppMaybeIcon from '@mui/icons-material/GppMaybe';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
 import PageHeader from '../components/PageHeader';
+import WeekYearSelector from '../components/WeekYearSelector';
 import TeamHelmet from '../components/sports/TeamHelmet';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbAllPicks } from '../api/cfb';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
+import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, spreadLabel } from '../utils/gameHelpers';
 
 const SEASON = 2025;
-
-function spreadLabel(spread: number): string {
-  if (spread === 0) return 'PK';
-  return spread > 0 ? `+${spread}` : `${spread}`;
-}
+const MIN_SEASON = 2025;
+const CFB_REGULAR_WEEKS = Array.from({ length: 14 }, (_, i) => i + 1);
+const CFB_POST_WEEKS = [1, 2, 3, 4, 5];
 
 function displayStatus(score: CfbScoreDto | undefined, gameTime: string): string {
   if (!score || score.gameStatus === 'StatusScheduled')
@@ -32,8 +32,12 @@ function displayStatus(score: CfbScoreDto | undefined, gameTime: string): string
 }
 
 export default function CfbScoresPage() {
-  const { currentLeague } = useSession();
+  const { currentLeague, leaguesLoaded } = useSession();
   const { user } = useAuth();
+
+  const [season, setSeason] = useState(SEASON);
+  const [week, setWeek] = useState(1);
+  const [isPostSeason, setIsPostSeason] = useState(false);
 
   const [slates, setSlates] = useState<CfbSlateDto[]>([]);
   const [activeSlate, setActiveSlate] = useState<CfbSlateDto | null>(null);
@@ -42,17 +46,25 @@ export default function CfbScoresPage() {
   const [allPicks, setAllPicks] = useState<CfbPickDto[]>([]);
   const [showOnlyMyPicks, setShowOnlyMyPicks] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isCurrentSlate, setIsCurrentSlate] = useState(true);
 
-  useEffect(() => { void load(); }, [currentLeague]);
+  useEffect(() => { if (leaguesLoaded) void initialLoad(); }, [currentLeague, leaguesLoaded]);
 
-  async function load() {
+  async function initialLoad() {
     setLoading(true);
+    setIsCurrentSlate(true);
     try {
       const allSlates = await getCfbSlates(SEASON);
       setSlates(allSlates);
-      const active = allSlates.find(s => new Date(s.endDate) >= new Date()) ?? allSlates[allSlates.length - 1] ?? null;
-      setActiveSlate(active);
-      if (active) await loadSlate(active);
+      const now = new Date();
+      const active = allSlates.find(s => new Date(s.endDate) >= now) ?? allSlates[allSlates.length - 1] ?? null;
+      if (active) {
+        const { week: w, isPostSeason: ps } = cfbSlateNumberToWeek(active.slateNumber);
+        setWeek(w);
+        setIsPostSeason(ps);
+        setActiveSlate(active);
+        await loadSlate(active);
+      }
     } finally {
       setLoading(false);
     }
@@ -69,6 +81,28 @@ export default function CfbScoresPage() {
     setAllPicks(picks);
   }
 
+  const handleWeekChange = useCallback(async (newWeek: number, meta?: { isPostSeason?: boolean }) => {
+    const ps = meta?.isPostSeason ?? isPostSeason;
+    setWeek(newWeek);
+    setIsPostSeason(ps);
+    setIsCurrentSlate(false);
+    const slateNum = cfbWeekToSlateNumber(newWeek, ps);
+    const slate = slates.find(s => s.slateNumber === slateNum) ?? null;
+    setActiveSlate(slate);
+    if (slate) await loadSlate(slate);
+  }, [slates, isPostSeason, currentLeague]);
+
+  const handlePostSeasonChange = useCallback(async (ps: boolean) => {
+    setIsPostSeason(ps);
+    const opts = ps ? CFB_POST_WEEKS : CFB_REGULAR_WEEKS;
+    const newWeek = opts[0];
+    setWeek(newWeek);
+    const slateNum = cfbWeekToSlateNumber(newWeek, ps);
+    const slate = slates.find(s => s.slateNumber === slateNum) ?? null;
+    setActiveSlate(slate);
+    if (slate) await loadSlate(slate);
+  }, [slates, currentLeague]);
+
   const scoreMap = new Map(scores.map(s => [s.espnEventId, s]));
   const spreadMap = new Map(spreads.map(s => [s.espnEventId, s]));
 
@@ -84,12 +118,10 @@ export default function CfbScoresPage() {
     const picked = myPick(espnEventId) === team;
     if (!picked) return <GppMaybeIcon color="disabled" />;
     if (!score || score.gameStatus !== 'StatusFinal') return <GppMaybeIcon color="info" />;
-    // Determine winner by spread
     const homeCovers = spread
       ? (score.homeTeamScore + spread.homeTeamSpread) > score.awayTeamScore
       : score.homeTeamScore > score.awayTeamScore;
-    const teamIsHome = team === score.homeTeam;
-    const won = teamIsHome ? homeCovers : !homeCovers;
+    const won = team === score.homeTeam ? homeCovers : !homeCovers;
     return won ? <GppGoodIcon color="success" /> : <GppBadIcon color="error" />;
   }
 
@@ -98,29 +130,38 @@ export default function CfbScoresPage() {
     const homeCovers = spread
       ? (score.homeTeamScore + spread.homeTeamSpread) > score.awayTeamScore
       : score.homeTeamScore > score.awayTeamScore;
-    const teamIsHome = team === score.homeTeam;
-    return (teamIsHome ? homeCovers : !homeCovers) ? 'success' : 'error';
+    return (team === score.homeTeam ? homeCovers : !homeCovers) ? 'success' : 'error';
   }
 
-  const isCFP = activeSlate?.slateType !== 'RegularSeason';
+  const isPostSeasonSlate = activeSlate?.slateType !== 'RegularSeason' && activeSlate?.slateType !== 'ConferenceChampionship';
 
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>;
 
   return (
     <Box>
-      <PageHeader title="CFP Scores" subtitle={`Season ${SEASON}`} />
+      <PageHeader title="CFB Scores" subtitle={`Season ${season}`} />
 
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
-        {slates.map(s => (
-          <Chip
-            key={s.id}
-            label={s.label}
-            variant={s.id === activeSlate?.id ? 'filled' : 'outlined'}
-            color={s.id === activeSlate?.id ? 'secondary' : 'default'}
-            onClick={async () => { setActiveSlate(s); await loadSlate(s); }}
-          />
-        ))}
-      </Stack>
+      <WeekYearSelector
+        season={season}
+        week={week}
+        isPostSeason={isPostSeason}
+        onSeasonChange={setSeason}
+        onWeekChange={handleWeekChange}
+        onSeasonTypeChange={handlePostSeasonChange}
+        regularWeekOptions={CFB_REGULAR_WEEKS}
+        postSeasonWeekOptions={CFB_POST_WEEKS}
+        minSeason={MIN_SEASON}
+        maxSeason={new Date().getFullYear()}
+        maxRegularSeasonWeek={14}
+        weekLabelFn={getCfbWeekName}
+      />
+      {!isCurrentSlate && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 2 }}>
+          <Button size="small" variant="outlined" onClick={() => void initialLoad()}>
+            Current Week
+          </Button>
+        </Box>
+      )}
 
       <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
         <Button
@@ -144,61 +185,37 @@ export default function CfbScoresPage() {
             return (
               <Grid key={sp.espnEventId} size={{ xs: 12, md: 6, lg: 4 }}>
                 <Paper sx={{ p: 2, pt: 2.5 }}>
-                  {/* Score row — mirrors NFL ScoresPage exactly */}
                   <Stack direction="row" alignItems="center" justifyContent="space-between">
                     <TeamHelmet abbr={sp.awayTeam} size={50} />
-                    <Typography variant="h6">
-                      {score ? score.awayTeamScore : ''}
-                    </Typography>
-                    <Typography variant="body2" textAlign="center">
-                      {displayStatus(score, sp.gameTime)}
-                    </Typography>
-                    <Typography variant="h6">
-                      {score ? score.homeTeamScore : ''}
-                    </Typography>
+                    <Typography variant="h6">{score ? score.awayTeamScore : ''}</Typography>
+                    <Typography variant="body2" textAlign="center">{displayStatus(score, sp.gameTime)}</Typography>
+                    <Typography variant="h6">{score ? score.homeTeamScore : ''}</Typography>
                     <TeamHelmet abbr={sp.homeTeam} size={50} flipped />
                   </Stack>
 
-                  {/* Away team pick row */}
                   <Stack direction="row" alignItems="center" sx={{ mt: 3, gap: 1.5, px: 1 }}>
-                    {getPickIcon(sp.espnEventId, sp.awayTeam, score, sp)}
+                    {getPickIcon(sp.espnEventId, sp.awayTeam, score, spreadMap.get(sp.espnEventId))}
                     <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{sp.awayTeam}</Typography>
                     <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
                       <Typography variant="subtitle1">{spreadLabel(sp.awayTeamSpread)}</Typography>
                     </Box>
-                    <Badge
-                      color={getBadgeColor(sp.espnEventId, sp.awayTeam, score, sp)}
-                      overlap="circular"
-                      badgeContent={awayPickers}
-                      invisible={awayPickers === 0}
-                    >
-                      <IconButton disabled={awayPickers === 0} size="small">
-                        <PersonIcon />
-                      </IconButton>
+                    <Badge color={getBadgeColor(sp.espnEventId, sp.awayTeam, score, spreadMap.get(sp.espnEventId))} overlap="circular" badgeContent={awayPickers} invisible={awayPickers === 0}>
+                      <IconButton disabled={awayPickers === 0} size="small"><PersonIcon /></IconButton>
                     </Badge>
                   </Stack>
 
-                  {/* Home team pick row */}
                   <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1.5, px: 1 }}>
-                    {getPickIcon(sp.espnEventId, sp.homeTeam, score, sp)}
+                    {getPickIcon(sp.espnEventId, sp.homeTeam, score, spreadMap.get(sp.espnEventId))}
                     <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{sp.homeTeam}</Typography>
                     <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
                       <Typography variant="subtitle1">{spreadLabel(sp.homeTeamSpread)}</Typography>
                     </Box>
-                    <Badge
-                      color={getBadgeColor(sp.espnEventId, sp.homeTeam, score, sp)}
-                      overlap="circular"
-                      badgeContent={homePickers}
-                      invisible={homePickers === 0}
-                    >
-                      <IconButton disabled={homePickers === 0} size="small">
-                        <PersonIcon />
-                      </IconButton>
+                    <Badge color={getBadgeColor(sp.espnEventId, sp.homeTeam, score, spreadMap.get(sp.espnEventId))} overlap="circular" badgeContent={homePickers} invisible={homePickers === 0}>
+                      <IconButton disabled={homePickers === 0} size="small"><PersonIcon /></IconButton>
                     </Badge>
                   </Stack>
 
-                  {/* O/U row — CFP is always postseason */}
-                  {isCFP && (
+                  {isPostSeasonSlate && (
                     <Stack direction="row" alignItems="center" justifyContent="center" sx={{ mt: 2.5, gap: 2 }}>
                       <ArrowCircleUpIcon color="disabled" fontSize="small" />
                       <Typography variant="subtitle1">{sp.overUnder}</Typography>
@@ -214,7 +231,7 @@ export default function CfbScoresPage() {
 
       {spreads.length === 0 && !loading && (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">No games available for this slate.</Typography>
+          <Typography color="text.secondary">No games available for this week.</Typography>
         </Paper>
       )}
     </Box>

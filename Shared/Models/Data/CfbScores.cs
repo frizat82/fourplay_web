@@ -15,5 +15,8 @@ public class CfbScores {
     public int AwayTeamScore { get; set; }
     public string GameStatus { get; set; } = string.Empty; // STATUS_FINAL, STATUS_IN_PROGRESS, STATUS_SCHEDULED
     public DateTimeOffset GameTime { get; set; }
+    public string? WeatherDisplayValue { get; set; }
+    public string? WeatherConditionId { get; set; }
+    public int? WeatherTemperatureF { get; set; }
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
 }

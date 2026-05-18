@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import TeamHelmet from '../components/sports/TeamHelmet';
 import {
   Box,
   Button,
   CircularProgress,
   Grid,
-  Paper,
   Stack,
   Typography,
 } from '@mui/material';
@@ -14,7 +12,7 @@ import PageHeader from '../components/PageHeader';
 import WeekYearSelector from '../components/WeekYearSelector';
 import NoLeague from '../components/NoLeague';
 import SpreadRelease from '../components/SpreadRelease';
-import WeatherIcon from '../components/WeatherIcon';
+import GameCard, { type PickState } from '../components/sports/GameCard';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { getWeekScores, loadScoresWithRetry } from '../api/espn';
@@ -93,41 +91,37 @@ export default function PicksPage() {
 
   const loadHistoricalWeek = useCallback(
     async (selectedSeason: number, selectedWeek: number, selectedIsPostSeason: boolean) => {
-    setLoading(true);
+      setLoading(true);
+      try {
+        const data = await getWeekScores(selectedWeek, selectedSeason, selectedIsPostSeason);
+        if (!data?.events || data.events.length === 0) {
+          setScores(null);
+          return;
+        }
 
-    const data = await getWeekScores(selectedWeek, selectedSeason, selectedIsPostSeason);
-    if (!data?.events || data.events.length === 0) {
-      setScores(null);
-      setLoading(false);
-      return;
-    }
+        setScores(data);
+        setIsPostSeason(selectedIsPostSeason);
+        setWeek(selectedWeek);
+        setSeason(selectedSeason);
 
-    setScores(data);
-    setIsPostSeason(selectedIsPostSeason);
-    setWeek(selectedWeek);
-    setSeason(selectedSeason);
+        if (!currentLeague) return;
 
-    if (!currentLeague) {
-      setLoading(false);
-      return;
-    }
+        const nflWeek = getWeekFromEspnWeek(selectedWeek, selectedIsPostSeason);
+        const [picksResult, oddsExist] = await Promise.all([
+          user?.userId ? getUserPicks(user.userId, currentLeague, selectedSeason, nflWeek) : Promise.resolve([]),
+          doOddsExist(currentLeague, selectedSeason, nflWeek),
+        ]);
+        setExistingPicks(new Set(picksResult.map((p) => pickKey(p))));
+        setHasOdds(oddsExist);
 
-    const nflWeek = getWeekFromEspnWeek(selectedWeek, selectedIsPostSeason);
+        if (oddsExist) {
+          await loadAllSpreads(data, currentLeague, selectedSeason, selectedWeek, selectedIsPostSeason);
+        }
 
-    const [picksResult, oddsExist] = await Promise.all([
-      user?.userId ? getUserPicks(user.userId, currentLeague, selectedSeason, nflWeek) : Promise.resolve([]),
-      doOddsExist(currentLeague, selectedSeason, nflWeek),
-    ]);
-    setExistingPicks(new Set(picksResult.map((p) => pickKey(p))));
-    setHasOdds(oddsExist);
-
-      if (oddsExist) {
-        await loadAllSpreads(data, currentLeague, selectedSeason, selectedWeek, selectedIsPostSeason);
+        await loadJerseys(selectedSeason, selectedWeek);
+      } finally {
+        setLoading(false);
       }
-
-      await loadJerseys(selectedSeason, selectedWeek);
-
-      setLoading(false);
     },
     [currentLeague, loadAllSpreads, loadJerseys, user?.userId]
   );
@@ -354,6 +348,13 @@ export default function PicksPage() {
             onWeekChange={handleWeekChange}
             onSeasonTypeChange={handleSeasonTypeChange}
           />
+          {!isCurrentWeek && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>
+              <Button size="small" variant="outlined" onClick={() => { setIsCurrentWeek(true); void reload(); }}>
+                Current Week
+              </Button>
+            </Box>
+          )}
         </Box>
       )}
       <Grid container spacing={2}>
@@ -390,152 +391,45 @@ export default function PicksPage() {
             .map((competition) => {
               const awayAbbr = getAwayTeamAbbr(competition);
               const homeAbbr = getHomeTeamAbbr(competition);
-              const awaySpreadSelected = isSelected(awayAbbr);
-              const homeSpreadSelected = isSelected(homeAbbr);
-              const homeOverSelected = isSelected(homeAbbr, 'Over');
-              const homeUnderSelected = isSelected(homeAbbr, 'Under');
-              const totalOver = getSpread(homeAbbr, 'Over');
-              const totalUnder = getSpread(homeAbbr, 'Under');
+              const locked = isGameStartedOrDisabledPicks(competition);
+
+              const awayPickState: PickState = isSelected(awayAbbr) ? 'submitted' : 'none';
+              const homePickState: PickState = isSelected(homeAbbr) ? 'submitted' : 'none';
+              const overPickState: PickState = isSelected(homeAbbr, 'Over') ? 'submitted' : 'none';
+              const underPickState: PickState = isSelected(homeAbbr, 'Under') ? 'submitted' : 'none';
 
               return (
                 <Grid size={{ xs: 12, lg: 4 }} key={competition.id}>
-                  <Paper sx={{ p: 2 }}>
-                    <Paper sx={{ p: 2, mb: 2 }}>
-                      <Stack direction="row" alignItems="center" justifyContent="space-between">
-                        <Box textAlign="center">
-                          {showJerseys && jerseyCache[awayAbbr]
-                            ? <img src={jerseyCache[awayAbbr]} width={50} />
-                            : <TeamHelmet abbr={awayAbbr} size={50} />
-                          }
-                        </Box>
-                        {!isPostSeason && (
-                          <Typography variant="subtitle2">{getTeamRecord(getAwayTeam(competition))}</Typography>
-                        )}
-                        <Typography variant={isPostSeason ? 'subtitle2' : 'h6'} className="fixed-width">
-                          {getSpread(awayAbbr) ?? ''}
-                        </Typography>
-                        {awaySpreadSelected ? (
-                          <Button
-                            color="success"
-                            variant="contained"
-                            onClick={() => unselectPick(awayAbbr)}
-                            sx={pickButtonSx}
-                          >
-                            Picked
-                          </Button>
-                        ) : (
-                          <Button
-                            color="warning"
-                            variant="contained"
-                            disabled={isGameStartedOrDisabledPicks(competition)}
-                            onClick={() => selectPick(awayAbbr)}
-                            sx={pickButtonSx}
-                          >
-                            Pick
-                          </Button>
-                        )}
-                      </Stack>
-                    </Paper>
-
-                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2, gap: 1 }}>
-                      {scoreEvent.weather && (
-                        <WeatherIcon
-                          iconKey={scoreEvent.weather.displayValue}
-                          conditionId={scoreEvent.weather.conditionId}
-                          temperatureF={scoreEvent.weather.temperature}
-                          showTemp
-                        />
-                      )}
-                      <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                        {displayDetails(competition)}
-                      </Typography>
-                    </Stack>
-
-                    <Paper sx={{ p: 2 }}>
-                      <Stack direction="row" alignItems="center" justifyContent="space-between">
-                        <Box textAlign="center">
-                          {showJerseys && jerseyCache[homeAbbr]
-                            ? <img src={jerseyCache[homeAbbr]} width={50} />
-                            : <TeamHelmet abbr={homeAbbr} size={50} flipped />
-                          }
-                        </Box>
-                        {!isPostSeason && (
-                          <Typography variant="subtitle2">{getTeamRecord(getHomeTeam(competition))}</Typography>
-                        )}
-                        <Typography variant={isPostSeason ? 'subtitle2' : 'h6'} className="fixed-width">
-                          {getSpread(homeAbbr) ?? ''}
-                        </Typography>
-                        {homeSpreadSelected ? (
-                          <Button
-                            color="success"
-                            variant="contained"
-                            onClick={() => unselectPick(homeAbbr)}
-                            sx={pickButtonSx}
-                          >
-                            Picked
-                          </Button>
-                        ) : (
-                          <Button
-                            color="warning"
-                            variant="contained"
-                            disabled={isGameStartedOrDisabledPicks(competition)}
-                            onClick={() => selectPick(homeAbbr)}
-                            sx={pickButtonSx}
-                          >
-                            Pick
-                          </Button>
-                        )}
-                      </Stack>
-                    </Paper>
-
-                    {isPostSeason && (
-                      <Paper
-                        data-testid="over-under-controls"
-                        sx={{ mt: 1, p: 1.5, borderRadius: 2, background: 'rgba(248, 250, 252, 0.04)' }}
-                      >
-                        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ gap: 0.5 }}>
-                          <Box textAlign="center" sx={{ minWidth: 44 }}>
-                            <Typography variant="caption" sx={{ opacity: 0.7, letterSpacing: 0.5, display: 'block' }}>
-                              Over
-                            </Typography>
-                            <Typography variant="caption" fontWeight={700}>
-                              {totalOver ?? '--'}
-                            </Typography>
-                          </Box>
-                          <Button
-                            variant="contained"
-                            color={homeOverSelected ? 'success' : 'warning'}
-                            sx={{ minWidth: 76, height: 36, fontSize: '0.8rem', px: 1 }}
-                            disabled={isGameStartedOrDisabledPicks(competition) && !homeOverSelected}
-                            onClick={() =>
-                              homeOverSelected ? unselectPick(homeAbbr, 'Over') : selectPick(homeAbbr, 'Over')
-                            }
-                          >
-                            {homeOverSelected ? 'Overed' : 'Over'}
-                          </Button>
-                          <Button
-                            variant="contained"
-                            color={homeUnderSelected ? 'success' : 'warning'}
-                            sx={{ minWidth: 76, height: 36, fontSize: '0.8rem', px: 1 }}
-                            disabled={isGameStartedOrDisabledPicks(competition) && !homeUnderSelected}
-                            onClick={() =>
-                              homeUnderSelected ? unselectPick(homeAbbr, 'Under') : selectPick(homeAbbr, 'Under')
-                            }
-                          >
-                            {homeUnderSelected ? 'Undered' : 'Under'}
-                          </Button>
-                          <Box textAlign="center" sx={{ minWidth: 44 }}>
-                            <Typography variant="caption" sx={{ opacity: 0.7, letterSpacing: 0.5, display: 'block' }}>
-                              Under
-                            </Typography>
-                            <Typography variant="caption" fontWeight={700}>
-                              {totalUnder ?? '--'}
-                            </Typography>
-                          </Box>
-                        </Stack>
-                      </Paper>
-                    )}
-                  </Paper>
+                  <GameCard
+                    mode="pick"
+                    homeTeam={homeAbbr}
+                    awayTeam={awayAbbr}
+                    homeSpread={getSpread(homeAbbr) ?? 0}
+                    awaySpread={getSpread(awayAbbr) ?? 0}
+                    gameTime={competition.date.toString()}
+                    gameStatus={competition.status?.type?.name}
+                    gameDetail={displayDetails(competition)}
+                    homeRecord={!isPostSeason ? getTeamRecord(getHomeTeam(competition)) : undefined}
+                    awayRecord={!isPostSeason ? getTeamRecord(getAwayTeam(competition)) : undefined}
+                    homeJerseyUrl={showJerseys ? jerseyCache[homeAbbr] : undefined}
+                    awayJerseyUrl={showJerseys ? jerseyCache[awayAbbr] : undefined}
+                    weatherDisplayValue={scoreEvent.weather?.displayValue}
+                    weatherConditionId={scoreEvent.weather?.conditionId}
+                    weatherTemperatureF={scoreEvent.weather?.temperature}
+                    isPostSeason={isPostSeason}
+                    homePickState={homePickState}
+                    awayPickState={awayPickState}
+                    locked={locked}
+                    onPickHome={() => homePickState !== 'none' ? unselectPick(homeAbbr) : selectPick(homeAbbr)}
+                    onPickAway={() => awayPickState !== 'none' ? unselectPick(awayAbbr) : selectPick(awayAbbr)}
+                    overValue={getSpread(homeAbbr, 'Over')}
+                    underValue={getSpread(homeAbbr, 'Under')}
+                    overPickState={overPickState}
+                    underPickState={underPickState}
+                    overUnderLocked={locked && overPickState === 'none'}
+                    onPickOver={() => overPickState !== 'none' ? unselectPick(homeAbbr, 'Over') : selectPick(homeAbbr, 'Over')}
+                    onPickUnder={() => underPickState !== 'none' ? unselectPick(homeAbbr, 'Under') : selectPick(homeAbbr, 'Under')}
+                  />
                 </Grid>
               );
             })

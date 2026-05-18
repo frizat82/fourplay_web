@@ -15,4 +15,14 @@ public class CfbApiService(HttpClient httpClient) : ICfbApiService {
         var json = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<EspnScores>(json, _opts);
     }
+
+    // Regular season + conference championships — groups=80 filters to Top 25 matchups only
+    public async Task<EspnScores?> GetTop25ByDateAsync(DateOnly date) {
+        var dateStr = date.ToString("yyyyMMdd");
+        var url = $"/apis/site/v2/sports/football/college-football/scoreboard?dates={dateStr}&groups=80&limit=50";
+        var response = await httpClient.GetAsync(url);
+        if (!response.IsSuccessStatusCode) return null;
+        var json = await response.Content.ReadAsStringAsync();
+        return JsonSerializer.Deserialize<EspnScores>(json, _opts);
+    }
 }

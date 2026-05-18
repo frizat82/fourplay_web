@@ -126,4 +126,43 @@ public class CfbScoresJobTests
 
         await _repo.Received(1).UpsertCfbScoresAsync(Arg.Any<IEnumerable<CfbScores>>());
     }
+
+    [Fact]
+    public async Task Execute_CapturesWeatherWhenPresent()
+    {
+        var scoreboard = BuildScoreboard(status: TypeName.StatusFinal);
+        scoreboard.Events[0].Weather = new EspnWeather {
+            DisplayValue = "Partly Cloudy", ConditionId = "3", Temperature = 55
+        };
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 19)).Returns(scoreboard);
+        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 20)).Returns((EspnScores?)null);
+
+        IEnumerable<CfbScores>? saved = null;
+        await _repo.UpsertCfbScoresAsync(Arg.Do<IEnumerable<CfbScores>>(s => saved = s));
+        await BuildJob().Execute(_context);
+
+        var score = saved!.First();
+        Assert.Equal("Partly Cloudy", score.WeatherDisplayValue);
+        Assert.Equal("3",             score.WeatherConditionId);
+        Assert.Equal(55,              score.WeatherTemperatureF);
+    }
+
+    [Fact]
+    public async Task Execute_WeatherIsNullWhenEventHasNoWeather()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 19))
+            .Returns(BuildScoreboard(status: TypeName.StatusFinal));
+        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 20)).Returns((EspnScores?)null);
+
+        IEnumerable<CfbScores>? saved = null;
+        await _repo.UpsertCfbScoresAsync(Arg.Do<IEnumerable<CfbScores>>(s => saved = s));
+        await BuildJob().Execute(_context);
+
+        var score = saved!.First();
+        Assert.Null(score.WeatherDisplayValue);
+        Assert.Null(score.WeatherConditionId);
+        Assert.Null(score.WeatherTemperatureF);
+    }
 }

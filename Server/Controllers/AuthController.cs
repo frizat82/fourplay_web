@@ -30,10 +30,13 @@ public class AuthController(
     private readonly TimeSpan _refreshTokenLifetime = TimeSpan.FromDays(14); // 14 days
     private bool UseSecureCookies => !environment.IsDevelopment() || Request.IsHttps;
 
+    private string? CookieDomain => config["COOKIE_DOMAIN"];
+
     private CookieOptions BuildCookieOptions(DateTimeOffset? expires = null) => new() {
         HttpOnly = true,
         Secure = UseSecureCookies,
         SameSite = UseSecureCookies ? SameSiteMode.None : SameSiteMode.Lax,
+        Domain = string.IsNullOrEmpty(CookieDomain) ? null : CookieDomain,
         Expires = expires
     };
 

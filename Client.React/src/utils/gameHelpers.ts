@@ -6,6 +6,35 @@ export function getWeekFromEspnWeek(week: number, isPostSeason = false) {
   return isPostSeason ? week + 18 : week;
 }
 
+export function spreadLabel(spread: number): string {
+  if (spread === 0) return 'PK';
+  return spread > 0 ? `+${spread}` : `${spread}`;
+}
+
+// CFB: SlateNumber 1-14 = regular season weeks, 15-19 = postseason
+// isPostSeason=false → week 1-14; isPostSeason=true → week 1-5 (conf champs + 4 CFP rounds)
+export function getCfbWeekName(week: number, isPostSeason = false): string {
+  if (!isPostSeason) return `Week ${week}`;
+  switch (week) {
+    case 1: return 'Conf. Championships';
+    case 2: return 'CFP First Round';
+    case 3: return 'CFP Quarterfinals';
+    case 4: return 'CFP Semifinals';
+    case 5: return 'CFP Championship';
+    default: return `Postseason Week ${week}`;
+  }
+}
+
+export function cfbSlateNumberToWeek(slateNumber: number): { week: number; isPostSeason: boolean } {
+  return slateNumber <= 14
+    ? { week: slateNumber, isPostSeason: false }
+    : { week: slateNumber - 14, isPostSeason: true };
+}
+
+export function cfbWeekToSlateNumber(week: number, isPostSeason: boolean): number {
+  return isPostSeason ? 14 + week : week;
+}
+
 export function getWeekName(week: number, isPostSeason = false) {
   if (!isPostSeason) return `Week ${week}`;
   switch (week) {
