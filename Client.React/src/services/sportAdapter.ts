@@ -53,6 +53,7 @@ export interface LoadedScores extends WeekState {
   userPicks: PickView[];
   hasOdds: boolean;
   hasActiveGames: boolean;
+  requiredPicks: number;
   maxWeek: number;
   maxSeason: number;
 }
