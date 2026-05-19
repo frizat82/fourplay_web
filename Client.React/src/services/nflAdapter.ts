@@ -167,7 +167,7 @@ export function createNflAdapter(): SportAdapter {
     async loadCurrentScores(leagueId, userId) {
       const data = await loadScoresWithRetry();
       if (!data?.season || !data.week) {
-        return { season: new Date().getFullYear(), week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false };
+        return { season: new Date().getFullYear(), week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 4, maxWeek: 1, maxSeason: new Date().getFullYear() };
       }
       const postSeason = isPostSeasonHelper(data);
       const weekNum = data.week.number;
@@ -184,7 +184,7 @@ export function createNflAdapter(): SportAdapter {
       const allPicksDtos = await getLeaguePicks(leagueId, season, nflWeek);
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
-      return { season, week: weekNum, isPostSeason: postSeason, games, allPicks, userPicks, hasOdds, hasActiveGames, maxWeek: weekNum, maxSeason: season };
+      return { season, week: weekNum, isPostSeason: postSeason, games, allPicks, userPicks, hasOdds, hasActiveGames, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: weekNum, maxSeason: season };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
@@ -197,7 +197,7 @@ export function createNflAdapter(): SportAdapter {
       const allPicksDtos = await getLeaguePicks(leagueId, season, nflWeek);
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
-      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds, hasActiveGames: false, maxWeek: week, maxSeason: season };
+      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds, hasActiveGames: false, requiredPicks: getEspnRequiredPicks(week, isPostSeason), maxWeek: week, maxSeason: season };
     },
   };
 }

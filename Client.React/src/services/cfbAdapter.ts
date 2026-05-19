@@ -169,12 +169,12 @@ export function createCfbAdapter(): SportAdapter {
       const slates = await getSlates();
       const active = findActiveSlate(slates);
       if (!active) {
-        return { season: CFB_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false };
+        return { season: CFB_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_SEASON };
       }
       const weekState = slateToWeekState(active);
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
       const hasActiveGames = games.some(g => g.gameStatus === 'in_progress' || g.gameStatus === 'halftime');
-      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, maxWeek: weekState.week, maxSeason: CFB_SEASON };
+      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: games.length, maxWeek: weekState.week, maxSeason: CFB_SEASON };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
@@ -184,7 +184,7 @@ export function createCfbAdapter(): SportAdapter {
       if (!slate) return null;
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate);
       if (games.length === 0) return null;
-      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, maxWeek: week, maxSeason: season };
+      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: games.length, maxWeek: week, maxSeason: season };
     },
   };
 }

@@ -148,6 +148,18 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
   const users = useMemo(() => Array.from(new Set((data?.allPicks ?? []).map(p => p.userName))), [data?.allPicks]);
 
+  /** Build spread result map for UserPicksMatrix from GameView cover data */
+  const matrixSpreads = useMemo(() => {
+    const result: Record<string, { isWinner: boolean; isOverWinner: boolean; isUnderWinner: boolean; spread: number | null; over: number | null; under: number | null }> = {};
+    for (const game of (data?.games ?? [])) {
+      if (game.homeCovers == null) continue; // not final
+      const ov = game.overWins ?? false;
+      result[game.homeTeam] = { isWinner: game.homeCovers, isOverWinner: ov, isUnderWinner: !ov, spread: game.homeSpread, over: game.overUnder, under: game.overUnder };
+      result[game.awayTeam] = { isWinner: !game.homeCovers, isOverWinner: ov, isUnderWinner: !ov, spread: game.awaySpread, over: game.overUnder, under: game.overUnder };
+    }
+    return result;
+  }, [data?.games]);
+
   // ─── Guard states ─────────────────────────────────────────────────────────
 
   if (loading) return (
@@ -212,8 +224,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
               picks={(data.allPicks ?? []).map(p => ({
                 team: p.team, pick: p.pickType, userName: p.userName,
               }))}
-              spreads={{}}
-              requiredPicks={4}
+              spreads={matrixSpreads}
+              requiredPicks={data?.requiredPicks ?? 4}
             />
           </Grid>
         ) : (
