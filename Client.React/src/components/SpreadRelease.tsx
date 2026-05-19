@@ -73,18 +73,18 @@ export default function SpreadRelease() {
         px: 3,
         textAlign: 'center',
         borderRadius: 3,
-        background: 'linear-gradient(135deg, #0f172a, #1e293b)',
-        color: 'common.white',
-        boxShadow: '0 20px 45px rgba(15, 23, 42, 0.4)',
+        bgcolor: 'background.paper',
+        border: '1px solid',
+        borderColor: 'divider',
       }}
     >
-      <Typography variant="overline" sx={{ letterSpacing: 2, opacity: 0.85 }}>
+      <Typography variant="overline" sx={{ letterSpacing: 2 }} color="text.secondary">
         Next Spread Reload
       </Typography>
-      <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }}>
+      <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }} color="text.primary">
         {timeRemaining || '00:00:00'}
       </Typography>
-      <Typography variant="body2" sx={{ mt: 1, opacity: 0.85 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
         Scheduled for {targetDate!.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
       </Typography>
     </Paper>
