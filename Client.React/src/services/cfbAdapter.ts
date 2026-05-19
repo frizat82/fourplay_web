@@ -1,7 +1,7 @@
-import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
+import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
-import type { SportAdapter, GameView, PickView, WeekState, LoadedWeek } from './sportAdapter';
+import type { SportAdapter, GameView, PickView, WeekState, LoadedWeek, LoadedScores } from './sportAdapter';
 
 const CFB_SEASON = 2025;
 const CFB_REGULAR_WEEKS = Array.from({ length: 14 }, (_, i) => i + 1);
@@ -21,6 +21,9 @@ function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] 
   const scoreMap = new Map(scores.map(s => [s.espnEventId, s]));
   return spreads.map(sp => {
     const score = scoreMap.get(sp.espnEventId);
+    const isFinal = score?.gameStatus === 'StatusFinal';
+    const hs = score?.homeTeamScore ?? null;
+    const as_ = score?.awayTeamScore ?? null;
     return {
       id: sp.espnEventId.toString(),
       homeTeam: sp.homeTeam,
@@ -28,10 +31,12 @@ function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] 
       homeSpread: sp.homeTeamSpread,
       awaySpread: sp.awayTeamSpread,
       overUnder: sp.overUnder,
-      homeScore: score?.homeTeamScore ?? null,
-      awayScore: score?.awayTeamScore ?? null,
+      homeScore: hs,
+      awayScore: as_,
       gameStatus: score?.gameStatus ?? null,
       gameTime: sp.gameTime,
+      homeCovers: isFinal && hs != null && as_ != null ? (hs + sp.homeTeamSpread) > as_ : null,
+      overWins: isFinal && hs != null && as_ != null ? (hs + as_) > sp.overUnder : null,
       weather: score?.weatherDisplayValue ? {
         displayValue: score.weatherDisplayValue,
         conditionId: score.weatherConditionId ?? undefined,
@@ -74,9 +79,23 @@ export function createCfbAdapter(): SportAdapter {
     return cachedSlates;
   }
 
+  async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
+    const [spreads, scores, allPickDtos] = await Promise.all([
+      getCfbSpreads(slate.id),
+      getCfbScores(slate.id),
+      getCfbAllPicks(leagueId, slate.id),
+    ]);
+    const games = buildGames(spreads, scores);
+    const allPicks = allPickDtos.map(cfbPickToPickView);
+    const userPicks = allPicks.filter(p => p.userId === userId);
+    return { games, allPicks, userPicks };
+  }
+
   return {
     pollIntervalMs: 0,
     supportsJerseys: false,
+    supportsMatrix: false,
+    supportsPickDialog: false,
     weekSelectorConfig: {
       regularWeekOptions: CFB_REGULAR_WEEKS,
       postSeasonWeekOptions: CFB_POST_WEEKS,
@@ -130,6 +149,30 @@ export function createCfbAdapter(): SportAdapter {
       await deleteCfbPicks(leagueId, slate.id);
       const fresh = await getCfbUserPicks(leagueId, slate.id);
       return fresh.map(cfbPickToPickView);
+    },
+
+    // ─── Scores ─────────────────────────────────────────────────────────────
+
+    async loadCurrentScores(leagueId, userId) {
+      const slates = await getSlates();
+      const active = findActiveSlate(slates);
+      if (!active) {
+        return { season: CFB_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false };
+      }
+      const weekState = slateToWeekState(active);
+      const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
+      const hasActiveGames = games.some(g => g.gameStatus === 'StatusInProgress');
+      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames };
+    },
+
+    async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
+      const slates = await getSlates();
+      const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
+      const slate = slates.find(s => s.slateNumber === slateNum && s.season === season);
+      if (!slate) return null;
+      const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate);
+      if (games.length === 0) return null;
+      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false };
     },
   };
 }

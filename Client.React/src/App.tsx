@@ -3,7 +3,6 @@ import AppLayout from './layouts/AppLayout';
 import HomePage from './pages/HomePage';
 import { useAuth } from './services/auth';
 import { useSportContext } from './services/sport';
-import CfbScoresPage from './pages/CfbScoresPage';
 import { createNflAdapter } from './services/nflAdapter';
 import { createCfbAdapter } from './services/cfbAdapter';
 
@@ -23,7 +22,7 @@ function PicksRoute() {
 
 function ScoresRoute() {
   const { isCfb } = useSportContext();
-  return isCfb ? <CfbScoresPage /> : <ScoresPage />;
+  return <ScoresPage adapter={isCfb ? cfbAdapter : nflAdapter} />;
 }
 
 function LeaderboardRoute() {
