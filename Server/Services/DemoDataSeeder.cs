@@ -481,9 +481,10 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         var existing = await db.CfbSlates.Where(s => s.Season == CfbDemoSeason).ToListAsync();
         if (existing.Count >= CfbExpectedSlateCount) return existing;
 
-        // Remove stale partial seed (old 4-slate structure) and orphaned spreads/scores before re-seeding
+        // Remove stale partial seed and ALL dependent data (picks included) before re-seeding
         if (existing.Count > 0) {
             var staleIds = existing.Select(s => s.Id).ToList();
+            db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => staleIds.Contains(p.CfbSlateId)));
             db.CfbScores.RemoveRange(db.CfbScores.Where(s => staleIds.Contains(s.CfbSlateId)));
             db.CfbSpreads.RemoveRange(db.CfbSpreads.Where(s => staleIds.Contains(s.CfbSlateId)));
             db.CfbSlates.RemoveRange(existing);

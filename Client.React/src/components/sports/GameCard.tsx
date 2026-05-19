@@ -8,8 +8,8 @@ export type PickState = 'none' | 'pending' | 'submitted';
 export interface GameCardProps {
   homeTeam: string;
   awayTeam: string;
-  homeSpread: number;
-  awaySpread: number;
+  homeSpread: number | null;
+  awaySpread: number | null;
   overUnder?: number;
   gameTime: string;
   mode: 'pick' | 'score';

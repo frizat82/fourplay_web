@@ -42,14 +42,19 @@ export interface LoadedWeek extends WeekState {
   userPicks: PickView[];
   hasOdds: boolean;
   requiredPicks: number;
+  /** The furthest week with data — used to cap the WeekYearSelector */
+  maxWeek: number;
+  maxSeason: number;
 }
 
 export interface LoadedScores extends WeekState {
   games: GameView[];
-  allPicks: PickView[];        // all users' picks (for the scores display)
-  userPicks: PickView[];       // current user's picks (for "my picks" filter)
+  allPicks: PickView[];
+  userPicks: PickView[];
   hasOdds: boolean;
-  hasActiveGames: boolean;     // drives poll interval
+  hasActiveGames: boolean;
+  maxWeek: number;
+  maxSeason: number;
 }
 
 export interface SportAdapter {

@@ -139,7 +139,7 @@ export function createNflAdapter(): SportAdapter {
       const sc = await buildSpreadCache(data.events ?? [], leagueId, season, nflWeek, hasOdds);
       const games: GameView[] = (data.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const userPicks = picksResult.map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
-      return { season, week: weekNum, isPostSeason: postSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(weekNum, postSeason) };
+      return { season, week: weekNum, isPostSeason: postSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: weekNum, maxSeason: season };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
@@ -150,7 +150,7 @@ export function createNflAdapter(): SportAdapter {
       const sc = await buildSpreadCache(data.events, leagueId, season, nflWeek, hasOdds);
       const games: GameView[] = data.events.flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const userPicks = picksResult.map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
-      return { season, week, isPostSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(week, isPostSeason) };
+      return { season, week, isPostSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(week, isPostSeason), maxWeek: week, maxSeason: season };
     },
 
     async submitPicks(leagueId, { season, week, isPostSeason }, picks) {
@@ -184,7 +184,7 @@ export function createNflAdapter(): SportAdapter {
       const allPicksDtos = await getLeaguePicks(leagueId, season, nflWeek);
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
-      return { season, week: weekNum, isPostSeason: postSeason, games, allPicks, userPicks, hasOdds, hasActiveGames };
+      return { season, week: weekNum, isPostSeason: postSeason, games, allPicks, userPicks, hasOdds, hasActiveGames, maxWeek: weekNum, maxSeason: season };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
@@ -197,7 +197,7 @@ export function createNflAdapter(): SportAdapter {
       const allPicksDtos = await getLeaguePicks(leagueId, season, nflWeek);
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
-      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds, hasActiveGames: false };
+      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds, hasActiveGames: false, maxWeek: week, maxSeason: season };
     },
   };
 }
