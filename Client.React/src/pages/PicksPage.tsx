@@ -15,41 +15,38 @@ import SpreadRelease from '../components/SpreadRelease';
 import GameCard, { type PickState } from '../components/sports/GameCard';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { getWeekScores, loadScoresWithRetry } from '../api/espn';
-import { addPicks, doOddsExist, getUserPicks, spreadBatch } from '../api/league';
-import { getAllJerseys } from '../api/jersey';
-import type { EspnScores, Competition, Event } from '../types/espn';
-import type { NflPickDto, PickType, SpreadResponse, BatchSpreadRequest } from '../types/picks';
-import {
-  getAwayTeamAbbr,
-  getAwayTeamLogo,
-  // getAwayTeamScore,
-  getAwayTeam,
-  getHomeTeamAbbr,
-  getHomeTeamLogo,
-  // getHomeTeamScore,
-  getHomeTeam,
-  getTeamRecord,
-  getWeekFromEspnWeek,
-  getEspnRequiredPicks,
-  isAfterKickoff,
-  isGameStarted,
-  isPostSeason as isPostSeasonHelper,
-} from '../utils/gameHelpers';
+import type { SportAdapter, GameView, WeekState } from '../services/sportAdapter';
+import { getEspnRequiredPicks, isAfterKickoff as gameAfterKickoff } from '../utils/gameHelpers';
 import { useToast } from '../services/toast';
 
-export default function PicksPage() {
-  const { currentLeague } = useSession();
+// Pick key: "gameId|team|pickType" — stable across NFL and CFB
+function pickKey(gameId: string, team: string, pickType: string) {
+  return `${gameId}|${team}|${pickType}`;
+}
+
+function gameIsLocked(game: GameView): boolean {
+  const status = game.gameStatus ?? '';
+  if (status === 'StatusFinal' || status === 'status_final') return true;
+  if (status === 'StatusInProgress' || status === 'status_in_progress') return true;
+  return new Date(game.gameTime) <= new Date();
+}
+
+interface PicksPageProps {
+  adapter: SportAdapter;
+}
+
+export default function PicksPage({ adapter }: PicksPageProps) {
+  const { currentLeague, leaguesLoaded } = useSession();
   const { user } = useAuth();
   const toast = useToast();
 
   const [loading, setLoading] = useState(true);
-  const [scores, setScores] = useState<EspnScores | null>(null);
+  const [games, setGames] = useState<GameView[]>([]);
+  const [hasOdds, setHasOdds] = useState(false);
+  const [requiredPicks, setRequiredPicks] = useState(4);
   const [isPostSeason, setIsPostSeason] = useState(false);
   const [week, setWeek] = useState(0);
   const [season, setSeason] = useState(new Date().getFullYear());
-  const [hasOdds, setHasOdds] = useState(false);
-  const [spreadCache, setSpreadCache] = useState<Record<string, SpreadResponse>>({});
   const [existingPicks, setExistingPicks] = useState<Set<string>>(new Set());
   const [userPicks, setUserPicks] = useState<Set<string>>(new Set());
   const [storingPicks, setStoringPicks] = useState(false);
@@ -57,253 +54,122 @@ export default function PicksPage() {
   const [jerseyCache, setJerseyCache] = useState<Record<string, string>>({});
   const [isCurrentWeek, setIsCurrentWeek] = useState(true);
   const [isPageVisible, setIsPageVisible] = useState(true);
-  const pickButtonSx = { minWidth: 80, height: 44, textTransform: 'none', fontSize: '0.85rem', flexShrink: 0 };
 
-  const pickKey = (pick: NflPickDto) =>
-    `${pick.team}|${pick.pick}|${pick.season}|${pick.nflWeek}|${pick.userId}|${pick.leagueId}`;
-
-  const loadAllSpreads = useCallback(
-    async (scoresData: EspnScores, leagueId: number, season: number, weekNumber: number, postSeason: boolean) => {
-      const request: BatchSpreadRequest = { requests: [] };
-      for (const scoreEvent of scoresData.events ?? []) {
-        for (const competition of scoreEvent.competitions) {
-          const homeTeam = getHomeTeamAbbr(competition);
-          const awayTeam = getAwayTeamAbbr(competition);
-          request.requests.push({ team: homeTeam });
-          request.requests.push({ team: awayTeam });
-        }
-      }
-      const response = await spreadBatch(leagueId, season, getWeekFromEspnWeek(weekNumber, postSeason), request);
-      setSpreadCache(response.responses ?? {});
-    },
-    []
-  );
-
-  const loadJerseys = useCallback(async (season: number, weekNumber: number) => {
-    try {
-      const jerseys = await getAllJerseys(season, weekNumber);
-      setJerseyCache(jerseys ?? {});
-    } catch {
-      setJerseyCache({});
+  function applyLoaded(loaded: { games: GameView[]; hasOdds: boolean; requiredPicks: number; season: number; week: number; isPostSeason: boolean; existingPicks?: Set<string> }) {
+    setGames(loaded.games);
+    setHasOdds(loaded.hasOdds);
+    setRequiredPicks(loaded.requiredPicks);
+    setSeason(loaded.season);
+    setWeek(loaded.week);
+    setIsPostSeason(loaded.isPostSeason);
+    if (loaded.existingPicks !== undefined) {
+      setExistingPicks(loaded.existingPicks);
     }
-  }, []);
-
-  const loadHistoricalWeek = useCallback(
-    async (selectedSeason: number, selectedWeek: number, selectedIsPostSeason: boolean) => {
-      setLoading(true);
-      try {
-        const data = await getWeekScores(selectedWeek, selectedSeason, selectedIsPostSeason);
-        if (!data?.events || data.events.length === 0) {
-          setScores(null);
-          return;
-        }
-
-        setScores(data);
-        setIsPostSeason(selectedIsPostSeason);
-        setWeek(selectedWeek);
-        setSeason(selectedSeason);
-
-        if (!currentLeague) return;
-
-        const nflWeek = getWeekFromEspnWeek(selectedWeek, selectedIsPostSeason);
-        const [picksResult, oddsExist] = await Promise.all([
-          user?.userId ? getUserPicks(user.userId, currentLeague, selectedSeason, nflWeek) : Promise.resolve([]),
-          doOddsExist(currentLeague, selectedSeason, nflWeek),
-        ]);
-        setExistingPicks(new Set(picksResult.map((p) => pickKey(p))));
-        setHasOdds(oddsExist);
-
-        if (oddsExist) {
-          await loadAllSpreads(data, currentLeague, selectedSeason, selectedWeek, selectedIsPostSeason);
-        }
-
-        await loadJerseys(selectedSeason, selectedWeek);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [currentLeague, loadAllSpreads, loadJerseys, user?.userId]
-  );
+    setUserPicks(new Set());
+  }
 
   const reload = useCallback(async () => {
+    if (!currentLeague || !user?.userId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-
-    const data = await loadScoresWithRetry();
-    if (!data?.season || !data.week) {
-      setScores(null);
+    try {
+      const result = await adapter.loadCurrentGames(currentLeague, user.userId);
+      const ep = new Set(result.userPicks.map(p => pickKey(p.gameId, p.team, p.pickType)));
+      applyLoaded({ ...result, existingPicks: ep });
+      setIsCurrentWeek(true);
+      if (adapter.supportsJerseys && adapter.loadJerseys) {
+        adapter.loadJerseys(result.season, result.week).then(setJerseyCache).catch(() => {});
+      }
+    } finally {
       setLoading(false);
-      return;
     }
+  }, [currentLeague, user?.userId, adapter]);
 
-    setScores(data);
-    const postSeason = isPostSeasonHelper(data);
-    setIsPostSeason(postSeason);
-    setWeek(data.week.number);
-    setSeason(data.season.year);
-    setIsCurrentWeek(true);
-
-    if (!currentLeague) {
+  const loadHistoricalWeek = useCallback(async (state: WeekState) => {
+    if (!currentLeague || !user?.userId) return;
+    setLoading(true);
+    try {
+      const result = await adapter.loadHistoricalGames(currentLeague, user.userId, state);
+      if (!result) {
+        setGames([]);
+        setHasOdds(false);
+        return;
+      }
+      const ep = new Set(result.userPicks.map(p => pickKey(p.gameId, p.team, p.pickType)));
+      applyLoaded({ ...result, existingPicks: ep });
+      if (adapter.supportsJerseys && adapter.loadJerseys) {
+        adapter.loadJerseys(result.season, result.week).then(setJerseyCache).catch(() => {});
+      }
+    } finally {
       setLoading(false);
-      return;
     }
+  }, [currentLeague, user?.userId, adapter]);
 
-    const seasonYear = data.season.year;
-    const nflWeek = getWeekFromEspnWeek(data.week.number, postSeason);
-    const [picksResult, oddsExist] = await Promise.all([
-      user?.userId ? getUserPicks(user.userId, currentLeague, seasonYear, nflWeek) : Promise.resolve([]),
-      doOddsExist(currentLeague, seasonYear, nflWeek),
-    ]);
-    setExistingPicks(new Set(picksResult.map((p) => pickKey(p))));
-    setHasOdds(oddsExist);
+  // Page visibility
+  useEffect(() => {
+    const handler = () => setIsPageVisible(!document.hidden);
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, []);
 
-    if (oddsExist) {
-      await loadAllSpreads(data, currentLeague, seasonYear, data.week.number, postSeason);
-    }
+  // Load + polling
+  useEffect(() => {
+    if (!isCurrentWeek || !isPageVisible || !leaguesLoaded) return;
+    void reload();
+    if (adapter.pollIntervalMs <= 0) return;
+    const interval = setInterval(() => void reload(), adapter.pollIntervalMs);
+    return () => clearInterval(interval);
+  }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded]);
 
-    await loadJerseys(seasonYear, data.week.number);
-
-    setLoading(false);
-  }, [currentLeague, loadAllSpreads, loadJerseys, user?.userId]);
+  const handleWeekChange = (newWeek: number, meta?: { isPostSeason?: boolean }) => {
+    const ps = meta?.isPostSeason ?? isPostSeason;
+    setWeek(newWeek);
+    setIsPostSeason(ps);
+    setIsCurrentWeek(false);
+    void loadHistoricalWeek({ season, week: newWeek, isPostSeason: ps });
+  };
 
   const handleSeasonChange = (newSeason: number) => {
     setSeason(newSeason);
     setIsCurrentWeek(false);
-    void loadHistoricalWeek(newSeason, week, isPostSeason);
+    void loadHistoricalWeek({ season: newSeason, week, isPostSeason });
   };
 
-  const handleWeekChange = (newWeek: number, meta?: { isPostSeason?: boolean }) => {
-    const newIsPostSeason = meta?.isPostSeason ?? isPostSeason;
-    setWeek(newWeek);
-    setIsPostSeason(newIsPostSeason);
+  const handleSeasonTypeChange = (ps: boolean) => {
+    setIsPostSeason(ps);
     setIsCurrentWeek(false);
-    void loadHistoricalWeek(season, newWeek, newIsPostSeason);
+    void loadHistoricalWeek({ season, week, isPostSeason: ps });
   };
 
-  const handleSeasonTypeChange = (newIsPostSeason: boolean) => {
-    setIsPostSeason(newIsPostSeason);
-    setIsCurrentWeek(false);
-    void loadHistoricalWeek(season, week, newIsPostSeason);
-  };
+  // Pick management
+  const isSelected = (gameId: string, team: string, pickType = 'Spread') =>
+    userPicks.has(pickKey(gameId, team, pickType)) || existingPicks.has(pickKey(gameId, team, pickType));
 
-  const hasActiveGames = useMemo(() => {
-    if (!scores?.events) return false;
-    return scores.events.some((event) =>
-      event.competitions.some((comp) => {
-        const statusName = comp.status?.type?.name ?? '';
-        return statusName === 'status_in_progress' || statusName === 'status_halftime' ||
-               statusName === 'status_end_period';
-      })
-    );
-  }, [scores]);
+  const remainingPicks = requiredPicks - userPicks.size - existingPicks.size;
+  const isPicksLocked = () => remainingPicks <= 0;
 
-  // Page visibility detection for smart polling
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      setIsPageVisible(!document.hidden);
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
-
-  useEffect(() => {
-    if (!isCurrentWeek || !isPageVisible) {
-      return;
-    }
-
-    void reload();
-
-    const pollInterval = hasActiveGames ? 30 * 1000 : 2 * 60 * 1000;
-    const interval = setInterval(() => {
-      void reload();
-    }, pollInterval);
-
-    return () => clearInterval(interval);
-  }, [reload, isCurrentWeek, isPageVisible, hasActiveGames]);
-
-  const requiredPicks = getEspnRequiredPicks(week, isPostSeason);
-  const requiredRemaining = requiredPicks - userPicks.size - existingPicks.size;
-
-  const isPicksLocked = () => requiredRemaining === 0;
-  const isClearPicksDisabled = () => userPicks.size === 0;
-  const isSubmitDisabled = () => storingPicks || userPicks.size === 0;
-  const isGameSelectDisabled = () => storingPicks || requiredRemaining === 0;
-
-  const getSpread = (teamAbbr: string, pickType: PickType = 'Spread') => {
-    const calc = spreadCache[teamAbbr];
-    if (!calc) return null;
-    if (pickType === 'Spread') return calc.spread;
-    if (pickType === 'Over') return calc.over;
-    return calc.under;
-  };
-
-  const competitionToPick = (teamAbbr: string, pickType: PickType): NflPickDto => ({
-    id: 0,
-    leagueId: currentLeague ?? 0,
-    nflWeek: getWeekFromEspnWeek(week, isPostSeason),
-    season: scores?.season?.year ?? 0,
-    team: teamAbbr,
-    userId: user?.userId ?? '',
-    userName: user?.name ?? '',
-    pick: pickType,
-    dateCreated: new Date().toISOString(),
-  });
-
-  const isSelected = (teamAbbr: string, pickType: PickType = 'Spread') => {
-    const pick = competitionToPick(teamAbbr, pickType);
-    const key = pickKey(pick);
-    return userPicks.has(key) || existingPicks.has(key);
-  };
-
-  const selectPick = (teamAbbr: string, pickType: PickType = 'Spread') => {
+  const selectPick = (gameId: string, team: string, pickType = 'Spread') => {
     if (isPicksLocked()) return;
-    const pick = competitionToPick(teamAbbr, pickType);
-    const key = pickKey(pick);
-    setUserPicks((prev) => new Set(prev).add(key));
+    setUserPicks(prev => new Set(prev).add(pickKey(gameId, team, pickType)));
   };
 
-  const unselectPick = (teamAbbr: string, pickType: PickType = 'Spread') => {
-    if (isPicksLocked()) return;
-    const pick = competitionToPick(teamAbbr, pickType);
-    const key = pickKey(pick);
-    setUserPicks((prev) => {
-      const next = new Set(prev);
-      next.delete(key);
-      return next;
-    });
+  const unselectPick = (gameId: string, team: string, pickType = 'Spread') => {
+    const key = pickKey(gameId, team, pickType);
+    setUserPicks(prev => { const s = new Set(prev); s.delete(key); return s; });
   };
-
-  const clearPicks = () => setUserPicks(new Set());
-
-  const isGameStartedOrDisabledPicks = (competition: Competition) =>
-    isGameStarted(competition) || isGameSelectDisabled() || isAfterKickoff(competition);
 
   const handleSubmit = async () => {
-    if (!user?.userId || !currentLeague || !scores?.season) return;
+    if (!currentLeague || userPicks.size === 0) return;
     setStoringPicks(true);
     try {
-      const picksToAdd = Array.from(userPicks).map((key) => {
-        const [team, pick, season, nflWeek, userId, leagueId] = key.split('|');
-        return {
-          id: 0,
-          leagueId: Number(leagueId),
-          userId,
-          userName: user.name ?? '',
-          team,
-          pick: pick as PickType,
-          nflWeek: Number(nflWeek),
-          season: Number(season),
-          dateCreated: new Date().toISOString(),
-        } as NflPickDto;
+      const picks = [...userPicks].map(key => {
+        const [gameId, team, pickType] = key.split('|');
+        return { gameId, team, pickType };
       });
-
-      if (picksToAdd.length === 0) {
-        toast.push('No Picks to Add - Please try again', 'error');
-        return;
-      }
-
-      await addPicks(picksToAdd);
-      toast.push(`${picksToAdd.length} Pick(s) Added`, 'success');
+      await adapter.submitPicks(currentLeague, { season, week, isPostSeason }, picks);
+      toast.push(`${picks.length} Pick(s) Added`, 'success');
       setUserPicks(new Set());
       await reload();
     } catch {
@@ -313,31 +179,30 @@ export default function PicksPage() {
     }
   };
 
-  const getTeamImage = (competition: Competition, isAway: boolean) => {
-    const teamAbbr = isAway ? getAwayTeamAbbr(competition) : getHomeTeamAbbr(competition);
-    if (showJerseys && jerseyCache[teamAbbr]) return jerseyCache[teamAbbr];
-    return isAway ? getAwayTeamLogo(competition) : getHomeTeamLogo(competition);
+  const handleClear = async () => {
+    if (!currentLeague) return;
+    const freshPicks = await adapter.clearPicks(currentLeague, { season, week, isPostSeason });
+    setUserPicks(new Set());
+    setExistingPicks(new Set(freshPicks.map(p => pickKey(p.gameId, p.team, p.pickType))));
   };
 
-  if (loading) {
-    return (
-      <Box>
-        <PageHeader title="Picks" />
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-          <CircularProgress />
-        </Box>
-      </Box>
-    );
-  }
+  if (loading) return (
+    <Box><PageHeader title="Picks" />
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
+    </Box>
+  );
 
   if (!currentLeague) return <NoLeague />;
-
   if (!hasOdds) return <SpreadRelease />;
+
+  const hasUnlockedGames = games.some(g => !gameIsLocked(g));
+  const isPostSeasonSlate = isPostSeason;
 
   return (
     <Box>
       <PageHeader title="Picks" />
-      {scores && (
+
+      {games.length > 0 && (
         <Box sx={{ mb: 3 }}>
           <WeekYearSelector
             season={season}
@@ -346,6 +211,7 @@ export default function PicksPage() {
             onSeasonChange={handleSeasonChange}
             onWeekChange={handleWeekChange}
             onSeasonTypeChange={handleSeasonTypeChange}
+            {...adapter.weekSelectorConfig}
           />
           {!isCurrentWeek && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>
@@ -356,82 +222,76 @@ export default function PicksPage() {
           )}
         </Box>
       )}
+
       <Grid container spacing={2}>
-        {Object.keys(jerseyCache).length > 0 && (
+        {adapter.supportsJerseys && Object.keys(jerseyCache).length > 0 && (
           <Grid size={12} sx={{ display: 'flex', justifyContent: 'center' }}>
-            <Button variant="outlined" color="info" startIcon={<CheckroomIcon />} onClick={() => setShowJerseys((prev) => !prev)}>
+            <Button variant="outlined" color="info" startIcon={<CheckroomIcon />} onClick={() => setShowJerseys(p => !p)}>
               {showJerseys ? 'Show Logos' : 'Show Jerseys'}
             </Button>
           </Grid>
         )}
 
-        {!isPicksLocked() && (
+        {hasUnlockedGames && (remainingPicks > 0 || userPicks.size > 0) && (
           <Grid size={12}>
-            {requiredRemaining > 0 && (
+            {remainingPicks > 0 && (
               <Stack spacing={1} alignItems="center">
-                <Typography variant="h6">Picks Remaining ({requiredRemaining})</Typography>
+                <Typography variant="h6">Picks Remaining ({remainingPicks})</Typography>
                 <Typography variant="h6">Submit picks before gametime</Typography>
               </Stack>
             )}
             <Stack direction="row" spacing={2} justifyContent="space-between" sx={{ mt: 2 }}>
-              <Button variant="contained" color="success" disabled={isSubmitDisabled()} onClick={handleSubmit}>
+              <Button variant="contained" color="success" disabled={storingPicks || userPicks.size === 0} onClick={handleSubmit}>
                 {storingPicks ? 'Submitting…' : 'Submit Pick(s)'}
               </Button>
-              <Button variant="contained" color="warning" disabled={isClearPicksDisabled()} onClick={clearPicks}>
+              <Button variant="contained" color="warning" disabled={userPicks.size === 0} onClick={() => setUserPicks(new Set())}>
                 Clear Selected Picks
               </Button>
             </Stack>
           </Grid>
         )}
 
-        {scores?.events?.map((scoreEvent: Event) =>
-          scoreEvent.competitions
-            .sort((a, b) => getAwayTeamAbbr(a).localeCompare(getAwayTeamAbbr(b)))
-            .map((competition) => {
-              const awayAbbr = getAwayTeamAbbr(competition);
-              const homeAbbr = getHomeTeamAbbr(competition);
-              const locked = isGameStartedOrDisabledPicks(competition);
+        {games.map(game => {
+          const homePickState: PickState = isSelected(game.id, game.homeTeam) ? 'submitted' : 'none';
+          const awayPickState: PickState = isSelected(game.id, game.awayTeam) ? 'submitted' : 'none';
+          const overPickState: PickState = isSelected(game.id, game.homeTeam, 'Over') ? 'submitted' : 'none';
+          const underPickState: PickState = isSelected(game.id, game.homeTeam, 'Under') ? 'submitted' : 'none';
+          const locked = gameIsLocked(game);
 
-              const awayPickState: PickState = isSelected(awayAbbr) ? 'submitted' : 'none';
-              const homePickState: PickState = isSelected(homeAbbr) ? 'submitted' : 'none';
-              const overPickState: PickState = isSelected(homeAbbr, 'Over') ? 'submitted' : 'none';
-              const underPickState: PickState = isSelected(homeAbbr, 'Under') ? 'submitted' : 'none';
-
-              return (
-                <Grid size={{ xs: 12, lg: 4 }} key={competition.id}>
-                  <GameCard
-                    mode="pick"
-                    homeTeam={homeAbbr}
-                    awayTeam={awayAbbr}
-                    homeSpread={getSpread(homeAbbr) ?? 0}
-                    awaySpread={getSpread(awayAbbr) ?? 0}
-                    gameTime={competition.date.toString()}
-                    gameStatus={competition.status?.type?.name}
-                    homeRecord={!isPostSeason ? getTeamRecord(getHomeTeam(competition)) : undefined}
-                    awayRecord={!isPostSeason ? getTeamRecord(getAwayTeam(competition)) : undefined}
-                    homeJerseyUrl={showJerseys ? jerseyCache[homeAbbr] : undefined}
-                    awayJerseyUrl={showJerseys ? jerseyCache[awayAbbr] : undefined}
-                    weatherDisplayValue={scoreEvent.weather?.displayValue}
-                    weatherConditionId={scoreEvent.weather?.conditionId}
-                    weatherTemperatureF={scoreEvent.weather?.temperature}
-                    isPostSeason={isPostSeason}
-                    homePickState={homePickState}
-                    awayPickState={awayPickState}
-                    locked={locked}
-                    onPickHome={() => homePickState !== 'none' ? unselectPick(homeAbbr) : selectPick(homeAbbr)}
-                    onPickAway={() => awayPickState !== 'none' ? unselectPick(awayAbbr) : selectPick(awayAbbr)}
-                    overValue={getSpread(homeAbbr, 'Over')}
-                    underValue={getSpread(homeAbbr, 'Under')}
-                    overPickState={overPickState}
-                    underPickState={underPickState}
-                    overUnderLocked={locked && overPickState === 'none'}
-                    onPickOver={() => overPickState !== 'none' ? unselectPick(homeAbbr, 'Over') : selectPick(homeAbbr, 'Over')}
-                    onPickUnder={() => underPickState !== 'none' ? unselectPick(homeAbbr, 'Under') : selectPick(homeAbbr, 'Under')}
-                  />
-                </Grid>
-              );
-            })
-        )}
+          return (
+            <Grid size={{ xs: 12, lg: 4 }} key={game.id}>
+              <GameCard
+                mode="pick"
+                homeTeam={game.homeTeam}
+                awayTeam={game.awayTeam}
+                homeSpread={game.homeSpread ?? 0}
+                awaySpread={game.awaySpread ?? 0}
+                gameTime={game.gameTime}
+                gameStatus={game.gameStatus ?? undefined}
+                homeRecord={!isPostSeasonSlate ? game.homeRecord : undefined}
+                awayRecord={!isPostSeasonSlate ? game.awayRecord : undefined}
+                homeJerseyUrl={showJerseys ? jerseyCache[game.homeTeam] : undefined}
+                awayJerseyUrl={showJerseys ? jerseyCache[game.awayTeam] : undefined}
+                weatherDisplayValue={game.weather?.displayValue}
+                weatherConditionId={game.weather?.conditionId}
+                weatherTemperatureF={game.weather?.temperatureF}
+                isPostSeason={isPostSeasonSlate}
+                homePickState={homePickState}
+                awayPickState={awayPickState}
+                locked={locked}
+                onPickHome={() => homePickState !== 'none' ? unselectPick(game.id, game.homeTeam) : selectPick(game.id, game.homeTeam)}
+                onPickAway={() => awayPickState !== 'none' ? unselectPick(game.id, game.awayTeam) : selectPick(game.id, game.awayTeam)}
+                overValue={isPostSeasonSlate ? game.overUnder : undefined}
+                underValue={isPostSeasonSlate ? game.overUnder : undefined}
+                overPickState={overPickState}
+                underPickState={underPickState}
+                overUnderLocked={locked && overPickState === 'none'}
+                onPickOver={() => overPickState !== 'none' ? unselectPick(game.id, game.homeTeam, 'Over') : selectPick(game.id, game.homeTeam, 'Over')}
+                onPickUnder={() => underPickState !== 'none' ? unselectPick(game.id, game.homeTeam, 'Under') : selectPick(game.id, game.homeTeam, 'Under')}
+              />
+            </Grid>
+          );
+        })}
       </Grid>
     </Box>
   );
