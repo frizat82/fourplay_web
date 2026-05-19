@@ -1,0 +1,54 @@
+export interface GameView {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeSpread: number | null;
+  awaySpread: number | null;
+  overUnder: number | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  gameStatus: string | null;
+  gameTime: string;
+  weather?: { displayValue: string; conditionId?: string; temperatureF?: number };
+  homeRecord?: string;
+  awayRecord?: string;
+}
+
+export interface PickView {
+  gameId: string;
+  team: string;
+  pickType: 'Spread' | 'Over' | 'Under';
+  userId: string;
+  userName: string;
+}
+
+export interface WeekState {
+  season: number;
+  week: number;
+  isPostSeason: boolean;
+}
+
+export interface LoadedWeek extends WeekState {
+  games: GameView[];
+  userPicks: PickView[];
+  hasOdds: boolean;
+  requiredPicks: number;
+}
+
+export interface SportAdapter {
+  loadCurrentGames(leagueId: number, userId: string): Promise<LoadedWeek>;
+  loadHistoricalGames(leagueId: number, userId: string, week: WeekState): Promise<LoadedWeek | null>;
+  submitPicks(leagueId: number, state: WeekState, picks: { gameId: string; team: string; pickType: string }[]): Promise<void>;
+  clearPicks(leagueId: number, state: WeekState): Promise<PickView[]>;
+  loadJerseys?(season: number, week: number): Promise<Record<string, string>>;
+  pollIntervalMs: number;
+  supportsJerseys: boolean;
+  weekSelectorConfig: {
+    regularWeekOptions?: number[];
+    postSeasonWeekOptions?: number[];
+    maxRegularSeasonWeek: number;
+    minSeason: number;
+    weekLabelFn?: (week: number, isPostSeason: boolean) => string;
+  };
+  currentSeasonYear(): Promise<number>;
+}

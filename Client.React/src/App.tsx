@@ -3,8 +3,12 @@ import AppLayout from './layouts/AppLayout';
 import HomePage from './pages/HomePage';
 import { useAuth } from './services/auth';
 import { useSportContext } from './services/sport';
-import CfbPicksPage from './pages/CfbPicksPage';
 import CfbScoresPage from './pages/CfbScoresPage';
+import { createNflAdapter } from './services/nflAdapter';
+import { createCfbAdapter } from './services/cfbAdapter';
+
+const nflAdapter = createNflAdapter();
+const cfbAdapter = createCfbAdapter();
 
 function RootRedirect() {
   const { user, loading } = useAuth();
@@ -14,12 +18,17 @@ function RootRedirect() {
 
 function PicksRoute() {
   const { isCfb } = useSportContext();
-  return isCfb ? <CfbPicksPage /> : <PicksPage />;
+  return <PicksPage adapter={isCfb ? cfbAdapter : nflAdapter} />;
 }
 
 function ScoresRoute() {
   const { isCfb } = useSportContext();
   return isCfb ? <CfbScoresPage /> : <ScoresPage />;
+}
+
+function LeaderboardRoute() {
+  const { isCfb } = useSportContext();
+  return <LeaderboardPage adapter={isCfb ? cfbAdapter : nflAdapter} />;
 }
 
 import LeaguePickerPage from './pages/LeaguePickerPage';
@@ -80,7 +89,7 @@ export default function App() {
         <Route path="/leaguepicker" element={<LeaguePickerPage />} />
         <Route path="/picks" element={<PicksRoute />} />
         <Route path="/scores" element={<ScoresRoute />} />
-        <Route path="/leaderboard" element={<LeaderboardPage />} />
+        <Route path="/leaderboard" element={<LeaderboardRoute />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/logout" element={<LogoutPage />} />
 

@@ -16,47 +16,32 @@ import {
 import PageHeader from '../components/PageHeader';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { getScores } from '../api/espn';
 import { getLeaderboard } from '../api/leaderboard';
 import type { LeaderboardDto } from '../types/leaderboard';
+import type { SportAdapter } from '../services/sportAdapter';
 
-export default function LeaderboardPage() {
+interface LeaderboardPageProps {
+  adapter: SportAdapter;
+}
+
+export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
   const { currentLeague } = useSession();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardDto[]>([]);
 
-  const loadScoresWithRetry = async (maxRetries = 5, delayMs = 500) => {
-    let attempt = 0;
-    let data = null;
-    while ((!data?.events || data.events.length === 0) && attempt < maxRetries) {
-      data = await getScores();
-      if (data?.events && data.events.length > 0) break;
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      attempt += 1;
-    }
-    return data;
-  };
-
   useEffect(() => {
     const run = async () => {
       setLoading(true);
-      if (!currentLeague) {
-        setLoading(false);
-        return;
-      }
-      const scores = await loadScoresWithRetry();
-      const seasonYear = scores?.season?.year;
-      if (!seasonYear) {
-        setLoading(false);
-        return;
-      }
+      if (!currentLeague) { setLoading(false); return; }
+      const seasonYear = await adapter.currentSeasonYear();
+      if (!seasonYear) { setLoading(false); return; }
       const data = await getLeaderboard(currentLeague, seasonYear);
       setLeaderboard(data ?? []);
       setLoading(false);
     };
     void run();
-  }, [currentLeague]);
+  }, [currentLeague, adapter]);
 
   const maxWeek = useMemo(() => {
     if (leaderboard.length === 0) return 0;
