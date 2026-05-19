@@ -51,7 +51,7 @@ describe('cfbAdapter', () => {
       expect(game.overUnder).toBe(44.5);
       expect(game.homeScore).toBe(27);
       expect(game.awayScore).toBe(13);
-      expect(game.gameStatus).toBe('StatusFinal');
+      expect(game.gameStatus).toBe('final');
       expect(game.id).toBe('999');
     });
 

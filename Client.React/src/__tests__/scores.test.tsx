@@ -34,14 +34,13 @@ const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetLeaguePicks = vi.mocked(getLeaguePicks);
 const mockedSpreadBatch = vi.mocked(spreadBatch);
 
-// BUF home (24-10), spread -7: homeCovers = 24-7=17 > 10 ✓ (BUF covers → green)
-// MIA away: !homeCovers → red
-// Over at 47.5: 24+10=34 < 47.5 → Under wins (not over)
+// BUF home (24-10), spread -7: homeCovers = 24+(-7)=17 > 10 ✓ (BUF covers → green)
+// MIA away: !homeCovers → red; Over at 47.5: 24+10=34 < 47.5 → Under wins
 const SPREAD_RESPONSES = {
-  BUF: createSpreadResponse(true, '-7', 47.5, 47.5),
-  MIA: createSpreadResponse(false, '+7', 47.5, 47.5),
-  DAL: createSpreadResponse(true, '-3', 47.5, 47.5),
-  NYG: createSpreadResponse(false, '+3', 47.5, 47.5),
+  BUF: createSpreadResponse('BUF', -7, 47.5, 47.5),
+  MIA: createSpreadResponse('MIA', 7, 47.5, 47.5),
+  DAL: createSpreadResponse('DAL', -3, 47.5, 47.5),
+  NYG: createSpreadResponse('NYG', 3, 47.5, 47.5),
 };
 
 function makeScores(week: number, postSeason: boolean, gameStarted: boolean) {

@@ -2,7 +2,7 @@ import { loadScoresWithRetry, getWeekScores, getLiveGames } from '../api/espn';
 import { getUserPicks, doOddsExist, spreadBatch, addPicks, getLeaguePicks } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import type { Competition, Event } from '../types/espn';
-import type { NflPickDto, PickType } from '../types/picks';
+import type { NflPickDto, PickType, SpreadResponse } from '../types/picks';
 import {
   getHomeTeamAbbr, getAwayTeamAbbr,
   getHomeTeam, getAwayTeam,
@@ -10,38 +10,45 @@ import {
   getTeamRecord, getTeamLogo,
   getWeekFromEspnWeek, getEspnRequiredPicks,
   isPostSeason as isPostSeasonHelper,
+  isGameOver, isGameStarted,
 } from '../utils/gameHelpers';
-import type { SportAdapter, GameView, PickView, WeekState, LoadedWeek, LoadedScores } from './sportAdapter';
+import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState, LoadedWeek, LoadedScores } from './sportAdapter';
+
+/** Map ESPN TypeName (number or string) to canonical GameStatusValue */
+function toGameStatus(competition: Competition): GameStatusValue {
+  if (isGameOver(competition)) return 'final';
+  if (!isGameStarted(competition)) return 'scheduled';
+  // isGameStarted=true and not final → in-progress or halftime
+  const name = competition.status?.type?.name;
+  if (name === 1 || name === 'status_halftime') return 'halftime';
+  return 'in_progress';
+}
 
 function competitionToGameView(
   competition: Competition,
   event: Event,
-  spreadCache: Record<string, { spread: string | null; over: string | null; under: string | null }>,
+  spreadCache: Record<string, SpreadResponse>,
   situationMap?: Map<string, string | null>
 ): GameView {
   const homeAbbr = getHomeTeamAbbr(competition);
   const awayAbbr = getAwayTeamAbbr(competition);
-  const parseSpread = (s: string | null | undefined): number | null => {
-    if (!s) return null;
-    const n = parseFloat(s);
-    return isFinite(n) ? n : null;
-  };
   const key = `${homeAbbr}-${awayAbbr}`;
   const homeScore = getHomeTeamScore(competition);
   const awayScore = getAwayTeamScore(competition);
-  const homeSpreadVal = parseSpread(spreadCache[homeAbbr]?.spread);
-  const overUnderVal = parseSpread(spreadCache[homeAbbr]?.over) ?? parseSpread(spreadCache[homeAbbr]?.under);
-  const isFinal = (competition.status?.type?.name ?? '').includes('final');
+  const homeSpreadVal = spreadCache[homeAbbr]?.spread ?? null;
+  const overUnderVal = spreadCache[homeAbbr]?.over ?? null;
+  const status = toGameStatus(competition);
+  const isFinal = status === 'final';
   return {
     id: competition.id,
     homeTeam: homeAbbr,
     awayTeam: awayAbbr,
     homeSpread: homeSpreadVal,
-    awaySpread: parseSpread(spreadCache[awayAbbr]?.spread),
+    awaySpread: spreadCache[awayAbbr]?.spread ?? null,
     overUnder: overUnderVal,
     homeScore,
     awayScore,
-    gameStatus: competition.status?.type?.name ?? null,
+    gameStatus: status,
     gameTime: competition.date,
     homeCovers: isFinal && homeSpreadVal != null ? (homeScore + homeSpreadVal) > awayScore : null,
     overWins: isFinal && overUnderVal != null ? (homeScore + awayScore) > overUnderVal : null,
@@ -76,7 +83,7 @@ async function buildSpreadCache(
   season: number,
   nflWeek: number,
   hasOdds: boolean
-): Promise<Record<string, { spread: string | null; over: string | null; under: string | null }>> {
+): Promise<Record<string, SpreadResponse>> {
   if (!hasOdds) return {};
   const teams: string[] = [];
   for (const event of events) {
@@ -170,7 +177,10 @@ export function createNflAdapter(): SportAdapter {
       const sc = await buildSpreadCache(data.events ?? [], leagueId, season, nflWeek, hasOdds);
       const situationMap = await buildSituationMap(data.events ?? []);
       const games = (data.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc, situationMap)));
-      const hasActiveGames = games.some(g => g.gameStatus === 'status_in_progress' || g.gameStatus === 'status_halftime');
+      // Use typed helpers on raw competitions — not string comparison on already-mapped GameView
+      const hasActiveGames = (data.events ?? []).some(ev =>
+        ev.competitions.some(c => isGameStarted(c) && !isGameOver(c))
+      );
       const allPicksDtos = await getLeaguePicks(leagueId, season, nflWeek);
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);

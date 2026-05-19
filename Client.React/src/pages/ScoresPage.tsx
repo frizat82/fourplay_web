@@ -17,26 +17,18 @@ import TeamHelmet from '../components/sports/TeamHelmet';
 import UserPicksMatrix from '../components/UserPicksMatrix';
 import PickDialog from '../components/PickDialog';
 import FieldPosition from '../components/FieldPosition';
-import ScoreTicker from '../components/ScoreTicker';
 import WeatherIcon from '../components/WeatherIcon';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { spreadLabel } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, PickView, WeekState, LoadedScores } from '../services/sportAdapter';
 
-// ─── Status helpers ───────────────────────────────────────────────────────────
-
-function isFinalStatus(status: string | null) {
-  return status === 'StatusFinal' || status === 'status_final';
-}
-function isLiveStatus(status: string | null) {
-  return status === 'StatusInProgress' || status === 'status_in_progress' || status === 'status_halftime';
-}
+// GameView.gameStatus is canonical GameStatusValue — use === directly, no string parsing
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
 
 function teamWins(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): boolean | null {
-  if (!isFinalStatus(game.gameStatus)) return null;
+  if (game.gameStatus !== 'final') return null;
   if (pickType === 'Spread') {
     if (game.homeCovers == null) return null;
     return team === game.homeTeam ? game.homeCovers : !game.homeCovers;
@@ -52,7 +44,7 @@ function coverIcon(game: GameView, team: string, pickType: 'Spread' | 'Over' | '
 }
 
 function badgeColor(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): 'success' | 'error' | 'info' | 'default' {
-  if (!isFinalStatus(game.gameStatus)) return 'info';
+  if (game.gameStatus !== 'final') return 'info';
   const wins = teamWins(game, team, pickType);
   if (wins == null) return 'default';
   return wins ? 'success' : 'error';
@@ -230,8 +222,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
             )}
 
             {games.map(game => {
-              const isFinal = isFinalStatus(game.gameStatus);
-              const isLive = isLiveStatus(game.gameStatus);
+              const isFinal = game.gameStatus === 'final';
+              const isLive = game.gameStatus === 'in_progress' || game.gameStatus === 'halftime';
               const hc = game.homeCovers ?? null;
               const ov = game.overWins ?? null;
 
@@ -338,17 +330,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                       </Stack>
                     )}
 
-                    {/* Score ticker (NFL only — shows when a pick is losing) */}
-                    {isLive && game.homeSpread != null && game.awaySpread != null && (
-                      <ScoreTicker
-                        competition={null as any}
-                        homeSpread={game.homeSpread != null ? String(game.homeSpread) : null}
-                        awaySpread={game.awaySpread != null ? String(game.awaySpread) : null}
-                        over={game.overUnder != null ? String(game.overUnder) : null}
-                        under={game.overUnder != null ? String(game.overUnder) : null}
-                        isPostSeason={isPostSeason}
-                      />
-                    )}
+                    {/* ScoreTicker deferred — needs GameView-compatible refactor */}
                   </Paper>
                 </Grid>
               );
