@@ -25,7 +25,7 @@ interface LeaderboardPageProps {
 }
 
 export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
-  const { currentLeague } = useSession();
+  const { currentLeague, leaguesLoaded } = useSession();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardDto[]>([]);
@@ -33,7 +33,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
   useEffect(() => {
     const run = async () => {
       setLoading(true);
-      if (!currentLeague) { setLoading(false); return; }
+      if (!leaguesLoaded || !currentLeague) { setLoading(false); return; }
       const seasonYear = await adapter.currentSeasonYear();
       if (!seasonYear) { setLoading(false); return; }
       const data = await getLeaderboard(currentLeague, seasonYear);
@@ -41,7 +41,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
       setLoading(false);
     };
     void run();
-  }, [currentLeague, adapter]);
+  }, [currentLeague, leaguesLoaded, adapter]);
 
   const maxWeek = useMemo(() => {
     if (leaderboard.length === 0) return 0;
@@ -101,7 +101,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
     );
   }
 
-  if (!currentLeague) return <Navigate to="/leaguepicker" replace />;
+  if (leaguesLoaded && !currentLeague) return <Navigate to="/leaguepicker" replace />;
 
   return (
     <Box>
