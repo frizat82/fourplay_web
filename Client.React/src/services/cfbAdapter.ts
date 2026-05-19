@@ -1,7 +1,15 @@
 import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
-import type { SportAdapter, GameView, PickView, WeekState, LoadedWeek, LoadedScores } from './sportAdapter';
+import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState, LoadedWeek, LoadedScores } from './sportAdapter';
+
+/** Map CFB backend status strings to canonical GameStatusValue */
+function toCfbGameStatus(gameStatus: string | null | undefined): GameStatusValue {
+  if (gameStatus === 'StatusFinal') return 'final';
+  if (gameStatus === 'StatusInProgress') return 'in_progress';
+  if (gameStatus === 'StatusScheduled' || !gameStatus) return 'scheduled';
+  return null;
+}
 
 const CFB_SEASON = 2025;
 const CFB_REGULAR_WEEKS = Array.from({ length: 14 }, (_, i) => i + 1);
@@ -21,7 +29,8 @@ function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] 
   const scoreMap = new Map(scores.map(s => [s.espnEventId, s]));
   return spreads.map(sp => {
     const score = scoreMap.get(sp.espnEventId);
-    const isFinal = score?.gameStatus === 'StatusFinal';
+    const status = toCfbGameStatus(score?.gameStatus);
+    const isFinal = status === 'final';
     const hs = score?.homeTeamScore ?? null;
     const as_ = score?.awayTeamScore ?? null;
     return {
@@ -33,7 +42,7 @@ function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] 
       overUnder: sp.overUnder,
       homeScore: hs,
       awayScore: as_,
-      gameStatus: score?.gameStatus ?? null,
+      gameStatus: status,
       gameTime: sp.gameTime,
       homeCovers: isFinal && hs != null && as_ != null ? (hs + sp.homeTeamSpread) > as_ : null,
       overWins: isFinal && hs != null && as_ != null ? (hs + as_) > sp.overUnder : null,
@@ -161,7 +170,7 @@ export function createCfbAdapter(): SportAdapter {
       }
       const weekState = slateToWeekState(active);
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
-      const hasActiveGames = games.some(g => g.gameStatus === 'StatusInProgress');
+      const hasActiveGames = games.some(g => g.gameStatus === 'in_progress' || g.gameStatus === 'halftime');
       return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames };
     },
 

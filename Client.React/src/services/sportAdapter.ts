@@ -1,3 +1,6 @@
+/** Canonical game status — both adapters normalize to this before populating GameView */
+export type GameStatusValue = 'final' | 'in_progress' | 'halftime' | 'scheduled' | null;
+
 export interface GameView {
   id: string;
   homeTeam: string;
@@ -7,7 +10,7 @@ export interface GameView {
   overUnder: number | null;
   homeScore: number | null;
   awayScore: number | null;
-  gameStatus: string | null;
+  gameStatus: GameStatusValue;
   gameTime: string;
   weather?: { displayValue: string; conditionId?: string; temperatureF?: number };
   homeRecord?: string;

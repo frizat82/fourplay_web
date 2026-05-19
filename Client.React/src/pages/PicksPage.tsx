@@ -25,9 +25,7 @@ function pickKey(gameId: string, team: string, pickType: string) {
 }
 
 function gameIsLocked(game: GameView): boolean {
-  const status = game.gameStatus ?? '';
-  if (status === 'StatusFinal' || status === 'status_final') return true;
-  if (status === 'StatusInProgress' || status === 'status_in_progress') return true;
+  if (game.gameStatus === 'final' || game.gameStatus === 'in_progress' || game.gameStatus === 'halftime') return true;
   return new Date(game.gameTime) <= new Date();
 }
 
@@ -82,6 +80,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       if (adapter.supportsJerseys && adapter.loadJerseys) {
         adapter.loadJerseys(result.season, result.week).then(setJerseyCache).catch(() => {});
       }
+    } catch (err) {
+      console.error('[PicksPage] loadCurrentGames failed:', err);
     } finally {
       setLoading(false);
     }
