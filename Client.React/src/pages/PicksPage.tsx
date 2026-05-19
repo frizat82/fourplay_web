@@ -51,6 +51,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const [showJerseys, setShowJerseys] = useState(false);
   const [jerseyCache, setJerseyCache] = useState<Record<string, string>>({});
   const [isCurrentWeek, setIsCurrentWeek] = useState(true);
+  const [maxWeek, setMaxWeek] = useState(adapter.weekSelectorConfig.maxRegularSeasonWeek);
+  const [maxSeason, setMaxSeason] = useState(adapter.weekSelectorConfig.minSeason);
   const [isPageVisible, setIsPageVisible] = useState(true);
 
   function applyLoaded(loaded: { games: GameView[]; hasOdds: boolean; requiredPicks: number; season: number; week: number; isPostSeason: boolean; existingPicks?: Set<string> }) {
@@ -77,6 +79,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       const ep = new Set(result.userPicks.map(p => pickKey(p.gameId, p.team, p.pickType)));
       applyLoaded({ ...result, existingPicks: ep });
       setIsCurrentWeek(true);
+      setMaxWeek(result.maxWeek);
+      setMaxSeason(result.maxSeason);
       if (adapter.supportsJerseys && adapter.loadJerseys) {
         adapter.loadJerseys(result.season, result.week).then(setJerseyCache).catch(() => {});
       }
@@ -212,6 +216,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
             onWeekChange={handleWeekChange}
             onSeasonTypeChange={handleSeasonTypeChange}
             {...adapter.weekSelectorConfig}
+            maxRegularSeasonWeek={maxWeek}
+            maxSeason={maxSeason}
           />
           {!isCurrentWeek && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>

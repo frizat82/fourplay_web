@@ -17,7 +17,6 @@ import TeamHelmet from '../components/sports/TeamHelmet';
 import UserPicksMatrix from '../components/UserPicksMatrix';
 import PickDialog from '../components/PickDialog';
 import FieldPosition from '../components/FieldPosition';
-import WeatherIcon from '../components/WeatherIcon';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { spreadLabel } from '../utils/gameHelpers';
@@ -63,6 +62,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<LoadedScores | null>(null);
   const [isCurrentWeek, setIsCurrentWeek] = useState(true);
+  const [maxWeek, setMaxWeek] = useState(adapter.weekSelectorConfig.maxRegularSeasonWeek);
+  const [maxSeason, setMaxSeason] = useState(adapter.weekSelectorConfig.minSeason);
   const [isPageVisible, setIsPageVisible] = useState(true);
   const [showMatrixView, setShowMatrixView] = useState(false);
   const [showOnlyMyPicks, setShowOnlyMyPicks] = useState(false);
@@ -78,6 +79,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
       const result = await adapter.loadCurrentScores(currentLeague, user.userId);
       setData(result);
       setIsCurrentWeek(true);
+      setMaxWeek(result.maxWeek);
+      setMaxSeason(result.maxSeason);
     } finally {
       setLoading(false);
     }
@@ -174,6 +177,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
           onWeekChange={handleWeekChange}
           onSeasonTypeChange={handleSeasonTypeChange}
           {...adapter.weekSelectorConfig}
+          maxRegularSeasonWeek={maxWeek}
+          maxSeason={maxSeason}
         />
         {!isCurrentWeek && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>
@@ -234,14 +239,9 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                     <Stack direction="row" alignItems="center" justifyContent="space-between">
                       <TeamHelmet abbr={game.awayTeam} size={50} />
                       <Typography variant="h6">{isFinal || isLive ? game.awayScore : ''}</Typography>
-                      <Box textAlign="center">
-                        {game.weather && (
-                          <WeatherIcon iconKey={game.weather.displayValue} conditionId={game.weather.conditionId} temperatureF={game.weather.temperatureF} showTemp={false} />
-                        )}
-                        <Typography variant="body2">
-                          {isFinal ? 'Final' : isLive ? 'Live' : new Date(game.gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                        </Typography>
-                      </Box>
+                      <Typography variant="body2" textAlign="center">
+                        {isFinal ? 'Final' : isLive ? 'Live' : new Date(game.gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </Typography>
                       <Typography variant="h6">{isFinal || isLive ? game.homeScore : ''}</Typography>
                       <TeamHelmet abbr={game.homeTeam} size={50} flipped />
                     </Stack>
