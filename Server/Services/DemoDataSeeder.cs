@@ -612,7 +612,12 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
     private async Task SeedCfbPicksAsync(LeagueInfo? league, List<CfbSlates> slates)
     {
         if (league == null) return;
-        if (await db.CfbPicks.AnyAsync(p => p.LeagueId == league.Id)) return;
+        // 5 users × 13 picks each (6 W8 + 4 QF + 2 SF + 1 Championship) = 65
+        const int ExpectedPickCount = 65;
+        if (await db.CfbPicks.CountAsync(p => p.LeagueId == league.Id) >= ExpectedPickCount) return;
+        // Clear any partial seed before re-seeding
+        db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => p.LeagueId == league.Id));
+        await db.SaveChangesAsync();
 
         var picks = new List<CfbPicks>();
 
