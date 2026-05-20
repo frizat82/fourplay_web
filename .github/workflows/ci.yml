@@ -107,7 +107,7 @@ jobs:
         # UserManagerJob fires in 5s (DEMO_MODE fast-start), then DemoDataSeeder runs.
         # Email creds are required by startup validation but not used in demo flows.
         run: |
-          dotnet run --project Server --no-build --no-launch-profile \
+          dotnet run --project Server --no-build -c Release --no-launch-profile \
             --urls http://localhost:5000 &
           echo "BACKEND_PID=$!" >> "$GITHUB_ENV"
         env:
