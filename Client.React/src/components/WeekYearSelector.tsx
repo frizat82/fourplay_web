@@ -83,7 +83,13 @@ export default function WeekYearSelector({
   };
 
   const handleSeasonTypeSelect = (value: 'regular' | 'postseason') => {
-    onSeasonTypeChange(value === 'postseason');
+    const newIsPostSeason = value === 'postseason';
+    onSeasonTypeChange(newIsPostSeason);
+    // Explicitly jump to the last available week so we always land on the most recent data
+    const opts = newIsPostSeason ? postSeasonOptions : regularOptions;
+    if (opts.length > 0) {
+      onWeekChange(opts[opts.length - 1], { isPostSeason: newIsPostSeason });
+    }
   };
 
   const seasonOptions = useMemo(
