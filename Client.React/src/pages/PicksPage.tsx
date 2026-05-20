@@ -197,6 +197,12 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   );
 
   if (!currentLeague) return <NoLeague />;
+  if (!hasOdds && !isCurrentWeek) return (
+    <Box sx={{ textAlign: 'center', py: 8 }}>
+      <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
+    </Box>
+  );
   if (!hasOdds) return <SpreadRelease />;
 
   const hasUnlockedGames = games.some(g => !gameIsLocked(g));
