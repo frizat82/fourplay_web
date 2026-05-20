@@ -169,13 +169,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     </Box>
   );
   if (!currentLeague) return <NoLeague />;
-  if (!data?.hasOdds && !isCurrentWeek) return (
-    <Box sx={{ textAlign: 'center', py: 8 }}>
-      <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
-    </Box>
-  );
-  if (!data?.hasOdds) return <SpreadRelease />;
+  if (!data?.hasOdds && isCurrentWeek) return <SpreadRelease />;
 
   const games = showOnlyMyPicks
     ? (data.games ?? []).filter(g => didUserPick(g.id, g.homeTeam) || didUserPick(g.id, g.awayTeam))
@@ -237,7 +231,13 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
           </Grid>
         ) : (
           <>
-            {showOnlyMyPicks && games.length === 0 && (
+            {!data?.hasOdds && (
+              <Grid size={12} sx={{ textAlign: 'center', py: 6 }}>
+                <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
+              </Grid>
+            )}
+            {data?.hasOdds && showOnlyMyPicks && games.length === 0 && (
               <Grid size={12}>
                 <Paper sx={{ p: 4, textAlign: 'center' }}>
                   <Typography color="text.secondary">You haven&apos;t made any picks for this week.</Typography>
@@ -245,7 +245,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
               </Grid>
             )}
 
-            {games.map(game => {
+            {data?.hasOdds && games.map(game => {
               const isFinal = game.gameStatus === 'final';
               const isLive = game.gameStatus === 'in_progress' || game.gameStatus === 'halftime';
               const hc = game.homeCovers ?? null;

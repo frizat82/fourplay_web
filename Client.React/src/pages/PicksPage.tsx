@@ -197,22 +197,17 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   );
 
   if (!currentLeague) return <NoLeague />;
-  if (!hasOdds && !isCurrentWeek) return (
-    <Box sx={{ textAlign: 'center', py: 8 }}>
-      <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
-    </Box>
-  );
-  if (!hasOdds) return <SpreadRelease />;
+  if (!hasOdds && isCurrentWeek) return <SpreadRelease />;
 
   const hasUnlockedGames = games.some(g => !gameIsLocked(g));
   const isPostSeasonSlate = isPostSeason;
+  const showSelector = games.length > 0 || !isCurrentWeek;
 
   return (
     <Box>
       <PageHeader title="Picks" />
 
-      {games.length > 0 && (
+      {showSelector && (
         <Box sx={{ mb: 3 }}>
           <WeekYearSelector
             season={season}
@@ -260,6 +255,13 @@ export default function PicksPage({ adapter }: PicksPageProps) {
                 Clear Selected Picks
               </Button>
             </Stack>
+          </Grid>
+        )}
+
+        {!hasOdds && (
+          <Grid size={12} sx={{ textAlign: 'center', py: 6 }}>
+            <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
           </Grid>
         )}
 
