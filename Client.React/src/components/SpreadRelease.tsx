@@ -36,7 +36,7 @@ export default function SpreadRelease() {
   // Compute once when targetDate changes — stable enough for "is this within 7 days"
   const showCountdown = useMemo(() => {
     if (!targetDate) return false;
-    const nowMs = new Date().getTime(); // eslint-disable-line
+    const nowMs = new Date().getTime();
     return targetDate.getTime() > nowMs && (targetDate.getTime() - nowMs) < MS_7_DAYS;
   }, [targetDate, MS_7_DAYS]);
 

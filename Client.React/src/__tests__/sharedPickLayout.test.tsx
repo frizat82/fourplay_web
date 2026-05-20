@@ -48,8 +48,8 @@ describe('NFL PicksPage — GameCard layout regression', () => {
     vi.mocked(doOddsExist).mockResolvedValue(true);
     vi.mocked(getUserPicks).mockResolvedValue([]);
     vi.mocked(spreadBatch).mockResolvedValue({ responses: {
-      KC: createSpreadResponse(true, '-3'),
-      BUF: createSpreadResponse(false, '+3'),
+      KC: createSpreadResponse('KC', -3),
+      BUF: createSpreadResponse('BUF', 3),
     }});
     vi.mocked(getAllJerseys).mockResolvedValue({});
     vi.mocked(getNextSpreadJob).mockResolvedValue(null);
