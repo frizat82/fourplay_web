@@ -73,10 +73,11 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
   const league: LeagueUserMappingDto = {
     id: 1,
     leagueId: TEST_LEAGUE_ID,
-    userId: TEST_USER.userId,
-    userName: TEST_USER.name,
+    userId: authUser.userId,  // use the actual logged-in user's ID
+    userName: authUser.name,
     leagueName: 'Test League',
-    leagueOwnerUserId: TEST_USER.userId,
+    leagueOwnerUserId: authUser.userId,
+    leagueType: 0,            // 0 = NFL — satisfies hasNflAccess check
     dateCreated: new Date().toISOString(),
   };
 

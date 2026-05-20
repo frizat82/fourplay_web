@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PicksPage from '../pages/PicksPage';
+import { createNflAdapter } from '../services/nflAdapter';
 import { createCompetition, createPick, createScores, createSpreadResponse } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
@@ -11,6 +12,9 @@ const sessionState = {
   selectLeague: vi.fn(),
   reloadLeagues: vi.fn(),
   clearSession: vi.fn(),
+  hasNflAccess: true,
+  hasCfbAccess: false,
+  leaguesLoaded: true,
 };
 
 const authState = {
@@ -101,8 +105,8 @@ const setupDefaults = async (options?: {
 };
 
 const renderPage = async () => {
-  render(<PicksPage />);
-  await screen.findByText(/Picks/i);
+  render(<PicksPage adapter={createNflAdapter()} />);
+  await screen.findByText(/^Picks$/i);
   await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
 };
 
@@ -123,13 +127,13 @@ describe('PicksPage', () => {
   it('shows no league message when no league selected', async () => {
     sessionState.currentLeague = null;
     await setupDefaults();
-    render(<PicksPage />);
+    render(<PicksPage adapter={createNflAdapter()} />);
     await screen.findByText(/Please select a league/i);
   });
 
   it('shows odds not posted when odds missing', async () => {
     await setupDefaults({ oddsExist: false });
-    render(<PicksPage />);
+    render(<PicksPage adapter={createNflAdapter()} />);
     await screen.findByText(/Odds Not Posted/i);
   });
 

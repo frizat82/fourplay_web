@@ -22,6 +22,45 @@ namespace FourPlayWebApp.Server.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.CfbSlates", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("DateCreated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("FirstGameUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Season")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SlateNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SlateType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CfbSlates");
+                });
+
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueInfo", b =>
                 {
                     b.Property<int>("Id")
@@ -373,6 +412,10 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<string>("RegisteredUserId")
                         .HasColumnType("text");
 
+                    b.Property<string>("SportType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset?>("UsedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -388,6 +431,140 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("RegisteredUserId");
 
                     b.ToTable("Invitations");
+                });
+
+            modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbPicks", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CfbSlateId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("DateCreated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EspnEventId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LeagueId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PickType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Season")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Team")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CfbPicks");
+                });
+
+            modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbScores", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AwayTeam")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("AwayTeamScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CfbSlateId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("DateCreated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EspnEventId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("GameStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("GameTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("HomeTeam")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("HomeTeamScore")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("WeatherConditionId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WeatherDisplayValue")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("WeatherTemperatureF")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CfbScores");
+                });
+
+            modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbSpreads", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AwayTeam")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<double>("AwayTeamSpread")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("CfbSlateId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("DateCreated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EspnEventId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("GameTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("HomeTeam")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<double>("HomeTeamSpread")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("OverUnder")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CfbSpreads");
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.NflScores", b =>

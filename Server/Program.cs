@@ -84,6 +84,9 @@ builder.Services.AddHttpClient<IEspnCoreOddsService, EspnCoreOddsService>(x => {
 builder.Services.AddHttpClient<IEspnApiService, EspnApiService>(x => {
     x.BaseAddress = new Uri("http://site.api.espn.com");
 });
+builder.Services.AddHttpClient<ICfbApiService, CfbApiService>(x => {
+    x.BaseAddress = new Uri("http://site.api.espn.com");
+});
 if (builder.Configuration["DEMO_MODE"] == "true")
 {
     builder.Services.AddSingleton<IEspnCacheService, DemoEspnCacheService>();
@@ -95,7 +98,7 @@ else
 builder.Services.AddHttpClient<IJerseyCacheService, JerseyCacheService>(c => {
     c.BaseAddress = new Uri("https://www.gridiron-uniforms.com/GUD/");
     // Some servers dislike aggressive headers; set a reasonable user agent
-    c.DefaultRequestHeaders.UserAgent.ParseAdd("FourPlayJerseyCache/1.0");
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("IVLeagueJerseyCache/1.0");
     c.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/html"));
 });
 #endregion
@@ -243,6 +246,8 @@ builder.Services.AddScoped<IInvitationService, InvitationService>();
 builder.Services.AddScoped<ISpreadCalculatorBuilder, SpreadCalculatorBuilder>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
 builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
+builder.Services.AddScoped<ICfbRepository, CfbRepository>();
+builder.Services.AddScoped<ICfbPicksRepository, CfbPicksRepository>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 
@@ -254,13 +259,19 @@ builder.Services.AddScoped<IJob, StartupJob>();
 builder.Services.AddScoped<IJob, UserManagerJob>();
 // Register MissingPicksJob
 builder.Services.AddScoped<IJob, MissingPicksJob>();
+builder.Services.AddScoped<IJob, CfbSlateSeederJob>();
+builder.Services.AddScoped<IJob, CfbSpreadJob>();
+builder.Services.AddScoped<IJob, CfbScoresJob>();
 builder.Services.AddQuartz(q => {
     // Setup User at startup
  // User Manager
+// In DEMO_MODE fire in 5s so seeding completes before e2e tests start;
+// otherwise fire 2 min after startup to avoid slowing cold boot.
+var userManagerDelay = builder.Configuration["DEMO_MODE"] == "true" ? 5 : 120;
 q.ScheduleJob<UserManagerJob>(trigger => trigger
     .WithIdentity("User Manager")
     .WithDescription("Manages initial user admin (mark)")
-    .StartAt(DateBuilder.FutureDate(2, IntervalUnit.Minute))
+    .StartAt(DateBuilder.FutureDate(userManagerDelay, IntervalUnit.Second))
 );
 
 // Note: use IANA timezone id "America/Chicago" which works on Linux containers
@@ -336,6 +347,58 @@ q.ScheduleJob<NflScoresJob>(trigger => trigger
 //     .WithCronSchedule("0 0 11 ? * SUN",
 //         x => x.WithMisfireHandlingInstructionFireAndProceed()
 //               .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+
+// CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons
+q.ScheduleJob<CfbSlateSeederJob>(trigger => trigger
+    .WithIdentity("CFB Slate Seeder")
+    .WithDescription("Seeds CFB slate dates for the current season")
+    .WithCronSchedule("0 0 5 ? * MON",
+        x => x.WithMisfireHandlingInstructionFireAndProceed()
+              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+// CFB Spreads — Saturday 9am CST (before first kickoffs) + Wednesday 10am CST (mid-week lines)
+q.ScheduleJob<CfbSpreadJob>(trigger => trigger
+    .WithIdentity("CFB Spread Job Sat")
+    .WithDescription("Fetches CFB spreads Saturday morning before kickoff")
+    .WithCronSchedule("0 0 9 ? * SAT",
+        x => x.WithMisfireHandlingInstructionFireAndProceed()
+              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+q.ScheduleJob<CfbSpreadJob>(trigger => trigger
+    .WithIdentity("CFB Spread Job Wed")
+    .WithDescription("Fetches CFB spreads Wednesday when mid-week lines open")
+    .WithCronSchedule("0 0 10 ? * WED",
+        x => x.WithMisfireHandlingInstructionFireAndProceed()
+              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+// CFB Scores — Saturday noon, 4pm, 8pm, midnight CST + Sunday 6am CST (covers all kickoff windows)
+q.ScheduleJob<CfbScoresJob>(trigger => trigger
+    .WithIdentity("CFB Scores Sat Noon")
+    .WithDescription("Fetches CFB scores at Saturday noon kickoff window")
+    .WithCronSchedule("0 0 12 ? * SAT",
+        x => x.WithMisfireHandlingInstructionFireAndProceed()
+              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+q.ScheduleJob<CfbScoresJob>(trigger => trigger
+    .WithIdentity("CFB Scores Sat 4pm")
+    .WithDescription("Fetches CFB scores at Saturday afternoon kickoff window")
+    .WithCronSchedule("0 0 16 ? * SAT",
+        x => x.WithMisfireHandlingInstructionFireAndProceed()
+              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+q.ScheduleJob<CfbScoresJob>(trigger => trigger
+    .WithIdentity("CFB Scores Sat 8pm")
+    .WithDescription("Fetches CFB scores at Saturday evening kickoff window")
+    .WithCronSchedule("0 0 20 ? * SAT",
+        x => x.WithMisfireHandlingInstructionFireAndProceed()
+              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+q.ScheduleJob<CfbScoresJob>(trigger => trigger
+    .WithIdentity("CFB Scores Sat Midnight")
+    .WithDescription("Fetches CFB final scores late Saturday night")
+    .WithCronSchedule("0 0 0 ? * SUN",
+        x => x.WithMisfireHandlingInstructionFireAndProceed()
+              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+q.ScheduleJob<CfbScoresJob>(trigger => trigger
+    .WithIdentity("CFB Scores Sun 6am")
+    .WithDescription("Fetches CFB overnight final scores Sunday morning")
+    .WithCronSchedule("0 0 6 ? * SUN",
+        x => x.WithMisfireHandlingInstructionFireAndProceed()
+              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
 });
 
 

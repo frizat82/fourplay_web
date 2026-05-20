@@ -16,7 +16,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <Typography
       variant="overline"
-      sx={{ color: 'text.disabled', letterSpacing: '0.08em', mb: 1, display: 'block' }}
+      sx={{ color: 'text.secondary', letterSpacing: '0.08em', mb: 1, display: 'block' }}
     >
       {children}
     </Typography>
@@ -71,11 +71,11 @@ function TeaseFormula() {
       }}
     >
       <Chip label="Vegas line" variant="outlined" size="small" />
-      <Typography color="text.disabled" fontWeight={500}>
+      <Typography color="text.secondary" fontWeight={500}>
         +
       </Typography>
       <Chip label="13 pt tease" size="small" color="secondary" variant="outlined" />
-      <Typography color="text.disabled" fontWeight={500}>
+      <Typography color="text.secondary" fontWeight={500}>
         =
       </Typography>
       <Chip label="Your line" size="small" color="success" />
@@ -105,12 +105,12 @@ function MatchupExample() {
       >
         <Typography
           variant="caption"
-          color="text.disabled"
+          color="text.secondary"
           sx={{ letterSpacing: '0.06em', textTransform: 'uppercase' }}
         >
           Week 1 · 2026 · SEA hosts CHI
         </Typography>
-        <Typography variant="caption" color="text.disabled">
+        <Typography variant="caption" color="text.secondary">
           Vegas → Teased
         </Typography>
       </Box>
@@ -132,13 +132,13 @@ function MatchupExample() {
             <Typography variant="body2" fontWeight={500}>
               {team.name}
             </Typography>
-            <Typography variant="caption" color="text.disabled">
+            <Typography variant="caption" color="text.secondary">
               {team.detail}
             </Typography>
           </Box>
           <Typography
             variant="body2"
-            color="text.disabled"
+            color="text.secondary"
             sx={{ textDecoration: 'line-through' }}
           >
             {team.vegas}
@@ -201,7 +201,7 @@ function ScenarioExample() {
             <Typography variant="body2" fontWeight={500}>
               {row.team}
             </Typography>
-            <Typography variant="caption" color="text.disabled">
+            <Typography variant="caption" color="text.secondary">
               {row.detail}
             </Typography>
           </Box>
@@ -244,7 +244,7 @@ function PlayoffGrid() {
             <Typography variant="h5" fontWeight={500}>
               {picks}
             </Typography>
-            <Typography variant="caption" color="text.disabled">
+            <Typography variant="caption" color="text.secondary">
               {picks === 1 ? 'pick required' : 'picks required'}
             </Typography>
           </Box>
@@ -399,7 +399,7 @@ export default function RulesPage() {
       <CardContent>
         <Box sx={{ mb: 2 }}>
           <PageHeader
-            title="How FourPlay Works"
+            title="How IV League Works"
             subtitle="Pick four teased lines each week. Sounds easy — it isn't."
           />
         </Box>

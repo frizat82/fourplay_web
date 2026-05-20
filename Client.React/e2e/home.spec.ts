@@ -1,21 +1,19 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Home page', () => {
-  test('renders FourPlay hero section', async ({ page }) => {
+  test('renders IV League hero section', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('text=FOURPLAY').first()).toBeVisible();
-    await expect(page.locator('text=Elevate Your Fantasy Game')).toBeVisible();
+    await expect(page.locator('text=IV League').first()).toBeVisible();
   });
 
-  test('shows Login and Register nav links', async ({ page }) => {
+  test('shows Login nav link', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('link', { name: /login/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /register/i }).or(page.getByRole('link', { name: /register/i }))).toBeVisible();
   });
 
-  test('Log In to Start link navigates to login', async ({ page }) => {
+  test('Login link navigates to login', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('link', { name: /log in to start/i }).click();
+    await page.getByRole('link', { name: 'Login' }).click();
     await expect(page).toHaveURL(/login/);
   });
 

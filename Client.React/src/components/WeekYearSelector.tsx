@@ -16,6 +16,7 @@ interface WeekYearSelectorProps {
   minSeason?: number;
   maxSeason?: number;
   maxRegularSeasonWeek?: number;
+  weekLabelFn?: (week: number, isPostSeason: boolean) => string;
 }
 
 export default function WeekYearSelector({
@@ -30,6 +31,7 @@ export default function WeekYearSelector({
   minSeason = 2020,
   maxSeason = new Date().getFullYear(),
   maxRegularSeasonWeek = 18,
+  weekLabelFn = getWeekName,
 }: WeekYearSelectorProps) {
   const defaultRegularWeeks = useMemo(() => Array.from({ length: maxRegularSeasonWeek }, (_, idx) => idx + 1), [
     maxRegularSeasonWeek,
@@ -50,7 +52,8 @@ export default function WeekYearSelector({
   useEffect(() => {
     if (currentOptions.length === 0) return;
     if (currentOptions.includes(week)) return;
-    onWeekChange(currentOptions[0], { isPostSeason });
+    // Default to the LAST available week (most recent data), not the first
+    onWeekChange(currentOptions[currentOptions.length - 1], { isPostSeason });
   }, [currentOptions, isPostSeason, onWeekChange, week]);
 
   const currentIndex = Math.max(0, currentOptions.indexOf(clampedWeek));
@@ -80,7 +83,13 @@ export default function WeekYearSelector({
   };
 
   const handleSeasonTypeSelect = (value: 'regular' | 'postseason') => {
-    onSeasonTypeChange(value === 'postseason');
+    const newIsPostSeason = value === 'postseason';
+    onSeasonTypeChange(newIsPostSeason);
+    // Explicitly jump to the last available week so we always land on the most recent data
+    const opts = newIsPostSeason ? postSeasonOptions : regularOptions;
+    if (opts.length > 0) {
+      onWeekChange(opts[opts.length - 1], { isPostSeason: newIsPostSeason });
+    }
   };
 
   const seasonOptions = useMemo(
@@ -124,7 +133,7 @@ export default function WeekYearSelector({
         >
           {currentOptions.map((w) => (
             <MenuItem key={w} value={w}>
-              {getWeekName(w, isPostSeason)}
+              {weekLabelFn(w, isPostSeason)}
             </MenuItem>
           ))}
         </Select>
