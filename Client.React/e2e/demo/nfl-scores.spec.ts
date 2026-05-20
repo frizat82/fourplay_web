@@ -2,7 +2,7 @@
  * NFL Scores page — demo backend integration tests.
  * Runs against a live DEMO_MODE=true backend at localhost:5174.
  *
- * Week 8 (2023) has 4 final games seeded: DAL/LAR, GB/MIN, MIA/NE, WAS/PHI.
+ * Week 18 (2025) has 4 final games seeded: DAL/LAR, GB/MIN, MIA/NE, WAS/PHI.
  * The frozen ESPN JSON also has in-progress and scheduled games.
  */
 import { test, expect } from '@playwright/test';

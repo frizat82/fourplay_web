@@ -15,8 +15,8 @@ namespace FourPlayWebApp.Server.Services;
 /// </summary>
 public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser> userManager, IConfiguration configuration)
 {
-    private const int DemoSeason = 2023;
-    private const int DemoWeek = 8;
+    private const int DemoSeason = 2025;
+    private const int DemoWeek = 18;
 
     // Fake demo users: name → email
     private static readonly (string Username, string Email)[] DemoUsers =
@@ -28,7 +28,7 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         ("Eve",    "eve@demo.local"),
     ];
 
-    // Per-user picks for week 8: 4 picks each (matching required picks limit)
+    // Per-user picks for week 18: 4 picks each (matching required picks limit)
     // Games available: BUF/TB, DAL/LAR, GB/MIN, TEN/ATL, IND/NO, MIA/NE, NYG/NYJ, PIT/JAC,
     //                  WAS/PHI, CAR/HOU, SEA/CLE, DEN/KC, ARI/BAL, SF/CIN, LAC/CHI, DET/LV
     private static readonly Dictionary<string, string[]> DemoPicksMap = new()
@@ -103,8 +103,8 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         {
             Season = DemoSeason,
             NflWeek = DemoWeek,
-            StartDate = new DateTimeOffset(2023, 10, 26, 0, 0, 0, TimeSpan.Zero),
-            EndDate = new DateTimeOffset(2023, 10, 31, 23, 59, 59, TimeSpan.Zero),
+            StartDate = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            EndDate = new DateTimeOffset(2026, 1, 5, 23, 59, 59, TimeSpan.Zero),
         });
         await db.SaveChangesAsync();
         Log.Information("DemoDataSeeder: seeded NflWeek {Season}/{Week}", DemoSeason, DemoWeek);
@@ -124,22 +124,22 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         var spreads = new List<NflSpreads>
         {
             // Abbreviations match ESPN mapped values (WAS not WSH, JAC not JAX)
-            Spread("BUF", "TB",  -3.0,  3.0, 48.5, "2023-10-27T00:15:00Z"),
-            Spread("DAL", "LAR", -6.5,  6.5, 46.5, "2023-10-29T17:00:00Z"),
-            Spread("GB",  "MIN", -3.0,  3.0, 44.5, "2023-10-29T17:00:00Z"),
-            Spread("TEN", "ATL",  1.5, -1.5, 38.5, "2023-10-29T17:00:00Z"),
-            Spread("IND", "NO",  -2.5,  2.5, 41.5, "2023-10-29T17:00:00Z"),
-            Spread("MIA", "NE",  -7.0,  7.0, 43.5, "2023-10-29T17:00:00Z"),
-            Spread("NYG", "NYJ",  3.0, -3.0, 36.5, "2023-10-29T17:00:00Z"),
-            Spread("PIT", "JAC", -1.0,  1.0, 40.5, "2023-10-29T17:00:00Z"),
-            Spread("WAS", "PHI",  9.5, -9.5, 44.5, "2023-10-29T17:00:00Z"),
-            Spread("CAR", "HOU",  3.5, -3.5, 39.5, "2023-10-29T17:00:00Z"),
-            Spread("SEA", "CLE", -3.0,  3.0, 43.5, "2023-10-29T20:05:00Z"),
-            Spread("DEN", "KC",  10.5,-10.5, 51.5, "2023-10-29T20:25:00Z"),
-            Spread("ARI", "BAL", 13.5,-13.5, 44.5, "2023-10-29T20:25:00Z"),
-            Spread("SF",  "CIN", -3.5,  3.5, 46.5, "2023-10-29T20:25:00Z"),
-            Spread("LAC", "CHI", -7.0,  7.0, 41.5, "2023-10-30T00:20:00Z"),
-            Spread("DET", "LV",  -7.5,  7.5, 47.5, "2023-10-31T00:15:00Z"),
+            Spread(DemoWeek, "BUF", "TB",  -3.0,  3.0, 48.5, "2026-01-04T18:00:00Z"),
+            Spread(DemoWeek, "DAL", "LAR", -6.5,  6.5, 46.5, "2026-01-04T18:00:00Z"),
+            Spread(DemoWeek, "GB",  "MIN", -3.0,  3.0, 44.5, "2026-01-04T18:00:00Z"),
+            Spread(DemoWeek, "TEN", "ATL",  1.5, -1.5, 38.5, "2026-01-04T18:00:00Z"),
+            Spread(DemoWeek, "IND", "NO",  -2.5,  2.5, 41.5, "2026-01-04T18:00:00Z"),
+            Spread(DemoWeek, "MIA", "NE",  -7.0,  7.0, 43.5, "2026-01-04T18:00:00Z"),
+            Spread(DemoWeek, "NYG", "NYJ",  3.0, -3.0, 36.5, "2026-01-04T18:00:00Z"),
+            Spread(DemoWeek, "PIT", "JAC", -1.0,  1.0, 40.5, "2026-01-04T18:00:00Z"),
+            Spread(DemoWeek, "WAS", "PHI",  9.5, -9.5, 44.5, "2026-01-04T18:00:00Z"),
+            Spread(DemoWeek, "CAR", "HOU",  3.5, -3.5, 39.5, "2026-01-04T18:00:00Z"),
+            Spread(DemoWeek, "SEA", "CLE", -3.0,  3.0, 43.5, "2026-01-04T21:25:00Z"),
+            Spread(DemoWeek, "DEN", "KC",  10.5,-10.5, 51.5, "2026-01-04T21:25:00Z"),
+            Spread(DemoWeek, "ARI", "BAL", 13.5,-13.5, 44.5, "2026-01-04T21:25:00Z"),
+            Spread(DemoWeek, "SF",  "CIN", -3.5,  3.5, 46.5, "2026-01-04T21:25:00Z"),
+            Spread(DemoWeek, "LAC", "CHI", -7.0,  7.0, 41.5, "2026-01-05T01:20:00Z"),
+            Spread(DemoWeek, "DET", "LV",  -7.5,  7.5, 47.5, "2026-01-05T01:15:00Z"),
         };
 
         db.NflSpreads.AddRange(spreads);
@@ -202,13 +202,13 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         if (await db.NflScores.AnyAsync(s => s.Season == DemoSeason && s.NflWeek == DemoWeek))
             return;
 
-        // 4 final games from frozen sample_espn_nfl.json for 2023 week 8
+        // 4 final games from frozen sample_espn_nfl.json for 2025 week 18
         var scores = new List<NflScores>
         {
-            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "DAL", AwayTeam = "LAR", HomeTeamScore = 28, AwayTeamScore = 20, GameTime = new DateTimeOffset(2023, 10, 29, 17, 0, 0, TimeSpan.Zero) },
-            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "GB",  AwayTeam = "MIN", HomeTeamScore = 17, AwayTeamScore = 24, GameTime = new DateTimeOffset(2023, 10, 29, 17, 0, 0, TimeSpan.Zero) },
-            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "MIA", AwayTeam = "NE",  HomeTeamScore = 31, AwayTeamScore = 17, GameTime = new DateTimeOffset(2023, 10, 29, 17, 0, 0, TimeSpan.Zero) },
-            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "WAS", AwayTeam = "PHI", HomeTeamScore = 7,  AwayTeamScore = 38, GameTime = new DateTimeOffset(2023, 10, 29, 17, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "DAL", AwayTeam = "LAR", HomeTeamScore = 28, AwayTeamScore = 20, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "GB",  AwayTeam = "MIN", HomeTeamScore = 17, AwayTeamScore = 24, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "MIA", AwayTeam = "NE",  HomeTeamScore = 31, AwayTeamScore = 17, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "WAS", AwayTeam = "PHI", HomeTeamScore = 7,  AwayTeamScore = 38, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
         };
         db.NflScores.AddRange(scores);
         await db.SaveChangesAsync();
@@ -291,22 +291,91 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         Log.Information("DemoDataSeeder: seeded picks for {Username}", user.UserName);
     }
 
-    // Historical weeks 1-7: same 4 games every week, home teams always cover
+    // Historical weeks 1-17: same 4 games every week, home teams always cover
     // Winning user picks: KC, DAL, PHI, BUF (all home = all cover)
     // Losing user picks:  DEN, DAL, PHI, BUF (DEN = wrong = loss)
     private static readonly string[] HistWinPicks = ["KC", "DAL", "PHI", "BUF"];
     private static readonly string[] HistLosePicks = ["DEN", "DAL", "PHI", "BUF"];
 
-    // Win pattern per user per week (weeks 1-7, index 0-6); true = win that week
-    // Scoring: WeeklyCost=5. Week 5 = all win → carryover → WeeklyCost=10 for week 6.
-    // Result: Alice +95, frizat +65, Carlos +35, Bob -25, Dana/Eve -85
+    // Win pattern per user per week (weeks 1-17, index 0-16); true = win that week
+    // Weeks 8-17 repeat the weeks 1-7 pattern (cycled) for a plausible leaderboard.
     private static readonly Dictionary<string, bool[]> HistWinPatterns = new()
     {
-        ["Alice"]  = [true,  true,  true,  true,  true, true,  true],
-        ["Bob"]    = [false, true,  false, false, true, true,  false],
-        ["Carlos"] = [true,  false, true,  false, true, true,  true],
-        ["Dana"]   = [false, false, true,  false, true, false, false],
-        ["Eve"]    = [false, false, false, true,  true, false, false],
+        ["Alice"]  = [true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true,  true],
+        ["Bob"]    = [false, true,  false, false, true,  true,  false, false, true,  false, false, true,  true,  false, false, true,  false],
+        ["Carlos"] = [true,  false, true,  false, true,  true,  true,  true,  false, true,  false, true,  true,  true,  true,  false, true],
+        ["Dana"]   = [false, false, true,  false, true,  false, false, false, false, true,  false, true,  false, false, false, false, true],
+        ["Eve"]    = [false, false, false, true,  true,  false, false, false, false, false, true,  true,  false, false, false, false, false],
+    };
+
+    // Wild Card (week 19): 6 games
+    private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] WildCardGames =
+    [
+        ("KC",  "HOU", -6.5,  6.5, 48.5, 27, 14, new DateTimeOffset(2026, 1, 11, 18, 0, 0, TimeSpan.Zero)),
+        ("BUF", "DEN", -7.5,  7.5, 46.5, 31,  7, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)),
+        ("BAL", "PIT", -8.0,  8.0, 44.5, 28, 14, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)),
+        ("PHI", "LAR", -9.5,  9.5, 47.5, 35, 14, new DateTimeOffset(2026, 1, 12, 18, 0, 0, TimeSpan.Zero)),
+        ("DET", "WAS", -7.0,  7.0, 50.5, 24, 14, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)),
+        ("SF",  "GB",  -3.5,  3.5, 47.0, 21, 13, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)),
+    ];
+
+    // Divisional (week 20): 4 games
+    private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] DivisionalGames =
+    [
+        ("KC",  "BUF", -1.5,  1.5, 51.5, 24, 21, new DateTimeOffset(2026, 1, 18, 18, 0, 0, TimeSpan.Zero)),
+        ("PHI", "DET", -3.0,  3.0, 48.0, 28, 24, new DateTimeOffset(2026, 1, 18, 21, 30, 0, TimeSpan.Zero)),
+        ("BAL", "HOU", -4.5,  4.5, 47.0, 17, 13, new DateTimeOffset(2026, 1, 19, 18, 0, 0, TimeSpan.Zero)),
+        ("SF",  "LAR", -5.5,  5.5, 46.0, 20, 13, new DateTimeOffset(2026, 1, 19, 21, 30, 0, TimeSpan.Zero)),
+    ];
+
+    // Conference Championship (week 21): 2 games
+    private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] ConfChampGames =
+    [
+        ("KC",  "BAL", -2.5,  2.5, 47.5, 31, 24, new DateTimeOffset(2026, 1, 26, 18, 0, 0, TimeSpan.Zero)),
+        ("PHI", "SF",  -2.0,  2.0, 45.5, 23, 13, new DateTimeOffset(2026, 1, 26, 21, 30, 0, TimeSpan.Zero)),
+    ];
+
+    // Super Bowl (week 22): 1 game
+    private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] SuperBowlGames =
+    [
+        ("PHI", "KC",  -1.5,  1.5, 48.5, 38, 35, new DateTimeOffset(2026, 2, 9, 23, 30, 0, TimeSpan.Zero)),
+    ];
+
+    // Postseason picks per user (true = home team, false = away team)
+    private static readonly Dictionary<string, bool[]> WildCardPicks = new()
+    {
+        ["Alice"]  = [true,  true,  true,  true,  true,  true],   // KC, BUF, BAL, PHI, DET, SF
+        ["Bob"]    = [false, false, false, false, false, false],   // HOU, DEN, PIT, LAR, WAS, GB
+        ["Carlos"] = [true,  true,  true,  true,  true,  false],  // KC, BUF, BAL, PHI, DET, GB
+        ["Dana"]   = [false, false, false, false, false, true],   // HOU, DEN, PIT, LAR, WAS, SF
+        ["Eve"]    = [true,  true,  true,  true,  true,  true],   // KC, BUF, BAL, PHI, DET, SF
+    };
+
+    private static readonly Dictionary<string, bool[]> DivisionalPicks = new()
+    {
+        ["Alice"]  = [true,  true,  true,  true],   // KC, PHI, BAL, SF
+        ["Bob"]    = [false, false, false, false],  // BUF, DET, HOU, LAR
+        ["Carlos"] = [true,  true,  true,  true],   // KC, PHI, BAL, SF
+        ["Dana"]   = [false, false, false, false],  // BUF, DET, HOU, LAR
+        ["Eve"]    = [true,  true,  true,  true],   // KC, PHI, BAL, SF
+    };
+
+    private static readonly Dictionary<string, bool[]> ConfChampPicks = new()
+    {
+        ["Alice"]  = [true,  true],   // KC, PHI
+        ["Bob"]    = [false, false],  // BAL, SF
+        ["Carlos"] = [true,  true],   // KC, PHI
+        ["Dana"]   = [false, false],  // BAL, SF
+        ["Eve"]    = [true,  true],   // KC, PHI
+    };
+
+    private static readonly Dictionary<string, bool> SuperBowlPicksMap = new()
+    {
+        ["Alice"]  = true,   // PHI
+        ["Bob"]    = false,  // KC
+        ["Carlos"] = true,   // PHI
+        ["Dana"]   = false,  // KC
+        ["Eve"]    = true,   // PHI
     };
 
     private async Task SeedHistoricalWeeksAsync(LeagueInfo? league)
@@ -319,8 +388,8 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         var adminUser = await userManager.FindByEmailAsync(adminEmail);
         if (adminUser == null) return;
 
-        // Admin (frizat) win pattern: W W L W W W W
-        bool[] adminWins = [true, true, false, true, true, true, true];
+        // Admin (frizat) win pattern for weeks 1-17: W W L W W W W W W L W W W W W W W
+        bool[] adminWins = [true, true, false, true, true, true, true, true, true, false, true, true, true, true, true, true, true];
 
         // Build user list
         var users = new List<(ApplicationUser User, bool[] Wins)> { (adminUser, adminWins) };
@@ -331,14 +400,15 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
                 users.Add((u, pattern));
         }
 
-        for (int week = 1; week <= 7; week++)
+        // Seed regular season weeks 1-17
+        for (int week = 1; week <= 17; week++)
         {
-            var weekGameTime = new DateTimeOffset(2023, 9, 4, 17, 0, 0, TimeSpan.Zero).AddDays((week - 1) * 7 + 3);
+            var weekGameTime = new DateTimeOffset(2025, 9, 4, 17, 0, 0, TimeSpan.Zero).AddDays((week - 1) * 7 + 3);
 
             // NflWeeks
             if (!await db.NflWeeks.AnyAsync(w => w.Season == DemoSeason && w.NflWeek == week))
             {
-                var weekStart = new DateTimeOffset(2023, 9, 4, 0, 0, 0, TimeSpan.Zero).AddDays((week - 1) * 7);
+                var weekStart = new DateTimeOffset(2025, 9, 4, 0, 0, 0, TimeSpan.Zero).AddDays((week - 1) * 7);
                 db.NflWeeks.Add(new NflWeeks { Season = DemoSeason, NflWeek = week, StartDate = weekStart, EndDate = weekStart.AddDays(6) });
                 await db.SaveChangesAsync();
             }
@@ -346,10 +416,10 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
 
             // NflSpreads (4 games, home teams favored)
             db.NflSpreads.AddRange(
-                new NflSpreads { Season = DemoSeason, NflWeek = week, HomeTeam = "KC",  AwayTeam = "DEN", HomeTeamSpread = -7.0, AwayTeamSpread = 7.0, OverUnder = 47.5, GameTime = weekGameTime },
-                new NflSpreads { Season = DemoSeason, NflWeek = week, HomeTeam = "DAL", AwayTeam = "CLE", HomeTeamSpread = -6.0, AwayTeamSpread = 6.0, OverUnder = 44.5, GameTime = weekGameTime },
-                new NflSpreads { Season = DemoSeason, NflWeek = week, HomeTeam = "PHI", AwayTeam = "NYG", HomeTeamSpread = -4.0, AwayTeamSpread = 4.0, OverUnder = 43.5, GameTime = weekGameTime },
-                new NflSpreads { Season = DemoSeason, NflWeek = week, HomeTeam = "BUF", AwayTeam = "NYJ", HomeTeamSpread = -3.0, AwayTeamSpread = 3.0, OverUnder = 46.5, GameTime = weekGameTime }
+                Spread(week, "KC",  "DEN", -7.0,  7.0, 47.5, weekGameTime.ToString("o")),
+                Spread(week, "DAL", "CLE", -6.0,  6.0, 44.5, weekGameTime.ToString("o")),
+                Spread(week, "PHI", "NYG", -4.0,  4.0, 43.5, weekGameTime.ToString("o")),
+                Spread(week, "BUF", "NYJ", -3.0,  3.0, 46.5, weekGameTime.ToString("o"))
             );
 
             // NflScores (all home teams win and cover)
@@ -379,14 +449,99 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             await db.SaveChangesAsync();
         }
 
-        Log.Information("DemoDataSeeder: seeded historical weeks 1-7 for {UserCount} users", users.Count);
+        // Seed postseason weeks (19-22)
+        await SeedPostseasonWeekAsync(league, users, 19, "Wild Card",
+            new DateTimeOffset(2026, 1, 11, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 1, 12, 23, 59, 59, TimeSpan.Zero),
+            WildCardGames.Select(g => (g.Home, g.Away, g.HomeSpread, g.AwaySpread, g.OU, g.HomeScore, g.AwayScore, g.GameTime)).ToArray(),
+            WildCardPicks);
+
+        await SeedPostseasonWeekAsync(league, users, 20, "Divisional",
+            new DateTimeOffset(2026, 1, 18, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 1, 19, 23, 59, 59, TimeSpan.Zero),
+            DivisionalGames.Select(g => (g.Home, g.Away, g.HomeSpread, g.AwaySpread, g.OU, g.HomeScore, g.AwayScore, g.GameTime)).ToArray(),
+            DivisionalPicks);
+
+        await SeedPostseasonWeekAsync(league, users, 21, "Conference Championship",
+            new DateTimeOffset(2026, 1, 26, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 1, 26, 23, 59, 59, TimeSpan.Zero),
+            ConfChampGames.Select(g => (g.Home, g.Away, g.HomeSpread, g.AwaySpread, g.OU, g.HomeScore, g.AwayScore, g.GameTime)).ToArray(),
+            ConfChampPicks);
+
+        // Super Bowl — build picks dict from SuperBowlPicksMap (bool→bool[])
+        var sbPicksAsArrays = SuperBowlPicksMap.ToDictionary(kv => kv.Key, kv => new[] { kv.Value });
+        await SeedPostseasonWeekAsync(league, users, 22, "Super Bowl",
+            new DateTimeOffset(2026, 2, 9, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 2, 9, 23, 59, 59, TimeSpan.Zero),
+            SuperBowlGames.Select(g => (g.Home, g.Away, g.HomeSpread, g.AwaySpread, g.OU, g.HomeScore, g.AwayScore, g.GameTime)).ToArray(),
+            sbPicksAsArrays);
+
+        Log.Information("DemoDataSeeder: seeded historical weeks 1-17 + postseason (19-22) for {UserCount} users", users.Count);
     }
 
-    private static NflSpreads Spread(string home, string away, double homeSpread, double awaySpread, double ou, string gameTimeUtc) =>
+    private async Task SeedPostseasonWeekAsync(
+        LeagueInfo league,
+        List<(ApplicationUser User, bool[] Wins)> users,
+        int week,
+        string label,
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] games,
+        Dictionary<string, bool[]> pickPatterns)
+    {
+        // NflWeeks row
+        if (!await db.NflWeeks.AnyAsync(w => w.Season == DemoSeason && w.NflWeek == week))
+        {
+            db.NflWeeks.Add(new NflWeeks { Season = DemoSeason, NflWeek = week, StartDate = startDate, EndDate = endDate });
+            await db.SaveChangesAsync();
+        }
+        var nflWeek = await db.NflWeeks.FirstAsync(w => w.Season == DemoSeason && w.NflWeek == week);
+
+        // Spreads
+        foreach (var g in games)
+            db.NflSpreads.Add(Spread(week, g.Home, g.Away, g.HomeSpread, g.AwaySpread, g.OU, g.GameTime.ToString("o")));
+
+        // Scores
+        foreach (var g in games)
+            db.NflScores.Add(new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = g.Home, AwayTeam = g.Away, HomeTeamScore = g.HomeScore, AwayTeamScore = g.AwayScore, GameTime = g.GameTime });
+
+        await db.SaveChangesAsync();
+
+        // Picks — admin uses same pattern as Alice for postseason
+        var allPickers = new List<(ApplicationUser User, string Name)>();
+        allPickers.Add((users[0].User, users[0].User.UserName!)); // admin
+        foreach (var (username, _) in DemoUsers)
+        {
+            var u = users.FirstOrDefault(x => x.User.UserName == username);
+            if (u.User != null) allPickers.Add((u.User, username));
+        }
+
+        foreach (var (user, name) in allPickers)
+        {
+            // Admin uses Alice's pattern
+            var patternKey = pickPatterns.ContainsKey(name) ? name : "Alice";
+            if (!pickPatterns.TryGetValue(patternKey, out var pattern)) continue;
+
+            for (int i = 0; i < games.Length; i++)
+            {
+                var team = (i < pattern.Length && pattern[i]) ? games[i].Home : games[i].Away;
+                db.NflPicks.Add(new NflPicks
+                {
+                    UserId = user.Id, LeagueId = league.Id, Team = team,
+                    Pick = PickType.Spread, NflWeek = week, Season = DemoSeason,
+                    NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow,
+                });
+            }
+        }
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: seeded postseason week {Week} ({Label})", week, label);
+    }
+
+    private static NflSpreads Spread(int week, string home, string away, double homeSpread, double awaySpread, double ou, string gameTimeUtc) =>
         new()
         {
             Season = DemoSeason,
-            NflWeek = DemoWeek,
+            NflWeek = week,
             HomeTeam = home,
             AwayTeam = away,
             HomeTeamSpread = homeSpread,
@@ -401,15 +556,158 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
 
     private const int CfbDemoSeason = 2025;
 
+    // Regular season weeks 1-7
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate1Games =
+    [
+        (1, 401700001, "MICH", "ILL",  -14.0, 14.0, 52.5, 45, 17, new DateTimeOffset(2025,  8, 30, 17,  0, 0, TimeSpan.Zero)),
+        (1, 401700002, "OSU",  "AKR",  -38.5, 38.5, 62.5, 56, 14, new DateTimeOffset(2025,  8, 30, 17,  0, 0, TimeSpan.Zero)),
+        (1, 401700003, "UGA",  "CLEM",  -7.0,  7.0, 51.0, 28, 21, new DateTimeOffset(2025,  8, 30, 20,  0, 0, TimeSpan.Zero)),
+        (1, 401700004, "ALA",  "MISS",  -3.5,  3.5, 53.5, 24, 21, new DateTimeOffset(2025,  8, 30, 20,  0, 0, TimeSpan.Zero)),
+        (1, 401700005, "ORE",  "USC",   -9.5,  9.5, 56.5, 34, 20, new DateTimeOffset(2025,  8, 30, 22, 30, 0, TimeSpan.Zero)),
+        (1, 401700006, "ND",   "TAMU",  -4.0,  4.0, 49.5, 28, 24, new DateTimeOffset(2025,  8, 30, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate2Games =
+    [
+        (2, 401700011, "MICH", "ARK",  -17.5, 17.5, 55.5, 35, 14, new DateTimeOffset(2025,  9,  6, 17,  0, 0, TimeSpan.Zero)),
+        (2, 401700012, "ALA",  "ND",    -5.5,  5.5, 54.0, 31, 28, new DateTimeOffset(2025,  9,  6, 20,  0, 0, TimeSpan.Zero)),
+        (2, 401700013, "OSU",  "TAMU",  -7.0,  7.0, 58.5, 38, 24, new DateTimeOffset(2025,  9,  6, 20,  0, 0, TimeSpan.Zero)),
+        (2, 401700014, "UGA",  "SC",   -10.5, 10.5, 52.5, 34, 17, new DateTimeOffset(2025,  9,  6, 20,  0, 0, TimeSpan.Zero)),
+        (2, 401700015, "ORE",  "MISS",  -6.5,  6.5, 59.5, 42, 35, new DateTimeOffset(2025,  9,  6, 22, 30, 0, TimeSpan.Zero)),
+        (2, 401700016, "CLEM", "FSU",   -7.0,  7.0, 48.5, 28, 17, new DateTimeOffset(2025,  9,  6, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate3Games =
+    [
+        (3, 401700021, "MICH", "TENN",  -3.5,  3.5, 51.5, 21, 17, new DateTimeOffset(2025,  9, 13, 17,  0, 0, TimeSpan.Zero)),
+        (3, 401700022, "OSU",  "ND",    -5.5,  5.5, 56.0, 35, 28, new DateTimeOffset(2025,  9, 13, 17,  0, 0, TimeSpan.Zero)),
+        (3, 401700023, "ALA",  "LSU",   -3.0,  3.0, 55.0, 34, 27, new DateTimeOffset(2025,  9, 13, 20,  0, 0, TimeSpan.Zero)),
+        (3, 401700024, "UGA",  "AUB",   -9.5,  9.5, 50.5, 31, 14, new DateTimeOffset(2025,  9, 13, 20,  0, 0, TimeSpan.Zero)),
+        (3, 401700025, "ORE",  "WASH",  -7.5,  7.5, 55.5, 38, 21, new DateTimeOffset(2025,  9, 13, 22, 30, 0, TimeSpan.Zero)),
+        (3, 401700026, "CLEM", "WIS",   -6.5,  6.5, 48.0, 24, 14, new DateTimeOffset(2025,  9, 13, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate4Games =
+    [
+        (4, 401700031, "MICH", "PSU",  -3.5,  3.5, 46.5, 24, 21, new DateTimeOffset(2025,  9, 20, 17,  0, 0, TimeSpan.Zero)),
+        (4, 401700032, "OSU",  "IU",  -13.5, 13.5, 58.5, 45, 28, new DateTimeOffset(2025,  9, 20, 17,  0, 0, TimeSpan.Zero)),
+        (4, 401700033, "UGA",  "OU",   -7.0,  7.0, 57.5, 35, 21, new DateTimeOffset(2025,  9, 20, 20,  0, 0, TimeSpan.Zero)),
+        (4, 401700034, "ALA",  "SC",  -10.0, 10.0, 52.0, 28, 14, new DateTimeOffset(2025,  9, 20, 20,  0, 0, TimeSpan.Zero)),
+        (4, 401700035, "ORE",  "UCLA", -9.5,  9.5, 56.0, 38, 28, new DateTimeOffset(2025,  9, 20, 22, 30, 0, TimeSpan.Zero)),
+        (4, 401700036, "CLEM", "NC",   -7.5,  7.5, 46.5, 28, 17, new DateTimeOffset(2025,  9, 20, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate5Games =
+    [
+        (5, 401700041, "OSU",  "MICH", -4.0,  4.0, 48.5, 31, 27, new DateTimeOffset(2025,  9, 27, 17,  0, 0, TimeSpan.Zero)),
+        (5, 401700042, "UGA",  "MISS", -7.5,  7.5, 58.5, 38, 28, new DateTimeOffset(2025,  9, 27, 17,  0, 0, TimeSpan.Zero)),
+        (5, 401700043, "ALA",  "TAMU", -5.5,  5.5, 55.0, 31, 24, new DateTimeOffset(2025,  9, 27, 20,  0, 0, TimeSpan.Zero)),
+        (5, 401700044, "LSU",  "ND",   -2.5,  2.5, 56.5, 28, 21, new DateTimeOffset(2025,  9, 27, 20,  0, 0, TimeSpan.Zero)),
+        (5, 401700045, "ORE",  "UTAH", -7.0,  7.0, 57.5, 35, 21, new DateTimeOffset(2025,  9, 27, 22, 30, 0, TimeSpan.Zero)),
+        (5, 401700046, "CLEM", "GT",  -14.5, 14.5, 49.5, 35, 17, new DateTimeOffset(2025,  9, 27, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate6Games =
+    [
+        (6, 401700051, "MICH", "MIN",  -7.5,  7.5, 48.5, 24, 14, new DateTimeOffset(2025, 10,  4, 17,  0, 0, TimeSpan.Zero)),
+        (6, 401700052, "OSU",  "ORE",  -2.5,  2.5, 58.5, 35, 28, new DateTimeOffset(2025, 10,  4, 17,  0, 0, TimeSpan.Zero)),
+        (6, 401700053, "ALA",  "CLEM", -6.5,  6.5, 54.0, 28, 21, new DateTimeOffset(2025, 10,  4, 20,  0, 0, TimeSpan.Zero)),
+        (6, 401700054, "UGA",  "LSU",  -3.5,  3.5, 55.5, 27, 24, new DateTimeOffset(2025, 10,  4, 20,  0, 0, TimeSpan.Zero)),
+        (6, 401700055, "ND",   "FSU",  -7.5,  7.5, 52.0, 31, 21, new DateTimeOffset(2025, 10,  4, 22, 30, 0, TimeSpan.Zero)),
+        (6, 401700056, "TAMU", "MISS", -2.5,  2.5, 58.5, 35, 31, new DateTimeOffset(2025, 10,  4, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate7Games =
+    [
+        (7, 401700061, "MICH", "NEB",  -10.5, 10.5, 52.5, 34, 17, new DateTimeOffset(2025, 10, 11, 17,  0, 0, TimeSpan.Zero)),
+        (7, 401700062, "OSU",  "TENN",  -6.0,  6.0, 56.5, 35, 24, new DateTimeOffset(2025, 10, 11, 17,  0, 0, TimeSpan.Zero)),
+        (7, 401700063, "UGA",  "CLEM",  -7.5,  7.5, 50.5, 31, 21, new DateTimeOffset(2025, 10, 11, 20,  0, 0, TimeSpan.Zero)),
+        (7, 401700064, "ALA",  "ORE",   -3.5,  3.5, 57.5, 28, 24, new DateTimeOffset(2025, 10, 11, 20,  0, 0, TimeSpan.Zero)),
+        (7, 401700065, "ND",   "SC",    -8.5,  8.5, 52.5, 31, 17, new DateTimeOffset(2025, 10, 11, 22, 30, 0, TimeSpan.Zero)),
+        (7, 401700066, "LSU",  "TAMU",  -3.0,  3.0, 52.5, 24, 21, new DateTimeOffset(2025, 10, 11, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
     // 2025 CFB Week 8 Top 25 matchups (real games, all final)
     private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Week8Games =
     [
-        (8, 401700101, "MICH",  "PSU",   -3.5,  3.5, 44.5, 27, 13, new DateTimeOffset(2025, 10, 11, 20, 0, 0, TimeSpan.Zero)),
-        (8, 401700102, "ALA",   "TENN",  -7.0,  7.0, 51.5, 24, 17, new DateTimeOffset(2025, 10, 11, 20, 0, 0, TimeSpan.Zero)),
+        (8, 401700101, "MICH",  "PSU",   -3.5,  3.5, 44.5, 27, 13, new DateTimeOffset(2025, 10, 11, 20,  0, 0, TimeSpan.Zero)),
+        (8, 401700102, "ALA",   "TENN",  -7.0,  7.0, 51.5, 24, 17, new DateTimeOffset(2025, 10, 11, 20,  0, 0, TimeSpan.Zero)),
         (8, 401700103, "OSU",   "ORE",   -2.5,  2.5, 56.0, 32, 31, new DateTimeOffset(2025, 10, 11, 23, 30, 0, TimeSpan.Zero)),
         (8, 401700104, "UGA",   "MIA",   -6.5,  6.5, 53.0, 31, 14, new DateTimeOffset(2025, 10, 11, 23, 30, 0, TimeSpan.Zero)),
-        (8, 401700105, "LSU",   "TAMU",  -3.0,  3.0, 48.5, 21, 17, new DateTimeOffset(2025, 10, 11, 20, 0, 0, TimeSpan.Zero)),
+        (8, 401700105, "LSU",   "TAMU",  -3.0,  3.0, 48.5, 21, 17, new DateTimeOffset(2025, 10, 11, 20,  0, 0, TimeSpan.Zero)),
         (8, 401700106, "CLEM",  "FSU",   -7.5,  7.5, 46.5, 35, 14, new DateTimeOffset(2025, 10, 11, 17, 30, 0, TimeSpan.Zero)),
+    ];
+
+    // Regular season weeks 9-14
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate9Games =
+    [
+        (9, 401700111, "MICH", "WIS",   -7.5,  7.5, 50.5, 28, 14, new DateTimeOffset(2025, 10, 18, 17,  0, 0, TimeSpan.Zero)),
+        (9, 401700112, "OSU",  "ALA",   -3.5,  3.5, 58.5, 31, 24, new DateTimeOffset(2025, 10, 18, 17,  0, 0, TimeSpan.Zero)),
+        (9, 401700113, "UGA",  "TAMU",  -9.5,  9.5, 54.0, 35, 21, new DateTimeOffset(2025, 10, 18, 20,  0, 0, TimeSpan.Zero)),
+        (9, 401700114, "ND",   "MISS",  -4.5,  4.5, 56.5, 28, 21, new DateTimeOffset(2025, 10, 18, 20,  0, 0, TimeSpan.Zero)),
+        (9, 401700115, "ORE",  "CLEM",  -3.0,  3.0, 54.5, 24, 21, new DateTimeOffset(2025, 10, 18, 22, 30, 0, TimeSpan.Zero)),
+        (9, 401700116, "LSU",  "FSU",   -6.5,  6.5, 55.0, 34, 21, new DateTimeOffset(2025, 10, 18, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate10Games =
+    [
+        (10, 401700121, "MICH", "IOWA", -14.5, 14.5, 52.0, 38, 17, new DateTimeOffset(2025, 10, 25, 17,  0, 0, TimeSpan.Zero)),
+        (10, 401700122, "OSU",  "ILL",  -21.5, 21.5, 58.5, 52, 14, new DateTimeOffset(2025, 10, 25, 17,  0, 0, TimeSpan.Zero)),
+        (10, 401700123, "UGA",  "ND",    -7.5,  7.5, 54.5, 28, 21, new DateTimeOffset(2025, 10, 25, 20,  0, 0, TimeSpan.Zero)),
+        (10, 401700124, "ALA",  "MISS",  -3.0,  3.0, 58.5, 35, 28, new DateTimeOffset(2025, 10, 25, 20,  0, 0, TimeSpan.Zero)),
+        (10, 401700125, "ORE",  "UTAH",  -9.5,  9.5, 57.5, 38, 24, new DateTimeOffset(2025, 10, 25, 22, 30, 0, TimeSpan.Zero)),
+        (10, 401700126, "TAMU", "CLEM",  -2.5,  2.5, 54.0, 28, 24, new DateTimeOffset(2025, 10, 25, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate11Games =
+    [
+        (11, 401700131, "MICH", "OSU",    4.5, -4.5, 51.5, 24, 31, new DateTimeOffset(2025, 11,  1, 17,  0, 0, TimeSpan.Zero)),
+        (11, 401700132, "ALA",  "LSU",   -3.0,  3.0, 58.5, 31, 24, new DateTimeOffset(2025, 11,  1, 17,  0, 0, TimeSpan.Zero)),
+        (11, 401700133, "UGA",  "MISS", -10.5, 10.5, 59.5, 38, 17, new DateTimeOffset(2025, 11,  1, 20,  0, 0, TimeSpan.Zero)),
+        (11, 401700134, "ND",   "CLEM",  -6.5,  6.5, 52.5, 28, 20, new DateTimeOffset(2025, 11,  1, 20,  0, 0, TimeSpan.Zero)),
+        (11, 401700135, "ORE",  "TAMU",  -5.5,  5.5, 58.5, 35, 28, new DateTimeOffset(2025, 11,  1, 22, 30, 0, TimeSpan.Zero)),
+        (11, 401700136, "IU",   "NEB",   -7.5,  7.5, 54.5, 31, 21, new DateTimeOffset(2025, 11,  1, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate12Games =
+    [
+        (12, 401700141, "OSU",  "MICH", -3.5,  3.5, 53.5, 28, 24, new DateTimeOffset(2025, 11,  8, 17,  0, 0, TimeSpan.Zero)),
+        (12, 401700142, "ALA",  "SC",  -11.5, 11.5, 52.5, 35, 17, new DateTimeOffset(2025, 11,  8, 17,  0, 0, TimeSpan.Zero)),
+        (12, 401700143, "UGA",  "TENN", -8.5,  8.5, 54.0, 31, 17, new DateTimeOffset(2025, 11,  8, 20,  0, 0, TimeSpan.Zero)),
+        (12, 401700144, "ND",   "PITT", -9.5,  9.5, 52.0, 35, 21, new DateTimeOffset(2025, 11,  8, 20,  0, 0, TimeSpan.Zero)),
+        (12, 401700145, "ORE",  "UCLA", -9.0,  9.0, 56.5, 38, 24, new DateTimeOffset(2025, 11,  8, 22, 30, 0, TimeSpan.Zero)),
+        (12, 401700146, "IU",   "PU",   -5.5,  5.5, 53.5, 28, 21, new DateTimeOffset(2025, 11,  8, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate13Games =
+    [
+        (13, 401700151, "OSU",  "UGA",  -2.5,  2.5, 54.5, 31, 28, new DateTimeOffset(2025, 11, 15, 17,  0, 0, TimeSpan.Zero)),
+        (13, 401700152, "ALA",  "TAMU", -5.5,  5.5, 57.5, 35, 24, new DateTimeOffset(2025, 11, 15, 17,  0, 0, TimeSpan.Zero)),
+        (13, 401700153, "ND",   "MICH", -3.5,  3.5, 52.5, 28, 21, new DateTimeOffset(2025, 11, 15, 20,  0, 0, TimeSpan.Zero)),
+        (13, 401700154, "ORE",  "IU",   -7.5,  7.5, 57.0, 35, 28, new DateTimeOffset(2025, 11, 15, 20,  0, 0, TimeSpan.Zero)),
+        (13, 401700155, "CLEM", "SC",   -3.5,  3.5, 50.5, 24, 17, new DateTimeOffset(2025, 11, 15, 22, 30, 0, TimeSpan.Zero)),
+        (13, 401700156, "LSU",  "MISS", -3.0,  3.0, 62.0, 35, 28, new DateTimeOffset(2025, 11, 15, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate14Games =
+    [
+        (14, 401700161, "OSU",  "MICH", -5.5,  5.5, 52.5, 34, 28, new DateTimeOffset(2025, 11, 22, 17,  0, 0, TimeSpan.Zero)),
+        (14, 401700162, "ALA",  "AUB",  -6.5,  6.5, 54.0, 24, 17, new DateTimeOffset(2025, 11, 22, 17,  0, 0, TimeSpan.Zero)),
+        (14, 401700163, "UGA",  "GT",  -17.5, 17.5, 57.0, 38, 14, new DateTimeOffset(2025, 11, 22, 20,  0, 0, TimeSpan.Zero)),
+        (14, 401700164, "ND",   "SC",   -8.0,  8.0, 52.5, 28, 17, new DateTimeOffset(2025, 11, 22, 20,  0, 0, TimeSpan.Zero)),
+        (14, 401700165, "ORE",  "WASH", -8.5,  8.5, 57.5, 35, 21, new DateTimeOffset(2025, 11, 22, 22, 30, 0, TimeSpan.Zero)),
+        (14, 401700166, "IU",   "MIN",  -7.5,  7.5, 55.5, 31, 21, new DateTimeOffset(2025, 11, 22, 22, 30, 0, TimeSpan.Zero)),
+    ];
+
+    // Conference Championships (slate 15)
+    private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate15Games =
+    [
+        (15, 401700201, "OSU",  "IU",   -6.5,  6.5, 56.5, 34, 31, new DateTimeOffset(2025, 12,  6, 17,  0, 0, TimeSpan.Zero)),
+        (15, 401700202, "ALA",  "UGA",  -3.5,  3.5, 54.5, 24, 17, new DateTimeOffset(2025, 12,  6, 20,  0, 0, TimeSpan.Zero)),
+        (15, 401700203, "ND",   "CLEM", -5.5,  5.5, 51.5, 28, 21, new DateTimeOffset(2025, 12,  6, 22, 30, 0, TimeSpan.Zero)),
+        (15, 401700204, "ORE",  "BOIS", -9.5,  9.5, 54.0, 35, 21, new DateTimeOffset(2025, 12,  6, 20,  0, 0, TimeSpan.Zero)),
+        (15, 401700205, "KSU",  "OU",   -3.0,  3.0, 51.0, 24, 17, new DateTimeOffset(2025, 12,  6, 16,  0, 0, TimeSpan.Zero)),
+        (15, 401700206, "MISS", "TAMU", -2.5,  2.5, 56.5, 28, 24, new DateTimeOffset(2025, 12,  7, 17,  0, 0, TimeSpan.Zero)),
     ];
 
     // 2025 CFP matchups (real bracket, all final as of Jan 2026)
@@ -527,7 +825,23 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         if (await db.CfbSpreads.AnyAsync(s => slates.Select(sl => sl.Id).Contains(s.CfbSlateId)))
             return;
 
-        var allGames = Week8Games.Concat(CfpGames);
+        var allGames = Slate1Games
+            .Concat(Slate2Games)
+            .Concat(Slate3Games)
+            .Concat(Slate4Games)
+            .Concat(Slate5Games)
+            .Concat(Slate6Games)
+            .Concat(Slate7Games)
+            .Concat(Week8Games)
+            .Concat(Slate9Games)
+            .Concat(Slate10Games)
+            .Concat(Slate11Games)
+            .Concat(Slate12Games)
+            .Concat(Slate13Games)
+            .Concat(Slate14Games)
+            .Concat(Slate15Games)
+            .Concat(CfpGames);
+
         var spreads = allGames.Select(g => new CfbSpreads
         {
             CfbSlateId     = slates.First(s => s.SlateNumber == g.SlateIdx).Id,
@@ -542,7 +856,7 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
 
         db.CfbSpreads.AddRange(spreads);
         await db.SaveChangesAsync();
-        Log.Information("DemoDataSeeder: seeded {Count} CFB spreads (week 8 + CFP)", spreads.Count);
+        Log.Information("DemoDataSeeder: seeded {Count} CFB spreads (all slates)", spreads.Count);
     }
 
     private async Task SeedCfbScoresAsync(List<CfbSlates> slates)
@@ -550,7 +864,23 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         if (await db.CfbScores.AnyAsync(s => slates.Select(sl => sl.Id).Contains(s.CfbSlateId)))
             return;
 
-        var allGames = Week8Games.Concat(CfpGames);
+        var allGames = Slate1Games
+            .Concat(Slate2Games)
+            .Concat(Slate3Games)
+            .Concat(Slate4Games)
+            .Concat(Slate5Games)
+            .Concat(Slate6Games)
+            .Concat(Slate7Games)
+            .Concat(Week8Games)
+            .Concat(Slate9Games)
+            .Concat(Slate10Games)
+            .Concat(Slate11Games)
+            .Concat(Slate12Games)
+            .Concat(Slate13Games)
+            .Concat(Slate14Games)
+            .Concat(Slate15Games)
+            .Concat(CfpGames);
+
         var scores = allGames.Select(g => new CfbScores
         {
             CfbSlateId    = slates.First(s => s.SlateNumber == g.SlateIdx).Id,
@@ -565,8 +895,23 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
 
         db.CfbScores.AddRange(scores);
         await db.SaveChangesAsync();
-        Log.Information("DemoDataSeeder: seeded {Count} CFB scores (week 8 + CFP, all final)", scores.Count);
+        Log.Information("DemoDataSeeder: seeded {Count} CFB scores (all slates, all final)", scores.Count);
     }
+
+    // CFB pick patterns — true = home team, false = away team
+    // Alice: always home (favorites)
+    // Bob: always away (underdogs)
+    // Carlos: home for games 1,3,5 and away for 2,4,6
+    // Dana: away for games 1,3,5 and home for 2,4,6
+    // Eve: home for games 1,2,4 and away for 3,5,6
+    private static readonly Dictionary<string, bool[]> CfbRegularSeasonPickPattern = new()
+    {
+        ["Alice"]  = [true,  true,  true,  true,  true,  true],
+        ["Bob"]    = [false, false, false, false, false, false],
+        ["Carlos"] = [true,  false, true,  false, true,  false],
+        ["Dana"]   = [false, true,  false, true,  false, true],
+        ["Eve"]    = [true,  true,  false, true,  false, false],
+    };
 
     // Who picks which home team (true) or away team (false) per game index, per slate
     // Week 8 games: MICH/PSU, ALA/TENN, OSU/ORE, UGA/MIA, LSU/TAMU, CLEM/FSU
@@ -612,8 +957,11 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
     private async Task SeedCfbPicksAsync(LeagueInfo? league, List<CfbSlates> slates)
     {
         if (league == null) return;
-        // 5 users × 13 picks each (6 W8 + 4 QF + 2 SF + 1 Championship) = 65
-        const int ExpectedPickCount = 65;
+        // 5 users × 101 picks each:
+        // Slates 1-7: 7×6=42, Slate 8: 6, Slates 9-14: 6×6=36, Slate 15: 6
+        // Slate 16 (FR): 4, Slate 17 (QF): 4, Slate 18 (SF): 2, Slate 19 (Champ): 1
+        // Total per user: 42+6+36+6+4+4+2+1 = 101 → 5×101 = 505
+        const int ExpectedPickCount = 505;
         if (await db.CfbPicks.CountAsync(p => p.LeagueId == league.Id) >= ExpectedPickCount) return;
         // Clear any partial seed before re-seeding
         db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => p.LeagueId == league.Id));
@@ -624,15 +972,84 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         void AddPick(int leagueId, string userId, int slateId, int eventId, string team) =>
             picks.Add(new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, EspnEventId = eventId, Team = team, PickType = "Spread", Season = CfbDemoSeason });
 
+        // Helper to get games for a given slate number from a static array
+        static IEnumerable<(int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)>
+            GamesForSlate(
+                (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] arr,
+                int slateNum) =>
+            arr.Where(g => g.SlateIdx == slateNum);
+
         foreach (var (username, _) in DemoUsers)
         {
             var user = await userManager.FindByNameAsync(username);
             if (user == null) continue;
 
-            // Week 8
+            // Regular season slates 1-7 (use CfbRegularSeasonPickPattern)
+            if (CfbRegularSeasonPickPattern.TryGetValue(username, out var rsPattern))
+            {
+                var regularSlates = new (int SlateNum, (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[])[]
+                {
+                    (1, Slate1Games), (2, Slate2Games), (3, Slate3Games), (4, Slate4Games),
+                    (5, Slate5Games), (6, Slate6Games), (7, Slate7Games),
+                };
+                foreach (var (slateNum, gamesArr) in regularSlates)
+                {
+                    if (slates.FirstOrDefault(s => s.SlateNumber == slateNum) is not { } slate) continue;
+                    var gamesForSlate = gamesArr; // all 6 games for this slate
+                    for (int i = 0; i < gamesForSlate.Length; i++)
+                    {
+                        var g = gamesForSlate[i];
+                        var pickHome = i < rsPattern.Length && rsPattern[i];
+                        AddPick(league.Id, user.Id, slate.Id, g.EventId, pickHome ? g.Home : g.Away);
+                    }
+                }
+            }
+
+            // Week 8 (use CfbWeek8Picks)
             if (CfbWeek8Picks.TryGetValue(username, out var w8) && slates.FirstOrDefault(s => s.SlateNumber == 8) is { } slate8)
                 for (int i = 0; i < Week8Games.Length; i++)
                     AddPick(league.Id, user.Id, slate8.Id, Week8Games[i].EventId, w8[i] ? Week8Games[i].Home : Week8Games[i].Away);
+
+            // Regular season slates 9-14 (use CfbRegularSeasonPickPattern)
+            if (CfbRegularSeasonPickPattern.TryGetValue(username, out var rsPattern2))
+            {
+                var regularSlates9to14 = new (int SlateNum, (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[])[]
+                {
+                    (9, Slate9Games), (10, Slate10Games), (11, Slate11Games),
+                    (12, Slate12Games), (13, Slate13Games), (14, Slate14Games),
+                };
+                foreach (var (slateNum, gamesArr) in regularSlates9to14)
+                {
+                    if (slates.FirstOrDefault(s => s.SlateNumber == slateNum) is not { } slate) continue;
+                    for (int i = 0; i < gamesArr.Length; i++)
+                    {
+                        var g = gamesArr[i];
+                        var pickHome = i < rsPattern2.Length && rsPattern2[i];
+                        AddPick(league.Id, user.Id, slate.Id, g.EventId, pickHome ? g.Home : g.Away);
+                    }
+                }
+            }
+
+            // Slate 15: Conference Championships (use CfbRegularSeasonPickPattern)
+            if (CfbRegularSeasonPickPattern.TryGetValue(username, out var confPattern) && slates.FirstOrDefault(s => s.SlateNumber == 15) is { } slate15)
+                for (int i = 0; i < Slate15Games.Length; i++)
+                {
+                    var g = Slate15Games[i];
+                    var pickHome = i < confPattern.Length && confPattern[i];
+                    AddPick(league.Id, user.Id, slate15.Id, g.EventId, pickHome ? g.Home : g.Away);
+                }
+
+            // CFP First Round (slate 16) — use regular season pattern
+            if (CfbRegularSeasonPickPattern.TryGetValue(username, out var fr16Pattern) && slates.FirstOrDefault(s => s.SlateNumber == 16) is { } slate16)
+            {
+                var fr16Games = CfpGames.Where(g => g.SlateIdx == 16).ToArray();
+                for (int i = 0; i < fr16Games.Length; i++)
+                {
+                    var g = fr16Games[i];
+                    var pickHome = i < fr16Pattern.Length && fr16Pattern[i];
+                    AddPick(league.Id, user.Id, slate16.Id, g.EventId, pickHome ? g.Home : g.Away);
+                }
+            }
 
             // CFP Quarterfinals (slate 17)
             if (CfbQfPicks.TryGetValue(username, out var qf) && slates.FirstOrDefault(s => s.SlateNumber == 17) is { } slateQf)
