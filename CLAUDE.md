@@ -164,10 +164,10 @@ Uses `page.route()` to intercept all `/api/*` calls. `mockAuth()` in `e2e/helper
 Runs against a live `DEMO_MODE=true` backend at `localhost:5174` (NFL) and `cfb.localhost:5174` (CFB). Uses storage-state auth: `setup.nfl.ts` / `setup.cfb.ts` log in as Alice once and save cookies to `e2e/demo/.auth/`. Test projects (`demo-nfl`, `demo-cfb`) depend on the setup projects. Run with `npm run test:e2e:demo`.
 
 **Demo seed data** (deterministic, idempotent):
-- NFL: 2023 Week 8, 16 games (frozen `sample_espn_nfl.json`), 16 spreads, "Demo League"
-- CFB: 2025 season, 19 slates (Week 1–14 + 5 CFP rounds), "CFB Demo League"
+- NFL: 2025 season, all 18 regular season weeks + Wild Card/Divisional/Conference/Super Bowl (weeks 19-22). Week 18 games from frozen `sample_espn_nfl.json`. All historical weeks have spreads + scores + picks.
+- CFB: 2025 season, all 19 slates (Week 1–14 + Conf. Championships + 4 CFP rounds), "CFB Demo League". All slates have spreads, scores, and picks.
 - Users: Alice, Bob, Carlos, Dana, Eve (password: `DemoPass@123`) + admin
-- Alice's NFL picks: BUF, DAL, MIN, MIA; Alice's CFP Championship pick: IU
+- Alice's NFL Week 18 picks: BUF, DAL, MIN, MIA; Alice's CFP Championship pick: IU
 
 ---
 

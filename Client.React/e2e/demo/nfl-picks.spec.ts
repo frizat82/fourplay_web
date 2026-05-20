@@ -2,7 +2,7 @@
  * NFL Picks page — demo backend integration tests.
  * Runs against a live DEMO_MODE=true backend at localhost:5174.
  *
- * Alice's Week 8 (2023) picks: BUF, DAL, MIN, MIA (all Spread).
+ * Alice's Week 18 (2025) picks: BUF, DAL, MIN, MIA (all Spread).
  */
 import { test, expect } from '@playwright/test';
 import { waitForSpinner } from '../helpers/demoAuth';
