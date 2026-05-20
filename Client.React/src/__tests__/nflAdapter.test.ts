@@ -35,8 +35,8 @@ describe('nflAdapter', () => {
       vi.mocked(doOddsExist).mockResolvedValue(true);
       vi.mocked(getUserPicks).mockResolvedValue([]);
       vi.mocked(spreadBatch).mockResolvedValue({ responses: {
-        KC: createSpreadResponse(true, '-3'),
-        BUF: createSpreadResponse(false, '+3'),
+        KC: createSpreadResponse('KC', -3),
+        BUF: createSpreadResponse('BUF', 3),
       }});
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -70,7 +70,7 @@ describe('nflAdapter', () => {
 
     it('maps userPicks to PickView[] with gameId matching game.id', async () => {
       const scores = makeScores('KC', 'BUF');
-      const gameId = scores.events[0].competitions[0].id;
+      const gameId = scores.events![0].competitions[0].id;
       vi.mocked(loadScoresWithRetry).mockResolvedValue(scores);
       vi.mocked(doOddsExist).mockResolvedValue(true);
       vi.mocked(getUserPicks).mockResolvedValue([{
@@ -95,7 +95,7 @@ describe('nflAdapter', () => {
       expect(adapter.supportsJerseys).toBe(true);
     });
     it('currentSeasonYear returns a number', async () => {
-      vi.mocked(loadScoresWithRetry).mockResolvedValue(createScores([createCompetition({ homeTeam: 'KC', awayTeam: 'BUF' })]));
+      vi.mocked(loadScoresWithRetry).mockResolvedValue(makeScores('KC', 'BUF'));
       const year = await adapter.currentSeasonYear();
       expect(typeof year).toBe('number');
     });

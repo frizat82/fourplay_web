@@ -15,7 +15,7 @@ const defaultProps = {
   maxRegularSeasonWeek: 18,
 };
 
-function setup(overrides?: Partial<typeof defaultProps>) {
+function setup(overrides?: Partial<typeof defaultProps> & Record<string, unknown>) {
   const props = { ...defaultProps, ...overrides };
   const user = userEvent.setup();
   const result = render(<WeekYearSelector {...props} />);

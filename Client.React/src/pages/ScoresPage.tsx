@@ -112,7 +112,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     if (adapter.pollIntervalMs <= 0) return;
     const interval = setInterval(() => void reload(), data?.hasActiveGames ? adapter.pollIntervalMs : adapter.pollIntervalMs * 4);
     return () => clearInterval(interval);
-  }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded, data?.hasActiveGames]);
+  }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded, data?.hasActiveGames, adapter.pollIntervalMs]);
 
   const handleWeekChange = (week: number, meta?: { isPostSeason?: boolean }) => {
     const isPostSeason = meta?.isPostSeason ?? data?.isPostSeason ?? false;
@@ -170,6 +170,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   );
   if (!currentLeague) return <NoLeague />;
   if (!data?.hasOdds && isCurrentWeek) return <SpreadRelease />;
+  if (!data) return null;
 
   const games = showOnlyMyPicks
     ? (data.games ?? []).filter(g => didUserPick(g.id, g.homeTeam) || didUserPick(g.id, g.awayTeam))

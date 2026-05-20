@@ -124,7 +124,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     if (adapter.pollIntervalMs <= 0) return;
     const interval = setInterval(() => void reload(), adapter.pollIntervalMs);
     return () => clearInterval(interval);
-  }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded]);
+  }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded, adapter.pollIntervalMs]);
 
   const handleWeekChange = (newWeek: number, meta?: { isPostSeason?: boolean }) => {
     const ps = meta?.isPostSeason ?? isPostSeason;
