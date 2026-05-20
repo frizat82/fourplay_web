@@ -18,7 +18,7 @@ export interface GameView {
   // Scores page extras
   homeLogo?: string;
   awayLogo?: string;
-  situation?: string | null;
+  situation?: import('../types/liveGame').GameSituation | null;
   homeCovers?: boolean | null;  // null = not final / no odds
   overWins?: boolean | null;
 }
