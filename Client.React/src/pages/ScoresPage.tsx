@@ -328,7 +328,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                     {/* Postseason O/U row */}
                     {isPostSeason && game.overUnder != null && (
                       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2.5, px: 1, gap: 1 }}>
-                        <Badge color={didUserPick(game.id, game.homeTeam, 'Over') ? 'info' : badgeColor(game, game.homeTeam, 'Over')} overlap="circular"
+                        <Badge data-testid={`badge-${game.homeTeam}-over`} color={didUserPick(game.id, game.homeTeam, 'Over') ? 'info' : badgeColor(game, game.homeTeam, 'Over')} overlap="circular"
                           badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Over')}
                           invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Over') === 0}>
                           <IconButton size="small"
@@ -340,7 +340,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <ArrowCircleUpIcon sx={{ color: isFinal ? (ov ? 'success.main' : 'error.main') : 'text.secondary', flexShrink: 0 }} />
                         <Typography variant="subtitle1" sx={{ minWidth: 36, textAlign: 'center' }}>{game.overUnder}</Typography>
                         <ArrowCircleDownIcon sx={{ color: isFinal ? (!ov ? 'success.main' : 'error.main') : 'text.secondary', flexShrink: 0 }} />
-                        <Badge color={didUserPick(game.id, game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
+                        <Badge data-testid={`badge-${game.homeTeam}-under`} color={didUserPick(game.id, game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
                           badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Under')}
                           invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}>
                           <IconButton size="small"
