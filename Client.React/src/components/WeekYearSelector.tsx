@@ -52,7 +52,8 @@ export default function WeekYearSelector({
   useEffect(() => {
     if (currentOptions.length === 0) return;
     if (currentOptions.includes(week)) return;
-    onWeekChange(currentOptions[0], { isPostSeason });
+    // Default to the LAST available week (most recent data), not the first
+    onWeekChange(currentOptions[currentOptions.length - 1], { isPostSeason });
   }, [currentOptions, isPostSeason, onWeekChange, week]);
 
   const currentIndex = Math.max(0, currentOptions.indexOf(clampedWeek));
