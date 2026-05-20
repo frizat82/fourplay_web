@@ -52,14 +52,21 @@ export default function SpreadRelease() {
 
   if (loading) return null;
 
-  if (!nextSpreadJob) {
+  // Only show a countdown if the release is in the future AND within 7 days.
+  // If the week is already past (or release is far off), just say no spreads.
+  const MS_7_DAYS = 7 * 24 * 60 * 60 * 1000;
+  const showCountdown = targetDate
+    && targetDate.getTime() > Date.now()
+    && (targetDate.getTime() - Date.now()) < MS_7_DAYS;
+
+  if (!showCountdown) {
     return (
       <Box sx={{ textAlign: 'center', py: 4 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
-          Odds Not Posted Yet
+          Odds Not Posted
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Check back soon for the next spread release.
+          No spreads available for this week.
         </Typography>
       </Box>
     );

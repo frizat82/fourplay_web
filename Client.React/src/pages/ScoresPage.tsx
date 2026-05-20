@@ -77,7 +77,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     setLoading(true);
     try {
       const result = await adapter.loadCurrentScores(currentLeague, user.userId);
-      setData(result);
+      const fp = (d: typeof result) => d.games.map(g => `${g.id}:${g.homeScore}:${g.awayScore}:${g.gameStatus}`).join('|');
+      setData(prev => prev && fp(prev) === fp(result) ? prev : result);
       setIsCurrentWeek(true);
       setMaxWeek(result.maxWeek);
       setMaxSeason(result.maxSeason);
