@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   AppBar,
   Box,
+  Button,
   Collapse,
   Divider,
   Drawer,
@@ -38,6 +39,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import MailIcon from '@mui/icons-material/Mail';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
+import { useSportContext } from '../services/sport';
 import { useThemeMode } from '../services/theme';
 import { isAdmin } from '../utils/auth';
 
@@ -60,10 +62,18 @@ export default function AppLayout() {
   const [open, setOpen] = useState(!isMobile);
   const [adminOpen, setAdminOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const { availableLeagues, currentLeague, selectLeague } = useSession();
+  const { availableLeagues, currentLeague, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded } = useSession();
+  const { isCfb } = useSportContext();
   const { user } = useAuth();
   const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
+
+  const getOtherSportUrl = () => {
+    const { hostname, port, protocol } = window.location;
+    const portSuffix = port ? `:${port}` : '';
+    const otherHost = hostname.startsWith('cfb.') ? hostname.slice(4) : `cfb.${hostname}`;
+    return `${protocol}//${otherHost}${portSuffix}`;
+  };
 
   const handleNavClick = (to: string) => {
     if (isMobile) setOpen(false);
@@ -76,6 +86,31 @@ export default function AppLayout() {
   }, [availableLeagues, currentLeague]);
 
   const showAdmin = isAdmin(user);
+
+  const hasCurrent = isCfb ? hasCfbAccess : hasNflAccess;
+  const hasOther = isCfb ? hasNflAccess : hasCfbAccess;
+  const noAccessContent = leaguesLoaded && currentLeague === null && !hasCurrent ? (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', textAlign: 'center', p: 4 }}>
+      <Typography variant="h5" fontWeight={700} gutterBottom>
+        No {isCfb ? 'CFB' : 'NFL'} access
+      </Typography>
+      {hasOther ? (
+        <>
+          <Typography color="text.secondary" sx={{ mb: 2 }}>
+            Your account has {isCfb ? 'NFL' : 'CFB'} leagues but not {isCfb ? 'CFB' : 'NFL'}.
+          </Typography>
+          <Button variant="contained" href={getOtherSportUrl()}>
+            Go to {isCfb ? 'NFL' : 'CFB'} site
+          </Button>
+        </>
+      ) : (
+        <Typography color="text.secondary">
+          You haven&apos;t been invited to any {isCfb ? 'college football' : 'NFL'} leagues yet.
+          Ask your commissioner for an invite link.
+        </Typography>
+      )}
+    </Box>
+  ) : null;
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -311,7 +346,7 @@ export default function AppLayout() {
       >
         <Toolbar />
         <Box className="page-shell" sx={{ flex: 1 }}>
-          <Outlet />
+          {noAccessContent ?? <Outlet />}
         </Box>
       </Box>
     </Box>

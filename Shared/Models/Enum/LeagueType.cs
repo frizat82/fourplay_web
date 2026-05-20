@@ -2,5 +2,5 @@
 
 public enum LeagueType {
     Nfl = 0,
-    Ncaa = 1
+    Cfb = 1
 }
