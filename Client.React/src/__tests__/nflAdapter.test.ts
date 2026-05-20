@@ -15,7 +15,7 @@ vi.mock('../api/league', () => ({
 }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 
-import { loadScoresWithRetry, getWeekScores } from '../api/espn';
+import { loadScoresWithRetry } from '../api/espn';
 import { getUserPicks, doOddsExist, spreadBatch } from '../api/league';
 import { createSpreadResponse } from '../test/fixtures';
 
