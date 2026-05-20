@@ -224,9 +224,11 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
             <UserPicksMatrix
               users={users}
               picks={(data.allPicks ?? []).map(p => ({
-                team: p.team, pick: p.pickType, userName: p.userName,
+                id: 0, leagueId: 0, userId: p.userId, userName: p.userName,
+                team: p.team, pick: p.pickType as 'Spread' | 'Over' | 'Under',
+                nflWeek: data.week, season: data.season, dateCreated: '',
               }))}
-              spreads={matrixSpreads}
+              spreads={matrixSpreads as Record<string, import('../types/picks').SpreadCalculationResponse>}
               requiredPicks={data?.requiredPicks ?? 4}
             />
           </Grid>
@@ -266,9 +268,9 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                       <TeamHelmet abbr={game.homeTeam} size={50} flipped />
                     </Stack>
 
-                    {/* Field position (NFL only) */}
-                    {game.situation != null && (
-                      <FieldPosition situation={isLive && game.situation ? { downDistanceText: game.situation, shortDownDistanceText: game.situation, possessionText: '', homeTimeouts: 3, awayTimeouts: 3, isRedZone: false, possession: '' } : null} />
+                    {/* Field position (NFL only — situation is a full GameSituation object) */}
+                    {isLive && game.situation != null && (
+                      <FieldPosition situation={game.situation} />
                     )}
 
                     {/* Away team pick row */}

@@ -65,7 +65,7 @@ function cfbPickToPickView(pick: CfbPickDto): PickView {
   };
 }
 
-async function loadSlate(leagueId: number, userId: string, slateId: number): Promise<{ games: GameView[]; userPicks: PickView[] }> {
+async function loadSlate(leagueId: number, _userId: string, slateId: number): Promise<{ games: GameView[]; userPicks: PickView[] }> {
   const [spreads, scores, picks] = await Promise.all([
     getCfbSpreads(slateId),
     getCfbScores(slateId),
@@ -121,7 +121,7 @@ export function createCfbAdapter(): SportAdapter {
       const slates = await getSlates();
       const active = findActiveSlate(slates);
       if (!active) {
-        return { season: CFB_SEASON, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0 };
+        return { season: CFB_SEASON, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_SEASON };
       }
       const weekState = slateToWeekState(active);
       const { games, userPicks } = await loadSlate(leagueId, userId, active.id);
