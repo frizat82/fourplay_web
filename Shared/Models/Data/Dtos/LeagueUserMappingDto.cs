@@ -1,4 +1,5 @@
 using System;
+using FourPlayWebApp.Shared.Models.Enum;
 
 namespace FourPlayWebApp.Shared.Models.Data.Dtos
 {
@@ -10,6 +11,7 @@ namespace FourPlayWebApp.Shared.Models.Data.Dtos
         public string UserId { get; set; } = string.Empty;
         public string? UserName { get; set; } = string.Empty;
         public string? LeagueName { get; set; } = string.Empty;
+        public LeagueType LeagueType { get; set; } = LeagueType.Nfl;
         public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
 
         // IEquatable implementation

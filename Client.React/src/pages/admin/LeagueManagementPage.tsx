@@ -138,6 +138,7 @@ export default function AdminLeagueManagementPage() {
       leagueOwnerUserId: user?.userId ?? '',
       userName: selectedUser.userName ?? '',
       leagueName: selectedLeague.leagueName,
+      leagueType: 0,
       dateCreated: new Date().toISOString(),
     });
     toast.push('User Added To League', 'success');
@@ -156,6 +157,7 @@ export default function AdminLeagueManagementPage() {
         userId: user.userId,
         userName: user.name ?? '',
         leagueOwnerUserId: user.userId,
+        leagueType: 0,
         dateCreated: new Date().toISOString(),
       });
     }

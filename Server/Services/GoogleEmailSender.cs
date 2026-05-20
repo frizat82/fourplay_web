@@ -26,7 +26,7 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
 
         try {
             using var message = new MailMessage {
-                From = new MailAddress(_userName, "FourPlay"),
+                From = new MailAddress(_userName, "IV League"),
                 Subject = subject,
                 Body = htmlBody,
                 IsBodyHtml = true
@@ -61,7 +61,7 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
                       <p>If you didn\u2019t create an account, you can safely ignore this message.</p>
                       """);
 
-        return SendEmailAsync(email, "Confirm your FourPlay email", body);
+        return SendEmailAsync(email, "Confirm your IV League email", body);
     }
 
     public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink) {
@@ -79,7 +79,7 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
                       <p>If you didn’t request this change, you can safely ignore this email.</p>
                       """);
 
-        return SendEmailAsync(email, "Reset your FourPlay password", body);
+        return SendEmailAsync(email, "Reset your IV League password", body);
     }
 
     public async Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode) {
@@ -97,11 +97,11 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
                       <p>If you didn’t request this change, you can safely ignore this email.</p>
                       """);
 
-        await SendEmailAsync(email, "Your FourPlay password reset code", body);
+        await SendEmailAsync(email, "Your IV League password reset code", body);
     }
 
     /// <summary>
-    /// Send a simple templated notification using the FourPlay template.
+    /// Send a simple templated notification using the IV League template.
     /// Accepts an optional ApplicationUser to personalize the message, but is not required.
     /// </summary>
     public Task SendTemplatedMessageAsync(ApplicationUser? user, string email, string title, string message) {
@@ -116,7 +116,7 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
     #region Private Template Helpers
 
     /// <summary>
-    /// Builds a unified FourPlay email layout with consistent design.
+    /// Builds a unified IV League email layout with consistent design.
     /// </summary>
     private static string BuildEmailTemplate(string title, string message) {
         var sb = new StringBuilder();
@@ -135,18 +135,18 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
                 <table width="520" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
                   <tr>
                     <td style="background-color:#4f46e5;padding:18px;text-align:center;color:#ffffff;font-size:22px;font-weight:bold;">
-                      FourPlay
+                      IV League
                     </td>
                   </tr>
                   <tr>
                     <td style="padding:36px 44px;color:#333333;font-size:15px;line-height:1.6;">
                       {message}
-                      <p style="margin-top:32px;font-size:13px;color:#777;text-align:center;">Thanks,<br/>The FourPlay Team</p>
+                      <p style="margin-top:32px;font-size:13px;color:#777;text-align:center;">Thanks,<br/>The IV League Team</p>
                     </td>
                   </tr>
                   <tr>
                     <td style="background-color:#f2f2f2;padding:14px;text-align:center;font-size:12px;color:#888888;">
-                      &copy; {DateTime.UtcNow.Year} FourPlay. All rights reserved.
+                      &copy; {DateTime.UtcNow.Year} IV League. All rights reserved.
                     </td>
                   </tr>
                 </table>
@@ -161,7 +161,7 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
     }
 
     /// <summary>
-    /// Public wrapper for external callers that want the FourPlay HTML-wrapped body.
+    /// Public wrapper for external callers that want the IV League HTML-wrapped body.
     /// </summary>
     public static string CreateTemplatedBody(string title, string message) => BuildEmailTemplate(title, message);
 

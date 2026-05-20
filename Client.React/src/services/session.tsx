@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { getLeagueUserMappingsForUser } from '../api/league';
 import type { LeagueUserMappingDto } from '../types/league';
 import { useAuth } from './auth';
+import { useSportContext } from './sport';
 
 interface SessionContextValue {
   availableLeagues: LeagueUserMappingDto[];
@@ -9,6 +10,9 @@ interface SessionContextValue {
   selectLeague: (leagueId: number) => void;
   reloadLeagues: () => Promise<void>;
   clearSession: () => void;
+  hasNflAccess: boolean;
+  hasCfbAccess: boolean;
+  leaguesLoaded: boolean;
 }
 
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
@@ -22,8 +26,12 @@ const loadStoredLeague = () => {
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const { sport } = useSportContext();
   const [availableLeagues, setAvailableLeagues] = useState<LeagueUserMappingDto[]>([]);
   const [currentLeague, setCurrentLeague] = useState<number | null>(() => loadStoredLeague());
+  const [hasNflAccess, setHasNflAccess] = useState(false);
+  const [hasCfbAccess, setHasCfbAccess] = useState(false);
+  const [leaguesLoaded, setLeaguesLoaded] = useState(false);
 
   const persistLeague = useCallback((leagueId: number | null) => {
     if (leagueId === null) {
@@ -41,7 +49,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const leagues = (await getLeagueUserMappingsForUser(user.userId)) ?? [];
+    const allLeagues = (await getLeagueUserMappingsForUser(user.userId)) ?? [];
+    setHasNflAccess(allLeagues.some((l) => l.leagueType === 0));
+    setHasCfbAccess(allLeagues.some((l) => l.leagueType === 1));
+    // Filter leagues to match the current sport context (leagueType: 0=NFL, 1=CFB)
+    const leagues = allLeagues.filter((l) =>
+      sport === 'CFB' ? l.leagueType === 1 : l.leagueType === 0
+    );
     setAvailableLeagues(leagues);
 
     const stored = loadStoredLeague();
@@ -56,7 +70,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setCurrentLeague(null);
       persistLeague(null);
     }
-  }, [persistLeague, user]);
+    setLeaguesLoaded(true);
+  }, [persistLeague, user, sport]);
 
   const selectLeague = useCallback(
     (leagueId: number) => {
@@ -79,8 +94,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [reloadLeagues]);
 
   const value = useMemo(
-    () => ({ availableLeagues, currentLeague, selectLeague, reloadLeagues, clearSession }),
-    [availableLeagues, clearSession, currentLeague, reloadLeagues, selectLeague]
+    () => ({ availableLeagues, currentLeague, selectLeague, reloadLeagues, clearSession, hasNflAccess, hasCfbAccess, leaguesLoaded }),
+    [availableLeagues, clearSession, currentLeague, reloadLeagues, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

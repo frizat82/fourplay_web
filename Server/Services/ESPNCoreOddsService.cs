@@ -36,4 +36,26 @@ public class EspnCoreOddsService(HttpClient httpClient) : IEspnCoreOddsService {
             return null;
         }
     }
+
+    public async Task<EspnCoreOddsApiResponse?> GetCfbEventsWithOddsAsync(int eventId) {
+        try {
+            var response = await httpClient.GetStringAsync(
+                $"/v2/sports/football/leagues/college-football/events/{eventId}/competitions/{eventId}/odds");
+            return JsonSerializer.Deserialize<EspnCoreOddsApiResponse>(response, _options);
+        } catch (Exception e) {
+            Log.Error(e, "Error fetching CFB odds for event {EventId}", eventId);
+            return null;
+        }
+    }
+
+    public async Task<EspnCoreOddsItem?> GetCfbEventsWithOddsAsync(int eventId, int providerId) {
+        try {
+            var response = await httpClient.GetStringAsync(
+                $"/v2/sports/football/leagues/college-football/events/{eventId}/competitions/{eventId}/odds/{providerId}");
+            return JsonSerializer.Deserialize<EspnCoreOddsItem>(response, _options);
+        } catch (Exception e) {
+            Log.Error(e, "Error fetching CFB odds for event {EventId} provider {ProviderId}", eventId, providerId);
+            return null;
+        }
+    }
 }
