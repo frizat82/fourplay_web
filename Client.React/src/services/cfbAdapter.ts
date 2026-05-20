@@ -125,10 +125,11 @@ export function createCfbAdapter(): SportAdapter {
       }
       const weekState = slateToWeekState(active);
       const { games, userPicks } = await loadSlate(leagueId, userId, active.id);
-      // maxWeek = latest slate with spreads seeded, for capping the WeekYearSelector
-      const lastSlateWithData = [...slates].reverse().find(s => s.slateNumber <= 19);
-      const { week: maxW, isPostSeason: maxPs } = cfbSlateNumberToWeek(lastSlateWithData?.slateNumber ?? active.slateNumber);
-      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: games.length, maxWeek: maxW, maxSeason: CFB_SEASON };
+      // maxWeek = max REGULAR season week with data (caps the regular season selector)
+      const maxRegularSlate = slates
+        .filter(s => s.slateType === 'RegularSeason')
+        .reduce((max, s) => Math.max(max, s.slateNumber), 0);
+      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: games.length, maxWeek: maxRegularSlate || 14, maxSeason: CFB_SEASON };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
