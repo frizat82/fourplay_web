@@ -60,17 +60,12 @@ function statusChip(status: string | undefined, gameTime: string) {
   );
 }
 
-function pickButtonColor(state: PickState): 'success' | 'warning' | 'inherit' {
-  if (state === 'submitted' || state === 'pending') return 'success';
-  return 'warning';
-}
-
 function pickButtonLabel(state: PickState, defaultLabel: string, pickedLabel = 'Picked'): string {
   return state !== 'none' ? pickedLabel : defaultLabel;
 }
 
 export default function GameCard({
-  homeTeam, awayTeam, homeSpread, awaySpread, overUnder, gameTime,
+  homeTeam, awayTeam, homeSpread, awaySpread, gameTime,
   mode,
   homeScore, awayScore, gameStatus, gameDetail,
   homePickState = 'none', awayPickState = 'none',

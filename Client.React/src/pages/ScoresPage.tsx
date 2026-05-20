@@ -20,7 +20,7 @@ import FieldPosition from '../components/FieldPosition';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { spreadLabel } from '../utils/gameHelpers';
-import type { SportAdapter, GameView, PickView, WeekState, LoadedScores } from '../services/sportAdapter';
+import type { SportAdapter, GameView, WeekState, LoadedScores } from '../services/sportAdapter';
 
 // GameView.gameStatus is canonical GameStatusValue — use === directly, no string parsing
 

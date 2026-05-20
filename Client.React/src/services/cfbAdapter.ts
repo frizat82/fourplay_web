@@ -1,7 +1,7 @@
 import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
-import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState, LoadedWeek, LoadedScores } from './sportAdapter';
+import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } from './sportAdapter';
 
 /** Map CFB backend status strings to canonical GameStatusValue */
 function toCfbGameStatus(gameStatus: string | null | undefined): GameStatusValue {
