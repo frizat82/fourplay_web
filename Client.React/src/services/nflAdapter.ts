@@ -12,7 +12,7 @@ import {
   isPostSeason as isPostSeasonHelper,
   isGameOver, isGameStarted,
 } from '../utils/gameHelpers';
-import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState, LoadedWeek, LoadedScores } from './sportAdapter';
+import type { SportAdapter, GameView, GameStatusValue, PickView } from './sportAdapter';
 
 /** Map ESPN TypeName (number or string) to canonical GameStatusValue */
 function toGameStatus(competition: Competition): GameStatusValue {
@@ -158,7 +158,7 @@ export function createNflAdapter(): SportAdapter {
       await addPicks(picks.map(p => ({ id: 0, leagueId, userId: '', userName: '', team: p.team, pick: p.pickType as PickType, nflWeek, season, dateCreated: new Date().toISOString() } as NflPickDto)));
     },
 
-    async clearPicks(_leagueId, _state) { return []; },
+    async clearPicks() { return []; },
 
     async loadJerseys(season, week) { return (await getAllJerseys(season, week)) ?? {}; },
 

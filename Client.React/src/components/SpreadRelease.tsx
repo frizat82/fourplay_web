@@ -31,18 +31,25 @@ export default function SpreadRelease() {
 
   const targetDate = useMemo(() => (nextSpreadJob ? new Date(nextSpreadJob) : null), [nextSpreadJob]);
 
-  useEffect(() => {
-    if (!targetDate) return;
+  // Only show countdown if release is in the future and within 7 days.
+  const MS_7_DAYS = 7 * 24 * 60 * 60 * 1000;
+  // Compute once when targetDate changes — stable enough for "is this within 7 days"
+  const showCountdown = useMemo(() => {
+    if (!targetDate) return false;
+    const nowMs = new Date().getTime(); // eslint-disable-line
+    return targetDate.getTime() > nowMs && (targetDate.getTime() - nowMs) < MS_7_DAYS;
+  }, [targetDate, MS_7_DAYS]);
 
+  useEffect(() => {
+    if (!targetDate || !showCountdown) return;
     const updateCountdown = () => {
       const diff = targetDate.getTime() - new Date().getTime();
       setTimeRemaining(formatCountdown(diff));
     };
-
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [targetDate]);
+  }, [targetDate, showCountdown]);
 
   useEffect(() => {
     if (targetDate) return;
@@ -51,13 +58,6 @@ export default function SpreadRelease() {
   }, [targetDate]);
 
   if (loading) return null;
-
-  // Only show a countdown if the release is in the future AND within 7 days.
-  // If the week is already past (or release is far off), just say no spreads.
-  const MS_7_DAYS = 7 * 24 * 60 * 60 * 1000;
-  const showCountdown = targetDate
-    && targetDate.getTime() > Date.now()
-    && (targetDate.getTime() - Date.now()) < MS_7_DAYS;
 
   if (!showCountdown) {
     return (

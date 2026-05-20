@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -16,7 +16,6 @@ import GameCard, { type PickState } from '../components/sports/GameCard';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import type { SportAdapter, GameView, WeekState } from '../services/sportAdapter';
-import { getEspnRequiredPicks, isAfterKickoff as gameAfterKickoff } from '../utils/gameHelpers';
 import { useToast } from '../services/toast';
 
 // Pick key: "gameId|team|pickType" — stable across NFL and CFB
@@ -183,11 +182,9 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     }
   };
 
-  const handleClear = async () => {
-    if (!currentLeague) return;
-    const freshPicks = await adapter.clearPicks(currentLeague, { season, week, isPostSeason });
+  const handleClear = () => {
+    // Clear only pending (unsubmitted) user picks — existing submitted picks stay
     setUserPicks(new Set());
-    setExistingPicks(new Set(freshPicks.map(p => pickKey(p.gameId, p.team, p.pickType))));
   };
 
   if (loading) return (
@@ -251,7 +248,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
               <Button variant="contained" color="success" disabled={storingPicks || userPicks.size === 0} onClick={handleSubmit}>
                 {storingPicks ? 'Submitting…' : 'Submit Pick(s)'}
               </Button>
-              <Button variant="contained" color="warning" disabled={userPicks.size === 0} onClick={() => setUserPicks(new Set())}>
+              <Button variant="contained" color="warning" disabled={userPicks.size === 0} onClick={handleClear}>
                 Clear Selected Picks
               </Button>
             </Stack>

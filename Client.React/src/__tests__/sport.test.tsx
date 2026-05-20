@@ -1,5 +1,5 @@
 import { renderHook } from '@testing-library/react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { SportsProvider, useSportContext } from '../services/sport';
 
 function wrapper({ children }: { children: React.ReactNode }) {
