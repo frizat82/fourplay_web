@@ -105,10 +105,10 @@ jobs:
 
       - name: Start backend (DEMO_MODE)
         # UserManagerJob fires in 5s (DEMO_MODE fast-start), then DemoDataSeeder runs.
-        # Email creds are required by startup validation but not used in demo flows.
+        # Output is captured to /tmp/backend.log — dumped on failure for diagnosis.
         run: |
           dotnet run --project Server --no-build -c Release --no-launch-profile \
-            --urls http://localhost:5000 &
+            --urls http://localhost:5000 > /tmp/backend.log 2>&1 &
           echo "BACKEND_PID=$!" >> "$GITHUB_ENV"
         env:
           ConnectionStrings__POSTGRES_CONNECTION_STRING: "Host=localhost;Port=5432;Username=fourplay;Password=fourplay_local;Database=fourplay_dev"
@@ -149,10 +149,18 @@ jobs:
               echo "Demo stack ready after ~$((i * 3))s"
               exit 0
             fi
+            echo "[$i/60] Not ready yet. Last response: $RESULT"
             sleep 3
           done
-          echo "Timed out waiting for demo stack"
+          echo "=== BACKEND LOG ==="
+          cat /tmp/backend.log || echo "(no log)"
           exit 1
+
+      - name: Dump backend log on failure
+        if: failure()
+        run: |
+          echo "=== BACKEND LOG ==="
+          cat /tmp/backend.log || echo "(no log)"
 
       - name: Install Playwright browsers
         working-directory: Client.React
