@@ -57,3 +57,11 @@ jobs:
         run: npm run build
         env:
           VITE_API_BASE_URL: ''
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Playwright (mock-based tests)
+        # webServer in playwright.config.ts auto-starts Vite when CI=true.
+        # All API calls are intercepted by page.route() — no real backend needed.
+        run: npm run test:e2e -- --project=chromium
