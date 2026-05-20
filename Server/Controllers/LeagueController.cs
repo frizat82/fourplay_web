@@ -121,7 +121,8 @@ public class LeagueController(
             LeagueOwnerUserId = m.League.OwnerUserId,
             UserId = m.UserId,
             UserName = m.User.UserName,
-            DateCreated = m.DateCreated
+            DateCreated = m.DateCreated,
+            LeagueType = m.League.LeagueType
         }).ToList();
         return Ok(dtoMappings);
     }
@@ -142,7 +143,8 @@ public class LeagueController(
             UserId = m.UserId,
             UserName = m.User.UserName,
             DateCreated = m.DateCreated,
-            LeagueName = m.League.LeagueName
+            LeagueName = m.League.LeagueName,
+            LeagueType = m.League.LeagueType
         }).ToList();
         return Ok(dtoMappings);
     }
