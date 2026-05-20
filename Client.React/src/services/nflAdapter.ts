@@ -28,7 +28,7 @@ function competitionToGameView(
   competition: Competition,
   event: Event,
   spreadCache: Record<string, SpreadResponse>,
-  situationMap?: Map<string, string | null>
+  situationMap?: Map<string, import('../types/liveGame').GameSituation | null>
 ): GameView {
   const homeAbbr = getHomeTeamAbbr(competition);
   const awayAbbr = getAwayTeamAbbr(competition);
@@ -95,8 +95,8 @@ async function buildSpreadCache(
   return resp.responses ?? {};
 }
 
-async function buildSituationMap(events: Event[]): Promise<Map<string, string | null>> {
-  const map = new Map<string, string | null>();
+async function buildSituationMap(events: Event[]): Promise<Map<string, import('../types/liveGame').GameSituation | null>> {
+  const map = new Map<string, import('../types/liveGame').GameSituation | null>();
   try {
     const liveGames = await getLiveGames();
     for (const event of events) {
@@ -104,7 +104,7 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, string | 
         const home = getHomeTeamAbbr(comp);
         const away = getAwayTeamAbbr(comp);
         const live = liveGames.find(g => g.homeTeam === home && g.awayTeam === away);
-        map.set(`${home}-${away}`, live?.situation?.downDistanceText ?? null);
+        map.set(`${home}-${away}`, live?.situation ?? null);
       }
     }
   } catch { /* live games unavailable */ }
@@ -129,7 +129,7 @@ export function createNflAdapter(): SportAdapter {
     async loadCurrentGames(leagueId, userId) {
       const data = await loadScoresWithRetry();
       if (!data?.season || !data.week) {
-        return { season: new Date().getFullYear(), week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 4 };
+        return { season: new Date().getFullYear(), week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 4, maxWeek: 1, maxSeason: new Date().getFullYear() };
       }
       const postSeason = isPostSeasonHelper(data);
       const weekNum = data.week.number;
