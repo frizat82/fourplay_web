@@ -31,18 +31,25 @@ export default function SpreadRelease() {
 
   const targetDate = useMemo(() => (nextSpreadJob ? new Date(nextSpreadJob) : null), [nextSpreadJob]);
 
-  useEffect(() => {
-    if (!targetDate) return;
+  // Only show countdown if release is in the future and within 7 days.
+  const MS_7_DAYS = 7 * 24 * 60 * 60 * 1000;
+  // Compute once when targetDate changes — stable enough for "is this within 7 days"
+  const showCountdown = useMemo(() => {
+    if (!targetDate) return false;
+    const nowMs = new Date().getTime();
+    return targetDate.getTime() > nowMs && (targetDate.getTime() - nowMs) < MS_7_DAYS;
+  }, [targetDate, MS_7_DAYS]);
 
+  useEffect(() => {
+    if (!targetDate || !showCountdown) return;
     const updateCountdown = () => {
       const diff = targetDate.getTime() - new Date().getTime();
       setTimeRemaining(formatCountdown(diff));
     };
-
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [targetDate]);
+  }, [targetDate, showCountdown]);
 
   useEffect(() => {
     if (targetDate) return;
@@ -52,14 +59,14 @@ export default function SpreadRelease() {
 
   if (loading) return null;
 
-  if (!nextSpreadJob) {
+  if (!showCountdown) {
     return (
       <Box sx={{ textAlign: 'center', py: 4 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
-          Odds Not Posted Yet
+          Odds Not Posted
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Check back soon for the next spread release.
+          No spreads available for this week.
         </Typography>
       </Box>
     );
@@ -73,18 +80,18 @@ export default function SpreadRelease() {
         px: 3,
         textAlign: 'center',
         borderRadius: 3,
-        background: 'linear-gradient(135deg, #0f172a, #1e293b)',
-        color: 'common.white',
-        boxShadow: '0 20px 45px rgba(15, 23, 42, 0.4)',
+        bgcolor: 'background.paper',
+        border: '1px solid',
+        borderColor: 'divider',
       }}
     >
-      <Typography variant="overline" sx={{ letterSpacing: 2, opacity: 0.85 }}>
+      <Typography variant="overline" sx={{ letterSpacing: 2 }} color="text.secondary">
         Next Spread Reload
       </Typography>
-      <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }}>
+      <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }} color="text.primary">
         {timeRemaining || '00:00:00'}
       </Typography>
-      <Typography variant="body2" sx={{ mt: 1, opacity: 0.85 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
         Scheduled for {targetDate!.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
       </Typography>
     </Paper>

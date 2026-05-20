@@ -54,20 +54,20 @@ export default function HomePage() {
     <div>
       <Container maxWidth={false} className="hero-section" sx={{ py: 6 }}>
         <Container maxWidth="lg" className="hero-content">
-          <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mb: 2 }}>
-            <Button variant="text" component={RouterLink} to="/account/login" className="hero-auth-link">
-              {isAuthed ? 'Switch Account' : 'Login'}
-            </Button>
-            {!isAuthed && (
+          {!isAuthed && (
+            <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mb: 2 }}>
+              <Button variant="text" component={RouterLink} to="/account/login" className="hero-auth-link">
+                Login
+              </Button>
               <Button variant="outlined" component={RouterLink} to="/account/register" className="hero-auth-link">
                 Register
               </Button>
-            )}
-          </Stack>
+            </Stack>
+          )}
           <Grid container spacing={4} alignItems="center">
             <Grid size={{ xs: 12, md: 6 }} className="hero-text-section">
               <Box className="hero-logo">
-                <img src="/Images/retro_logo.png" alt="FourPlay Logo" className="hero-logo-img" />
+                <img src="/Images/retro_logo.png" alt="IV League Logo" className="hero-logo-img" />
               </Box>
               <Box className="hero-text-inner">
                 <Typography variant="h2" className="hero-title">
@@ -115,7 +115,7 @@ export default function HomePage() {
                 </Stack>
               </Box>
             </Grid>
-            <Grid size={{ xs: 12, md: 6 }} className="hero-image-section">
+            {!isAuthed && <Grid size={{ xs: 12, md: 6 }} className="hero-image-section">
               <Stack spacing={2}>
                 <Paper elevation={8} sx={{ position: 'relative', overflow: 'hidden', borderRadius: 2 }}>
                   <video
@@ -145,10 +145,10 @@ export default function HomePage() {
                   </IconButton>
                 </Paper>
                 <Paper className="hero-image" elevation={8}>
-                  <img src="/Images/fourplayhome.jpg" alt="FourPlay" className="hero-image-img" />
+                  <img src="/Images/fourplayhome.jpg" alt="IV League" className="hero-image-img" />
                 </Paper>
               </Stack>
-            </Grid>
+            </Grid>}
           </Grid>
         </Container>
       </Container>
