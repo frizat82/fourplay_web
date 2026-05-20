@@ -2,12 +2,34 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './layouts/AppLayout';
 import HomePage from './pages/HomePage';
 import { useAuth } from './services/auth';
+import { useSportContext } from './services/sport';
+import { createNflAdapter } from './services/nflAdapter';
+import { createCfbAdapter } from './services/cfbAdapter';
+
+const nflAdapter = createNflAdapter();
+const cfbAdapter = createCfbAdapter();
 
 function RootRedirect() {
   const { user, loading } = useAuth();
   if (loading) return null;
   return user ? <Navigate to="/dashboard" replace /> : <HomePage />;
 }
+
+function PicksRoute() {
+  const { isCfb } = useSportContext();
+  return <PicksPage adapter={isCfb ? cfbAdapter : nflAdapter} />;
+}
+
+function ScoresRoute() {
+  const { isCfb } = useSportContext();
+  return <ScoresPage adapter={isCfb ? cfbAdapter : nflAdapter} />;
+}
+
+function LeaderboardRoute() {
+  const { isCfb } = useSportContext();
+  return <LeaderboardPage adapter={isCfb ? cfbAdapter : nflAdapter} />;
+}
+
 import LeaguePickerPage from './pages/LeaguePickerPage';
 import PicksPage from './pages/PicksPage';
 import ScoresPage from './pages/ScoresPage';
@@ -64,9 +86,9 @@ export default function App() {
       >
         <Route path="/dashboard" element={<HomePage />} />
         <Route path="/leaguepicker" element={<LeaguePickerPage />} />
-        <Route path="/picks" element={<PicksPage />} />
-        <Route path="/scores" element={<ScoresPage />} />
-        <Route path="/leaderboard" element={<LeaderboardPage />} />
+        <Route path="/picks" element={<PicksRoute />} />
+        <Route path="/scores" element={<ScoresRoute />} />
+        <Route path="/leaderboard" element={<LeaderboardRoute />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/logout" element={<LogoutPage />} />
 
@@ -113,8 +135,8 @@ export default function App() {
         />
         <Route path="/account/manage" element={<ManageAccountPage />} />
         <Route path="/account/manage/changepassword" caseSensitive={false} element={<ChangePasswordPage />} />
+        <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
       </Route>
-      <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
       <Route path="/account" element={<Navigate to="/account/login" replace />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
