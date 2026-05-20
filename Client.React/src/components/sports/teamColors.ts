@@ -61,13 +61,13 @@ const TEAMS: Record<string, TeamColors> = {
   JMU:  { primary: '#450084', secondary: '#cbb677', text: '#ffffff' }, // James Madison
   KSU:  { primary: '#512888', secondary: '#d1a827', text: '#ffffff' }, // Kansas State
   LSU:  { primary: '#461d7c', secondary: '#fdd023', text: '#fdd023' }, // LSU
-  MIA:  { primary: '#f47321', secondary: '#005030', text: '#ffffff' }, // Miami FL
+  MIAF: { primary: '#f47321', secondary: '#005030', text: '#ffffff' }, // Miami FL (CFB)
   MICH: { primary: '#00274c', secondary: '#ffcb05', text: '#ffcb05' }, // Michigan
   MISS: { primary: '#ce1126', secondary: '#14213d', text: '#ffffff' }, // Ole Miss
   MSU:  { primary: '#18453b', secondary: '#ffffff', text: '#ffffff' }, // Michigan State / Miss State
   MSST: { primary: '#660000', secondary: '#ffffff', text: '#ffffff' }, // Mississippi State
   ND:   { primary: '#0c2340', secondary: '#c99700', text: '#ffffff' }, // Notre Dame
-  NE:   { primary: '#002244', secondary: '#c60c30', text: '#ffffff' }, // Nebraska (CFB) - same as NE NFL so use below
+  // NE: same as NFL New England (using NEB for Nebraska instead)
   NEB:  { primary: '#e41c38', secondary: '#f5f1e7', text: '#ffffff' }, // Nebraska
   NCST: { primary: '#cc0000', secondary: '#6f7073', text: '#ffffff' }, // NC State
   OHIO: { primary: '#bb0000', secondary: '#636669', text: '#ffffff' }, // Ohio
@@ -80,7 +80,7 @@ const TEAMS: Record<string, TeamColors> = {
   SC:   { primary: '#73000a', secondary: '#000000', text: '#ffffff' }, // South Carolina
   STAN: { primary: '#8c1515', secondary: '#b6b1a9', text: '#ffffff' }, // Stanford
   TAMU: { primary: '#500000', secondary: '#ffffff', text: '#ffffff' }, // Texas A&M
-  TEN:  { primary: '#f77f00', secondary: '#ffffff', text: '#ffffff' }, // Tennessee (CFB)
+  TENN: { primary: '#f77f00', secondary: '#ffffff', text: '#ffffff' }, // Tennessee (CFB)
   TEX:  { primary: '#bf5700', secondary: '#ffffff', text: '#ffffff' }, // Texas
   TTU:  { primary: '#cc0000', secondary: '#000000', text: '#ffffff' }, // Texas Tech
   TULN: { primary: '#006747', secondary: '#418fde', text: '#ffffff' }, // Tulane

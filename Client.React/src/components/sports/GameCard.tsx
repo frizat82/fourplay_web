@@ -104,7 +104,7 @@ export default function GameCard({
                 <Typography variant="subtitle2">{awayRecord}</Typography>
               )}
               <Typography variant="h6" className="fixed-width">
-                {mode === 'score' && showScore ? awayScore : spreadLabel(awaySpread)}
+                {mode === 'score' && showScore ? awayScore : awaySpread != null ? spreadLabel(awaySpread) : ""}
               </Typography>
               {mode === 'pick' ? (
                 awayPickState !== 'none' ? (
@@ -130,7 +130,7 @@ export default function GameCard({
               ) : (
                 mode === 'score' && (
                   <Typography variant="caption" color="text.secondary">
-                    {spreadLabel(awaySpread)}
+                    {awaySpread != null ? spreadLabel(awaySpread) : ""}
                     {awayPickers !== undefined && ` · ${awayPickers}👤`}
                   </Typography>
                 )
@@ -169,7 +169,7 @@ export default function GameCard({
                 <Typography variant="subtitle2">{homeRecord}</Typography>
               )}
               <Typography variant="h6" className="fixed-width">
-                {mode === 'score' && showScore ? homeScore : spreadLabel(homeSpread)}
+                {mode === 'score' && showScore ? homeScore : homeSpread != null ? spreadLabel(homeSpread) : ""}
               </Typography>
               {mode === 'pick' ? (
                 homePickState !== 'none' ? (
@@ -195,7 +195,7 @@ export default function GameCard({
               ) : (
                 mode === 'score' && (
                   <Typography variant="caption" color="text.secondary">
-                    {spreadLabel(homeSpread)}
+                    {homeSpread != null ? spreadLabel(homeSpread) : ""}
                     {homePickers !== undefined && ` · ${homePickers}👤`}
                   </Typography>
                 )

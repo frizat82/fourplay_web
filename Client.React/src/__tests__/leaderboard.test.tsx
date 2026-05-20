@@ -27,11 +27,15 @@ const mockedGetLeaderboard = vi.mocked(getLeaderboard);
 const mockAdapter: SportAdapter = {
   loadCurrentGames: vi.fn(),
   loadHistoricalGames: vi.fn(),
+  loadCurrentScores: vi.fn(),
+  loadHistoricalScores: vi.fn(),
   submitPicks: vi.fn(),
   clearPicks: vi.fn(),
   currentSeasonYear: vi.fn().mockResolvedValue(2023),
   pollIntervalMs: 0,
   supportsJerseys: false,
+  supportsMatrix: false,
+  supportsPickDialog: false,
   weekSelectorConfig: { maxRegularSeasonWeek: 18, minSeason: 2020 },
 };
 
