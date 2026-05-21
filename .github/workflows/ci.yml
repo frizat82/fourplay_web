@@ -57,3 +57,123 @@ jobs:
         run: npm run build
         env:
           VITE_API_BASE_URL: ''
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Playwright (mock-based tests)
+        # webServer in playwright.config.ts auto-starts Vite when CI=true.
+        # All API calls are intercepted by page.route() — no real backend needed.
+        run: npm run test:e2e -- --project=chromium
+
+  demo-e2e:
+    name: Demo backend e2e tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fourplay
+          POSTGRES_PASSWORD: fourplay_local
+          POSTGRES_DB: fourplay_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: Client.React/package-lock.json
+
+      - name: Build backend
+        run: dotnet build -c Release
+
+      - name: Start backend (DEMO_MODE)
+        # UserManagerJob fires in 5s (DEMO_MODE fast-start), then DemoDataSeeder runs.
+        # Output is captured to /tmp/backend.log — dumped on failure for diagnosis.
+        run: |
+          dotnet run --project Server --no-build -c Release --no-launch-profile \
+            --urls http://localhost:5000 > /tmp/backend.log 2>&1 &
+          echo "BACKEND_PID=$!" >> "$GITHUB_ENV"
+        env:
+          ConnectionStrings__POSTGRES_CONNECTION_STRING: "Host=localhost;Port=5432;Username=fourplay;Password=fourplay_local;Database=fourplay_dev"
+          Jwt__Key: "ci-test-jwt-key-must-be-at-least-256-bits-long-for-hmacsha256"
+          Jwt__Issuer: FourPlayWebAppClientDev
+          Jwt__Audience: FourPlayWebAppClientDev
+          Jwt__ExpiresMinutes: "1000"
+          ADMIN_EMAIL: "admin@ci-demo.local"
+          ADMIN_USERNAME: "ci-admin"
+          ADMIN_PASSWORD: "CiAdmin@Test1!"
+          APP_URL: "http://localhost:5174"
+          DEMO_MODE: "true"
+          ASPNETCORE_ENVIRONMENT: Development
+          FOURPLAY_EMAIL_USER: "ci-noreply@example.com"
+          FOURPLAY_EMAIL_PASS: "ci-dummy-not-used"
+
+      - name: Install frontend deps
+        working-directory: Client.React
+        run: npm ci
+
+      - name: Start frontend (NFL + CFB)
+        working-directory: Client.React
+        run: |
+          VITE_API_TARGET=http://localhost:5000 npm run dev -- --port 5174 &
+          echo "FRONTEND_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for demo stack to be ready
+        # Poll until Alice can log in — confirms backend up + UserManagerJob + DemoDataSeeder all done.
+        # With DEMO_MODE fast-start (5s delay), this typically resolves in ~30s.
+        run: |
+          echo "Waiting for demo seed to complete..."
+          for i in $(seq 1 60); do
+            RESULT=$(curl -s -X POST http://localhost:5000/api/auth/login \
+              -H "Content-Type: application/json" \
+              -d '{"username":"alice@demo.local","password":"DemoPass@123","rememberMe":false}' \
+              2>/dev/null || echo '{}')
+            if echo "$RESULT" | grep -q '"succeeded":true'; then
+              echo "Demo stack ready after ~$((i * 3))s"
+              exit 0
+            fi
+            echo "[$i/60] Not ready yet. Last response: $RESULT"
+            sleep 3
+          done
+          echo "=== BACKEND LOG ==="
+          cat /tmp/backend.log || echo "(no log)"
+          exit 1
+
+      - name: Dump backend log on failure
+        if: failure()
+        run: |
+          echo "=== BACKEND LOG ==="
+          cat /tmp/backend.log || echo "(no log)"
+
+      - name: Install Playwright browsers
+        working-directory: Client.React
+        run: npx playwright install chromium --with-deps
+
+      - name: Playwright (demo integration tests)
+        working-directory: Client.React
+        run: npm run test:e2e:demo
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-demo-report
+          path: Client.React/playwright-report/
+          retention-days: 7

@@ -265,10 +265,13 @@ builder.Services.AddScoped<IJob, CfbScoresJob>();
 builder.Services.AddQuartz(q => {
     // Setup User at startup
  // User Manager
+// In DEMO_MODE fire in 5s so seeding completes before e2e tests start;
+// otherwise fire 2 min after startup to avoid slowing cold boot.
+var userManagerDelay = builder.Configuration["DEMO_MODE"] == "true" ? 5 : 120;
 q.ScheduleJob<UserManagerJob>(trigger => trigger
     .WithIdentity("User Manager")
     .WithDescription("Manages initial user admin (mark)")
-    .StartAt(DateBuilder.FutureDate(2, IntervalUnit.Minute))
+    .StartAt(DateBuilder.FutureDate(userManagerDelay, IntervalUnit.Second))
 );
 
 // Note: use IANA timezone id "America/Chicago" which works on Linux containers
