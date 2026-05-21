@@ -308,74 +308,79 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         ["Eve"]    = [false, false, false, true,  true,  false, false, false, false, false, true,  true,  false, false, false, false, false],
     };
 
-    // Wild Card (week 19): 6 games
+    // Real 2025 NFL Playoffs (verified from ESPN API)
+    // Wild Card (NflWeek 19 = ESPN postseason week 1): Jan 11-12 2026
     private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] WildCardGames =
     [
-        ("KC",  "HOU", -6.5,  6.5, 48.5, 27, 14, new DateTimeOffset(2026, 1, 11, 18, 0, 0, TimeSpan.Zero)),
-        ("BUF", "DEN", -7.5,  7.5, 46.5, 31,  7, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)),
-        ("BAL", "PIT", -8.0,  8.0, 44.5, 28, 14, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)),
-        ("PHI", "LAR", -9.5,  9.5, 47.5, 35, 14, new DateTimeOffset(2026, 1, 12, 18, 0, 0, TimeSpan.Zero)),
-        ("DET", "WAS", -7.0,  7.0, 50.5, 24, 14, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)),
-        ("SF",  "GB",  -3.5,  3.5, 47.0, 21, 13, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)),
+        ("LAR", "CAR", -6.5,  6.5, 48.5, 34, 31, new DateTimeOffset(2026, 1, 11, 18, 0, 0, TimeSpan.Zero)),  // LAR wins
+        ("GB",  "CHI", -3.5,  3.5, 45.5, 27, 31, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // CHI wins (upset)
+        ("BUF", "JAX", -9.5,  9.5, 47.5, 27, 24, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // BUF wins
+        ("SF",  "PHI", -3.5,  3.5, 48.5, 23, 19, new DateTimeOffset(2026, 1, 12, 18, 0, 0, TimeSpan.Zero)),  // SF wins
+        ("LAC", "NE",  -5.5,  5.5, 44.5,  3, 16, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)), // NE wins (upset)
+        ("HOU", "PIT", -6.5,  6.5, 43.5, 30,  6, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)), // HOU wins
     ];
 
-    // Divisional (week 20): 4 games
+    // Divisional (NflWeek 20 = ESPN postseason week 2): Jan 18-19 2026
     private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] DivisionalGames =
     [
-        ("KC",  "BUF", -1.5,  1.5, 51.5, 24, 21, new DateTimeOffset(2026, 1, 18, 18, 0, 0, TimeSpan.Zero)),
-        ("PHI", "DET", -3.0,  3.0, 48.0, 28, 24, new DateTimeOffset(2026, 1, 18, 21, 30, 0, TimeSpan.Zero)),
-        ("BAL", "HOU", -4.5,  4.5, 47.0, 17, 13, new DateTimeOffset(2026, 1, 19, 18, 0, 0, TimeSpan.Zero)),
-        ("SF",  "LAR", -5.5,  5.5, 46.0, 20, 13, new DateTimeOffset(2026, 1, 19, 21, 30, 0, TimeSpan.Zero)),
+        ("DEN", "BUF", -2.5,  2.5, 49.5, 33, 30, new DateTimeOffset(2026, 1, 18, 18, 0, 0, TimeSpan.Zero)),  // DEN wins
+        ("SEA", "SF",  -3.0,  3.0, 45.0, 41,  6, new DateTimeOffset(2026, 1, 18, 21, 30, 0, TimeSpan.Zero)), // SEA wins
+        ("NE",  "HOU", -1.5,  1.5, 44.5, 28, 16, new DateTimeOffset(2026, 1, 19, 18, 0, 0, TimeSpan.Zero)),  // NE wins
+        ("LAR", "CHI", -4.5,  4.5, 46.5, 20, 17, new DateTimeOffset(2026, 1, 19, 21, 30, 0, TimeSpan.Zero)), // LAR wins
     ];
 
-    // Conference Championship (week 21): 2 games
+    // Conference Championship (NflWeek 21 = ESPN postseason week 3): Jan 26 2026
     private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] ConfChampGames =
     [
-        ("KC",  "BAL", -2.5,  2.5, 47.5, 31, 24, new DateTimeOffset(2026, 1, 26, 18, 0, 0, TimeSpan.Zero)),
-        ("PHI", "SF",  -2.0,  2.0, 45.5, 23, 13, new DateTimeOffset(2026, 1, 26, 21, 30, 0, TimeSpan.Zero)),
+        ("NE",  "DEN", -3.5,  3.5, 44.5, 10,  7, new DateTimeOffset(2026, 1, 26, 18, 0, 0, TimeSpan.Zero)),  // NE wins
+        ("SEA", "LAR", -4.5,  4.5, 46.5, 31, 27, new DateTimeOffset(2026, 1, 26, 21, 30, 0, TimeSpan.Zero)), // SEA wins
     ];
 
-    // Super Bowl (week 22): 1 game
+    // Super Bowl (NflWeek 23 = ESPN postseason week 5): Feb 9 2026 — NE home (ESPN convention), SEA wins
     private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] SuperBowlGames =
     [
-        ("PHI", "KC",  -1.5,  1.5, 48.5, 38, 35, new DateTimeOffset(2026, 2, 9, 23, 30, 0, TimeSpan.Zero)),
+        ("NE",  "SEA", -2.5,  2.5, 45.5, 13, 29, new DateTimeOffset(2026, 2, 9, 23, 30, 0, TimeSpan.Zero)),  // SEA wins
     ];
 
     // Postseason picks per user (true = home team, false = away team)
+    // Wild Card: LAR/CAR, GB/CHI, BUF/JAX, SF/PHI, LAC/NE, HOU/PIT
     private static readonly Dictionary<string, bool[]> WildCardPicks = new()
     {
-        ["Alice"]  = [true,  true,  true,  true,  true,  true],   // KC, BUF, BAL, PHI, DET, SF
-        ["Bob"]    = [false, false, false, false, false, false],   // HOU, DEN, PIT, LAR, WAS, GB
-        ["Carlos"] = [true,  true,  true,  true,  true,  false],  // KC, BUF, BAL, PHI, DET, GB
-        ["Dana"]   = [false, false, false, false, false, true],   // HOU, DEN, PIT, LAR, WAS, SF
-        ["Eve"]    = [true,  true,  true,  true,  true,  true],   // KC, BUF, BAL, PHI, DET, SF
+        ["Alice"]  = [true,  true,  true,  true,  true,  true],   // LAR, GB, BUF, SF, LAC, HOU (all home)
+        ["Bob"]    = [false, false, false, false, false, false],   // CAR, CHI, JAX, PHI, NE, PIT (all away)
+        ["Carlos"] = [true,  false, true,  true,  false, true],   // LAR, CHI, BUF, SF, NE, HOU
+        ["Dana"]   = [false, true,  false, false, true,  false],  // CAR, GB, JAX, PHI, LAC, PIT
+        ["Eve"]    = [true,  false, true,  true,  false, true],   // LAR, CHI, BUF, SF, NE, HOU
     };
 
+    // Divisional: DEN/BUF, SEA/SF, NE/HOU, LAR/CHI
     private static readonly Dictionary<string, bool[]> DivisionalPicks = new()
     {
-        ["Alice"]  = [true,  true,  true,  true],   // KC, PHI, BAL, SF
-        ["Bob"]    = [false, false, false, false],  // BUF, DET, HOU, LAR
-        ["Carlos"] = [true,  true,  true,  true],   // KC, PHI, BAL, SF
-        ["Dana"]   = [false, false, false, false],  // BUF, DET, HOU, LAR
-        ["Eve"]    = [true,  true,  true,  true],   // KC, PHI, BAL, SF
+        ["Alice"]  = [true,  true,  true,  true],   // DEN, SEA, NE, LAR (all home, all win)
+        ["Bob"]    = [false, false, false, false],  // BUF, SF, HOU, CHI
+        ["Carlos"] = [true,  true,  true,  true],   // DEN, SEA, NE, LAR
+        ["Dana"]   = [false, false, false, false],  // BUF, SF, HOU, CHI
+        ["Eve"]    = [true,  true,  true,  true],   // DEN, SEA, NE, LAR
     };
 
+    // Conference Championship: NE/DEN, SEA/LAR
     private static readonly Dictionary<string, bool[]> ConfChampPicks = new()
     {
-        ["Alice"]  = [true,  true],   // KC, PHI
-        ["Bob"]    = [false, false],  // BAL, SF
-        ["Carlos"] = [true,  true],   // KC, PHI
-        ["Dana"]   = [false, false],  // BAL, SF
-        ["Eve"]    = [true,  true],   // KC, PHI
+        ["Alice"]  = [true,  true],   // NE, SEA (both win)
+        ["Bob"]    = [false, false],  // DEN, LAR
+        ["Carlos"] = [true,  true],   // NE, SEA
+        ["Dana"]   = [false, false],  // DEN, LAR
+        ["Eve"]    = [true,  true],   // NE, SEA
     };
 
+    // Super Bowl: NE home, SEA away. SEA wins. true=NE(home), false=SEA(away)
     private static readonly Dictionary<string, bool> SuperBowlPicksMap = new()
     {
-        ["Alice"]  = true,   // PHI
-        ["Bob"]    = false,  // KC
-        ["Carlos"] = true,   // PHI
-        ["Dana"]   = false,  // KC
-        ["Eve"]    = true,   // PHI
+        ["Alice"]  = false,  // SEA (wins)
+        ["Bob"]    = true,   // NE
+        ["Carlos"] = false,  // SEA (wins)
+        ["Dana"]   = true,   // NE
+        ["Eve"]    = false,  // SEA (wins)
     };
 
     private async Task SeedHistoricalWeeksAsync(LeagueInfo? league)
@@ -470,13 +475,14 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
 
         // Super Bowl — build picks dict from SuperBowlPicksMap (bool→bool[])
         var sbPicksAsArrays = SuperBowlPicksMap.ToDictionary(kv => kv.Key, kv => new[] { kv.Value });
-        await SeedPostseasonWeekAsync(league, users, 22, "Super Bowl",
+        // Super Bowl is ESPN postseason week 5 → NflWeek 23 (getWeekFromEspnWeek(5, true) = 23)
+        await SeedPostseasonWeekAsync(league, users, 23, "Super Bowl",
             new DateTimeOffset(2026, 2, 9, 0, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 2, 9, 23, 59, 59, TimeSpan.Zero),
             SuperBowlGames.Select(g => (g.Home, g.Away, g.HomeSpread, g.AwaySpread, g.OU, g.HomeScore, g.AwayScore, g.GameTime)).ToArray(),
             sbPicksAsArrays);
 
-        Log.Information("DemoDataSeeder: seeded historical weeks 1-17 + postseason (19-22) for {UserCount} users", users.Count);
+        Log.Information("DemoDataSeeder: seeded historical weeks 1-17 + postseason (19-22, 23) for {UserCount} users", users.Count);
     }
 
     private async Task SeedPostseasonWeekAsync(

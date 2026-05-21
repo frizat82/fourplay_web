@@ -117,7 +117,22 @@ export function createNflAdapter(): SportAdapter {
     supportsJerseys: true,
     supportsMatrix: true,
     supportsPickDialog: true,
-    weekSelectorConfig: { maxRegularSeasonWeek: 18, minSeason: 2020 },
+    weekSelectorConfig: {
+      maxRegularSeasonWeek: 18,
+      minSeason: 2020,
+      // Skip week 4 (Pro Bowl) — Super Bowl is week 5 in ESPN's 2025 postseason
+      postSeasonWeekOptions: [1, 2, 3, 5],
+      weekLabelFn: (week, isPostSeason) => {
+        if (!isPostSeason) return `Week ${week}`;
+        switch (week) {
+          case 1: return 'Wild Card';
+          case 2: return 'Divisional Round';
+          case 3: return 'Conference Championship';
+          case 5: return 'Super Bowl';
+          default: return `Postseason Week ${week}`;
+        }
+      },
+    },
 
     async currentSeasonYear() {
       const data = await loadScoresWithRetry();
