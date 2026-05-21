@@ -25,12 +25,26 @@ function slateToWeekState(slate: CfbSlateDto): WeekState {
   return { season: slate.season, week, isPostSeason };
 }
 
+// Demo situation for in-progress CFB games (shows field position bar in scores page)
+import type { GameSituation } from '../types/liveGame';
+
+const CFB_DEMO_SITUATION: GameSituation = {
+  downDistanceText: '3rd & 4 at MIA 22',
+  possessionTeam: 'IU',
+  isHomePossession: true,
+  yardLine: 22,
+  down: 3,
+  distance: 4,
+  isRedZone: true,
+};
+
 function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] {
   const scoreMap = new Map(scores.map(s => [s.espnEventId, s]));
   return spreads.map(sp => {
     const score = scoreMap.get(sp.espnEventId);
     const status = toCfbGameStatus(score?.gameStatus);
     const isFinal = status === 'final';
+    const isLive = status === 'in_progress' || status === 'halftime';
     const hs = score?.homeTeamScore ?? null;
     const as_ = score?.awayTeamScore ?? null;
     return {
@@ -51,6 +65,8 @@ function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] 
         conditionId: score.weatherConditionId ?? undefined,
         temperatureF: score.weatherTemperatureF ?? undefined,
       } : undefined,
+      // Provide demo field-position data for in-progress games so FieldPosition renders
+      situation: isLive ? CFB_DEMO_SITUATION : null,
     };
   });
 }

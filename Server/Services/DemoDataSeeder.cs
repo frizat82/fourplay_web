@@ -291,11 +291,34 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         Log.Information("DemoDataSeeder: seeded picks for {Username}", user.UserName);
     }
 
-    // Historical weeks 1-17: same 4 games every week, home teams always cover
-    // Winning user picks: KC, DAL, PHI, BUF (all home = all cover)
-    // Losing user picks:  DEN, DAL, PHI, BUF (DEN = wrong = loss)
+    // Historical weeks 1-17: same 16 games every week (all 32 NFL teams), home teams always cover
+    // 4 picks per user per week (required picks = 4)
+    // Winning user picks: KC, DAL, PHI, BUF (first 4 home teams — all cover)
+    // Losing user picks:  DEN, CLE, NYG, NYJ (first 4 away teams — none cover)
     private static readonly string[] HistWinPicks = ["KC", "DAL", "PHI", "BUF"];
-    private static readonly string[] HistLosePicks = ["DEN", "DAL", "PHI", "BUF"];
+    private static readonly string[] HistLosePicks = ["DEN", "CLE", "NYG", "NYJ"];
+
+    // 16 game pairings covering all 32 NFL teams — same matchups every regular season week 1-17
+    // Real game data comes from ESPN API; these spreads are for demo purposes only
+    private static readonly (string Home, string Away, double HomeSpread, double OU)[] HistGames =
+    [
+        ("KC",  "DEN", -7.0, 47.5),
+        ("DAL", "CLE", -6.0, 44.5),
+        ("PHI", "NYG", -4.0, 43.5),
+        ("BUF", "NYJ", -3.0, 46.5),
+        ("BAL", "PIT", -5.5, 44.0),
+        ("HOU", "JAC", -4.5, 43.0),
+        ("TEN", "IND",  2.5, 41.5),
+        ("MIA", "NE",  -3.5, 45.5),
+        ("LAR", "SEA", -2.5, 46.5),
+        ("SF",  "ARI", -9.5, 47.0),
+        ("LAC", "LV",  -3.5, 44.0),
+        ("GB",  "MIN", -2.5, 46.0),
+        ("DET", "CHI", -7.0, 46.5),
+        ("TB",  "ATL", -3.0, 44.5),
+        ("NO",  "CAR",  5.5, 40.5),
+        ("WAS", "CIN",  1.5, 43.5),
+    ];
 
     // Win pattern per user per week (weeks 1-17, index 0-16); true = win that week
     // Weeks 8-17 repeat the weeks 1-7 pattern (cycled) for a plausible leaderboard.
@@ -308,16 +331,17 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         ["Eve"]    = [false, false, false, true,  true,  false, false, false, false, false, true,  true,  false, false, false, false, false],
     };
 
-    // Real 2025 NFL Playoffs (verified from ESPN API)
+    // Real 2025 NFL Playoffs — home/away verified against ESPN API responses.
     // Wild Card (NflWeek 19 = ESPN postseason week 1): Jan 11-12 2026
     private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] WildCardGames =
     [
-        ("LAR", "CAR", -6.5,  6.5, 48.5, 34, 31, new DateTimeOffset(2026, 1, 11, 18, 0, 0, TimeSpan.Zero)),  // LAR wins
-        ("GB",  "CHI", -3.5,  3.5, 45.5, 27, 31, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // CHI wins (upset)
-        ("BUF", "JAX", -9.5,  9.5, 47.5, 27, 24, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // BUF wins
-        ("SF",  "PHI", -3.5,  3.5, 48.5, 23, 19, new DateTimeOffset(2026, 1, 12, 18, 0, 0, TimeSpan.Zero)),  // SF wins
-        ("LAC", "NE",  -5.5,  5.5, 44.5,  3, 16, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)), // NE wins (upset)
-        ("HOU", "PIT", -6.5,  6.5, 43.5, 30,  6, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)), // HOU wins
+        // ESPN home team listed first — verified from scoreboard API
+        ("CAR", "LAR",  6.5, -6.5, 48.5, 31, 34, new DateTimeOffset(2026, 1, 11, 18, 0, 0, TimeSpan.Zero)),  // LAR wins, CAR covers
+        ("CHI", "GB",  -3.5,  3.5, 45.5, 31, 27, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // CHI wins and covers
+        ("JAX", "BUF",  9.5, -9.5, 47.5, 24, 27, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // BUF wins, JAX covers
+        ("PHI", "SF",   3.5, -3.5, 48.5, 19, 23, new DateTimeOffset(2026, 1, 12, 18, 0, 0, TimeSpan.Zero)),  // SF wins, PHI doesn't cover
+        ("NE",  "LAC", -5.5,  5.5, 44.5, 16,  3, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)), // NE wins and covers
+        ("PIT", "HOU",  6.5, -6.5, 43.5,  6, 30, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)), // HOU wins, PIT doesn't cover
     ];
 
     // Divisional (NflWeek 20 = ESPN postseason week 2): Jan 18-19 2026
@@ -326,14 +350,14 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         ("DEN", "BUF", -2.5,  2.5, 49.5, 33, 30, new DateTimeOffset(2026, 1, 18, 18, 0, 0, TimeSpan.Zero)),  // DEN wins
         ("SEA", "SF",  -3.0,  3.0, 45.0, 41,  6, new DateTimeOffset(2026, 1, 18, 21, 30, 0, TimeSpan.Zero)), // SEA wins
         ("NE",  "HOU", -1.5,  1.5, 44.5, 28, 16, new DateTimeOffset(2026, 1, 19, 18, 0, 0, TimeSpan.Zero)),  // NE wins
-        ("LAR", "CHI", -4.5,  4.5, 46.5, 20, 17, new DateTimeOffset(2026, 1, 19, 21, 30, 0, TimeSpan.Zero)), // LAR wins
+        ("CHI", "LAR",  4.5, -4.5, 46.5, 17, 20, new DateTimeOffset(2026, 1, 19, 21, 30, 0, TimeSpan.Zero)), // LAR wins, CHI covers
     ];
 
     // Conference Championship (NflWeek 21 = ESPN postseason week 3): Jan 26 2026
     private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] ConfChampGames =
     [
-        ("NE",  "DEN", -3.5,  3.5, 44.5, 10,  7, new DateTimeOffset(2026, 1, 26, 18, 0, 0, TimeSpan.Zero)),  // NE wins
-        ("SEA", "LAR", -4.5,  4.5, 46.5, 31, 27, new DateTimeOffset(2026, 1, 26, 21, 30, 0, TimeSpan.Zero)), // SEA wins
+        ("DEN", "NE",   3.5, -3.5, 44.5,  7, 10, new DateTimeOffset(2026, 1, 26, 18, 0, 0, TimeSpan.Zero)),  // NE wins, DEN covers
+        ("SEA", "LAR", -4.5,  4.5, 46.5, 31, 27, new DateTimeOffset(2026, 1, 26, 21, 30, 0, TimeSpan.Zero)), // SEA wins, doesn't cover
     ];
 
     // Super Bowl (NflWeek 23 = ESPN postseason week 5): Feb 9 2026 — NE home (ESPN convention), SEA wins
@@ -343,34 +367,37 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
     ];
 
     // Postseason picks per user (true = home team, false = away team)
-    // Wild Card: LAR/CAR, GB/CHI, BUF/JAX, SF/PHI, LAC/NE, HOU/PIT
+    // Wild Card: CAR/LAR, CHI/GB, JAX/BUF, PHI/SF, NE/LAC, PIT/HOU
+    // Results:  LAR wins, CHI wins, BUF wins, SF wins, NE wins, HOU wins
     private static readonly Dictionary<string, bool[]> WildCardPicks = new()
     {
-        ["Alice"]  = [true,  true,  true,  true,  true,  true],   // LAR, GB, BUF, SF, LAC, HOU (all home)
-        ["Bob"]    = [false, false, false, false, false, false],   // CAR, CHI, JAX, PHI, NE, PIT (all away)
-        ["Carlos"] = [true,  false, true,  true,  false, true],   // LAR, CHI, BUF, SF, NE, HOU
-        ["Dana"]   = [false, true,  false, false, true,  false],  // CAR, GB, JAX, PHI, LAC, PIT
-        ["Eve"]    = [true,  false, true,  true,  false, true],   // LAR, CHI, BUF, SF, NE, HOU
+        ["Alice"]  = [false, true,  false, false, true,  false],  // LAR, CHI, BUF, SF, NE, HOU (picks all winners)
+        ["Bob"]    = [true,  false, true,  true,  false, true],   // CAR, GB, JAX, PHI, LAC, PIT (picks all losers)
+        ["Carlos"] = [false, true,  false, false, true,  false],  // LAR, CHI, BUF, SF, NE, HOU
+        ["Dana"]   = [true,  false, true,  true,  false, true],   // CAR, GB, JAX, PHI, LAC, PIT
+        ["Eve"]    = [false, true,  false, false, true,  true],   // LAR, CHI, BUF, SF, NE, PIT (one wrong)
     };
 
-    // Divisional: DEN/BUF, SEA/SF, NE/HOU, LAR/CHI
+    // Divisional: DEN/BUF, SEA/SF, NE/HOU, CHI/LAR
+    // Results:  DEN wins, SEA wins, NE wins, LAR wins
     private static readonly Dictionary<string, bool[]> DivisionalPicks = new()
     {
-        ["Alice"]  = [true,  true,  true,  true],   // DEN, SEA, NE, LAR (all home, all win)
-        ["Bob"]    = [false, false, false, false],  // BUF, SF, HOU, CHI
-        ["Carlos"] = [true,  true,  true,  true],   // DEN, SEA, NE, LAR
-        ["Dana"]   = [false, false, false, false],  // BUF, SF, HOU, CHI
-        ["Eve"]    = [true,  true,  true,  true],   // DEN, SEA, NE, LAR
+        ["Alice"]  = [true,  true,  true,  false],  // DEN, SEA, NE, LAR (all winners)
+        ["Bob"]    = [false, false, false, true],   // BUF, SF, HOU, CHI (all losers)
+        ["Carlos"] = [true,  true,  true,  false],  // DEN, SEA, NE, LAR
+        ["Dana"]   = [false, false, false, true],   // BUF, SF, HOU, CHI
+        ["Eve"]    = [true,  true,  true,  false],  // DEN, SEA, NE, LAR
     };
 
-    // Conference Championship: NE/DEN, SEA/LAR
+    // Conference Championship: DEN/NE, SEA/LAR
+    // Results:  NE wins, SEA wins
     private static readonly Dictionary<string, bool[]> ConfChampPicks = new()
     {
-        ["Alice"]  = [true,  true],   // NE, SEA (both win)
-        ["Bob"]    = [false, false],  // DEN, LAR
-        ["Carlos"] = [true,  true],   // NE, SEA
-        ["Dana"]   = [false, false],  // DEN, LAR
-        ["Eve"]    = [true,  true],   // NE, SEA
+        ["Alice"]  = [false, true],   // NE, SEA (both win)
+        ["Bob"]    = [true,  false],  // DEN, LAR
+        ["Carlos"] = [false, true],   // NE, SEA
+        ["Dana"]   = [true,  false],  // DEN, LAR
+        ["Eve"]    = [false, true],   // NE, SEA
     };
 
     // Super Bowl: NE home, SEA away. SEA wins. true=NE(home), false=SEA(away)
@@ -419,21 +446,20 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             }
             var nflWeek = await db.NflWeeks.FirstAsync(w => w.Season == DemoSeason && w.NflWeek == week);
 
-            // NflSpreads (4 games, home teams favored)
-            db.NflSpreads.AddRange(
-                Spread(week, "KC",  "DEN", -7.0,  7.0, 47.5, weekGameTime.ToString("o")),
-                Spread(week, "DAL", "CLE", -6.0,  6.0, 44.5, weekGameTime.ToString("o")),
-                Spread(week, "PHI", "NYG", -4.0,  4.0, 43.5, weekGameTime.ToString("o")),
-                Spread(week, "BUF", "NYJ", -3.0,  3.0, 46.5, weekGameTime.ToString("o"))
-            );
+            // NflSpreads (16 games, all 32 NFL teams, home teams favored)
+            foreach (var g in HistGames)
+                db.NflSpreads.Add(Spread(week, g.Home, g.Away, g.HomeSpread, -g.HomeSpread, g.OU, weekGameTime.ToString("o")));
 
-            // NflScores (all home teams win and cover)
-            db.NflScores.AddRange(
-                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "KC",  AwayTeam = "DEN", HomeTeamScore = 24, AwayTeamScore = 14, GameTime = weekGameTime },
-                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "DAL", AwayTeam = "CLE", HomeTeamScore = 28, AwayTeamScore = 20, GameTime = weekGameTime },
-                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "PHI", AwayTeam = "NYG", HomeTeamScore = 20, AwayTeamScore = 13, GameTime = weekGameTime },
-                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "BUF", AwayTeam = "NYJ", HomeTeamScore = 17, AwayTeamScore = 10, GameTime = weekGameTime }
-            );
+            // NflScores (all home teams win and cover — home score exceeds away score + spread margin)
+            var histScores = new[]
+            {
+                ("KC",  "DEN", 24, 14), ("DAL", "CLE", 28, 20), ("PHI", "NYG", 20, 13), ("BUF", "NYJ", 17, 10),
+                ("BAL", "PIT", 21, 13), ("HOU", "JAC", 27, 20), ("TEN", "IND", 24, 17), ("MIA", "NE",  20, 13),
+                ("LAR", "SEA", 24, 20), ("SF",  "ARI", 31, 17), ("LAC", "LV",  20, 14), ("GB",  "MIN", 24, 20),
+                ("DET", "CHI", 28, 17), ("TB",  "ATL", 20, 14), ("NO",  "CAR", 27, 17), ("WAS", "CIN", 17, 14),
+            };
+            foreach (var (home, away, hs, as_) in histScores)
+                db.NflScores.Add(new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = home, AwayTeam = away, HomeTeamScore = hs, AwayTeamScore = as_, GameTime = weekGameTime });
             await db.SaveChangesAsync();
 
             // NflPicks
@@ -734,8 +760,8 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         // Slate 18: Semifinals (Jan 8-9)
         (18, 401800009, "IU",   "ORE",   -3.0,  3.0, 51.5, 34, 27, new DateTimeOffset(2026,  1,  9, 20,  0, 0, TimeSpan.Zero)),
         (18, 401800010, "MIA",  "UGA",    3.5, -3.5, 50.0, 21, 17, new DateTimeOffset(2026,  1,  8, 20,  0, 0, TimeSpan.Zero)),
-        // Slate 19: Championship (Jan 19)
-        (19, 401800011, "IU",   "MIA",   -3.0,  3.0, 46.5, 23, 20, new DateTimeOffset(2026,  1, 19, 23, 30, 0, TimeSpan.Zero)),
+        // Slate 19: Championship (Jan 19) — IN PROGRESS Q3: IU 14, MIA 7 (IU winning)
+        (19, 401800011, "IU",   "MIA",   -3.0,  3.0, 46.5, 14,  7, new DateTimeOffset(2026,  1, 19, 23, 30, 0, TimeSpan.Zero)),
     ];
 
     private async Task<LeagueInfo?> SeedCfbLeagueAsync()
@@ -896,13 +922,14 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             AwayTeam      = g.Away,
             HomeTeamScore = g.HomeScore,
             AwayTeamScore = g.AwayScore,
-            GameStatus    = "StatusFinal",
+            // Championship (slate 19) is in-progress so we can show field position in demo
+            GameStatus    = g.SlateIdx == 19 ? "StatusInProgress" : "StatusFinal",
             GameTime      = g.GameTime,
         }).ToList();
 
         db.CfbScores.AddRange(scores);
         await db.SaveChangesAsync();
-        Log.Information("DemoDataSeeder: seeded {Count} CFB scores (all slates, all final)", scores.Count);
+        Log.Information("DemoDataSeeder: seeded {Count} CFB scores (Championship in-progress, all others final)", scores.Count);
     }
 
     // CFB pick patterns — true = home team, false = away team
