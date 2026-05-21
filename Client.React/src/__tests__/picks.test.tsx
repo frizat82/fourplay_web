@@ -29,7 +29,7 @@ vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/auth', () => ({ useAuth: () => authState }));
 vi.mock('../services/toast', () => ({ useToast: () => toastState }));
 
-vi.mock('../api/espn', () => ({ getScores: vi.fn(), loadScoresWithRetry: vi.fn() }));
+vi.mock('../api/espn', () => ({ getScores: vi.fn(), loadScoresWithRetry: vi.fn(), getWeekScores: vi.fn(), getLiveGames: vi.fn() }));
 vi.mock('../api/league', () => ({
   addPicks: vi.fn(),
   doOddsExist: vi.fn(),

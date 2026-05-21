@@ -25,10 +25,20 @@ test.describe('CFB scores — demo backend', () => {
     await expect(page.getByText('MIA').first()).toBeVisible({ timeout: 5_000 });
   });
 
-  test('Championship final score is shown (IU 23, MIA 20)', async ({ page }) => {
-    // Use heading role — scores render as h6 elements
-    await expect(page.getByRole('heading', { name: '23' })).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole('heading', { name: '20' })).toBeVisible({ timeout: 5_000 });
+  // Championship is in-progress (Q3: IU 14, MIA 7) so field position renders
+  test('Championship shows Live indicator and partial scores', async ({ page }) => {
+    await expect(page.getByText('Live')).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole('heading', { name: '14' })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('heading', { name: '7' })).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('Championship shows field position bar (in-progress)', async ({ page }) => {
+    await expect(page.locator('[data-testid="field-position-bar"]')).toBeVisible({ timeout: 8_000 });
+    await expect(page.locator('[data-testid="ball-marker"]')).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('Championship shows down and distance text', async ({ page }) => {
+    await expect(page.getByText('3rd & 4 at MIA 22')).toBeVisible({ timeout: 8_000 });
   });
 
   test('league picks badge is visible for the Championship game', async ({ page }) => {
