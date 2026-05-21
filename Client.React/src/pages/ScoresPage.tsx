@@ -91,12 +91,24 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     if (!currentLeague || !user?.userId) return;
     setLoading(true);
     try {
+      // If the selected week matches the current (frozen demo) week, use the current
+      // scores path so the in-progress state is shown instead of the real ESPN final.
+      const isSameAsCurrentWeek =
+        data != null &&
+        state.season === data.season &&
+        state.week === data.week &&
+        state.isPostSeason === data.isPostSeason;
+      if (isSameAsCurrentWeek && isCurrentWeek === false) {
+        await reload();
+        setIsCurrentWeek(true);
+        return;
+      }
       const result = await adapter.loadHistoricalScores(currentLeague, user.userId, state);
       setData(result);
     } finally {
       setLoading(false);
     }
-  }, [currentLeague, user?.userId, adapter]);
+  }, [currentLeague, user?.userId, adapter, data, isCurrentWeek, reload]);
 
   // Page visibility
   useEffect(() => {
@@ -114,19 +126,19 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     return () => clearInterval(interval);
   }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded, data?.hasActiveGames, adapter.pollIntervalMs]);
 
-  const handleWeekChange = (week: number, meta?: { isPostSeason?: boolean }) => {
+  const handleWeekChange = useCallback((week: number, meta?: { isPostSeason?: boolean }) => {
     const isPostSeason = meta?.isPostSeason ?? data?.isPostSeason ?? false;
     setIsCurrentWeek(false);
     void loadHistorical({ season: data?.season ?? new Date().getFullYear(), week, isPostSeason });
-  };
-  const handleSeasonChange = (season: number) => {
+  }, [data?.isPostSeason, data?.season, loadHistorical]);
+  const handleSeasonChange = useCallback((season: number) => {
     setIsCurrentWeek(false);
     void loadHistorical({ season, week: data?.week ?? 1, isPostSeason: data?.isPostSeason ?? false });
-  };
-  const handleSeasonTypeChange = (isPostSeason: boolean) => {
+  }, [data?.week, data?.isPostSeason, loadHistorical]);
+  const handleSeasonTypeChange = useCallback((isPostSeason: boolean) => {
     setIsCurrentWeek(false);
     void loadHistorical({ season: data?.season ?? new Date().getFullYear(), week: data?.week ?? 1, isPostSeason });
-  };
+  }, [data?.season, data?.week, loadHistorical]);
 
   // Pick query helpers
   const pickCountForTeam = (gameId: string, team: string, pickType: 'Spread' | 'Over' | 'Under') =>
