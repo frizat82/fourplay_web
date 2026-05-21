@@ -297,16 +297,16 @@
   ],
   "season": {
     "type": 2,
-    "year": 2023
+    "year": 2025
   },
   "week": {
-    "number": 8
+    "number": 18
   },
   "events": [
     {
       "id": "401547496",
       "uid": "s:20~l:28~e:401547496",
-      "date": "2023-10-27T00:15Z",
+      "date": "2026-01-27T00:15Z",
       "name": "Tampa Bay Buccaneers at Buffalo Bills",
       "shortName": "TB @ BUF",
       "season": {
@@ -321,7 +321,7 @@
         {
           "id": "401547496",
           "uid": "s:20~l:28~e:401547496~c:401547496",
-          "date": "2023-10-27T00:15Z",
+          "date": "2026-01-27T00:15Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -838,7 +838,7 @@
     {
       "id": "401547505",
       "uid": "s:20~l:28~e:401547505",
-      "date": "2023-10-29T17:00Z",
+      "date": "2026-01-29T17:00Z",
       "name": "Los Angeles Rams at Dallas Cowboys",
       "shortName": "LAR @ DAL",
       "season": {
@@ -853,7 +853,7 @@
         {
           "id": "401547505",
           "uid": "s:20~l:28~e:401547505~c:401547505",
-          "date": "2023-10-29T17:00Z",
+          "date": "2026-01-29T17:00Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -1543,7 +1543,7 @@
     {
       "id": "401547506",
       "uid": "s:20~l:28~e:401547506",
-      "date": "2023-10-29T17:00Z",
+      "date": "2026-01-29T17:00Z",
       "name": "Minnesota Vikings at Green Bay Packers",
       "shortName": "MIN @ GB",
       "season": {
@@ -1558,7 +1558,7 @@
         {
           "id": "401547506",
           "uid": "s:20~l:28~e:401547506~c:401547506",
-          "date": "2023-10-29T17:00Z",
+          "date": "2026-01-29T17:00Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -2248,7 +2248,7 @@
     {
       "id": "401547500",
       "uid": "s:20~l:28~e:401547500",
-      "date": "2023-10-29T17:00Z",
+      "date": "2026-01-29T17:00Z",
       "name": "Atlanta Falcons at Tennessee Titans",
       "shortName": "ATL @ TEN",
       "season": {
@@ -2263,7 +2263,7 @@
         {
           "id": "401547500",
           "uid": "s:20~l:28~e:401547500~c:401547500",
-          "date": "2023-10-29T17:00Z",
+          "date": "2026-01-29T17:00Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -2953,7 +2953,7 @@
     {
       "id": "401547507",
       "uid": "s:20~l:28~e:401547507",
-      "date": "2023-10-29T17:00Z",
+      "date": "2026-01-29T17:00Z",
       "name": "New Orleans Saints at Indianapolis Colts",
       "shortName": "NO @ IND",
       "season": {
@@ -2968,7 +2968,7 @@
         {
           "id": "401547507",
           "uid": "s:20~l:28~e:401547507~c:401547507",
-          "date": "2023-10-29T17:00Z",
+          "date": "2026-01-29T17:00Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -3658,7 +3658,7 @@
     {
       "id": "401547497",
       "uid": "s:20~l:28~e:401547497",
-      "date": "2023-10-29T17:00Z",
+      "date": "2026-01-29T17:00Z",
       "name": "New England Patriots at Miami Dolphins",
       "shortName": "NE @ MIA",
       "season": {
@@ -3673,7 +3673,7 @@
         {
           "id": "401547497",
           "uid": "s:20~l:28~e:401547497~c:401547497",
-          "date": "2023-10-29T17:00Z",
+          "date": "2026-01-29T17:00Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -4363,7 +4363,7 @@
     {
       "id": "401547498",
       "uid": "s:20~l:28~e:401547498",
-      "date": "2023-10-29T17:00Z",
+      "date": "2026-01-29T17:00Z",
       "name": "New York Jets at New York Giants",
       "shortName": "NYJ @ NYG",
       "season": {
@@ -4378,7 +4378,7 @@
         {
           "id": "401547498",
           "uid": "s:20~l:28~e:401547498~c:401547498",
-          "date": "2023-10-29T17:00Z",
+          "date": "2026-01-29T17:00Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -5068,7 +5068,7 @@
     {
       "id": "401547499",
       "uid": "s:20~l:28~e:401547499",
-      "date": "2023-10-29T17:00Z",
+      "date": "2026-01-29T17:00Z",
       "name": "Jacksonville Jaguars at Pittsburgh Steelers",
       "shortName": "JAX @ PIT",
       "season": {
@@ -5083,7 +5083,7 @@
         {
           "id": "401547499",
           "uid": "s:20~l:28~e:401547499~c:401547499",
-          "date": "2023-10-29T17:00Z",
+          "date": "2026-01-29T17:00Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -5773,7 +5773,7 @@
     {
       "id": "401547508",
       "uid": "s:20~l:28~e:401547508",
-      "date": "2023-10-29T17:00Z",
+      "date": "2026-01-29T17:00Z",
       "name": "Philadelphia Eagles at Washington Commanders",
       "shortName": "PHI @ WSH",
       "season": {
@@ -5788,7 +5788,7 @@
         {
           "id": "401547508",
           "uid": "s:20~l:28~e:401547508~c:401547508",
-          "date": "2023-10-29T17:00Z",
+          "date": "2026-01-29T17:00Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -6478,7 +6478,7 @@
     {
       "id": "401547504",
       "uid": "s:20~l:28~e:401547504",
-      "date": "2023-10-29T17:00Z",
+      "date": "2026-01-29T17:00Z",
       "name": "Houston Texans at Carolina Panthers",
       "shortName": "HOU @ CAR",
       "season": {
@@ -6493,7 +6493,7 @@
         {
           "id": "401547504",
           "uid": "s:20~l:28~e:401547504~c:401547504",
-          "date": "2023-10-29T17:00Z",
+          "date": "2026-01-29T17:00Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -7183,7 +7183,7 @@
     {
       "id": "401547509",
       "uid": "s:20~l:28~e:401547509",
-      "date": "2023-10-29T20:05Z",
+      "date": "2026-01-29T20:05Z",
       "name": "Cleveland Browns at Seattle Seahawks",
       "shortName": "CLE @ SEA",
       "season": {
@@ -7198,7 +7198,7 @@
         {
           "id": "401547509",
           "uid": "s:20~l:28~e:401547509~c:401547509",
-          "date": "2023-10-29T20:05Z",
+          "date": "2026-01-29T20:05Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -7888,7 +7888,7 @@
     {
       "id": "401547502",
       "uid": "s:20~l:28~e:401547502",
-      "date": "2023-10-29T20:25Z",
+      "date": "2026-01-29T20:25Z",
       "name": "Kansas City Chiefs at Denver Broncos",
       "shortName": "KC @ DEN",
       "season": {
@@ -7903,7 +7903,7 @@
         {
           "id": "401547502",
           "uid": "s:20~l:28~e:401547502~c:401547502",
-          "date": "2023-10-29T20:25Z",
+          "date": "2026-01-29T20:25Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -8652,7 +8652,7 @@
     {
       "id": "401547501",
       "uid": "s:20~l:28~e:401547501",
-      "date": "2023-10-29T20:25Z",
+      "date": "2026-01-29T20:25Z",
       "name": "Baltimore Ravens at Arizona Cardinals",
       "shortName": "BAL @ ARI",
       "season": {
@@ -8667,7 +8667,7 @@
         {
           "id": "401547501",
           "uid": "s:20~l:28~e:401547501~c:401547501",
-          "date": "2023-10-29T20:25Z",
+          "date": "2026-01-29T20:25Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -9357,7 +9357,7 @@
     {
       "id": "401547503",
       "uid": "s:20~l:28~e:401547503",
-      "date": "2023-10-29T20:25Z",
+      "date": "2026-01-29T20:25Z",
       "name": "Cincinnati Bengals at San Francisco 49ers",
       "shortName": "CIN @ SF",
       "season": {
@@ -9372,7 +9372,7 @@
         {
           "id": "401547503",
           "uid": "s:20~l:28~e:401547503~c:401547503",
-          "date": "2023-10-29T20:25Z",
+          "date": "2026-01-29T20:25Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -10121,7 +10121,7 @@
     {
       "id": "401547510",
       "uid": "s:20~l:28~e:401547510",
-      "date": "2023-10-30T00:20Z",
+      "date": "2026-01-30T00:20Z",
       "name": "Chicago Bears at Los Angeles Chargers",
       "shortName": "CHI @ LAC",
       "season": {
@@ -10136,7 +10136,7 @@
         {
           "id": "401547510",
           "uid": "s:20~l:28~e:401547510~c:401547510",
-          "date": "2023-10-30T00:20Z",
+          "date": "2026-01-30T00:20Z",
           "attendance": 0,
           "type": {
             "id": "1",
@@ -10826,7 +10826,7 @@
     {
       "id": "401547511",
       "uid": "s:20~l:28~e:401547511",
-      "date": "2023-10-31T00:15Z",
+      "date": "2026-01-31T00:15Z",
       "name": "Las Vegas Raiders at Detroit Lions",
       "shortName": "LV @ DET",
       "season": {
@@ -10841,7 +10841,7 @@
         {
           "id": "401547511",
           "uid": "s:20~l:28~e:401547511~c:401547511",
-          "date": "2023-10-31T00:15Z",
+          "date": "2026-01-31T00:15Z",
           "attendance": 0,
           "type": {
             "id": "1",
