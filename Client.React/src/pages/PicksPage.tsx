@@ -126,25 +126,25 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     return () => clearInterval(interval);
   }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded, adapter.pollIntervalMs]);
 
-  const handleWeekChange = (newWeek: number, meta?: { isPostSeason?: boolean }) => {
+  const handleWeekChange = useCallback((newWeek: number, meta?: { isPostSeason?: boolean }) => {
     const ps = meta?.isPostSeason ?? isPostSeason;
     setWeek(newWeek);
     setIsPostSeason(ps);
     setIsCurrentWeek(false);
     void loadHistoricalWeek({ season, week: newWeek, isPostSeason: ps });
-  };
+  }, [isPostSeason, season, loadHistoricalWeek]);
 
-  const handleSeasonChange = (newSeason: number) => {
+  const handleSeasonChange = useCallback((newSeason: number) => {
     setSeason(newSeason);
     setIsCurrentWeek(false);
     void loadHistoricalWeek({ season: newSeason, week, isPostSeason });
-  };
+  }, [week, isPostSeason, loadHistoricalWeek]);
 
-  const handleSeasonTypeChange = (ps: boolean) => {
+  const handleSeasonTypeChange = useCallback((ps: boolean) => {
     setIsPostSeason(ps);
     setIsCurrentWeek(false);
     void loadHistoricalWeek({ season, week, isPostSeason: ps });
-  };
+  }, [season, week, loadHistoricalWeek]);
 
   // Pick management
   const isSelected = (gameId: string, team: string, pickType = 'Spread') =>
