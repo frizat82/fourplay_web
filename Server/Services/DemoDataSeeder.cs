@@ -547,7 +547,8 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             HomeTeamSpread = homeSpread,
             AwayTeamSpread = awaySpread,
             OverUnder = ou,
-            GameTime = DateTime.Parse(gameTimeUtc, null, System.Globalization.DateTimeStyles.RoundtripKind),
+            // Parse as UTC explicitly — DateTimeOffset.Parse preserves offset, avoiding local-time conversion
+            GameTime = DateTimeOffset.Parse(gameTimeUtc, null, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal),
         };
 
     // -----------------------------------------------------------------------
