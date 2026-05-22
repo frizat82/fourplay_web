@@ -155,7 +155,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     (data?.userPicks ?? []).some(p => p.gameId === gameId && p.team === team && p.pickType === pickType);
 
   const showDialog = (game: GameView, team: string, logo: string, pickType: 'Spread' | 'Over' | 'Under' = 'Spread') => {
-    if (!adapter.supportsPickDialog) return;
+
     const names = (data?.allPicks ?? []).filter(p => p.gameId === game.id && p.team === team && p.pickType === pickType).map(p => p.userName).sort();
     if (!names.length) return;
     setDialogState({
@@ -225,7 +225,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
       <Grid container spacing={2}>
         {/* Controls row */}
         <Grid size={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          {adapter.supportsMatrix && (
+          {data?.allPicks.length && data.allPicks.length > 0 && (
             <Button variant="contained" onClick={() => setShowMatrixView(p => !p)}>
               {showMatrixView ? 'Show Standard View' : 'Show As Matrix'}
             </Button>
@@ -238,7 +238,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
         </Grid>
 
         {/* Matrix view */}
-        {showMatrixView && adapter.supportsMatrix ? (
+        {showMatrixView ? (
           <Grid size={12}>
             <UserPicksMatrix
               users={users}
@@ -351,6 +351,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                           badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Over')}
                           invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Over') === 0}>
                           <IconButton size="small"
+                            color={(isFinal || isLive) ? (ov ? 'success' : ov === false ? 'error' : 'inherit') : 'inherit'}
                             disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Over') === 0}
                             onClick={() => showDialog(game, game.homeTeam, game.homeLogo ?? '', 'Over')}>
                             <PersonIcon />
@@ -363,6 +364,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                           badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Under')}
                           invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}>
                           <IconButton size="small"
+                            color={(isFinal || isLive) ? (!ov ? 'success' : ov === true ? 'error' : 'inherit') : 'inherit'}
                             disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}
                             onClick={() => showDialog(game, game.homeTeam, game.homeLogo ?? '', 'Under')}>
                             <PersonIcon />
@@ -380,7 +382,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
         )}
       </Grid>
 
-      {dialogState && adapter.supportsPickDialog && (
+      {dialogState && (
         <PickDialog
           open={dialogState.open}
           onClose={() => setDialogState(null)}

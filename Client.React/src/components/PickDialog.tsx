@@ -42,7 +42,7 @@ export default function PickDialog({
               <Typography variant="h5" fontWeight={700}>
                 Team: {teamAbbr}
               </Typography>
-              <img src={logo} alt={teamAbbr} width={60} style={{ borderRadius: 8 }} />
+              {logo && <img src={logo} alt={teamAbbr} width={60} style={{ borderRadius: 8 }} />}
             </>
           )}
           {userNamesOver.length > 0 && <ArrowCircleUpIcon fontSize="large" />}
