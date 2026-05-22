@@ -50,8 +50,8 @@ function competitionToGameView(
     awayScore,
     gameStatus: status,
     gameTime: competition.date,
-    homeCovers: isFinal && homeSpreadVal != null ? (homeScore + homeSpreadVal) > awayScore : null,
-    overWins: isFinal && overUnderVal != null ? (homeScore + awayScore) > overUnderVal : null,
+    homeCovers: (isFinal || status === 'in_progress' || status === 'halftime') && homeSpreadVal != null ? (homeScore + homeSpreadVal) > awayScore : null,
+    overWins: (isFinal || status === 'in_progress' || status === 'halftime') && overUnderVal != null ? (homeScore + awayScore) > overUnderVal : null,
     weather: event.weather ? {
       displayValue: event.weather.displayValue,
       conditionId: event.weather.conditionId,
@@ -104,7 +104,9 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
         const home = getHomeTeamAbbr(comp);
         const away = getAwayTeamAbbr(comp);
         const live = liveGames.find(g => g.homeTeam === home && g.awayTeam === away);
-        map.set(`${home}-${away}`, live?.situation ?? null);
+        // Merge period/clock from LiveGame into the situation so ScoresPage can display "Q3 8:42"
+        const sit = live?.situation ?? null;
+        map.set(`${home}-${away}`, sit || live?.period ? { ...(sit ?? { possessionTeam: null, isHomePossession: false, yardLine: 0, down: 0, distance: 0, isRedZone: false, downDistanceText: '' }), period: live?.period, displayClock: live?.displayClock } : null);
       }
     }
   } catch { /* live games unavailable */ }
@@ -158,7 +160,11 @@ export function createNflAdapter(): SportAdapter {
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
-      const data = await getWeekScores(week, season, isPostSeason);
+      // Use frozen JSON when requesting the current demo week for consistent in-progress state
+      const frozenData = await loadScoresWithRetry();
+      const frozenIsPostSeason = isPostSeasonHelper(frozenData);
+      const isFrozenWeek = frozenData?.season?.year === season && frozenData?.week?.number === week && frozenIsPostSeason === isPostSeason;
+      const data = isFrozenWeek ? frozenData : await getWeekScores(week, season, isPostSeason);
       if (!data?.events?.length) return null;
       const nflWeek = getWeekFromEspnWeek(week, isPostSeason);
       const [picksResult, hasOdds] = await Promise.all([getUserPicks(userId, leagueId, season, nflWeek), doOddsExist(leagueId, season, nflWeek)]);
@@ -203,7 +209,10 @@ export function createNflAdapter(): SportAdapter {
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
-      const data = await getWeekScores(week, season, isPostSeason);
+      const frozenData = await loadScoresWithRetry();
+      const frozenIsPostSeason = isPostSeasonHelper(frozenData);
+      const isFrozenWeek = frozenData?.season?.year === season && frozenData?.week?.number === week && frozenIsPostSeason === isPostSeason;
+      const data = isFrozenWeek ? frozenData : await getWeekScores(week, season, isPostSeason);
       if (!data?.events?.length) return null;
       const nflWeek = getWeekFromEspnWeek(week, isPostSeason);
       const hasOdds = await doOddsExist(leagueId, season, nflWeek);

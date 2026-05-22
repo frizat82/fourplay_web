@@ -150,7 +150,7 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
     private async Task FixSpreadAbbreviationsAsync()
     {
         // Correct legacy abbreviations that were seeded before the ESPN mapping was applied
-        var fixes = new Dictionary<string, string> { ["WSH"] = "WAS", ["JAX"] = "JAC", ["ARZ"] = "ARI" };
+        var fixes = new Dictionary<string, string> { ["WSH"] = "WAS", ["ARZ"] = "ARI" };
         bool changed = false;
         foreach (var spread in await db.NflSpreads.Where(s => s.Season == DemoSeason && s.NflWeek == DemoWeek).ToListAsync())
         {
@@ -338,7 +338,7 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         // ESPN home team listed first — verified from scoreboard API
         ("CAR", "LAR",  6.5, -6.5, 48.5, 31, 34, new DateTimeOffset(2026, 1, 11, 18, 0, 0, TimeSpan.Zero)),  // LAR wins, CAR covers
         ("CHI", "GB",  -3.5,  3.5, 45.5, 31, 27, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // CHI wins and covers
-        ("JAX", "BUF",  9.5, -9.5, 47.5, 24, 27, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // BUF wins, JAX covers
+        ("JAC", "BUF",  9.5, -9.5, 47.5, 24, 27, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // BUF wins, JAC covers
         ("PHI", "SF",   3.5, -3.5, 48.5, 19, 23, new DateTimeOffset(2026, 1, 12, 18, 0, 0, TimeSpan.Zero)),  // SF wins, PHI doesn't cover
         ("NE",  "LAC", -5.5,  5.5, 44.5, 16,  3, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)), // NE wins and covers
         ("PIT", "HOU",  6.5, -6.5, 43.5,  6, 30, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)), // HOU wins, PIT doesn't cover
@@ -367,14 +367,14 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
     ];
 
     // Postseason picks per user (true = home team, false = away team)
-    // Wild Card: CAR/LAR, CHI/GB, JAX/BUF, PHI/SF, NE/LAC, PIT/HOU
+    // Wild Card: CAR/LAR, CHI/GB, JAC/BUF, PHI/SF, NE/LAC, PIT/HOU
     // Results:  LAR wins, CHI wins, BUF wins, SF wins, NE wins, HOU wins
     private static readonly Dictionary<string, bool[]> WildCardPicks = new()
     {
         ["Alice"]  = [false, true,  false, false, true,  false],  // LAR, CHI, BUF, SF, NE, HOU (picks all winners)
-        ["Bob"]    = [true,  false, true,  true,  false, true],   // CAR, GB, JAX, PHI, LAC, PIT (picks all losers)
+        ["Bob"]    = [true,  false, true,  true,  false, true],   // CAR, GB, JAC, PHI, LAC, PIT (picks all losers)
         ["Carlos"] = [false, true,  false, false, true,  false],  // LAR, CHI, BUF, SF, NE, HOU
-        ["Dana"]   = [true,  false, true,  true,  false, true],   // CAR, GB, JAX, PHI, LAC, PIT
+        ["Dana"]   = [true,  false, true,  true,  false, true],   // CAR, GB, JAC, PHI, LAC, PIT
         ["Eve"]    = [false, true,  false, false, true,  true],   // LAR, CHI, BUF, SF, NE, PIT (one wrong)
     };
 
@@ -995,7 +995,7 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         // Slates 1-7: 7×6=42, Slate 8: 6, Slates 9-14: 6×6=36, Slate 15: 6
         // Slate 16 (FR): 4, Slate 17 (QF): 4, Slate 18 (SF): 2, Slate 19 (Champ): 1
         // Total per user: 42+6+36+6+4+4+2+1 = 101 → 5×101 = 505
-        const int ExpectedPickCount = 505;
+        const int ExpectedPickCount = 507; // 505 spread + 2 O/U for CFP Championship
         if (await db.CfbPicks.CountAsync(p => p.LeagueId == league.Id) >= ExpectedPickCount) return;
         // Clear any partial seed before re-seeding
         db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => p.LeagueId == league.Id));
@@ -1101,11 +1101,17 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
                     AddPick(league.Id, user.Id, slateSf.Id, sfGames[i].EventId, sf[i] ? sfGames[i].Home : sfGames[i].Away);
             }
 
-            // CFP Championship (slate 19)
-            if (CfbFinalPicks.TryGetValue(username, out var final) && slates.FirstOrDefault(s => s.SlateNumber == 19) is { } slateFinal)
+            // CFP Championship (slate 19): spread pick + Over/Under picks for some users
+            if (slates.FirstOrDefault(s => s.SlateNumber == 19) is { } slateFinal)
             {
                 var finalGame = CfpGames.First(g => g.SlateIdx == 19);
-                AddPick(league.Id, user.Id, slateFinal.Id, finalGame.EventId, final ? finalGame.Home : finalGame.Away);
+                if (CfbFinalPicks.TryGetValue(username, out var final))
+                    AddPick(league.Id, user.Id, slateFinal.Id, finalGame.EventId, final ? finalGame.Home : finalGame.Away);
+                // Over/Under picks so users can test the O/U row on in-progress CFP Championship
+                if (username == "Bob")
+                    picks.Add(new CfbPicks { UserId = user.Id, LeagueId = league.Id, CfbSlateId = slateFinal.Id, EspnEventId = finalGame.EventId, Team = finalGame.Home, PickType = "Over", Season = CfbDemoSeason });
+                if (username == "Dana")
+                    picks.Add(new CfbPicks { UserId = user.Id, LeagueId = league.Id, CfbSlateId = slateFinal.Id, EspnEventId = finalGame.EventId, Team = finalGame.Home, PickType = "Under", Season = CfbDemoSeason });
             }
         }
 

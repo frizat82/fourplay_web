@@ -13,6 +13,9 @@ public class LiveGameDto
     public DateTimeOffset KickoffUtc { get; set; }
     public GameSituationDto? Situation { get; set; }
 
+    public int? Period { get; set; }
+    public string? DisplayClock { get; set; }
+
     public static LiveGameDto FromCompetition(Competition competition)
     {
         var home = competition.Competitors.First(c => c.HomeAway == HomeAway.Home);
@@ -26,6 +29,8 @@ public class LiveGameDto
             AwayScore = away.Score,
             IsCompleted = competition.Status?.Type?.Completed ?? false,
             KickoffUtc = competition.Date,
+            Period = (int?)competition.Status?.Period,
+            DisplayClock = competition.Status?.DisplayClock,
             Situation = competition.Situation is null
                 ? null
                 : GameSituationDto.FromSituation(competition.Situation, home, away),

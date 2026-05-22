@@ -31,9 +31,11 @@ test.describe('NFL scores — demo backend', () => {
     await expect(page.getByText('No Odds Available')).not.toBeVisible({ timeout: 3_000 });
   });
 
-  // REGRESSION: in-progress game must show "Live" indicator
-  test('Super Bowl shows Live indicator', async ({ page }) => {
-    await expect(page.getByText('Live')).toBeVisible({ timeout: 8_000 });
+  // REGRESSION: in-progress game must show clock indicator (Q3 8:42 or Live fallback)
+  test('Super Bowl shows game clock (Q3) indicator', async ({ page }) => {
+    // Shows "Q3 8:42" when situation has period+clock, or "Live" as fallback
+    const clockText = page.getByText(/Q[1-4]|Live/);
+    await expect(clockText.first()).toBeVisible({ timeout: 8_000 });
   });
 
   // REGRESSION: field position must show for in-progress games
@@ -51,12 +53,17 @@ test.describe('NFL scores — demo backend', () => {
   test('Wild Card spread badges show green/red cover colors', async ({ page }) => {
     const weekSelect = page.getByRole('combobox').nth(1);
     await weekSelect.click();
-    await page.getByRole('option', { name: 'Wild Card' }).click();
+    // Wait for both ESPN scores AND league picks to complete before checking badge colors
+    await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/league/') && r.url().includes('/picks/') && r.status() === 200),
+      page.getByRole('option', { name: 'Wild Card' }).click(),
+    ]);
     await waitForSpinner(page);
+    await page.waitForTimeout(500); // allow React to batch-update allPicks into badge visibility
 
     // Should have green and red badges — no "default" (which means homeCovers=null/missing spreads)
-    const successBadges = page.locator('.MuiBadge-colorSuccess');
-    const errorBadges = page.locator('.MuiBadge-colorError');
+    const successBadges = page.locator('.MuiBadge-colorSuccess:not(.MuiBadge-invisible)');
+    const errorBadges = page.locator('.MuiBadge-colorError:not(.MuiBadge-invisible)');
     await expect(successBadges.first()).toBeVisible({ timeout: 8_000 });
     await expect(errorBadges.first()).toBeVisible({ timeout: 5_000 });
   });
