@@ -36,6 +36,8 @@ const CFB_DEMO_SITUATION: GameSituation = {
   down: 3,
   distance: 4,
   isRedZone: true,
+  period: 3,
+  displayClock: '7:23',
 };
 
 function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] {
@@ -58,8 +60,8 @@ function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] 
       awayScore: as_,
       gameStatus: status,
       gameTime: sp.gameTime,
-      homeCovers: isFinal && hs != null && as_ != null ? (hs + sp.homeTeamSpread) > as_ : null,
-      overWins: isFinal && hs != null && as_ != null ? (hs + as_) > sp.overUnder : null,
+      homeCovers: (isFinal || isLive) && hs != null && as_ != null ? (hs + sp.homeTeamSpread) > as_ : null,
+      overWins: (isFinal || isLive) && hs != null && as_ != null ? (hs + as_) > sp.overUnder : null,
       weather: score?.weatherDisplayValue ? {
         displayValue: score.weatherDisplayValue,
         conditionId: score.weatherConditionId ?? undefined,

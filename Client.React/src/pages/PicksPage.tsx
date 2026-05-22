@@ -141,10 +141,11 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   }, [week, isPostSeason, loadHistoricalWeek]);
 
   const handleSeasonTypeChange = useCallback((ps: boolean) => {
+    // WeekYearSelector.handleSeasonTypeSelect also calls onWeekChange with the last available
+    // week — that handleWeekChange call loads the correct historical week. Don't double-load here.
     setIsPostSeason(ps);
     setIsCurrentWeek(false);
-    void loadHistoricalWeek({ season, week, isPostSeason: ps });
-  }, [season, week, loadHistoricalWeek]);
+  }, []);
 
   // Pick management
   const isSelected = (gameId: string, team: string, pickType = 'Spread') =>

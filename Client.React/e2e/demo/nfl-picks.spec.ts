@@ -48,12 +48,14 @@ test.describe('NFL picks — demo backend', () => {
     await page.getByRole('option', { name: 'Wild Card' }).click();
     await waitForSpinner(page);
 
-    // All 6 Wild Card teams must appear
-    for (const team of ['CAR', 'LAR', 'CHI', 'GB', 'JAX', 'BUF', 'PHI', 'SF', 'NE', 'LAC', 'PIT', 'HOU']) {
-      await expect(page.getByText(team).first()).toBeVisible({ timeout: 15_000 });
+    // Wait for all 6 games to load — wait for the last team in the list to appear
+    await expect(page.getByText('HOU', { exact: true }).first()).toBeVisible({ timeout: 20_000 });
+    // All 6 Wild Card games — backend normalizes JAX → JAC via NflTeamAbbrMapping
+    for (const team of ['CAR', 'LAR', 'CHI', 'GB', 'JAC', 'BUF', 'PHI', 'SF', 'NE', 'LAC', 'PIT', 'HOU']) {
+      await expect(page.getByText(team, { exact: true }).first()).toBeVisible({ timeout: 5_000 });
     }
     // All 6 games have O/U row
-    await expect(page.locator('[data-testid="over-under-controls"]')).toHaveCount(6, { timeout: 8_000 });
+    await expect(page.locator('[data-testid="over-under-controls"]')).toHaveCount(6, { timeout: 10_000 });
   });
 
   test('Alice Wild Card picks are all visible', async ({ page }) => {
@@ -72,8 +74,8 @@ test.describe('NFL picks — demo backend', () => {
     await page.getByRole('option', { name: 'Regular Season' }).click();
     await waitForSpinner(page);
 
-    // Default to Week 18 (last regular season week)
-    await expect(page.getByRole('combobox').nth(1)).toContainText('Week 18', { timeout: 5_000 });
+    // WeekYearSelector defaults to last option (Week 18) after season-type switch
+    await expect(page.getByRole('combobox').nth(1)).toContainText('Week 18', { timeout: 10_000 });
 
     // Open week dropdown and count options
     await page.getByRole('combobox').nth(1).click();
