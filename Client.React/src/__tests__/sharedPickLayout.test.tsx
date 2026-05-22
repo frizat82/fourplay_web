@@ -7,7 +7,7 @@ import { vi } from 'vitest';
 import PicksPage from '../pages/PicksPage';
 import { createCfbAdapter } from '../services/cfbAdapter';
 import { createNflAdapter } from '../services/nflAdapter';
-import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto } from '../types/league';
+import type { CfbSlateDto, CfbSpreadDto } from '../types/league';
 
 vi.mock('../services/session', () => ({
   useSession: () => ({
@@ -26,7 +26,6 @@ vi.mock('../components/sports/TeamHelmet', () => ({
 vi.mock('../components/WeatherIcon', () => ({ default: () => null }));
 
 // ─── NFL regression ──────────────────────────────────────────────────────────
-vi.mock('../api/espn', () => ({ getScores: vi.fn(), loadScoresWithRetry: vi.fn(), getWeekScores: vi.fn() }));
 vi.mock('../api/league', () => ({ addPicks: vi.fn(), doOddsExist: vi.fn(), getUserPicks: vi.fn(), spreadBatch: vi.fn() }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
@@ -68,22 +67,32 @@ describe('NFL PicksPage — GameCard layout regression', () => {
 
 // ─── CFB regression ──────────────────────────────────────────────────────────
 vi.mock('../api/cfb', () => ({
-  getCfbSlates: vi.fn(), getCfbSpreads: vi.fn(), getCfbScores: vi.fn(),
+  getCfbSlates: vi.fn(), getCfbSpreads: vi.fn(),
   getCfbUserPicks: vi.fn(), addCfbPicks: vi.fn(), deleteCfbPicks: vi.fn(),
 }));
+// Single espn mock covering both NFL and CFB needs
+vi.mock('../api/espn', () => ({
+  loadScoresWithRetry: vi.fn(),
+  getWeekScores: vi.fn(),
+  getScores: vi.fn(),
+  getCfbLiveScores: vi.fn(),
+  getLiveGames: vi.fn(),
+}));
 
-import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
+import { getCfbSlates, getCfbSpreads, getCfbUserPicks } from '../api/cfb';
+import { getCfbLiveScores, getLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
 const spread: CfbSpreadDto = { id: 1, cfbSlateId: 1, espnEventId: 100, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5, gameTime: '2030-10-11T20:00:00Z' };
-const cfbScore: CfbScoreDto = { id: 1, cfbSlateId: 1, espnEventId: 100, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamScore: 0, awayTeamScore: 0, gameStatus: 'StatusScheduled', gameTime: '2030-10-11T20:00:00Z' };
 
 describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getCfbSlates).mockResolvedValue([slate]);
     vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-    vi.mocked(getCfbScores).mockResolvedValue([cfbScore]);
+    // ESPN returns scheduled game (future date → no score yet)
+    vi.mocked(getCfbLiveScores).mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
+    vi.mocked(getLiveGames).mockResolvedValue([]);
     vi.mocked(getCfbUserPicks).mockResolvedValue([]);
   });
 

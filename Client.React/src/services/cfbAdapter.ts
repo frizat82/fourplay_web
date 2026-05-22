@@ -1,15 +1,12 @@
-import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
+import { getCfbSlates, getCfbSpreads, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
+import { getCfbLiveScores, getLiveGames } from '../api/espn';
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins } from '../utils/gameHelpers';
-import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
+import type { CfbSlateDto, CfbSpreadDto, CfbPickDto } from '../types/league';
+import type { EspnScores } from '../types/espn';
+import { getHomeTeamScore, getAwayTeamScore } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } from './sportAdapter';
 
 /** Map CFB backend status strings to canonical GameStatusValue */
-function toCfbGameStatus(gameStatus: string | null | undefined): GameStatusValue {
-  if (gameStatus === 'StatusFinal') return 'final';
-  if (gameStatus === 'StatusInProgress') return 'in_progress';
-  if (gameStatus === 'StatusScheduled' || !gameStatus) return 'scheduled';
-  return null;
-}
 
 const CFB_SEASON = 2025;
 const CFB_REGULAR_WEEKS = Array.from({ length: 14 }, (_, i) => i + 1);
@@ -40,14 +37,36 @@ const CFB_DEMO_SITUATION: GameSituation = {
   displayClock: '7:23',
 };
 
-function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] {
-  const scoreMap = new Map(scores.map(s => [s.espnEventId, s]));
+/**
+ * Merge our spread data (owned) with live ESPN competition data.
+ * ESPN is the source of truth for score, status, and situation — same as NFL.
+ */
+function buildGamesFromEspn(spreads: CfbSpreadDto[], espnData: EspnScores | null, situationMap: Map<string, import('../types/liveGame').GameSituation | null>): GameView[] {
+  // Index ESPN competitions by espnEventId for O(1) lookup
+  const espnMap = new Map<number, import('../types/espn').Competition>();
+  for (const event of espnData?.events ?? []) {
+    for (const comp of event.competitions) {
+      espnMap.set(parseInt(comp.id), comp);
+    }
+  }
+
   return spreads.map(sp => {
-    const score = scoreMap.get(sp.espnEventId);
-    const status = toCfbGameStatus(score?.gameStatus);
+    const comp = espnMap.get(sp.espnEventId);
+    const status: GameStatusValue = comp
+      ? (() => {
+          const t = comp.status?.type;
+          if (t?.completed) return 'final';
+          const name = t?.name as string | undefined;
+          if (!name || name === 'STATUS_SCHEDULED') return 'scheduled';
+          if (name === 'STATUS_HALFTIME') return 'halftime';
+          if (name === 'STATUS_IN_PROGRESS' || name === 'STATUS_END_PERIOD') return 'in_progress';
+          return 'scheduled';
+        })()
+      : 'scheduled';
     const isLive = status === 'in_progress' || status === 'halftime';
-    const hs = score?.homeTeamScore ?? null;
-    const as_ = score?.awayTeamScore ?? null;
+    const hs = comp ? getHomeTeamScore(comp) : null;
+    const as_ = comp ? getAwayTeamScore(comp) : null;
+    const key = `${sp.homeTeam}-${sp.awayTeam}`;
     return {
       id: sp.espnEventId.toString(),
       homeTeam: sp.homeTeam,
@@ -61,13 +80,7 @@ function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] 
       gameTime: sp.gameTime,
       homeCovers: computeHomeCovers(status, sp.homeTeamSpread, hs, as_),
       overWins: computeOverWins(status, sp.overUnder, hs, as_),
-      weather: score?.weatherDisplayValue ? {
-        displayValue: score.weatherDisplayValue,
-        conditionId: score.weatherConditionId ?? undefined,
-        temperatureF: score.weatherTemperatureF ?? undefined,
-      } : undefined,
-      // Provide demo field-position data for in-progress games so FieldPosition renders
-      situation: isLive ? CFB_DEMO_SITUATION : null,
+      situation: situationMap.get(key) ?? (isLive ? CFB_DEMO_SITUATION : null),
     };
   });
 }
@@ -82,14 +95,30 @@ function cfbPickToPickView(pick: CfbPickDto): PickView {
   };
 }
 
-async function loadSlate(leagueId: number, _userId: string, slateId: number): Promise<{ games: GameView[]; userPicks: PickView[] }> {
-  const [spreads, scores, picks] = await Promise.all([
+async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores | null; situations: Map<string, import('../types/liveGame').GameSituation | null> }> {
+  const startDate = slate.startDate;
+  const endDate = slate.endDate;
+  const [espn, liveGames] = await Promise.all([
+    getCfbLiveScores(startDate, endDate),
+    getLiveGames().catch(() => []),
+  ]);
+  // Build situation map from live games
+  const situations = new Map<string, import('../types/liveGame').GameSituation | null>();
+  for (const live of liveGames) {
+    const sit = live.situation ? { ...live.situation, period: live.period, displayClock: live.displayClock } : null;
+    situations.set(`${live.homeTeam}-${live.awayTeam}`, sit);
+  }
+  return { espn, situations };
+}
+
+async function loadSlate(leagueId: number, _userId: string, slateId: number, slate: CfbSlateDto): Promise<{ games: GameView[]; userPicks: PickView[] }> {
+  const [spreads, picks, { espn, situations }] = await Promise.all([
     getCfbSpreads(slateId),
-    getCfbScores(slateId),
     getCfbUserPicks(leagueId, slateId),
+    fetchCfbEspnData(slate),
   ]);
   return {
-    games: buildGames(spreads, scores),
+    games: buildGamesFromEspn(spreads, espn, situations),
     userPicks: picks.map(cfbPickToPickView),
   };
 }
@@ -106,12 +135,12 @@ export function createCfbAdapter(): SportAdapter {
   }
 
   async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
-    const [spreads, scores, allPickDtos] = await Promise.all([
+    const [spreads, allPickDtos, { espn, situations }] = await Promise.all([
       getCfbSpreads(slate.id),
-      getCfbScores(slate.id),
       getCfbAllPicks(leagueId, slate.id),
+      fetchCfbEspnData(slate),
     ]);
-    const games = buildGames(spreads, scores);
+    const games = buildGamesFromEspn(spreads, espn, situations);
     const allPicks = allPickDtos.map(cfbPickToPickView);
     const userPicks = allPicks.filter(p => p.userId === userId);
     return { games, allPicks, userPicks };
@@ -138,7 +167,7 @@ export function createCfbAdapter(): SportAdapter {
         return { season: CFB_SEASON, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_SEASON };
       }
       const weekState = slateToWeekState(active);
-      const { games, userPicks } = await loadSlate(leagueId, userId, active.id);
+      const { games, userPicks } = await loadSlate(leagueId, userId, active.id, active);
       // maxWeek = max REGULAR season week with data (caps the regular season selector)
       const maxRegularSlate = slates
         .filter(s => s.slateType === 'RegularSeason')
@@ -151,7 +180,7 @@ export function createCfbAdapter(): SportAdapter {
       const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
       const slate = slates.find(s => s.slateNumber === slateNum && s.season === season);
       if (!slate) return null;
-      const { games, userPicks } = await loadSlate(leagueId, userId, slate.id);
+      const { games, userPicks } = await loadSlate(leagueId, userId, slate.id, slate);
       if (games.length === 0) return null;
       return { season, week, isPostSeason, games, userPicks, hasOdds: true, requiredPicks: games.length, maxWeek: week, maxSeason: season };
     },

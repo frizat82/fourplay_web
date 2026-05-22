@@ -24,6 +24,14 @@ export async function loadScoresWithRetry(maxRetries = 5, delayMs = 500): Promis
   return data;
 }
 
+/** Fetches live CFB game data from ESPN for the slate's date window. */
+export async function getCfbLiveScores(startDate: string, endDate: string): Promise<EspnScores | null> {
+  const { data } = await http.get<EspnScores>('/api/espn/cfb/scores', {
+    params: { startDate, endDate },
+  });
+  return data ?? null;
+}
+
 export async function getWeekScores(week: number, year: number, postSeason = false) {
   const { data } = await http.get<EspnScores>(`/api/espn/scores/week/${week}/${year}`, {
     params: { postSeason },
