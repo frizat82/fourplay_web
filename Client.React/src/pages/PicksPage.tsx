@@ -80,7 +80,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       setIsCurrentWeek(true);
       setMaxWeek(result.maxWeek);
       setMaxSeason(result.maxSeason);
-      if (adapter.supportsJerseys && adapter.loadJerseys) {
+      if (adapter.loadJerseys) {
         adapter.loadJerseys(result.season, result.week).then(setJerseyCache).catch(() => {});
       }
     } catch (err) {
@@ -102,7 +102,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       }
       const ep = new Set(result.userPicks.map(p => pickKey(p.gameId, p.team, p.pickType)));
       applyLoaded({ ...result, existingPicks: ep });
-      if (adapter.supportsJerseys && adapter.loadJerseys) {
+      if (adapter.loadJerseys) {
         adapter.loadJerseys(result.season, result.week).then(setJerseyCache).catch(() => {});
       }
     } finally {
@@ -229,7 +229,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       )}
 
       <Grid container spacing={2}>
-        {adapter.supportsJerseys && Object.keys(jerseyCache).length > 0 && (
+        {Object.keys(jerseyCache).length > 0 && (
           <Grid size={12} sx={{ display: 'flex', justifyContent: 'center' }}>
             <Button variant="outlined" color="info" startIcon={<CheckroomIcon />} onClick={() => setShowJerseys(p => !p)}>
               {showJerseys ? 'Show Logos' : 'Show Jerseys'}

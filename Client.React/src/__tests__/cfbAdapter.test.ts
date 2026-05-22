@@ -109,9 +109,6 @@ describe('cfbAdapter', () => {
     it('pollIntervalMs is 0 (no polling)', () => {
       expect(adapter.pollIntervalMs).toBe(0);
     });
-    it('supportsJerseys is false', () => {
-      expect(adapter.supportsJerseys).toBe(false);
-    });
     it('currentSeasonYear returns 2025', async () => {
       expect(await adapter.currentSeasonYear()).toBe(2025);
     });

@@ -116,9 +116,6 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
 export function createNflAdapter(): SportAdapter {
   return {
     pollIntervalMs: 30_000,
-    supportsJerseys: true,
-    supportsMatrix: true,
-    supportsPickDialog: true,
     weekSelectorConfig: {
       maxRegularSeasonWeek: 18,
       minSeason: 2020,

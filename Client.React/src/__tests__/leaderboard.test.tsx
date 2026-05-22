@@ -33,9 +33,6 @@ const mockAdapter: SportAdapter = {
   clearPicks: vi.fn(),
   currentSeasonYear: vi.fn().mockResolvedValue(2023),
   pollIntervalMs: 0,
-  supportsJerseys: false,
-  supportsMatrix: false,
-  supportsPickDialog: false,
   weekSelectorConfig: { maxRegularSeasonWeek: 18, minSeason: 2020 },
 };
 

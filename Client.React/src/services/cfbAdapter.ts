@@ -119,9 +119,6 @@ export function createCfbAdapter(): SportAdapter {
 
   return {
     pollIntervalMs: 0,
-    supportsJerseys: false,
-    supportsMatrix: false,
-    supportsPickDialog: false,
     weekSelectorConfig: {
       regularWeekOptions: CFB_REGULAR_WEEKS,
       postSeasonWeekOptions: CFB_POST_WEEKS,
