@@ -11,6 +11,7 @@ import {
   getWeekFromEspnWeek, getEspnRequiredPicks,
   isPostSeason as isPostSeasonHelper,
   isGameOver, isGameStarted,
+  computeHomeCovers, computeOverWins,
 } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView } from './sportAdapter';
 
@@ -38,7 +39,6 @@ function competitionToGameView(
   const homeSpreadVal = spreadCache[homeAbbr]?.spread ?? null;
   const overUnderVal = spreadCache[homeAbbr]?.over ?? null;
   const status = toGameStatus(competition);
-  const isFinal = status === 'final';
   return {
     id: competition.id,
     homeTeam: homeAbbr,
@@ -50,8 +50,8 @@ function competitionToGameView(
     awayScore,
     gameStatus: status,
     gameTime: competition.date,
-    homeCovers: (isFinal || status === 'in_progress' || status === 'halftime') && homeSpreadVal != null ? (homeScore + homeSpreadVal) > awayScore : null,
-    overWins: (isFinal || status === 'in_progress' || status === 'halftime') && overUnderVal != null ? (homeScore + awayScore) > overUnderVal : null,
+    homeCovers: computeHomeCovers(status, homeSpreadVal, homeScore, awayScore),
+    overWins: computeOverWins(status, overUnderVal, homeScore, awayScore),
     weather: event.weather ? {
       displayValue: event.weather.displayValue,
       conditionId: event.weather.conditionId,
