@@ -26,8 +26,10 @@ test.describe('CFB scores — demo backend', () => {
   });
 
   // Championship is in-progress (Q3: IU 14, MIA 7) so field position renders
-  test('Championship shows Live indicator and partial scores', async ({ page }) => {
-    await expect(page.getByText('Live')).toBeVisible({ timeout: 8_000 });
+  test('Championship shows game clock (Q3) indicator and partial scores', async ({ page }) => {
+    // Shows "Q3 7:23" from CFB_DEMO_SITUATION, or "Live" as fallback
+    const clockText = page.getByText(/Q[1-4]|Live/);
+    await expect(clockText.first()).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('heading', { name: '14' })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByRole('heading', { name: '7' })).toBeVisible({ timeout: 5_000 });
   });

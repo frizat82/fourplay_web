@@ -26,8 +26,12 @@ import type { SportAdapter, GameView, WeekState, LoadedScores } from '../service
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
 
+function isDecided(game: GameView): boolean {
+  return game.gameStatus === 'final' || game.gameStatus === 'in_progress' || game.gameStatus === 'halftime';
+}
+
 function teamWins(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): boolean | null {
-  if (game.gameStatus !== 'final') return null;
+  if (!isDecided(game)) return null;
   if (pickType === 'Spread') {
     if (game.homeCovers == null) return null;
     return team === game.homeTeam ? game.homeCovers : !game.homeCovers;
@@ -43,7 +47,7 @@ function coverIcon(game: GameView, team: string, pickType: 'Spread' | 'Over' | '
 }
 
 function badgeColor(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): 'success' | 'error' | 'info' | 'default' {
-  if (game.gameStatus !== 'final') return 'info';
+  if (!isDecided(game)) return 'info';
   const wins = teamWins(game, team, pickType);
   if (wins == null) return 'default';
   return wins ? 'success' : 'error';
@@ -79,7 +83,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
       const result = await adapter.loadCurrentScores(currentLeague, user.userId);
       const fp = (d: typeof result) => d.games.map(g => `${g.id}:${g.homeScore}:${g.awayScore}:${g.gameStatus}`).join('|');
       setData(prev => prev && fp(prev) === fp(result) ? prev : result);
-      setIsCurrentWeek(true);
+      // Do NOT set isCurrentWeek=true here — polling races with handleWeekChange and would
+      // reset historical navigation. isCurrentWeek is managed by the callers.
       setMaxWeek(result.maxWeek);
       setMaxSeason(result.maxSeason);
     } finally {
@@ -93,12 +98,13 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     try {
       // If the selected week matches the current (frozen demo) week, use the current
       // scores path so the in-progress state is shown instead of the real ESPN final.
+      // If the selected week matches the frozen demo week, use current path for consistency
       const isSameAsCurrentWeek =
         data != null &&
         state.season === data.season &&
         state.week === data.week &&
         state.isPostSeason === data.isPostSeason;
-      if (isSameAsCurrentWeek && isCurrentWeek === false) {
+      if (isSameAsCurrentWeek) {
         await reload();
         setIsCurrentWeek(true);
         return;
@@ -108,7 +114,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [currentLeague, user?.userId, adapter, data, isCurrentWeek, reload]);
+  }, [currentLeague, user?.userId, adapter, data, reload]);
 
   // Page visibility
   useEffect(() => {
@@ -135,10 +141,11 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     setIsCurrentWeek(false);
     void loadHistorical({ season, week: data?.week ?? 1, isPostSeason: data?.isPostSeason ?? false });
   }, [data?.week, data?.isPostSeason, loadHistorical]);
-  const handleSeasonTypeChange = useCallback((isPostSeason: boolean) => {
+  const handleSeasonTypeChange = useCallback((_isPostSeason: boolean) => {
+    // WeekYearSelector.handleSeasonTypeSelect also calls onWeekChange with the last week —
+    // don't double-load here, let handleWeekChange handle it.
     setIsCurrentWeek(false);
-    void loadHistorical({ season: data?.season ?? new Date().getFullYear(), week: data?.week ?? 1, isPostSeason });
-  }, [data?.season, data?.week, loadHistorical]);
+  }, []);
 
   // Pick query helpers
   const pickCountForTeam = (gameId: string, team: string, pickType: 'Spread' | 'Over' | 'Under') =>
@@ -274,7 +281,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                       <TeamHelmet abbr={game.awayTeam} size={50} />
                       <Typography variant="h6">{isFinal || isLive ? game.awayScore : ''}</Typography>
                       <Typography variant="body2" textAlign="center">
-                        {isFinal ? 'Final' : isLive ? 'Live' : new Date(game.gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        {isFinal ? 'Final' : isLive ? (game.situation?.period && game.situation?.displayClock ? `Q${game.situation.period} ${game.situation.displayClock}` : 'Live') : new Date(game.gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                       </Typography>
                       <Typography variant="h6">{isFinal || isLive ? game.homeScore : ''}</Typography>
                       <TeamHelmet abbr={game.homeTeam} size={50} flipped />
@@ -301,7 +308,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.awayTeam, 'Spread') === 0}
                       >
                         <IconButton
-                          color={isFinal ? (hc === false ? 'success' : hc === true ? 'error' : 'inherit') : 'inherit'}
+                          color={(isFinal || isLive) ? (hc === false ? 'success' : hc === true ? 'error' : 'inherit') : 'inherit'}
                           disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.awayTeam, 'Spread') === 0}
                           onClick={() => showDialog(game, game.awayTeam, game.awayLogo ?? '', 'Spread')}
                           size="small"
@@ -339,7 +346,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
                     {/* Postseason O/U row */}
                     {isPostSeason && game.overUnder != null && (
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2.5, px: 1, gap: 1 }}>
+                      <Stack data-testid="over-under-controls" direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2.5, px: 1, gap: 1 }}>
                         <Badge data-testid={`badge-${game.homeTeam}-over`} color={didUserPick(game.id, game.homeTeam, 'Over') ? 'info' : badgeColor(game, game.homeTeam, 'Over')} overlap="circular"
                           badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Over')}
                           invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Over') === 0}>
