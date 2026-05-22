@@ -563,10 +563,15 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
                     Pick = PickType.Spread, NflWeek = week, Season = DemoSeason,
                     NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow,
                 });
+                // Add Over/Under picks for Bob and Dana so the O/U row is testable in-progress games
+                if (name == "Bob" && i == 0)
+                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Over, NflWeek = week, Season = DemoSeason, NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow });
+                if (name == "Dana" && i == 0)
+                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Under, NflWeek = week, Season = DemoSeason, NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow });
             }
         }
         await db.SaveChangesAsync();
-        Log.Information("DemoDataSeeder: seeded postseason week {Week} ({Label})", week, label);
+        Log.Information("DemoDataSeeder: seeded postseason week {Week} ({Label}) with O/U picks", week, label);
     }
 
     private static NflSpreads Spread(int week, string home, string away, double homeSpread, double awaySpread, double ou, string gameTimeUtc) =>
