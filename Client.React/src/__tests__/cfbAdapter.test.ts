@@ -1,17 +1,24 @@
 import { vi } from 'vitest';
 import { createCfbAdapter } from '../services/cfbAdapter';
-import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
+import type { CfbSlateDto, CfbSpreadDto, CfbPickDto } from '../types/league';
+import type { EspnScores } from '../types/espn';
 
 vi.mock('../api/cfb', () => ({
   getCfbSlates: vi.fn(),
   getCfbSpreads: vi.fn(),
-  getCfbScores: vi.fn(),
   getCfbUserPicks: vi.fn(),
+  getCfbAllPicks: vi.fn(),
   addCfbPicks: vi.fn(),
   deleteCfbPicks: vi.fn(),
 }));
 
-import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
+vi.mock('../api/espn', () => ({
+  getCfbLiveScores: vi.fn(),
+  getLiveGames: vi.fn(),
+}));
+
+import { getCfbSlates, getCfbSpreads, getCfbUserPicks } from '../api/cfb';
+import { getCfbLiveScores, getLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
   id: 10, season: 2025, slateNumber: 8, label: 'Week 8',
@@ -22,22 +29,39 @@ const spread: CfbSpreadDto = {
   homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5,
   gameTime: '2025-10-11T20:00:00Z',
 };
-const score: CfbScoreDto = {
-  id: 1, cfbSlateId: 10, espnEventId: 999, homeTeam: 'MICH', awayTeam: 'PSU',
-  homeTeamScore: 27, awayTeamScore: 13, gameStatus: 'StatusFinal',
-  gameTime: '2025-10-11T20:00:00Z',
+
+/** Minimal EspnScores with one final game matching espnEventId=999 */
+const espnFinalGame: EspnScores = {
+  leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 },
+  events: [{
+    id: '999', date: '2025-10-11T20:00:00Z',
+    season: { year: 2025, type: 2 }, week: { number: 8 },
+    competitions: [{
+      id: '999', date: '2025-10-11T20:00:00Z',
+      status: { type: { id: 3, name: 'STATUS_FINAL', completed: true, description: 'Final', state: 'post', detail: 'Final', shortDetail: 'Final' }, clock: 0, period: 4, displayClock: '0:00' },
+      competitors: [
+        { id: 'mich', homeAway: 'home' as const, score: 27, team: { abbreviation: 'MICH', logo: '' }, records: [] },
+        { id: 'psu', homeAway: 'away' as const, score: 13, team: { abbreviation: 'PSU', logo: '' }, records: [] },
+      ],
+      odds: [], situation: null,
+    }],
+    weather: null,
+  }],
 };
 
 const adapter = createCfbAdapter();
 
 describe('cfbAdapter', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getLiveGames).mockResolvedValue([]);
+  });
 
   describe('loadCurrentGames', () => {
-    it('maps CfbSpreadDto + CfbScoreDto to GameView[]', async () => {
+    it('maps CfbSpreadDto + ESPN live data to GameView[]', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(getCfbScores).mockResolvedValue([score]);
+      vi.mocked(getCfbLiveScores).mockResolvedValue(espnFinalGame);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -58,7 +82,7 @@ describe('cfbAdapter', () => {
     it('always sets hasOdds=true when spreads exist', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(getCfbScores).mockResolvedValue([]);
+      vi.mocked(getCfbLiveScores).mockResolvedValue(null);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -68,7 +92,7 @@ describe('cfbAdapter', () => {
     it('sets hasOdds=false when no spreads exist', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([]);
-      vi.mocked(getCfbScores).mockResolvedValue([]);
+      vi.mocked(getCfbLiveScores).mockResolvedValue(null);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -82,7 +106,7 @@ describe('cfbAdapter', () => {
       };
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(getCfbScores).mockResolvedValue([score]);
+      vi.mocked(getCfbLiveScores).mockResolvedValue(espnFinalGame);
       vi.mocked(getCfbUserPicks).mockResolvedValue([pick]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -95,13 +119,24 @@ describe('cfbAdapter', () => {
     it('derives WeekState from slate slateNumber', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]); // slateNumber=8
       vi.mocked(getCfbSpreads).mockResolvedValue([]);
-      vi.mocked(getCfbScores).mockResolvedValue([]);
+      vi.mocked(getCfbLiveScores).mockResolvedValue(null);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
       expect(result.week).toBe(8);
       expect(result.isPostSeason).toBe(false);
       expect(result.season).toBe(2025);
+    });
+
+    it('game shows scheduled when ESPN has no matching event', async () => {
+      vi.mocked(getCfbSlates).mockResolvedValue([slate]);
+      vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
+      vi.mocked(getCfbLiveScores).mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
+      vi.mocked(getCfbUserPicks).mockResolvedValue([]);
+
+      const result = await adapter.loadCurrentGames(1, 'user1');
+      expect(result.games[0].gameStatus).toBe('scheduled');
+      expect(result.games[0].homeScore).toBeNull();
     });
   });
 
