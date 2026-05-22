@@ -213,6 +213,43 @@ export function getPickLabel(pickType: PickType) {
   return pickType === 'Spread' ? 'Spread' : pickType;
 }
 
+// ─── Shared cover/over computation used by all sport adapters ────────────────
+// Both NFL and CFB adapters should call these instead of duplicating the logic.
+
+import type { GameStatusValue } from '../services/sportAdapter';
+
+function isDecidedStatus(status: GameStatusValue): boolean {
+  return status === 'final' || status === 'in_progress' || status === 'halftime';
+}
+
+/**
+ * Returns whether the home team is covering the spread, or null if the game
+ * hasn't started or spread data isn't available.
+ * Works for final, in-progress, and halftime.
+ */
+export function computeHomeCovers(
+  status: GameStatusValue,
+  homeSpread: number | null,
+  homeScore: number | null,
+  awayScore: number | null,
+): boolean | null {
+  if (!isDecidedStatus(status) || homeSpread == null || homeScore == null || awayScore == null) return null;
+  return (homeScore + homeSpread) > awayScore;
+}
+
+/**
+ * Returns whether the total is over the over/under line, or null if unavailable.
+ */
+export function computeOverWins(
+  status: GameStatusValue,
+  overUnder: number | null,
+  homeScore: number | null,
+  awayScore: number | null,
+): boolean | null {
+  if (!isDecidedStatus(status) || overUnder == null || homeScore == null || awayScore == null) return null;
+  return (homeScore + awayScore) > overUnder;
+}
+
 function isHomeAway(value: HomeAway, expected: 'home' | 'away') {
   if (typeof value === 'number') {
     return expected === 'away' ? value === 0 : value === 1;
