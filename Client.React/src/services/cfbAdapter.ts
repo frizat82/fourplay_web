@@ -1,5 +1,5 @@
 import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
-import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName } from '../utils/gameHelpers';
+import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } from './sportAdapter';
 
@@ -45,7 +45,6 @@ function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] 
   return spreads.map(sp => {
     const score = scoreMap.get(sp.espnEventId);
     const status = toCfbGameStatus(score?.gameStatus);
-    const isFinal = status === 'final';
     const isLive = status === 'in_progress' || status === 'halftime';
     const hs = score?.homeTeamScore ?? null;
     const as_ = score?.awayTeamScore ?? null;
@@ -60,8 +59,8 @@ function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] 
       awayScore: as_,
       gameStatus: status,
       gameTime: sp.gameTime,
-      homeCovers: (isFinal || isLive) && hs != null && as_ != null ? (hs + sp.homeTeamSpread) > as_ : null,
-      overWins: (isFinal || isLive) && hs != null && as_ != null ? (hs + as_) > sp.overUnder : null,
+      homeCovers: computeHomeCovers(status, sp.homeTeamSpread, hs, as_),
+      overWins: computeOverWins(status, sp.overUnder, hs, as_),
       weather: score?.weatherDisplayValue ? {
         displayValue: score.weatherDisplayValue,
         conditionId: score.weatherConditionId ?? undefined,
