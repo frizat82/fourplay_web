@@ -334,7 +334,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Spread') === 0}
                       >
                         <IconButton
-                          color={isFinal ? (hc === true ? 'success' : hc === false ? 'error' : 'inherit') : 'inherit'}
+                          color={(isFinal || isLive) ? (hc === true ? 'success' : hc === false ? 'error' : 'inherit') : 'inherit'}
                           disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Spread') === 0}
                           onClick={() => showDialog(game, game.homeTeam, game.homeLogo ?? '', 'Spread')}
                           size="small"
@@ -356,9 +356,9 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                             <PersonIcon />
                           </IconButton>
                         </Badge>
-                        <ArrowCircleUpIcon sx={{ color: isFinal ? (ov ? 'success.main' : 'error.main') : 'text.secondary', flexShrink: 0 }} />
+                        <ArrowCircleUpIcon sx={{ color: (isFinal || isLive) ? (ov ? 'success.main' : 'error.main') : 'text.secondary', flexShrink: 0 }} />
                         <Typography variant="subtitle1" sx={{ minWidth: 36, textAlign: 'center' }}>{game.overUnder}</Typography>
-                        <ArrowCircleDownIcon sx={{ color: isFinal ? (!ov ? 'success.main' : 'error.main') : 'text.secondary', flexShrink: 0 }} />
+                        <ArrowCircleDownIcon sx={{ color: (isFinal || isLive) ? (!ov ? 'success.main' : 'error.main') : 'text.secondary', flexShrink: 0 }} />
                         <Badge data-testid={`badge-${game.homeTeam}-under`} color={didUserPick(game.id, game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
                           badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Under')}
                           invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}>
