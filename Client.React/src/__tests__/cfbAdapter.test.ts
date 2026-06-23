@@ -103,7 +103,7 @@ describe('cfbAdapter', () => {
 
     it('maps CfbPickDto to PickView with stringified gameId', async () => {
       const pick: CfbPickDto = {
-        id: 1, userId: 'user1', leagueId: 1, cfbSlateId: 10,
+        id: 1, userId: 'user1', userName: 'user1', leagueId: 1, cfbSlateId: 10,
         espnEventId: 999, team: 'MICH', pickType: 'Spread', season: 2025,
       };
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
