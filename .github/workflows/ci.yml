@@ -136,20 +136,34 @@ jobs:
           echo "FRONTEND_PID=$!" >> "$GITHUB_ENV"
 
       - name: Wait for demo stack to be ready
-        # Poll until Alice can log in — confirms backend up + UserManagerJob + DemoDataSeeder all done.
-        # With DEMO_MODE fast-start (5s delay), this typically resolves in ~30s.
+        # Poll until Alice can log in (backend + seeder done) AND Vite is serving at 5174.
+        # With DEMO_MODE fast-start (5s delay), backend typically resolves in ~30s.
         run: |
-          echo "Waiting for demo seed to complete..."
+          echo "Waiting for backend (seed) + Vite to be ready..."
+          BACKEND_READY=0
+          VITE_READY=0
           for i in $(seq 1 60); do
-            RESULT=$(curl -s -X POST http://localhost:5000/api/auth/login \
-              -H "Content-Type: application/json" \
-              -d '{"username":"alice@demo.local","password":"DemoPass@123","rememberMe":false}' \
-              2>/dev/null || echo '{}')
-            if echo "$RESULT" | grep -q '"succeeded":true'; then
-              echo "Demo stack ready after ~$((i * 3))s"
+            if [ "$BACKEND_READY" -eq 0 ]; then
+              RESULT=$(curl -s -X POST http://localhost:5000/api/auth/login \
+                -H "Content-Type: application/json" \
+                -d '{"username":"alice@demo.local","password":"DemoPass@123","rememberMe":false}' \
+                2>/dev/null || echo '{}')
+              if echo "$RESULT" | grep -q '"succeeded":true'; then
+                echo "Backend ready after ~$((i * 3))s"
+                BACKEND_READY=1
+              fi
+            fi
+            if [ "$VITE_READY" -eq 0 ]; then
+              if curl -s -o /dev/null -w "%{http_code}" http://localhost:5174 | grep -qE "^[23]"; then
+                echo "Vite ready after ~$((i * 3))s"
+                VITE_READY=1
+              fi
+            fi
+            if [ "$BACKEND_READY" -eq 1 ] && [ "$VITE_READY" -eq 1 ]; then
+              echo "Full demo stack ready after ~$((i * 3))s"
               exit 0
             fi
-            echo "[$i/60] Not ready yet. Last response: $RESULT"
+            echo "[$i/60] backend=$BACKEND_READY vite=$VITE_READY"
             sleep 3
           done
           echo "=== BACKEND LOG ==="
