@@ -1041,13 +1041,6 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         void AddPick(int leagueId, string userId, int slateId, int eventId, string team) =>
             picks.Add(new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, EspnEventId = eventId, Team = team, PickType = "Spread", Season = CfbDemoSeason });
 
-        // Helper to get games for a given slate number from a static array
-        static IEnumerable<(int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)>
-            GamesForSlate(
-                (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] arr,
-                int slateNum) =>
-            arr.Where(g => g.SlateIdx == slateNum);
-
         foreach (var (username, _) in DemoUsers)
         {
             var user = await userManager.FindByNameAsync(username);
