@@ -63,8 +63,8 @@ test.describe('NFL picks — demo backend', () => {
     await weekSelect.click();
     await page.getByRole('option', { name: 'Wild Card' }).click();
     await waitForSpinner(page);
-    // Alice picks all winners: LAR, CHI, BUF, SF, NE, HOU
-    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toHaveCount(6, { timeout: 8_000 });
+    // Wild Card requires 3 picks (GetRequiredPicks(19)=3); Alice picks LAR, CHI, BUF
+    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toHaveCount(3, { timeout: 8_000 });
   });
 
   // REGRESSION: regular season must show ALL 18 weeks (not just Week 1)

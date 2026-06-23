@@ -3,7 +3,11 @@ import { toLocalDisplay } from './time';
 import type { PickType } from '../types/picks';
 
 export function getWeekFromEspnWeek(week: number, isPostSeason = false) {
-  return isPostSeason ? week + 18 : week;
+  if (!isPostSeason) return week;
+  // ESPN skips Pro Bowl (week 4); Super Bowl is ESPN week 5.
+  // NflScoresJob normalizes week 5 → 4 before storing (j == 5 ? 4 : j).
+  // DB postseason weeks: WC=19, Div=20, CC=21, SB=22.
+  return (week === 5 ? 4 : week) + 18;
 }
 
 export function spreadLabel(spread: number): string {
@@ -54,9 +58,9 @@ export function getWeekName(week: number, isPostSeason = false) {
 export function getEspnRequiredPicks(week: number, isPostSeason = false) {
   if (!isPostSeason) return 4;
   switch (week) {
-    case 1: return 3; // Wild Card (6 games)
-    case 2: return 2; // Divisional (4 games)
-    case 3: return 1; // Conference Championship (2 games)
+    case 1: return 3; // Wild Card
+    case 2: return 3; // Divisional
+    case 3: return 2; // Conference Championship
     case 4:
     case 5: return 1; // Super Bowl (week 5 in ESPN; week 4 = Pro Bowl)
     default:
