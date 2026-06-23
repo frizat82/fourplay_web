@@ -67,7 +67,7 @@ describe('NFL PicksPage — GameCard layout regression', () => {
 
 // ─── CFB regression ──────────────────────────────────────────────────────────
 vi.mock('../api/cfb', () => ({
-  getCfbSlates: vi.fn(), getCfbSpreads: vi.fn(),
+  getCfbSlates: vi.fn(), getCfbSpreads: vi.fn(), getCfbScores: vi.fn(),
   getCfbUserPicks: vi.fn(), addCfbPicks: vi.fn(), deleteCfbPicks: vi.fn(),
 }));
 // Single espn mock covering both NFL and CFB needs
@@ -79,7 +79,7 @@ vi.mock('../api/espn', () => ({
   getLiveGames: vi.fn(),
 }));
 
-import { getCfbSlates, getCfbSpreads, getCfbUserPicks } from '../api/cfb';
+import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
 import { getCfbLiveScores, getLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
@@ -93,6 +93,7 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
     // ESPN returns scheduled game (future date → no score yet)
     vi.mocked(getCfbLiveScores).mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
     vi.mocked(getLiveGames).mockResolvedValue([]);
+    vi.mocked(getCfbScores).mockResolvedValue([]);
     vi.mocked(getCfbUserPicks).mockResolvedValue([]);
   });
 

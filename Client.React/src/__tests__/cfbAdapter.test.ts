@@ -6,6 +6,7 @@ import type { EspnScores } from '../types/espn';
 vi.mock('../api/cfb', () => ({
   getCfbSlates: vi.fn(),
   getCfbSpreads: vi.fn(),
+  getCfbScores: vi.fn(),
   getCfbUserPicks: vi.fn(),
   getCfbAllPicks: vi.fn(),
   addCfbPicks: vi.fn(),
@@ -17,7 +18,7 @@ vi.mock('../api/espn', () => ({
   getLiveGames: vi.fn(),
 }));
 
-import { getCfbSlates, getCfbSpreads, getCfbUserPicks } from '../api/cfb';
+import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
 import { getCfbLiveScores, getLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
@@ -55,6 +56,7 @@ describe('cfbAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getLiveGames).mockResolvedValue([]);
+    vi.mocked(getCfbScores).mockResolvedValue([]);
   });
 
   describe('loadCurrentGames', () => {

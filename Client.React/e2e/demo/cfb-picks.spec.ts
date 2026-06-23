@@ -3,7 +3,7 @@
  * Runs against a live DEMO_MODE=true backend at cfb.localhost:5174.
  *
  * Alice's CFP Championship pick: IU (Indiana).
- * Alice's CFB Week 8 picks: all 6 home teams (MICH, ALA, OSU, UGA, LSU, CLEM).
+ * Alice's CFB Week 8 picks: first 4 home teams (MICH, ALA, OSU, UGA) — 4-pick rule.
  *
  * Regression guards:
  *  - CFB regular season selector must have 14 weeks (not 5 — old bug)
@@ -73,7 +73,7 @@ test.describe('CFB picks — demo backend', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('CFB Week 8 is accessible and shows 6 game cards', async ({ page }) => {
+  test('CFB Week 8 is accessible and Alice has 4 picks', async ({ page }) => {
     // Switch to Regular Season
     const seasonTypeSelect = page.getByRole('combobox').last();
     await seasonTypeSelect.click();
@@ -89,7 +89,7 @@ test.describe('CFB picks — demo backend', () => {
     // 6 games were seeded for Week 8 — each game card shows two team abbreviations
     await expect(page.getByText('MICH')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('PSU')).toBeVisible({ timeout: 5_000 });
-    // Alice picked all favorites — should see 6 "Picked" buttons
-    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toHaveCount(6, { timeout: 8_000 });
+    // Alice picked 4 teams (regular season max) — should see 4 "Picked" buttons
+    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toHaveCount(4, { timeout: 8_000 });
   });
 });
