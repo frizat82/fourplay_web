@@ -12,7 +12,7 @@ import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import type { NflPickDto, SpreadCalculationResponse } from '../types/picks';
-import { getTeamLogo } from '../utils/gameHelpers';
+import TeamHelmet from './sports/TeamHelmet';
 
 interface UserPicksMatrixProps {
   users: string[];
@@ -91,13 +91,7 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
                             color={result ? 'success' : 'error'}
                           />
                         )}
-                        <img
-                          src={getTeamLogo(pick.team)}
-                          alt={pick.team}
-                          width={40}
-                          height={40}
-                          style={{ background: 'white', padding: 4, borderRadius: 8 }}
-                        />
+                        <TeamHelmet abbr={pick.team} size={40} showLabel={false} />
                         {result === true && (
                           <CheckCircleIcon
                             fontSize="small"

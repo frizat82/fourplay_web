@@ -26,6 +26,7 @@ export function createAppTheme(mode: 'light' | 'dark') {
     success: {
       main: '#10b981', // Emerald green for positive actions
       light: '#34d399',
+      contrastText: '#FFFFFF',
     },
     warning: {
       main: '#f59e0b', // Amber for caution

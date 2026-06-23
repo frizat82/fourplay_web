@@ -72,9 +72,7 @@ export interface SportAdapter {
 
   // Shared config
   pollIntervalMs: number;
-  supportsJerseys: boolean;
-  supportsMatrix: boolean;      // NFL: true; CFB: false (for now)
-  supportsPickDialog: boolean;  // NFL: true; CFB: false (no ESPN logos)
+  // loadJerseys is optional — if defined, PicksPage shows jerseys when data is non-empty
   weekSelectorConfig: {
     regularWeekOptions?: number[];
     postSeasonWeekOptions?: number[];

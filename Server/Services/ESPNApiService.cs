@@ -78,6 +78,25 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
         }
     }
 
+    private const string _cfbScoreboardEndpoint = "/apis/site/v2/sports/football/college-football/scoreboard";
+
+    public async Task<EspnScores?> GetCfbScores(DateOnly startDate, DateOnly endDate) {
+        try {
+            // ESPN date format: YYYYMMDD
+            var dates = $"{startDate:yyyyMMdd}-{endDate:yyyyMMdd}";
+            var response = await httpClient.GetAsync($"{_cfbScoreboardEndpoint}?dates={dates}&limit=100&groups=80");
+            response.EnsureSuccessStatusCode();
+            var responseString = await response.Content.ReadAsStringAsync();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            EspnApiServiceJsonConverter.Settings.Converters.ToList().ForEach(x => options.Converters.Add(x));
+            return JsonSerializer.Deserialize<EspnScores>(responseString, options);
+        }
+        catch (Exception e) {
+            Log.Warning("GetCfbScores failed for {Start}-{End}: {Msg}", startDate, endDate, e.Message);
+            return null;
+        }
+    }
+
     public async Task<EspnScores?> GetScores() {
         try {
             // Replace the endpoint with the actual ESPN API endpoint for NFL spreads

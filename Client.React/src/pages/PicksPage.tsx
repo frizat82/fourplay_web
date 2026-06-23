@@ -80,7 +80,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       setIsCurrentWeek(true);
       setMaxWeek(result.maxWeek);
       setMaxSeason(result.maxSeason);
-      if (adapter.supportsJerseys && adapter.loadJerseys) {
+      if (adapter.loadJerseys) {
         adapter.loadJerseys(result.season, result.week).then(setJerseyCache).catch(() => {});
       }
     } catch (err) {
@@ -102,7 +102,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       }
       const ep = new Set(result.userPicks.map(p => pickKey(p.gameId, p.team, p.pickType)));
       applyLoaded({ ...result, existingPicks: ep });
-      if (adapter.supportsJerseys && adapter.loadJerseys) {
+      if (adapter.loadJerseys) {
         adapter.loadJerseys(result.season, result.week).then(setJerseyCache).catch(() => {});
       }
     } finally {
@@ -126,25 +126,26 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     return () => clearInterval(interval);
   }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded, adapter.pollIntervalMs]);
 
-  const handleWeekChange = (newWeek: number, meta?: { isPostSeason?: boolean }) => {
+  const handleWeekChange = useCallback((newWeek: number, meta?: { isPostSeason?: boolean }) => {
     const ps = meta?.isPostSeason ?? isPostSeason;
     setWeek(newWeek);
     setIsPostSeason(ps);
     setIsCurrentWeek(false);
     void loadHistoricalWeek({ season, week: newWeek, isPostSeason: ps });
-  };
+  }, [isPostSeason, season, loadHistoricalWeek]);
 
-  const handleSeasonChange = (newSeason: number) => {
+  const handleSeasonChange = useCallback((newSeason: number) => {
     setSeason(newSeason);
     setIsCurrentWeek(false);
     void loadHistoricalWeek({ season: newSeason, week, isPostSeason });
-  };
+  }, [week, isPostSeason, loadHistoricalWeek]);
 
-  const handleSeasonTypeChange = (ps: boolean) => {
+  const handleSeasonTypeChange = useCallback((ps: boolean) => {
+    // WeekYearSelector.handleSeasonTypeSelect also calls onWeekChange with the last available
+    // week — that handleWeekChange call loads the correct historical week. Don't double-load here.
     setIsPostSeason(ps);
     setIsCurrentWeek(false);
-    void loadHistoricalWeek({ season, week, isPostSeason: ps });
-  };
+  }, []);
 
   // Pick management
   const isSelected = (gameId: string, team: string, pickType = 'Spread') =>
@@ -228,7 +229,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       )}
 
       <Grid container spacing={2}>
-        {adapter.supportsJerseys && Object.keys(jerseyCache).length > 0 && (
+        {Object.keys(jerseyCache).length > 0 && (
           <Grid size={12} sx={{ display: 'flex', justifyContent: 'center' }}>
             <Button variant="outlined" color="info" startIcon={<CheckroomIcon />} onClick={() => setShowJerseys(p => !p)}>
               {showJerseys ? 'Show Logos' : 'Show Jerseys'}

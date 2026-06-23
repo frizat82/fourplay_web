@@ -42,10 +42,8 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 
     [HttpGet("picks/{leagueId}/{cfbSlateId}")]
-    public async Task<IActionResult> GetAllPicks(int leagueId, int cfbSlateId) {
-        var picks = await repo.GetAllPicksForSlateAsync(leagueId, cfbSlateId);
-        return Ok(picks);
-    }
+    public async Task<IActionResult> GetAllPicks(int leagueId, int cfbSlateId) =>
+        Ok(await repo.GetAllPicksForSlateAsync(leagueId, cfbSlateId));
 
     [HttpGet("picks/{leagueId}/{cfbSlateId}/user")]
     public async Task<IActionResult> GetUserPicks(int leagueId, int cfbSlateId) {

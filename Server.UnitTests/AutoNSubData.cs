@@ -35,7 +35,7 @@ public class DbContextFactoryStub : IDbContextFactory<ApplicationDbContext>
     public Task<ApplicationDbContext> CreateDbContextAsync() =>
         Task.FromResult(CreateDbContext());
 
-    public async Task PopulateScoresTestDataAsync(int weeks = 22)
+    public async Task PopulateScoresTestDataAsync(int weeks = 21)
     {
         var fixture = new Fixture();
         // Generate 18 weeks of NFL scores
