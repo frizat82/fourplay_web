@@ -120,7 +120,7 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
 
   it('shows Picked when pick already submitted', async () => {
     vi.mocked(getCfbUserPicks).mockResolvedValue([
-      { id: 1, userId: 'u1', leagueId: 1, cfbSlateId: 1, espnEventId: 100, team: 'MICH', pickType: 'Spread', season: 2025 }
+      { id: 1, userId: 'u1', userName: 'u1', leagueId: 1, cfbSlateId: 1, espnEventId: 100, team: 'MICH', pickType: 'Spread', season: 2025 }
     ]);
     render(<PicksPage adapter={createCfbAdapter()} />);
     await waitFor(() => expect(screen.getByRole('button', { name: /^picked$/i })).toBeInTheDocument());
