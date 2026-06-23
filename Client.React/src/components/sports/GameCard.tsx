@@ -212,33 +212,28 @@ export default function GameCard({
             sx={{ mt: 1, p: 0 }}
           >
             <CardContent sx={{ p: '12px !important' }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ gap: 0.5 }}>
-                <Box textAlign="center" sx={{ minWidth: 44 }}>
-                  <Typography variant="caption" sx={{ opacity: 0.7, display: 'block' }}>Over</Typography>
-                  <Typography variant="caption" fontWeight={700}>{overValue}</Typography>
-                </Box>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ gap: 1 }}>
                 <Button
                   variant="contained"
                   color={overPickState !== 'none' ? 'success' : 'warning'}
-                  sx={{ minWidth: 76, height: 36, fontSize: '0.8rem', px: 1 }}
+                  sx={pickButtonSx}
                   disabled={overUnderLocked && overPickState === 'none'}
                   onClick={onPickOver}
                 >
                   {pickButtonLabel(overPickState, 'Over', 'Overed')}
                 </Button>
+                <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center', flexShrink: 0 }}>
+                  {overValue}
+                </Typography>
                 <Button
                   variant="contained"
                   color={underPickState !== 'none' ? 'success' : 'warning'}
-                  sx={{ minWidth: 76, height: 36, fontSize: '0.8rem', px: 1 }}
+                  sx={pickButtonSx}
                   disabled={overUnderLocked && underPickState === 'none'}
                   onClick={onPickUnder}
                 >
                   {pickButtonLabel(underPickState, 'Under', 'Undered')}
                 </Button>
-                <Box textAlign="center" sx={{ minWidth: 44 }}>
-                  <Typography variant="caption" sx={{ opacity: 0.7, display: 'block' }}>Under</Typography>
-                  <Typography variant="caption" fontWeight={700}>{underValue}</Typography>
-                </Box>
               </Stack>
             </CardContent>
           </Card>

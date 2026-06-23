@@ -54,17 +54,22 @@ export function getWeekName(week: number, isPostSeason = false) {
 export function getEspnRequiredPicks(week: number, isPostSeason = false) {
   if (!isPostSeason) return 4;
   switch (week) {
-    case 1:
-    case 2:
-      return 3;
-    case 3:
-      return 2;
+    case 1: return 3; // Wild Card (6 games)
+    case 2: return 2; // Divisional (4 games)
+    case 3: return 1; // Conference Championship (2 games)
     case 4:
-    case 5:
-      return 1;
+    case 5: return 1; // Super Bowl (week 5 in ESPN; week 4 = Pro Bowl)
     default:
       throw new Error('Invalid week number');
   }
+}
+
+// CFB postseason mirrors NFL: Conf.Champs(15)=3, FirstRound(16)=2, QF(17)=2, SF(18)=1, Champ(19)=1
+export function getCfbRequiredPicks(slateNumber: number): number {
+  if (slateNumber <= 14) return 4;
+  if (slateNumber === 15) return 3;
+  if (slateNumber <= 17) return 2;
+  return 1;
 }
 
 const STATUS_FINAL = 0;

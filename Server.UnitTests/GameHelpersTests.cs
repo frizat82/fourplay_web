@@ -67,11 +67,11 @@ public class GameHelpersTests
     [InlineData(1, false, 4)]
     [InlineData(9, false, 4)]
     [InlineData(18, false, 4)]
-    [InlineData(1, true, 3)]   // Wild Card
-    [InlineData(2, true, 3)]   // Divisional Round
-    [InlineData(3, true, 2)]   // Conference Championship
-    [InlineData(4, true, 1)]   // Super Bowl
-    [InlineData(5, true, 1)]   // Pro Bowl (ESPN edge case)
+    [InlineData(1, true, 3)]   // Wild Card (6 games, pick 3)
+    [InlineData(2, true, 3)]   // Divisional (4 games, pick 3)
+    [InlineData(3, true, 2)]   // Conference Championship (2 games, pick 2)
+    [InlineData(4, true, 1)]   // Super Bowl (stored at NflWeek 22 via wk5→4 hack in NflScoresJob)
+    [InlineData(5, true, 1)]   // Super Bowl (ESPN week 5)
     public void GetEspnRequiredPicks_ReturnsCorrectCount(long week, bool isPostSeason, int expected)
     {
         Assert.Equal(expected, GameHelpers.GetEspnRequiredPicks(week, isPostSeason));
@@ -88,10 +88,10 @@ public class GameHelpersTests
     [Theory]
     [InlineData(1, 4)]
     [InlineData(18, 4)]
-    [InlineData(19, 3)]  // Wild Card (DB week)
-    [InlineData(20, 3)]  // Divisional Round
-    [InlineData(21, 2)]  // Conference Championship
-    [InlineData(22, 1)]  // Super Bowl
+    [InlineData(19, 3)]  // Wild Card (6 games, pick 3)
+    [InlineData(20, 3)]  // Divisional (4 games, pick 3)
+    [InlineData(21, 2)]  // Conference Championship (2 games, pick 2)
+    [InlineData(22, 1)]  // Super Bowl (stored at NflWeek 22 via wk5→4 hack in NflScoresJob)
     public void GetRequiredPicks_ReturnsCorrectCount(long week, int expected)
     {
         Assert.Equal(expected, GameHelpers.GetRequiredPicks(week));
@@ -101,6 +101,22 @@ public class GameHelpersTests
     public void GetRequiredPicks_InvalidPostSeasonWeek_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => GameHelpers.GetRequiredPicks(23));
+    }
+
+    // ─── GetCfbRequiredPicks ──────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(1,  4)]
+    [InlineData(7,  4)]
+    [InlineData(14, 4)]  // last regular-season slate
+    [InlineData(15, 3)]  // Conf. Championships
+    [InlineData(16, 2)]  // CFP First Round
+    [InlineData(17, 2)]  // CFP Quarterfinals
+    [InlineData(18, 1)]  // CFP Semifinals
+    [InlineData(19, 1)]  // CFP National Championship
+    public void GetCfbRequiredPicks_ReturnsCorrectCount(int slateNumber, int expected)
+    {
+        Assert.Equal(expected, GameHelpers.GetCfbRequiredPicks(slateNumber));
     }
 
     // ─── GetTeamLogo ──────────────────────────────────────────────────────────

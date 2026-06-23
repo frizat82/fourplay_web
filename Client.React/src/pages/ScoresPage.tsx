@@ -72,7 +72,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   const [showMatrixView, setShowMatrixView] = useState(false);
   const [showOnlyMyPicks, setShowOnlyMyPicks] = useState(false);
   const [dialogState, setDialogState] = useState<{
-    open: boolean; teamAbbr: string; logo: string;
+    open: boolean; teamAbbr: string; pickType: 'Spread' | 'Over' | 'Under';
     userNames: string[]; userNamesOver: string[]; userNamesUnder: string[];
   } | null>(null);
 
@@ -154,12 +154,13 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   const didUserPick = (gameId: string, team: string, pickType: 'Spread' | 'Over' | 'Under' = 'Spread') =>
     (data?.userPicks ?? []).some(p => p.gameId === gameId && p.team === team && p.pickType === pickType);
 
-  const showDialog = (game: GameView, team: string, logo: string, pickType: 'Spread' | 'Over' | 'Under' = 'Spread') => {
-
+  const showDialog = (game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under' = 'Spread') => {
     const names = (data?.allPicks ?? []).filter(p => p.gameId === game.id && p.team === team && p.pickType === pickType).map(p => p.userName).sort();
     if (!names.length) return;
     setDialogState({
-      open: true, teamAbbr: team, logo,
+      open: true,
+      teamAbbr: pickType === 'Spread' ? team : '',
+      pickType,
       userNames: pickType === 'Spread' ? names : [],
       userNamesOver: pickType === 'Over' ? names : [],
       userNamesUnder: pickType === 'Under' ? names : [],
@@ -192,7 +193,9 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   if (!data) return null;
 
   const games = showOnlyMyPicks
-    ? (data.games ?? []).filter(g => didUserPick(g.id, g.homeTeam) || didUserPick(g.id, g.awayTeam))
+    ? (data.games ?? []).filter(g =>
+        didUserPick(g.id, g.homeTeam) || didUserPick(g.id, g.awayTeam) ||
+        didUserPick(g.id, g.homeTeam, 'Over') || didUserPick(g.id, g.homeTeam, 'Under'))
     : (data.games ?? []);
 
   const isPostSeason = data.isPostSeason;
@@ -296,9 +299,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                     <Stack direction="row" alignItems="center" sx={{ mt: 2, gap: 1.5, px: 1 }}>
                       {coverIcon(game, game.awayTeam, 'Spread')}
                       <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.awayTeam}</Typography>
-                      <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                        <Typography variant="subtitle1">{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
-                      </Box>
+                      <Box sx={{ flexGrow: 1 }} />
+                      <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
                       <Badge
                         data-testid={`badge-${game.awayTeam}-spread`}
                         data-tone={didUserPick(game.id, game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
@@ -310,7 +312,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <IconButton
                           color={(isFinal || isLive) ? (hc === false ? 'success' : hc === true ? 'error' : 'inherit') : 'inherit'}
                           disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.awayTeam, 'Spread') === 0}
-                          onClick={() => showDialog(game, game.awayTeam, game.awayLogo ?? '', 'Spread')}
+                          onClick={() => showDialog(game, game.awayTeam, 'Spread')}
                           size="small"
                         >
                           <PersonIcon />
@@ -322,9 +324,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                     <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1.5, px: 1 }}>
                       {coverIcon(game, game.homeTeam, 'Spread')}
                       <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.homeTeam}</Typography>
-                      <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                        <Typography variant="subtitle1">{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>
-                      </Box>
+                      <Box sx={{ flexGrow: 1 }} />
+                      <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>
                       <Badge
                         data-testid={`badge-${game.homeTeam}-spread`}
                         data-tone={didUserPick(game.id, game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
@@ -336,7 +337,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <IconButton
                           color={(isFinal || isLive) ? (hc === true ? 'success' : hc === false ? 'error' : 'inherit') : 'inherit'}
                           disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Spread') === 0}
-                          onClick={() => showDialog(game, game.homeTeam, game.homeLogo ?? '', 'Spread')}
+                          onClick={() => showDialog(game, game.homeTeam, 'Spread')}
                           size="small"
                         >
                           <PersonIcon />
@@ -353,7 +354,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                           <IconButton size="small"
                             color={(isFinal || isLive) ? (ov ? 'success' : ov === false ? 'error' : 'inherit') : 'inherit'}
                             disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Over') === 0}
-                            onClick={() => showDialog(game, game.homeTeam, game.homeLogo ?? '', 'Over')}>
+                            onClick={() => showDialog(game, game.homeTeam, 'Over')}>
                             <PersonIcon />
                           </IconButton>
                         </Badge>
@@ -366,7 +367,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                           <IconButton size="small"
                             color={(isFinal || isLive) ? (!ov ? 'success' : ov === true ? 'error' : 'inherit') : 'inherit'}
                             disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}
-                            onClick={() => showDialog(game, game.homeTeam, game.homeLogo ?? '', 'Under')}>
+                            onClick={() => showDialog(game, game.homeTeam, 'Under')}>
                             <PersonIcon />
                           </IconButton>
                         </Badge>
@@ -387,7 +388,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
           open={dialogState.open}
           onClose={() => setDialogState(null)}
           teamAbbr={dialogState.teamAbbr}
-          logo={dialogState.logo}
+          pickType={dialogState.pickType}
           userNames={dialogState.userNames}
           userNamesOver={dialogState.userNamesOver}
           userNamesUnder={dialogState.userNamesUnder}
