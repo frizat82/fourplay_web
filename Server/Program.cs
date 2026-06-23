@@ -245,6 +245,7 @@ builder.Services.AddScoped<IInvitationService, InvitationService>();
 
 builder.Services.AddScoped<ISpreadCalculatorBuilder, SpreadCalculatorBuilder>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
+builder.Services.AddScoped<ICfbLeaderboardService, CfbLeaderboardService>();
 builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
 builder.Services.AddScoped<ICfbRepository, CfbRepository>();
 builder.Services.AddScoped<ICfbPicksRepository, CfbPicksRepository>();

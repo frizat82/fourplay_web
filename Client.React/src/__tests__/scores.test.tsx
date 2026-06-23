@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import ScoresPage from '../pages/ScoresPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createPick, createScores, createSpreadResponse, createCompetition } from '../test/fixtures';
@@ -166,5 +167,47 @@ describe('ScoresPage', () => {
     const { getByTestId } = await renderPage();
     expect(getByTestId('badge-BUF-spread')).toHaveAttribute('data-tone', 'info');
     expect(getByTestId('badge-MIA-spread')).toHaveAttribute('data-tone', 'info');
+  });
+
+  it('show only my picks hides games the user did not pick', async () => {
+    // User picked BUF (home, game 1) but not DAL/NYG (game 2)
+    const picks = [createPick({ team: 'BUF', userId: '123' })];
+    await setupDefaults({ picks, gameStarted: true });
+    await renderPage();
+
+    // Both games visible initially
+    expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/DAL/i).length).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole('button', { name: /show only my picks/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0);
+    });
+    // DAL game should be hidden
+    expect(screen.queryByText(/^DAL$/)).toBeNull();
+  });
+
+  it('show only my picks shows all games when toggled back', async () => {
+    const picks = [createPick({ team: 'BUF', userId: '123' })];
+    await setupDefaults({ picks, gameStarted: true });
+    await renderPage();
+
+    await userEvent.click(screen.getByRole('button', { name: /show only my picks/i }));
+    await waitFor(() => expect(screen.queryByText(/^DAL$/)).toBeNull());
+
+    await userEvent.click(screen.getByRole('button', { name: /show all games/i }));
+    await waitFor(() => expect(screen.getAllByText(/DAL/i).length).toBeGreaterThan(0));
+  });
+
+  it('show only my picks shows empty message when user has no picks', async () => {
+    await setupDefaults({ picks: [], gameStarted: true });
+    await renderPage();
+
+    await userEvent.click(screen.getByRole('button', { name: /show only my picks/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/haven.t made any picks/i)).toBeInTheDocument();
+    });
   });
 });

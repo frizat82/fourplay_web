@@ -6,6 +6,10 @@ export interface GameSituation {
   distance: number;
   isRedZone: boolean;
   downDistanceText: string;
+  /** Current quarter/period (1-4, OT=5) */
+  period?: number;
+  /** Game clock string e.g. "8:42" */
+  displayClock?: string;
 }
 
 export interface LiveGame {
@@ -16,4 +20,6 @@ export interface LiveGame {
   isCompleted: boolean;
   kickoffUtc: string;
   situation: GameSituation | null;
+  period?: number;
+  displayClock?: string;
 }
