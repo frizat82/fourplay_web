@@ -1,6 +1,5 @@
 import {
   Avatar,
-  Box,
   Dialog,
   DialogContent,
   Divider,
@@ -13,6 +12,7 @@ import {
 } from '@mui/material';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
+import TeamHelmet from './sports/TeamHelmet';
 
 interface PickDialogProps {
   open: boolean;
@@ -21,7 +21,7 @@ interface PickDialogProps {
   userNamesOver: string[];
   userNamesUnder: string[];
   teamAbbr: string;
-  logo: string;
+  pickType: 'Spread' | 'Over' | 'Under';
 }
 
 export default function PickDialog({
@@ -31,77 +31,70 @@ export default function PickDialog({
   userNamesOver,
   userNamesUnder,
   teamAbbr,
-  logo,
+  pickType,
 }: PickDialogProps) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogContent>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-          {(userNames.length > 0 || userNamesOver.length > 0 || userNamesUnder.length > 0) && (
+          {pickType === 'Spread' && (
             <>
-              <Typography variant="h5" fontWeight={700}>
-                Team: {teamAbbr}
-              </Typography>
-              <img src={logo} alt={teamAbbr} width={60} style={{ borderRadius: 8 }} />
+              <Typography variant="h5" fontWeight={700}>{teamAbbr}</Typography>
+              <TeamHelmet abbr={teamAbbr} size={60} />
             </>
           )}
-          {userNamesOver.length > 0 && <ArrowCircleUpIcon fontSize="large" />}
-          {userNamesUnder.length > 0 && <ArrowCircleDownIcon fontSize="large" />}
+          {pickType === 'Over' && (
+            <Stack direction="row" alignItems="center" gap={1}>
+              <ArrowCircleUpIcon fontSize="large" color="success" />
+              <Typography variant="h5" fontWeight={700}>Over</Typography>
+            </Stack>
+          )}
+          {pickType === 'Under' && (
+            <Stack direction="row" alignItems="center" gap={1}>
+              <ArrowCircleDownIcon fontSize="large" color="error" />
+              <Typography variant="h5" fontWeight={700}>Under</Typography>
+            </Stack>
+          )}
         </Stack>
         <Divider sx={{ mb: 2 }} />
 
         {userNames.length > 0 && (
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              Spread
-            </Typography>
-            <List dense>
-              {userNames.map((user) => (
-                <ListItem key={user}>
-                  <ListItemAvatar>
-                    <Avatar>{user[0]}</Avatar>
-                  </ListItemAvatar>
-                  <ListItemText primary={user} />
-                </ListItem>
-              ))}
-            </List>
-          </Box>
+          <List dense>
+            {userNames.map((user) => (
+              <ListItem key={user}>
+                <ListItemAvatar>
+                  <Avatar>{user[0]}</Avatar>
+                </ListItemAvatar>
+                <ListItemText primary={user} />
+              </ListItem>
+            ))}
+          </List>
         )}
 
         {userNamesOver.length > 0 && (
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              Over
-            </Typography>
-            <List dense>
-              {userNamesOver.map((user) => (
-                <ListItem key={user}>
-                  <ListItemAvatar>
-                    <Avatar color="primary">{user[0]}</Avatar>
-                  </ListItemAvatar>
-                  <ListItemText primary={user} />
-                </ListItem>
-              ))}
-            </List>
-          </Box>
+          <List dense>
+            {userNamesOver.map((user) => (
+              <ListItem key={user}>
+                <ListItemAvatar>
+                  <Avatar>{user[0]}</Avatar>
+                </ListItemAvatar>
+                <ListItemText primary={user} />
+              </ListItem>
+            ))}
+          </List>
         )}
 
         {userNamesUnder.length > 0 && (
-          <Box>
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              Under
-            </Typography>
-            <List dense>
-              {userNamesUnder.map((user) => (
-                <ListItem key={user}>
-                  <ListItemAvatar>
-                    <Avatar color="secondary">{user[0]}</Avatar>
-                  </ListItemAvatar>
-                  <ListItemText primary={user} />
-                </ListItem>
-              ))}
-            </List>
-          </Box>
+          <List dense>
+            {userNamesUnder.map((user) => (
+              <ListItem key={user}>
+                <ListItemAvatar>
+                  <Avatar>{user[0]}</Avatar>
+                </ListItemAvatar>
+                <ListItemText primary={user} />
+              </ListItem>
+            ))}
+          </List>
         )}
       </DialogContent>
     </Dialog>

@@ -16,3 +16,18 @@ repos:
       - id: detect-private-key
       - id: no-commit-to-branch
         args: ['--branch', 'main', '--branch', 'dev']
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        entry: bash -c 'cd Client.React && npm run lint'
+        language: system
+        pass_filenames: false
+        files: ^Client\.React/.*\.[jt]sx?$
+      - id: typecheck
+        name: TypeScript typecheck
+        entry: bash -c 'cd Client.React && npm run typecheck'
+        language: system
+        pass_filenames: false
+        files: ^Client\.React/.*\.[jt]sx?$

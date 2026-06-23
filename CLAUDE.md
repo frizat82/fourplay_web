@@ -2,6 +2,75 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## What This App Is — Read This First
+
+**IV League** is a weekly pick'em pool for NFL and CFB. Users pick N teams against a **league-admin-configured teased spread** each week. You must get **ALL picks right** to win the week. Winners collect juice (money) from losers.
+
+The tease amount is **NOT hardcoded** — it is set per-league by admins via `LeagueJuiceMapping`:
+- `Juice` = tease pts added for regular season games ("Juice (Teaser)" in admin UI)
+- `JuiceDivisional` = tease pts for Wild Card + Divisional rounds
+- `JuiceConference` = tease pts for Conference Championship round
+- `WeeklyCost` = money per week at stake
+
+Admin pages are at `/admin/leagueManagement` — **only visible to `isAdmin(user)=true` users**. In the demo stack, log in as `admin` (not Alice/Bob/etc.) to access.
+
+### Pick Count Rules — Core Invariants
+
+**NFL** (`GetRequiredPicks(nflWeek)` C# / `getEspnRequiredPicks(week, isPostSeason)` TS):
+
+| NflWeek | ESPN Week | Label | Required Picks |
+|---------|-----------|-------|---------------|
+| 1–18 | 1–18 | Regular Season | 4 |
+| 19 | 1 | Wild Card | 3 |
+| 20 | 2 | Divisional | 3 |
+| 21 | 3 | Conference Championship | 2 |
+| 22 | 4 | Super Bowl (stored via wk5→4 hack in NflScoresJob) | 1 |
+
+**CFB** (`GetCfbRequiredPicks(slateNumber)` C# / `getCfbRequiredPicks(slateNumber)` TS):
+
+| SlateNumber | Label | Required Picks |
+|-------------|-------|---------------|
+| 1–14 | Regular Season Weeks 1–14 | 4 |
+| 15 | Conf. Championships | 3 |
+| 16 | CFP First Round | 2 |
+| 17 | CFP Quarterfinals | 2 |
+| 18 | CFP Semifinals | 1 |
+| 19 | CFP National Championship | 1 |
+
+**Before changing ANY pick logic:** read the tables above, run the full test suite, verify counts in the DB.
+
+---
+
+## Test Quality Standards
+
+### Before Writing Any Test
+1. Understand the correct business rule FIRST — read the pick count tables above
+2. A test asserting the wrong value is WORSE than no test — false confidence hides bugs
+3. Tests must assert THE RULE, not the current (possibly broken) implementation
+
+### The Seeder Is Production-Critical
+- `DemoDataSeeder` seeds the demo DB that Playwright e2e tests run against — same data, same invariants
+- Every pick count in the seeder must match `GetCfbRequiredPicks`/`GetRequiredPicks`
+- After ANY change to pick logic: re-verify seeder counts AND run `npm run test:e2e:demo`
+- `ExpectedPickCount` in `DemoDataSeeder.cs` is a guard — update it accurately, never fudge it
+
+### Test Rot Prevention
+- When fixing a bug in business logic, ALWAYS check if existing tests assert the buggy behavior
+- Search for test assertions that match old wrong values before shipping
+- When changing `GetRequiredPicks`/`GetEspnRequiredPicks`: read ALL test files that reference the function, update expected values first, then fix the implementation
+
+### Demo Stack Pick Count Invariants (5 users, CFB Demo League)
+| Slate(s) | Picks/user | Total picks |
+|----------|-----------|-------------|
+| 1–14 (regular season) | 4 each | 20/slate |
+| 15 (Conf. Championships) | 3 | 15 |
+| 16–17 (First Round, QF) | 2 each | 10/slate |
+| 18 (Semifinals) | 1 | 5 |
+| 19 (Championship) | 1 spread + O/U for Bob/Dana | 7 |
+| **Total** | — | **327** |
+
+---
+
 ## CRITICAL: TDD Is the Primary Development Methodology
 - **Write failing tests FIRST, then implement** — no exceptions
 - Red → Green → Refactor is the only acceptable order

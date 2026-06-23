@@ -3,7 +3,11 @@ import { toLocalDisplay } from './time';
 import type { PickType } from '../types/picks';
 
 export function getWeekFromEspnWeek(week: number, isPostSeason = false) {
-  return isPostSeason ? week + 18 : week;
+  if (!isPostSeason) return week;
+  // ESPN skips Pro Bowl (week 4); Super Bowl is ESPN week 5.
+  // NflScoresJob normalizes week 5 → 4 before storing (j == 5 ? 4 : j).
+  // DB postseason weeks: WC=19, Div=20, CC=21, SB=22.
+  return (week === 5 ? 4 : week) + 18;
 }
 
 export function spreadLabel(spread: number): string {
@@ -54,17 +58,22 @@ export function getWeekName(week: number, isPostSeason = false) {
 export function getEspnRequiredPicks(week: number, isPostSeason = false) {
   if (!isPostSeason) return 4;
   switch (week) {
-    case 1:
-    case 2:
-      return 3;
-    case 3:
-      return 2;
+    case 1: return 3; // Wild Card
+    case 2: return 3; // Divisional
+    case 3: return 2; // Conference Championship
     case 4:
-    case 5:
-      return 1;
+    case 5: return 1; // Super Bowl (week 5 in ESPN; week 4 = Pro Bowl)
     default:
       throw new Error('Invalid week number');
   }
+}
+
+// CFB postseason mirrors NFL: Conf.Champs(15)=3, FirstRound(16)=2, QF(17)=2, SF(18)=1, Champ(19)=1
+export function getCfbRequiredPicks(slateNumber: number): number {
+  if (slateNumber <= 14) return 4;
+  if (slateNumber === 15) return 3;
+  if (slateNumber <= 17) return 2;
+  return 1;
 }
 
 const STATUS_FINAL = 0;
@@ -211,6 +220,43 @@ export function getScoreEvents(scores: EspnScores | null | undefined): Event[] {
 
 export function getPickLabel(pickType: PickType) {
   return pickType === 'Spread' ? 'Spread' : pickType;
+}
+
+// ─── Shared cover/over computation used by all sport adapters ────────────────
+// Both NFL and CFB adapters should call these instead of duplicating the logic.
+
+import type { GameStatusValue } from '../services/sportAdapter';
+
+function isDecidedStatus(status: GameStatusValue): boolean {
+  return status === 'final' || status === 'in_progress' || status === 'halftime';
+}
+
+/**
+ * Returns whether the home team is covering the spread, or null if the game
+ * hasn't started or spread data isn't available.
+ * Works for final, in-progress, and halftime.
+ */
+export function computeHomeCovers(
+  status: GameStatusValue,
+  homeSpread: number | null,
+  homeScore: number | null,
+  awayScore: number | null,
+): boolean | null {
+  if (!isDecidedStatus(status) || homeSpread == null || homeScore == null || awayScore == null) return null;
+  return (homeScore + homeSpread) > awayScore;
+}
+
+/**
+ * Returns whether the total is over the over/under line, or null if unavailable.
+ */
+export function computeOverWins(
+  status: GameStatusValue,
+  overUnder: number | null,
+  homeScore: number | null,
+  awayScore: number | null,
+): boolean | null {
+  if (!isDecidedStatus(status) || overUnder == null || homeScore == null || awayScore == null) return null;
+  return (homeScore + awayScore) > overUnder;
 }
 
 function isHomeAway(value: HomeAway, expected: 'home' | 'away') {
