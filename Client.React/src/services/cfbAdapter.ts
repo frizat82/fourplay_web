@@ -5,6 +5,7 @@ import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../type
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } from './sportAdapter';
+import { revealPicksForStartedGames } from './sportAdapter';
 
 /** Map CFB backend status strings to canonical GameStatusValue */
 
@@ -190,7 +191,7 @@ export function createCfbAdapter(): SportAdapter {
     const games = buildGamesFromEspn(spreads, espn, dbScores, situations);
     const allPicks = allPickDtos.map(cfbPickToPickView);
     const userPicks = allPicks.filter(p => p.userId === userId);
-    return { games, allPicks, userPicks };
+    return { games, allPicks: revealPicksForStartedGames(allPicks, games, userId), userPicks };
   }
 
   return {

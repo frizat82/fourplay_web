@@ -14,6 +14,7 @@ import {
   computeHomeCovers, computeOverWins,
 } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView } from './sportAdapter';
+import { revealPicksForStartedGames } from './sportAdapter';
 
 /** Map ESPN TypeName (number or string) to canonical GameStatusValue */
 function toGameStatus(competition: Competition): GameStatusValue {
@@ -202,7 +203,7 @@ export function createNflAdapter(): SportAdapter {
       const allPicksDtos = await getLeaguePicks(leagueId, season, nflWeek);
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
-      return { season, week: weekNum, isPostSeason: postSeason, games, allPicks, userPicks, hasOdds, hasActiveGames, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: 18, maxSeason: season };
+      return { season, week: weekNum, isPostSeason: postSeason, games, allPicks: revealPicksForStartedGames(allPicks, games, userId), userPicks, hasOdds, hasActiveGames, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: 18, maxSeason: season };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
