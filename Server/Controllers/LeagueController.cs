@@ -119,6 +119,9 @@ public class LeagueController(
     [HttpGet("{leagueId:int}/users")]
     [ProducesResponseType(typeof(List<LeagueUserMappingDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<LeagueUserMappingDto>>> GetLeagueUserMappings(int leagueId) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
+            return Forbid();
         var mappings = await repo.GetLeagueUserMappingsAsync(leagueId);
         var dtoMappings = mappings.Select(m => new LeagueUserMappingDto {
             LeagueId = m.LeagueId,
@@ -271,6 +274,9 @@ public class LeagueController(
     [HttpGet("{leagueId:int}/picks/{season:int}/{week:int}")]
     [ProducesResponseType(typeof(List<NflPickDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<NflPickDto>>> GetLeaguePicks(int leagueId, int season, int week) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
+            return Forbid();
         var cacheKey = $"picks_{leagueId}_{season}_{week}";
         var response = await memoryCache.GetOrCreateAsync(cacheKey, async entry => {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
