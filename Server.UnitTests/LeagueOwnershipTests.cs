@@ -290,6 +290,7 @@ public class LeagueOwnershipTests
         Assert.NotNull(result);
         await repo.Received(1).AddLeagueInfoAsync(Arg.Is<LeagueInfo>(l => l.LeagueName == "My League" && l.OwnerUserId == OwnerId));
         await repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.Season == 2025 && m.Juice == 13));
+        await repo.Received(1).AddLeagueUserMappingAsync(Arg.Is<LeagueUserMapping>(m => m.UserId == OwnerId));
     }
 
     [Fact]

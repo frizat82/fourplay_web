@@ -670,6 +670,11 @@ public class LeagueController(
             WeeklyCost = dto.WeeklyCost,
             DateCreated = DateTimeOffset.UtcNow,
         });
+        await repo.AddLeagueUserMappingAsync(new LeagueUserMapping {
+            LeagueId = league.Id,
+            UserId = dto.OwnerUserId,
+            DateCreated = DateTimeOffset.UtcNow,
+        });
         return Ok(new LeagueInfoDto { Id = league.Id, LeagueName = league.LeagueName, LeagueType = league.LeagueType, OwnerUserId = league.OwnerUserId, DateCreated = league.DateCreated });
     }
 
