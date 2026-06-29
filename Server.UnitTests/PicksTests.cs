@@ -52,7 +52,8 @@ public class PicksTests
             NullLogger<LeagueController>.Instance,
             BuildUserManager(),
             Substitute.For<ISpreadCalculatorBuilder>(),
-            espnCacheService);
+            espnCacheService,
+            Substitute.For<IInvitationService>());
 
         var httpContext = new DefaultHttpContext();
         if (principal is not null)
@@ -327,5 +328,199 @@ public class PicksTests
         Assert.IsType<OkObjectResult>(result.Result);
         await repo.Received(1).AddNflPicksAsync(
             Arg.Is<IEnumerable<NflPicks>>(picks => !picks.Any()));
+    }
+
+    // ── GetLeaguePicks — pick reveal gate ─────────────────────────────────────
+
+    private const string OtherUserId = "other-user-002";
+
+    /// <summary>
+    /// Builds an ESPN payload where BUF/MIA is STATUS_SCHEDULED (not started)
+    /// and DAL/NYG is STATUS_IN_PROGRESS (already kicked off).
+    /// </summary>
+    private static EspnScores BuildMixedStatusScores() => new()
+    {
+        Events =
+        [
+            new Event
+            {
+                Id = "e1", Season = new Season { Year = Season, Type = 2 }, Week = new Week { Number = Week },
+                Date = DateTimeOffset.UtcNow.AddHours(2),
+                Competitions =
+                [
+                    new Competition
+                    {
+                        Id = "c1", Date = DateTimeOffset.UtcNow.AddHours(2),
+                        Competitors =
+                        [
+                            new Competitor { Team = new EspnTeam { Abbreviation = "BUF" }, HomeAway = HomeAway.Home },
+                            new Competitor { Team = new EspnTeam { Abbreviation = "MIA" }, HomeAway = HomeAway.Away }
+                        ],
+                        Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Completed = false } },
+                        Odds = []
+                    }
+                ]
+            },
+            new Event
+            {
+                Id = "e2", Season = new Season { Year = Season, Type = 2 }, Week = new Week { Number = Week },
+                Date = DateTimeOffset.UtcNow.AddHours(-1),
+                Competitions =
+                [
+                    new Competition
+                    {
+                        Id = "c2", Date = DateTimeOffset.UtcNow.AddHours(-1),
+                        Competitors =
+                        [
+                            new Competitor { Team = new EspnTeam { Abbreviation = "DAL" }, HomeAway = HomeAway.Home },
+                            new Competitor { Team = new EspnTeam { Abbreviation = "NYG" }, HomeAway = HomeAway.Away }
+                        ],
+                        Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusInProgress, Completed = false } },
+                        Odds = []
+                    }
+                ]
+            }
+        ]
+    };
+
+    private static NflPicks MakeNflPick(string userId, string team) => new()
+    {
+        LeagueId = LeagueId, UserId = userId, Team = team,
+        Pick = PickType.Spread, NflWeek = Week, Season = Season, NflWeekId = 1,
+        User = new ApplicationUser { UserName = userId }
+    };
+
+    private static ILeagueRepository BuildRepoWithPicks(params NflPicks[] picks)
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetNflPicksAsync(LeagueId, Season, Week).Returns([.. picks]);
+        return repo;
+    }
+
+    /// <summary>
+    /// Other users' picks for a game with STATUS_SCHEDULED must not be returned
+    /// to the caller — same rule as revealPicksForStartedGames on the frontend.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaguePicks_HidesOtherUserPicksForScheduledGames()
+    {
+        var repo = BuildRepoWithPicks(
+            MakeNflPick(UserId,      "BUF"),  // caller's own pick — always visible
+            MakeNflPick(OtherUserId, "MIA")); // other user on same not-started game
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns(BuildMixedStatusScores());
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+
+        var result = await controller.GetLeaguePicks(LeagueId, Season, Week);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<NflPickDto>>(ok.Value);
+        Assert.All(returned, p => Assert.Equal(UserId, p.UserId));
+        Assert.DoesNotContain(returned, p => p.UserId == OtherUserId && p.Team == "MIA");
+    }
+
+    /// <summary>
+    /// Other users' picks for games with STATUS_IN_PROGRESS must be returned — the
+    /// game has started so picks are no longer secret.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaguePicks_ShowsOtherUserPicksForStartedGames()
+    {
+        var repo = BuildRepoWithPicks(
+            MakeNflPick(UserId,      "DAL"),  // caller pick on in-progress game
+            MakeNflPick(OtherUserId, "NYG")); // other user on same in-progress game
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns(BuildMixedStatusScores());
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+
+        var result = await controller.GetLeaguePicks(LeagueId, Season, Week);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<NflPickDto>>(ok.Value).ToList();
+        Assert.Contains(returned, p => p.UserId == OtherUserId && p.Team == "NYG");
+    }
+
+    /// <summary>
+    /// The caller's own picks are always visible — even when their game is still STATUS_SCHEDULED.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaguePicks_AlwaysShowsCallerOwnPicks()
+    {
+        var repo = BuildRepoWithPicks(MakeNflPick(UserId, "BUF")); // scheduled game
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns(BuildMixedStatusScores());
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+
+        var result = await controller.GetLeaguePicks(LeagueId, Season, Week);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<NflPickDto>>(ok.Value).ToList();
+        Assert.Single(returned);
+        Assert.Equal("BUF", returned[0].Team);
+    }
+
+    /// <summary>
+    /// When the ESPN cache is unavailable, GetLeaguePicks must fail open and return
+    /// all picks rather than silently hiding them.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaguePicks_WhenEspnCacheNull_ReturnsAllPicks()
+    {
+        var repo = BuildRepoWithPicks(
+            MakeNflPick(UserId,      "BUF"),
+            MakeNflPick(OtherUserId, "MIA"));
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns((EspnScores?)null);
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+
+        var result = await controller.GetLeaguePicks(LeagueId, Season, Week);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<NflPickDto>>(ok.Value).ToList();
+        Assert.Equal(2, returned.Count);
+    }
+
+    /// <summary>
+    /// Admins bypass the pick-reveal filter and always receive all picks regardless
+    /// of game status.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaguePicks_AdminSeesAllPicksRegardlessOfGameStatus()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        // Admin is NOT in the league — but should still get picks
+        repo.UserExistsInLeagueAsync(Arg.Any<string>(), LeagueId).Returns(false);
+        repo.GetNflPicksAsync(LeagueId, Season, Week).Returns(
+        [
+            MakeNflPick(UserId,      "BUF"),  // scheduled game
+            MakeNflPick(OtherUserId, "MIA"),  // scheduled game
+        ]);
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns(BuildMixedStatusScores());
+
+        var adminPrincipal = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+            [
+                new System.Security.Claims.Claim(ClaimTypes.NameIdentifier, "admin-001"),
+                new System.Security.Claims.Claim(ClaimTypes.Role, "Administrator"),
+            ], "Test"));
+
+        var controller = BuildController(repo, espn, adminPrincipal);
+
+        var result = await controller.GetLeaguePicks(LeagueId, Season, Week);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<NflPickDto>>(ok.Value).ToList();
+        Assert.Equal(2, returned.Count);
     }
 }
