@@ -37,6 +37,7 @@ import WorkIcon from '@mui/icons-material/Work';
 import GroupsIcon from '@mui/icons-material/Groups';
 import PersonIcon from '@mui/icons-material/Person';
 import MailIcon from '@mui/icons-material/Mail';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { useSportContext } from '../services/sport';
@@ -62,7 +63,7 @@ export default function AppLayout() {
   const [open, setOpen] = useState(!isMobile);
   const [adminOpen, setAdminOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const { availableLeagues, currentLeague, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded } = useSession();
+  const { availableLeagues, currentLeague, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded, isLeagueOwner } = useSession();
   const { isCfb } = useSportContext();
   const { user } = useAuth();
   const { mode, toggleTheme } = useThemeMode();
@@ -254,6 +255,19 @@ export default function AppLayout() {
               </ListItemIcon>
               <ListItemText primary="Rules" />
             </ListItemButton>
+            {isLeagueOwner && (
+              <ListItemButton
+                component={NavLink}
+                to="/league/manage"
+                sx={navItemSx}
+                onClick={() => handleNavClick('/league/manage')}
+              >
+                <ListItemIcon>
+                  <EmojiEventsIcon />
+                </ListItemIcon>
+                <ListItemText primary="My Leagues" />
+              </ListItemButton>
+            )}
           </List>
           {showAdmin && (
             <>
@@ -321,6 +335,18 @@ export default function AppLayout() {
                       </ListItemIcon>
                       <ListItemText primary="Invitations" />
                     </ListItemButton>
+                    {isCfb && (
+                      <ListItemButton
+                        component={NavLink}
+                        to="/admin/cfb-schedule"
+                        sx={adminNavItemSx}
+                      >
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <ScoreboardIcon sx={{ fontSize: 20 }} />
+                        </ListItemIcon>
+                        <ListItemText primary="CFB Schedule" />
+                      </ListItemButton>
+                    )}
                   </List>
                 </Collapse>
               </List>
