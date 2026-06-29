@@ -278,8 +278,9 @@ public class LeagueController(
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
             return Forbid();
+
         var cacheKey = $"picks_{leagueId}_{season}_{week}";
-        var response = await memoryCache.GetOrCreateAsync(cacheKey, async entry => {
+        var allPicks = await memoryCache.GetOrCreateAsync(cacheKey, async entry => {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
             var picks = await repo.GetNflPicksAsync(leagueId, season, week);
             return picks.Select(p => new NflPickDto {
@@ -294,7 +295,26 @@ public class LeagueController(
                 DateCreated = p.DateCreated
             }).ToList();
         });
-        return Ok(response);
+
+        // Hide other users' picks for games that haven't kicked off yet.
+        // Mirrors revealPicksForStartedGames on the frontend — same "not STATUS_SCHEDULED" rule.
+        // Admins always see all picks. Fails open if ESPN cache is unavailable.
+        if (!User.IsInRole(AppRoles.Administrator)) {
+            var espnScores = await espnCacheService.GetScoresAsync();
+            if (espnScores?.Events is not null) {
+                var notStartedTeams = espnScores.Events
+                    .SelectMany(e => e.Competitions)
+                    .Where(c => c.Status?.Type?.Name == TypeName.StatusScheduled)
+                    .SelectMany(c => c.Competitors.Select(comp => comp.Team?.Abbreviation))
+                    .Where(a => a is not null)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)!;
+                allPicks = allPicks!
+                    .Where(p => p.UserId == callerId || !notStartedTeams.Contains(p.Team))
+                    .ToList();
+            }
+        }
+
+        return Ok(allPicks);
     }
 
     [HttpGet("{leagueId:int}/picks/{season:int}/{week:int}/user/{userId}")]
