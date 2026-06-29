@@ -1,6 +1,19 @@
 /** Canonical game status — both adapters normalize to this before populating GameView */
 export type GameStatusValue = 'final' | 'in_progress' | 'halftime' | 'scheduled' | null;
 
+/**
+ * Hide other users' picks for games that haven't started yet.
+ * The caller's own picks are always visible (so they can confirm their submission).
+ * Once a game kicks off, picks for that game become visible to everyone — mirroring
+ * the write-side kickoff lock in AddPicks.
+ */
+export function revealPicksForStartedGames(allPicks: PickView[], games: GameView[], userId: string): PickView[] {
+  const startedIds = new Set(
+    games.filter(g => g.gameStatus !== 'scheduled' && g.gameStatus !== null).map(g => g.id)
+  );
+  return allPicks.filter(p => p.userId === userId || startedIds.has(p.gameId));
+}
+
 export interface GameView {
   id: string;
   homeTeam: string;
