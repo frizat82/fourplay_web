@@ -1,4 +1,5 @@
 ﻿using FourPlayWebApp.Server.Auth;
+using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
@@ -17,6 +18,8 @@ using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.Controllers;
 
+public record LeagueInviteDto(string Email);
+
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -27,7 +30,8 @@ public class LeagueController(
     ILogger<LeagueController> logger,
     UserManager<ApplicationUser> userManager,
     ISpreadCalculatorBuilder spreadCalculatorBuilder,
-    IEspnCacheService espnCacheService) : ControllerBase {
+    IEspnCacheService espnCacheService,
+    IInvitationService invitationService) : ControllerBase {
     // ---------- League Info ----------
     [HttpGet("{leagueId:int}")]
     [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]
@@ -633,6 +637,146 @@ public class LeagueController(
         };
         await repo.AddLeagueJuiceMappingAsync(mapping);
         return NoContent();
+    }
+
+    // ---------- Commissioner Portal ─────────────────────────────────────────
+
+    [HttpPost("create")]
+    [Authorize(Roles = AppRoles.Administrator)]
+    [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateLeague([FromBody] LeagueCreateDto dto) {
+        if (await repo.LeagueExistsAsync(dto.LeagueName))
+            return Conflict($"A league named '{dto.LeagueName}' already exists.");
+        var league = await repo.AddLeagueInfoAsync(new LeagueInfo {
+            LeagueName = dto.LeagueName,
+            LeagueType = dto.LeagueType,
+            OwnerUserId = dto.OwnerUserId,
+            DateCreated = DateTimeOffset.UtcNow,
+        });
+        await repo.AddLeagueJuiceMappingAsync(new LeagueJuiceMapping {
+            LeagueId = league.Id,
+            Season = dto.Season,
+            Juice = dto.Juice,
+            JuiceDivisional = dto.JuiceDivisional,
+            JuiceConference = dto.JuiceConference,
+            WeeklyCost = dto.WeeklyCost,
+            DateCreated = DateTimeOffset.UtcNow,
+        });
+        return Ok(new LeagueInfoDto { Id = league.Id, LeagueName = league.LeagueName, LeagueType = league.LeagueType, OwnerUserId = league.OwnerUserId, DateCreated = league.DateCreated });
+    }
+
+    [HttpPut("{leagueId:int}/owner/{newOwnerUserId}")]
+    [Authorize(Roles = AppRoles.Administrator)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> AssignLeagueOwner(int leagueId, string newOwnerUserId) {
+        await repo.UpdateLeagueOwnerAsync(leagueId, newOwnerUserId);
+        return NoContent();
+    }
+
+    [HttpGet("my-leagues")]
+    [ProducesResponseType(typeof(List<LeagueInfoDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyLeagues() {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var leagues = await repo.GetLeaguesByOwnerAsync(userId);
+        return Ok(leagues.Select(l => new LeagueInfoDto {
+            Id = l.Id, LeagueName = l.LeagueName, LeagueType = l.LeagueType,
+            OwnerUserId = l.OwnerUserId, DateCreated = l.DateCreated,
+        }));
+    }
+
+    [HttpGet("{leagueId:int}/cost")]
+    [ProducesResponseType(typeof(LeagueCostDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetLeagueCost(int leagueId) {
+        var league = await repo.GetLeagueInfoAsync(leagueId);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != userId)
+            return Forbid();
+        var count = await repo.GetLeagueMemberCountAsync(leagueId);
+        const int baseCost = 100, baseMembers = 10, perHead = 10;
+        var cost = baseCost + Math.Max(0, count - baseMembers) * perHead;
+        return Ok(new LeagueCostDto(count, cost));
+    }
+
+    [HttpPut("{leagueId:int}/juice/{season:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateLeagueJuice(int leagueId, int season, [FromBody] LeagueJuiceUpdateDto dto) {
+        var league = await repo.GetLeagueInfoAsync(leagueId);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != userId)
+            return Forbid();
+        var existing = await repo.GetLeagueJuiceMappingAsync(leagueId, season);
+        if (existing is null) return NotFound($"No juice mapping for league {leagueId} season {season}.");
+        existing.Juice = dto.Juice;
+        existing.JuiceDivisional = dto.JuiceDivisional;
+        existing.JuiceConference = dto.JuiceConference;
+        existing.WeeklyCost = dto.WeeklyCost;
+        await repo.UpdateLeagueJuiceMappingAsync(existing);
+        return NoContent();
+    }
+
+    [HttpPost("{leagueId:int}/juice/roll-forward/{toSeason:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RollForwardJuice(int leagueId, int toSeason) {
+        var league = await repo.GetLeagueInfoAsync(leagueId);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != userId)
+            return Forbid();
+        if (await repo.GetLeagueJuiceMappingAsync(leagueId, toSeason) is not null)
+            return BadRequest($"Juice mapping for season {toSeason} already exists.");
+        var priorMapping = (await repo.GetLeagueJuiceMappingAsync(leagueId))
+            .Where(m => m.Season < toSeason)
+            .MaxBy(m => m.Season);
+        if (priorMapping is null)
+            return BadRequest("No prior season juice mapping to copy from.");
+        await repo.AddLeagueJuiceMappingAsync(new LeagueJuiceMapping {
+            LeagueId = leagueId,
+            Season = toSeason,
+            Juice = priorMapping.Juice,
+            JuiceDivisional = priorMapping.JuiceDivisional,
+            JuiceConference = priorMapping.JuiceConference,
+            WeeklyCost = priorMapping.WeeklyCost,
+            DateCreated = DateTimeOffset.UtcNow,
+        });
+        return NoContent();
+    }
+
+    [HttpDelete("{leagueId:int}/members/{userId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RemoveLeagueMember(int leagueId, string userId) {
+        var league = await repo.GetLeagueInfoAsync(leagueId);
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return Forbid();
+        await repo.RemoveLeagueUserMappingAsync(leagueId, userId);
+        return NoContent();
+    }
+
+    [HttpPost("{leagueId:int}/invite")]
+    [ProducesResponseType(typeof(InvitationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> InviteToLeague(int leagueId, [FromBody] LeagueInviteDto dto) {
+        var league = await repo.GetLeagueInfoAsync(leagueId);
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return Forbid();
+        var invitation = await invitationService.CreateInvitationAsync(dto.Email, callerId, leagueId);
+        return Ok(new InvitationDto {
+            Id = invitation.Id,
+            InvitationCode = invitation.InvitationCode,
+            Email = invitation.Email,
+            LeagueId = invitation.LeagueId,
+            IsUsed = invitation.IsUsed,
+            IsExpired = invitation.IsExpired,
+            IsValid = invitation.IsValid,
+            CreatedAt = invitation.CreatedAt,
+            ExpiresAt = invitation.ExpiresAt,
+        });
     }
 
 }

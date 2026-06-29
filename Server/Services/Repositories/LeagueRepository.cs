@@ -233,6 +233,43 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     }
 
 
+    // Commissioner portal methods
+    public async Task<List<LeagueInfo>> GetLeaguesByOwnerAsync(string ownerId) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.LeagueInfo
+            .Where(l => l.OwnerUserId == ownerId)
+            .Include(l => l.LeagueJuiceMappings)
+            .ToListAsync();
+    }
+
+    public async Task UpdateLeagueOwnerAsync(int leagueId, string newOwnerUserId) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        var league = await db.LeagueInfo.FirstAsync(l => l.Id == leagueId);
+        league.OwnerUserId = newOwnerUserId;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task UpdateLeagueJuiceMappingAsync(LeagueJuiceMapping mapping) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        db.LeagueJuiceMapping.Update(mapping);
+        await db.SaveChangesAsync();
+    }
+
+    public async Task RemoveLeagueUserMappingAsync(int leagueId, string userId) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        var mapping = await db.LeagueUserMapping
+            .FirstOrDefaultAsync(m => m.LeagueId == leagueId && m.UserId == userId);
+        if (mapping is not null) {
+            db.LeagueUserMapping.Remove(mapping);
+            await db.SaveChangesAsync();
+        }
+    }
+
+    public async Task<int> GetLeagueMemberCountAsync(int leagueId) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.LeagueUserMapping.CountAsync(m => m.LeagueId == leagueId);
+    }
+
     // Add operations
     public async Task AddLeagueUserAsync(LeagueUsers leagueUser) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
@@ -246,10 +283,11 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await db.SaveChangesAsync();
     }
 
-    public async Task AddLeagueInfoAsync(LeagueInfo leagueInfo) {
+    public async Task<LeagueInfo> AddLeagueInfoAsync(LeagueInfo leagueInfo) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         await db.LeagueInfo.AddAsync(leagueInfo);
         await db.SaveChangesAsync();
+        return leagueInfo;
     }
 
     public async Task AddLeagueJuiceMappingAsync(LeagueJuiceMapping mapping) {
