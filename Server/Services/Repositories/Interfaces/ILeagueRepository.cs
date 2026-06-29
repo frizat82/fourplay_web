@@ -29,10 +29,17 @@ public interface ILeagueRepository {
     Task<List<NflPicks>> GetNflPicksAsync(int leagueId, int season, int week);
     Task<List<NflPicks>> GetUserNflPicksAsync(string userId, int leagueId, int season, int week);
 
+    // Commissioner portal methods
+    Task<List<LeagueInfo>> GetLeaguesByOwnerAsync(string ownerId);
+    Task UpdateLeagueOwnerAsync(int leagueId, string newOwnerUserId);
+    Task UpdateLeagueJuiceMappingAsync(LeagueJuiceMapping mapping);
+    Task RemoveLeagueUserMappingAsync(int leagueId, string userId);
+    Task<int> GetLeagueMemberCountAsync(int leagueId);
+
     // Add operations
     Task AddLeagueUserAsync(LeagueUsers leagueUser);
     Task AddLeagueUserMappingAsync(LeagueUserMapping mapping);
-    Task AddLeagueInfoAsync(LeagueInfo leagueInfo);
+    Task<LeagueInfo> AddLeagueInfoAsync(LeagueInfo leagueInfo);
     Task AddLeagueJuiceMappingAsync(LeagueJuiceMapping mapping);
     Task AddNflScoresAsync(IEnumerable<NflScores> scores);
     Task AddNflSpreadsAsync(IEnumerable<NflSpreads> spreads);

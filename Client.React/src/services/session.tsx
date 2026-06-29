@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { getLeagueUserMappingsForUser } from '../api/league';
+import { getLeagueUserMappingsForUser, getMyLeagues } from '../api/league';
 import type { LeagueUserMappingDto } from '../types/league';
+import type { LeagueInfoDto } from '../types/admin';
 import { useAuth } from './auth';
 import { useSportContext } from './sport';
 
@@ -13,6 +14,8 @@ interface SessionContextValue {
   hasNflAccess: boolean;
   hasCfbAccess: boolean;
   leaguesLoaded: boolean;
+  isLeagueOwner: boolean;
+  ownedLeagues: LeagueInfoDto[];
 }
 
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
@@ -32,6 +35,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [hasNflAccess, setHasNflAccess] = useState(false);
   const [hasCfbAccess, setHasCfbAccess] = useState(false);
   const [leaguesLoaded, setLeaguesLoaded] = useState(false);
+  const [ownedLeagues, setOwnedLeagues] = useState<LeagueInfoDto[]>([]);
 
   const persistLeague = useCallback((leagueId: number | null) => {
     if (leagueId === null) {
@@ -49,7 +53,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const allLeagues = (await getLeagueUserMappingsForUser(user.userId)) ?? [];
+    const [allLeagues, myLeagues] = await Promise.all([
+      getLeagueUserMappingsForUser(user.userId).then((d) => d ?? []),
+      getMyLeagues().catch(() => [] as LeagueInfoDto[]),
+    ]);
     setHasNflAccess(allLeagues.some((l) => l.leagueType === 0));
     setHasCfbAccess(allLeagues.some((l) => l.leagueType === 1));
     // Filter leagues to match the current sport context (leagueType: 0=NFL, 1=CFB)
@@ -57,6 +64,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       sport === 'CFB' ? l.leagueType === 1 : l.leagueType === 0
     );
     setAvailableLeagues(leagues);
+    const sportType = sport === 'CFB' ? 'Cfb' : 'Nfl';
+    setOwnedLeagues(myLeagues.filter((l) => l.leagueType === sportType));
 
     const stored = loadStoredLeague();
     const storedValid = stored !== null && leagues.some((l) => l.leagueId === stored);
@@ -93,9 +102,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     });
   }, [reloadLeagues]);
 
+  const isLeagueOwner = ownedLeagues.length > 0;
+
   const value = useMemo(
-    () => ({ availableLeagues, currentLeague, selectLeague, reloadLeagues, clearSession, hasNflAccess, hasCfbAccess, leaguesLoaded }),
-    [availableLeagues, clearSession, currentLeague, reloadLeagues, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded]
+    () => ({ availableLeagues, currentLeague, selectLeague, reloadLeagues, clearSession, hasNflAccess, hasCfbAccess, leaguesLoaded, isLeagueOwner, ownedLeagues }),
+    [availableLeagues, clearSession, currentLeague, reloadLeagues, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded, isLeagueOwner, ownedLeagues]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

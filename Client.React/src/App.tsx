@@ -57,6 +57,8 @@ import AdminInvitationsPage from './pages/admin/InvitationsPage';
 import LogoutPage from './pages/LogoutPage';
 import AuthPage from './pages/AuthPage';
 import RulesPage from './pages/RulesPage';
+import LeaguePortalPage from './pages/LeaguePortalPage';
+import CfbSchedulePage from './pages/admin/CfbSchedulePage';
 
 export default function App() {
   return (
@@ -136,6 +138,15 @@ export default function App() {
         <Route path="/account/manage" element={<ManageAccountPage />} />
         <Route path="/account/manage/changepassword" caseSensitive={false} element={<ChangePasswordPage />} />
         <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
+        <Route path="/league/manage" element={<LeaguePortalPage />} />
+        <Route
+          path="/admin/cfb-schedule"
+          element={
+            <RequireAdmin>
+              <CfbSchedulePage />
+            </RequireAdmin>
+          }
+        />
       </Route>
       <Route path="/account" element={<Navigate to="/account/login" replace />} />
       <Route path="*" element={<NotFoundPage />} />
