@@ -65,6 +65,8 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         // CFB demo data
         var cfbLeague = await SeedCfbLeagueAsync();
         await SeedCfbLeagueMembersAsync(cfbLeague);
+        await SeedLeagueJuiceMappingAsync(cfbLeague);
+        await SeedCfbWeekConfigAsync();
         var slates = await SeedCfbSlatesAsync();
         await SeedCfbSpreadsAsync(slates);
         await SeedCfbScoresAsync(slates);
@@ -150,7 +152,7 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
     private async Task FixSpreadAbbreviationsAsync()
     {
         // Correct legacy abbreviations that were seeded before the ESPN mapping was applied
-        var fixes = new Dictionary<string, string> { ["WSH"] = "WAS", ["JAX"] = "JAC", ["ARZ"] = "ARI" };
+        var fixes = new Dictionary<string, string> { ["WSH"] = "WAS", ["ARZ"] = "ARI" };
         bool changed = false;
         foreach (var spread in await db.NflSpreads.Where(s => s.Season == DemoSeason && s.NflWeek == DemoWeek).ToListAsync())
         {
@@ -291,11 +293,34 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         Log.Information("DemoDataSeeder: seeded picks for {Username}", user.UserName);
     }
 
-    // Historical weeks 1-17: same 4 games every week, home teams always cover
-    // Winning user picks: KC, DAL, PHI, BUF (all home = all cover)
-    // Losing user picks:  DEN, DAL, PHI, BUF (DEN = wrong = loss)
+    // Historical weeks 1-17: same 16 games every week (all 32 NFL teams), home teams always cover
+    // 4 picks per user per week (required picks = 4)
+    // Winning user picks: KC, DAL, PHI, BUF (first 4 home teams — all cover)
+    // Losing user picks:  DEN, CLE, NYG, NYJ (first 4 away teams — none cover)
     private static readonly string[] HistWinPicks = ["KC", "DAL", "PHI", "BUF"];
-    private static readonly string[] HistLosePicks = ["DEN", "DAL", "PHI", "BUF"];
+    private static readonly string[] HistLosePicks = ["DEN", "CLE", "NYG", "NYJ"];
+
+    // 16 game pairings covering all 32 NFL teams — same matchups every regular season week 1-17
+    // Real game data comes from ESPN API; these spreads are for demo purposes only
+    private static readonly (string Home, string Away, double HomeSpread, double OU)[] HistGames =
+    [
+        ("KC",  "DEN", -7.0, 47.5),
+        ("DAL", "CLE", -6.0, 44.5),
+        ("PHI", "NYG", -4.0, 43.5),
+        ("BUF", "NYJ", -3.0, 46.5),
+        ("BAL", "PIT", -5.5, 44.0),
+        ("HOU", "JAC", -4.5, 43.0),
+        ("TEN", "IND",  2.5, 41.5),
+        ("MIA", "NE",  -3.5, 45.5),
+        ("LAR", "SEA", -2.5, 46.5),
+        ("SF",  "ARI", -9.5, 47.0),
+        ("LAC", "LV",  -3.5, 44.0),
+        ("GB",  "MIN", -2.5, 46.0),
+        ("DET", "CHI", -7.0, 46.5),
+        ("TB",  "ATL", -3.0, 44.5),
+        ("NO",  "CAR",  5.5, 40.5),
+        ("WAS", "CIN",  1.5, 43.5),
+    ];
 
     // Win pattern per user per week (weeks 1-17, index 0-16); true = win that week
     // Weeks 8-17 repeat the weeks 1-7 pattern (cycled) for a plausible leaderboard.
@@ -308,74 +333,86 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         ["Eve"]    = [false, false, false, true,  true,  false, false, false, false, false, true,  true,  false, false, false, false, false],
     };
 
-    // Wild Card (week 19): 6 games
+    // Real 2025 NFL Playoffs — home/away verified against ESPN API responses.
+    // Wild Card (NflWeek 19 = ESPN postseason week 1): Jan 11-12 2026
     private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] WildCardGames =
     [
-        ("KC",  "HOU", -6.5,  6.5, 48.5, 27, 14, new DateTimeOffset(2026, 1, 11, 18, 0, 0, TimeSpan.Zero)),
-        ("BUF", "DEN", -7.5,  7.5, 46.5, 31,  7, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)),
-        ("BAL", "PIT", -8.0,  8.0, 44.5, 28, 14, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)),
-        ("PHI", "LAR", -9.5,  9.5, 47.5, 35, 14, new DateTimeOffset(2026, 1, 12, 18, 0, 0, TimeSpan.Zero)),
-        ("DET", "WAS", -7.0,  7.0, 50.5, 24, 14, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)),
-        ("SF",  "GB",  -3.5,  3.5, 47.0, 21, 13, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)),
+        // ESPN home team listed first — verified from scoreboard API
+        ("CAR", "LAR",  6.5, -6.5, 48.5, 31, 34, new DateTimeOffset(2026, 1, 11, 18, 0, 0, TimeSpan.Zero)),  // LAR wins, CAR covers
+        ("CHI", "GB",  -3.5,  3.5, 45.5, 31, 27, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // CHI wins and covers
+        ("JAC", "BUF",  9.5, -9.5, 47.5, 24, 27, new DateTimeOffset(2026, 1, 11, 21, 30, 0, TimeSpan.Zero)), // BUF wins, JAC covers
+        ("PHI", "SF",   3.5, -3.5, 48.5, 19, 23, new DateTimeOffset(2026, 1, 12, 18, 0, 0, TimeSpan.Zero)),  // SF wins, PHI doesn't cover
+        ("NE",  "LAC", -5.5,  5.5, 44.5, 16,  3, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)), // NE wins and covers
+        ("PIT", "HOU",  6.5, -6.5, 43.5,  6, 30, new DateTimeOffset(2026, 1, 12, 21, 30, 0, TimeSpan.Zero)), // HOU wins, PIT doesn't cover
     ];
 
-    // Divisional (week 20): 4 games
+    // Divisional (NflWeek 20 = ESPN postseason week 2): Jan 18-19 2026
     private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] DivisionalGames =
     [
-        ("KC",  "BUF", -1.5,  1.5, 51.5, 24, 21, new DateTimeOffset(2026, 1, 18, 18, 0, 0, TimeSpan.Zero)),
-        ("PHI", "DET", -3.0,  3.0, 48.0, 28, 24, new DateTimeOffset(2026, 1, 18, 21, 30, 0, TimeSpan.Zero)),
-        ("BAL", "HOU", -4.5,  4.5, 47.0, 17, 13, new DateTimeOffset(2026, 1, 19, 18, 0, 0, TimeSpan.Zero)),
-        ("SF",  "LAR", -5.5,  5.5, 46.0, 20, 13, new DateTimeOffset(2026, 1, 19, 21, 30, 0, TimeSpan.Zero)),
+        ("DEN", "BUF", -2.5,  2.5, 49.5, 33, 30, new DateTimeOffset(2026, 1, 18, 18, 0, 0, TimeSpan.Zero)),  // DEN wins
+        ("SEA", "SF",  -3.0,  3.0, 45.0, 41,  6, new DateTimeOffset(2026, 1, 18, 21, 30, 0, TimeSpan.Zero)), // SEA wins
+        ("NE",  "HOU", -1.5,  1.5, 44.5, 28, 16, new DateTimeOffset(2026, 1, 19, 18, 0, 0, TimeSpan.Zero)),  // NE wins
+        ("CHI", "LAR",  4.5, -4.5, 46.5, 17, 20, new DateTimeOffset(2026, 1, 19, 21, 30, 0, TimeSpan.Zero)), // LAR wins, CHI covers
     ];
 
-    // Conference Championship (week 21): 2 games
+    // Conference Championship (NflWeek 21 = ESPN postseason week 3): Jan 26 2026
     private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] ConfChampGames =
     [
-        ("KC",  "BAL", -2.5,  2.5, 47.5, 31, 24, new DateTimeOffset(2026, 1, 26, 18, 0, 0, TimeSpan.Zero)),
-        ("PHI", "SF",  -2.0,  2.0, 45.5, 23, 13, new DateTimeOffset(2026, 1, 26, 21, 30, 0, TimeSpan.Zero)),
+        ("DEN", "NE",   3.5, -3.5, 44.5,  7, 10, new DateTimeOffset(2026, 1, 26, 18, 0, 0, TimeSpan.Zero)),  // NE wins, DEN covers
+        ("SEA", "LAR", -4.5,  4.5, 46.5, 31, 27, new DateTimeOffset(2026, 1, 26, 21, 30, 0, TimeSpan.Zero)), // SEA wins, doesn't cover
     ];
 
-    // Super Bowl (week 22): 1 game
+    // Super Bowl (NflWeek 22 = ESPN postseason week 4 via NflScoresJob wk5→4 hack): Feb 9 2026 — NE home (ESPN convention), SEA wins
     private static readonly (string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] SuperBowlGames =
     [
-        ("PHI", "KC",  -1.5,  1.5, 48.5, 38, 35, new DateTimeOffset(2026, 2, 9, 23, 30, 0, TimeSpan.Zero)),
+        ("NE",  "SEA", -2.5,  2.5, 45.5, 13, 29, new DateTimeOffset(2026, 2, 9, 23, 30, 0, TimeSpan.Zero)),  // SEA wins
     ];
 
     // Postseason picks per user (true = home team, false = away team)
+    // Wild Card has 6 games but only 3 picks required (same as NFL GetRequiredPicks(19)=3)
+    // Wild Card: CAR/LAR, CHI/GB, JAC/BUF, PHI/SF, NE/LAC, PIT/HOU — picking first 3 games
+    // Results:  LAR wins, CHI wins, BUF wins (first 3 game results)
     private static readonly Dictionary<string, bool[]> WildCardPicks = new()
     {
-        ["Alice"]  = [true,  true,  true,  true,  true,  true],   // KC, BUF, BAL, PHI, DET, SF
-        ["Bob"]    = [false, false, false, false, false, false],   // HOU, DEN, PIT, LAR, WAS, GB
-        ["Carlos"] = [true,  true,  true,  true,  true,  false],  // KC, BUF, BAL, PHI, DET, GB
-        ["Dana"]   = [false, false, false, false, false, true],   // HOU, DEN, PIT, LAR, WAS, SF
-        ["Eve"]    = [true,  true,  true,  true,  true,  true],   // KC, BUF, BAL, PHI, DET, SF
+        ["Alice"]  = [false, true,  false],  // LAR, CHI, BUF (3 winners)
+        ["Bob"]    = [true,  false, true],   // CAR, GB, JAC (3 losers)
+        ["Carlos"] = [false, true,  false],  // LAR, CHI, BUF
+        ["Dana"]   = [true,  false, true],   // CAR, GB, JAC
+        ["Eve"]    = [false, true,  true],   // LAR, CHI, JAC (2 winners, 1 loser)
     };
 
+    // Divisional has 4 games and 3 picks required (GetRequiredPicks(20)=3)
+    // Divisional: DEN/BUF, SEA/SF, NE/HOU, CHI/LAR — picking first 3 games
+    // Results: DEN covers (+3.5, wins 33-30), SEA covers (-3.0, wins 41-6), NE covers (-1.5, wins 28-16)
     private static readonly Dictionary<string, bool[]> DivisionalPicks = new()
     {
-        ["Alice"]  = [true,  true,  true,  true],   // KC, PHI, BAL, SF
-        ["Bob"]    = [false, false, false, false],  // BUF, DET, HOU, LAR
-        ["Carlos"] = [true,  true,  true,  true],   // KC, PHI, BAL, SF
-        ["Dana"]   = [false, false, false, false],  // BUF, DET, HOU, LAR
-        ["Eve"]    = [true,  true,  true,  true],   // KC, PHI, BAL, SF
+        ["Alice"]  = [true,  true,  true],   // DEN, SEA, NE (all cover — wins)
+        ["Bob"]    = [false, false, false],  // BUF, SF, HOU (none cover — loses)
+        ["Carlos"] = [true,  true,  true],   // DEN, SEA, NE
+        ["Dana"]   = [false, false, false],  // BUF, SF, HOU
+        ["Eve"]    = [true,  false, true],   // DEN, SF, NE (SF loses — Eve loses week)
     };
 
+    // Conference Championship has 2 games and 2 picks required (GetRequiredPicks(21)=2)
+    // Conf. Champ: DEN/NE, SEA/LAR
+    // Results: DEN covers (+3.5, loses 7-10 but covers), LAR covers (+4.5, loses 27-31 but covers)
     private static readonly Dictionary<string, bool[]> ConfChampPicks = new()
     {
-        ["Alice"]  = [true,  true],   // KC, PHI
-        ["Bob"]    = [false, false],  // BAL, SF
-        ["Carlos"] = [true,  true],   // KC, PHI
-        ["Dana"]   = [false, false],  // BAL, SF
-        ["Eve"]    = [true,  true],   // KC, PHI
+        ["Alice"]  = [false, true],   // NE (doesn't cover), SEA (doesn't cover) — Alice loses
+        ["Bob"]    = [true,  false],  // DEN (covers), LAR (covers) — Bob wins
+        ["Carlos"] = [false, true],   // NE, SEA — Carlos loses
+        ["Dana"]   = [true,  false],  // DEN, LAR — Dana wins
+        ["Eve"]    = [false, false],  // NE (loses), LAR (wins) — Eve loses (not all correct)
     };
 
+    // Super Bowl: NE home, SEA away. SEA wins. true=NE(home), false=SEA(away)
     private static readonly Dictionary<string, bool> SuperBowlPicksMap = new()
     {
-        ["Alice"]  = true,   // PHI
-        ["Bob"]    = false,  // KC
-        ["Carlos"] = true,   // PHI
-        ["Dana"]   = false,  // KC
-        ["Eve"]    = true,   // PHI
+        ["Alice"]  = false,  // SEA (wins)
+        ["Bob"]    = true,   // NE
+        ["Carlos"] = false,  // SEA (wins)
+        ["Dana"]   = true,   // NE
+        ["Eve"]    = false,  // SEA (wins)
     };
 
     private async Task SeedHistoricalWeeksAsync(LeagueInfo? league)
@@ -414,21 +451,20 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             }
             var nflWeek = await db.NflWeeks.FirstAsync(w => w.Season == DemoSeason && w.NflWeek == week);
 
-            // NflSpreads (4 games, home teams favored)
-            db.NflSpreads.AddRange(
-                Spread(week, "KC",  "DEN", -7.0,  7.0, 47.5, weekGameTime.ToString("o")),
-                Spread(week, "DAL", "CLE", -6.0,  6.0, 44.5, weekGameTime.ToString("o")),
-                Spread(week, "PHI", "NYG", -4.0,  4.0, 43.5, weekGameTime.ToString("o")),
-                Spread(week, "BUF", "NYJ", -3.0,  3.0, 46.5, weekGameTime.ToString("o"))
-            );
+            // NflSpreads (16 games, all 32 NFL teams, home teams favored)
+            foreach (var g in HistGames)
+                db.NflSpreads.Add(Spread(week, g.Home, g.Away, g.HomeSpread, -g.HomeSpread, g.OU, weekGameTime.ToString("o")));
 
-            // NflScores (all home teams win and cover)
-            db.NflScores.AddRange(
-                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "KC",  AwayTeam = "DEN", HomeTeamScore = 24, AwayTeamScore = 14, GameTime = weekGameTime },
-                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "DAL", AwayTeam = "CLE", HomeTeamScore = 28, AwayTeamScore = 20, GameTime = weekGameTime },
-                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "PHI", AwayTeam = "NYG", HomeTeamScore = 20, AwayTeamScore = 13, GameTime = weekGameTime },
-                new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = "BUF", AwayTeam = "NYJ", HomeTeamScore = 17, AwayTeamScore = 10, GameTime = weekGameTime }
-            );
+            // NflScores (all home teams win and cover — home score exceeds away score + spread margin)
+            var histScores = new[]
+            {
+                ("KC",  "DEN", 24, 14), ("DAL", "CLE", 28, 20), ("PHI", "NYG", 20, 13), ("BUF", "NYJ", 17, 10),
+                ("BAL", "PIT", 21, 13), ("HOU", "JAC", 27, 20), ("TEN", "IND", 24, 17), ("MIA", "NE",  20, 13),
+                ("LAR", "SEA", 24, 20), ("SF",  "ARI", 31, 17), ("LAC", "LV",  20, 14), ("GB",  "MIN", 24, 20),
+                ("DET", "CHI", 28, 17), ("TB",  "ATL", 20, 14), ("NO",  "CAR", 27, 17), ("WAS", "CIN", 17, 14),
+            };
+            foreach (var (home, away, hs, as_) in histScores)
+                db.NflScores.Add(new NflScores { Season = DemoSeason, NflWeek = week, HomeTeam = home, AwayTeam = away, HomeTeamScore = hs, AwayTeamScore = as_, GameTime = weekGameTime });
             await db.SaveChangesAsync();
 
             // NflPicks
@@ -470,6 +506,7 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
 
         // Super Bowl — build picks dict from SuperBowlPicksMap (bool→bool[])
         var sbPicksAsArrays = SuperBowlPicksMap.ToDictionary(kv => kv.Key, kv => new[] { kv.Value });
+        // NflScoresJob maps ESPN wk5→4 via (j==5?4:j), so GetWeekFromEspnWeek(4,true)=22
         await SeedPostseasonWeekAsync(league, users, 22, "Super Bowl",
             new DateTimeOffset(2026, 2, 9, 0, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 2, 9, 23, 59, 59, TimeSpan.Zero),
@@ -522,19 +559,25 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             var patternKey = pickPatterns.ContainsKey(name) ? name : "Alice";
             if (!pickPatterns.TryGetValue(patternKey, out var pattern)) continue;
 
-            for (int i = 0; i < games.Length; i++)
+            // Only seed as many picks as the pattern specifies — pattern.Length = required picks for this round
+            for (int i = 0; i < Math.Min(pattern.Length, games.Length); i++)
             {
-                var team = (i < pattern.Length && pattern[i]) ? games[i].Home : games[i].Away;
+                var team = pattern[i] ? games[i].Home : games[i].Away;
                 db.NflPicks.Add(new NflPicks
                 {
                     UserId = user.Id, LeagueId = league.Id, Team = team,
                     Pick = PickType.Spread, NflWeek = week, Season = DemoSeason,
                     NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow,
                 });
+                // Add Over/Under picks for Bob and Dana so the O/U row is testable in-progress games
+                if (name == "Bob" && i == 0)
+                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Over, NflWeek = week, Season = DemoSeason, NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow });
+                if (name == "Dana" && i == 0)
+                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Under, NflWeek = week, Season = DemoSeason, NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow });
             }
         }
         await db.SaveChangesAsync();
-        Log.Information("DemoDataSeeder: seeded postseason week {Week} ({Label})", week, label);
+        Log.Information("DemoDataSeeder: seeded postseason week {Week} ({Label}) with O/U picks", week, label);
     }
 
     private static NflSpreads Spread(int week, string home, string away, double homeSpread, double awaySpread, double ou, string gameTimeUtc) =>
@@ -700,36 +743,36 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         (14, 401700166, "IU",   "MIN",  -7.5,  7.5, 55.5, 31, 21, new DateTimeOffset(2025, 11, 22, 22, 30, 0, TimeSpan.Zero)),
     ];
 
-    // Conference Championships (slate 15)
+    // Conference Championships (slate 14 in new 18-slate system)
     private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] Slate15Games =
     [
-        (15, 401700201, "OSU",  "IU",   -6.5,  6.5, 56.5, 34, 31, new DateTimeOffset(2025, 12,  6, 17,  0, 0, TimeSpan.Zero)),
-        (15, 401700202, "ALA",  "UGA",  -3.5,  3.5, 54.5, 24, 17, new DateTimeOffset(2025, 12,  6, 20,  0, 0, TimeSpan.Zero)),
-        (15, 401700203, "ND",   "CLEM", -5.5,  5.5, 51.5, 28, 21, new DateTimeOffset(2025, 12,  6, 22, 30, 0, TimeSpan.Zero)),
-        (15, 401700204, "ORE",  "BOIS", -9.5,  9.5, 54.0, 35, 21, new DateTimeOffset(2025, 12,  6, 20,  0, 0, TimeSpan.Zero)),
-        (15, 401700205, "KSU",  "OU",   -3.0,  3.0, 51.0, 24, 17, new DateTimeOffset(2025, 12,  6, 16,  0, 0, TimeSpan.Zero)),
-        (15, 401700206, "MISS", "TAMU", -2.5,  2.5, 56.5, 28, 24, new DateTimeOffset(2025, 12,  7, 17,  0, 0, TimeSpan.Zero)),
+        (14, 401700201, "OSU",  "IU",   -6.5,  6.5, 56.5, 34, 31, new DateTimeOffset(2025, 12,  6, 17,  0, 0, TimeSpan.Zero)),
+        (14, 401700202, "ALA",  "UGA",  -3.5,  3.5, 54.5, 24, 17, new DateTimeOffset(2025, 12,  6, 20,  0, 0, TimeSpan.Zero)),
+        (14, 401700203, "ND",   "CLEM", -5.5,  5.5, 51.5, 28, 21, new DateTimeOffset(2025, 12,  6, 22, 30, 0, TimeSpan.Zero)),
+        (14, 401700204, "ORE",  "BOIS", -9.5,  9.5, 54.0, 35, 21, new DateTimeOffset(2025, 12,  6, 20,  0, 0, TimeSpan.Zero)),
+        (14, 401700205, "KSU",  "OU",   -3.0,  3.0, 51.0, 24, 17, new DateTimeOffset(2025, 12,  6, 16,  0, 0, TimeSpan.Zero)),
+        (14, 401700206, "MISS", "TAMU", -2.5,  2.5, 56.5, 28, 24, new DateTimeOffset(2025, 12,  7, 17,  0, 0, TimeSpan.Zero)),
     ];
 
     // 2025 CFP matchups (real bracket, all final as of Jan 2026)
-    // SlateIdx now refers to SlateNumber (16=First Round, 17=QF, 18=SF, 19=Championship)
+    // SlateIdx now refers to SlateNumber (15=First Round, 16=QF, 17=SF, 18=Championship)
     private static readonly (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] CfpGames =
     [
-        // Slate 16: First Round (Dec 19-20)
-        (16, 401800001, "ORE",  "JMU",  -24.5, 24.5, 52.5, 38, 10, new DateTimeOffset(2025, 12, 19, 20,  0, 0, TimeSpan.Zero)),
-        (16, 401800002, "MISS", "TULN", -17.5, 17.5, 58.0, 35, 17, new DateTimeOffset(2025, 12, 19, 23, 30, 0, TimeSpan.Zero)),
-        (16, 401800003, "TAMU", "MIA",   -7.0,  7.0, 49.5, 24, 17, new DateTimeOffset(2025, 12, 20, 20,  0, 0, TimeSpan.Zero)),
-        (16, 401800004, "OU",   "ALA",   -3.0,  3.0, 51.0, 21, 14, new DateTimeOffset(2025, 12, 20, 23, 30, 0, TimeSpan.Zero)),
-        // Slate 17: Quarterfinals (Dec 31/Jan 1)
-        (17, 401800005, "IU",   "ALA",   -3.5,  3.5, 48.5, 27, 24, new DateTimeOffset(2026,  1,  1, 17,  0, 0, TimeSpan.Zero)),
-        (17, 401800006, "UGA",  "MISS", -10.0, 10.0, 55.0, 35, 21, new DateTimeOffset(2026,  1,  1, 20, 30, 0, TimeSpan.Zero)),
-        (17, 401800007, "ORE",  "TTU",   -3.5,  3.5, 53.0, 31, 20, new DateTimeOffset(2025, 12, 31, 20,  0, 0, TimeSpan.Zero)),
-        (17, 401800008, "MIA",  "OSU",    7.0, -7.0, 56.5, 28, 24, new DateTimeOffset(2025, 12, 31, 23, 30, 0, TimeSpan.Zero)),
-        // Slate 18: Semifinals (Jan 8-9)
-        (18, 401800009, "IU",   "ORE",   -3.0,  3.0, 51.5, 34, 27, new DateTimeOffset(2026,  1,  9, 20,  0, 0, TimeSpan.Zero)),
-        (18, 401800010, "MIA",  "UGA",    3.5, -3.5, 50.0, 21, 17, new DateTimeOffset(2026,  1,  8, 20,  0, 0, TimeSpan.Zero)),
-        // Slate 19: Championship (Jan 19)
-        (19, 401800011, "IU",   "MIA",   -3.0,  3.0, 46.5, 23, 20, new DateTimeOffset(2026,  1, 19, 23, 30, 0, TimeSpan.Zero)),
+        // Slate 15: First Round (Dec 19-20)
+        (15, 401800001, "ORE",  "JMU",  -24.5, 24.5, 52.5, 38, 10, new DateTimeOffset(2025, 12, 19, 20,  0, 0, TimeSpan.Zero)),
+        (15, 401800002, "MISS", "TULN", -17.5, 17.5, 58.0, 35, 17, new DateTimeOffset(2025, 12, 19, 23, 30, 0, TimeSpan.Zero)),
+        (15, 401800003, "TAMU", "MIA",   -7.0,  7.0, 49.5, 24, 17, new DateTimeOffset(2025, 12, 20, 20,  0, 0, TimeSpan.Zero)),
+        (15, 401800004, "OU",   "ALA",   -3.0,  3.0, 51.0, 21, 14, new DateTimeOffset(2025, 12, 20, 23, 30, 0, TimeSpan.Zero)),
+        // Slate 16: Quarterfinals (Dec 31/Jan 1)
+        (16, 401800005, "IU",   "ALA",   -3.5,  3.5, 48.5, 27, 24, new DateTimeOffset(2026,  1,  1, 17,  0, 0, TimeSpan.Zero)),
+        (16, 401800006, "UGA",  "MISS", -10.0, 10.0, 55.0, 35, 21, new DateTimeOffset(2026,  1,  1, 20, 30, 0, TimeSpan.Zero)),
+        (16, 401800007, "ORE",  "TTU",   -3.5,  3.5, 53.0, 31, 20, new DateTimeOffset(2025, 12, 31, 20,  0, 0, TimeSpan.Zero)),
+        (16, 401800008, "MIA",  "OSU",    7.0, -7.0, 56.5, 28, 24, new DateTimeOffset(2025, 12, 31, 23, 30, 0, TimeSpan.Zero)),
+        // Slate 17: Semifinals (Jan 8-9)
+        (17, 401800009, "IU",   "ORE",   -3.0,  3.0, 51.5, 34, 27, new DateTimeOffset(2026,  1,  9, 20,  0, 0, TimeSpan.Zero)),
+        (17, 401800010, "MIA",  "UGA",    3.5, -3.5, 50.0, 21, 17, new DateTimeOffset(2026,  1,  8, 20,  0, 0, TimeSpan.Zero)),
+        // Slate 18: Championship (Jan 19) — IN PROGRESS Q3: IU 14, MIA 7 (IU winning)
+        (18, 401800011, "IU",   "MIA",   -3.0,  3.0, 46.5, 14,  7, new DateTimeOffset(2026,  1, 19, 23, 30, 0, TimeSpan.Zero)),
     ];
 
     private async Task<LeagueInfo?> SeedCfbLeagueAsync()
@@ -773,7 +816,7 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         Log.Information("DemoDataSeeder: added all demo users to CFB Demo League");
     }
 
-    private const int CfbExpectedSlateCount = 19;
+    private const int CfbExpectedSlateCount = 18;
 
     private async Task<List<CfbSlates>> SeedCfbSlatesAsync()
     {
@@ -792,28 +835,27 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
 
         var slates = new List<CfbSlates>
         {
-            // Regular season weeks 1-14
-            new() { Season = CfbDemoSeason, SlateNumber =  1, Label = "Week 1",  SlateType = "RegularSeason",          StartDate = new DateOnly(2025,  8, 23), EndDate = new DateOnly(2025,  8, 30) },
-            new() { Season = CfbDemoSeason, SlateNumber =  2, Label = "Week 2",  SlateType = "RegularSeason",          StartDate = new DateOnly(2025,  8, 30), EndDate = new DateOnly(2025,  9,  6) },
-            new() { Season = CfbDemoSeason, SlateNumber =  3, Label = "Week 3",  SlateType = "RegularSeason",          StartDate = new DateOnly(2025,  9,  6), EndDate = new DateOnly(2025,  9, 13) },
-            new() { Season = CfbDemoSeason, SlateNumber =  4, Label = "Week 4",  SlateType = "RegularSeason",          StartDate = new DateOnly(2025,  9, 13), EndDate = new DateOnly(2025,  9, 20) },
-            new() { Season = CfbDemoSeason, SlateNumber =  5, Label = "Week 5",  SlateType = "RegularSeason",          StartDate = new DateOnly(2025,  9, 20), EndDate = new DateOnly(2025,  9, 27) },
-            new() { Season = CfbDemoSeason, SlateNumber =  6, Label = "Week 6",  SlateType = "RegularSeason",          StartDate = new DateOnly(2025,  9, 27), EndDate = new DateOnly(2025, 10,  4) },
-            new() { Season = CfbDemoSeason, SlateNumber =  7, Label = "Week 7",  SlateType = "RegularSeason",          StartDate = new DateOnly(2025, 10,  4), EndDate = new DateOnly(2025, 10, 11) },
-            new() { Season = CfbDemoSeason, SlateNumber =  8, Label = "Week 8",  SlateType = "RegularSeason",          StartDate = new DateOnly(2025, 10, 11), EndDate = new DateOnly(2025, 10, 18) },
-            new() { Season = CfbDemoSeason, SlateNumber =  9, Label = "Week 9",  SlateType = "RegularSeason",          StartDate = new DateOnly(2025, 10, 18), EndDate = new DateOnly(2025, 10, 25) },
-            new() { Season = CfbDemoSeason, SlateNumber = 10, Label = "Week 10", SlateType = "RegularSeason",          StartDate = new DateOnly(2025, 10, 25), EndDate = new DateOnly(2025, 11,  1) },
-            new() { Season = CfbDemoSeason, SlateNumber = 11, Label = "Week 11", SlateType = "RegularSeason",          StartDate = new DateOnly(2025, 11,  1), EndDate = new DateOnly(2025, 11,  8) },
-            new() { Season = CfbDemoSeason, SlateNumber = 12, Label = "Week 12", SlateType = "RegularSeason",          StartDate = new DateOnly(2025, 11,  8), EndDate = new DateOnly(2025, 11, 15) },
-            new() { Season = CfbDemoSeason, SlateNumber = 13, Label = "Week 13", SlateType = "RegularSeason",          StartDate = new DateOnly(2025, 11, 15), EndDate = new DateOnly(2025, 11, 22) },
-            new() { Season = CfbDemoSeason, SlateNumber = 14, Label = "Week 14", SlateType = "RegularSeason",          StartDate = new DateOnly(2025, 11, 22), EndDate = new DateOnly(2025, 11, 29) },
-            // Conference Championship Week
-            new() { Season = CfbDemoSeason, SlateNumber = 15, Label = "Conf. Championships", SlateType = "ConferenceChampionship", StartDate = new DateOnly(2025, 12,  5), EndDate = new DateOnly(2025, 12,  7) },
+            // Regular season weeks 1-13
+            new() { Season = CfbDemoSeason, SlateNumber =  1, Label = "Week 1",  SlateType = "RegularSeason",         EspnWeekNumber =  1, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  8, 23), EndDate = new DateOnly(2025,  8, 30) },
+            new() { Season = CfbDemoSeason, SlateNumber =  2, Label = "Week 2",  SlateType = "RegularSeason",         EspnWeekNumber =  2, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  8, 30), EndDate = new DateOnly(2025,  9,  6) },
+            new() { Season = CfbDemoSeason, SlateNumber =  3, Label = "Week 3",  SlateType = "RegularSeason",         EspnWeekNumber =  3, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  9,  6), EndDate = new DateOnly(2025,  9, 13) },
+            new() { Season = CfbDemoSeason, SlateNumber =  4, Label = "Week 4",  SlateType = "RegularSeason",         EspnWeekNumber =  4, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  9, 13), EndDate = new DateOnly(2025,  9, 20) },
+            new() { Season = CfbDemoSeason, SlateNumber =  5, Label = "Week 5",  SlateType = "RegularSeason",         EspnWeekNumber =  5, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  9, 20), EndDate = new DateOnly(2025,  9, 27) },
+            new() { Season = CfbDemoSeason, SlateNumber =  6, Label = "Week 6",  SlateType = "RegularSeason",         EspnWeekNumber =  6, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  9, 27), EndDate = new DateOnly(2025, 10,  4) },
+            new() { Season = CfbDemoSeason, SlateNumber =  7, Label = "Week 7",  SlateType = "RegularSeason",         EspnWeekNumber =  7, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 10,  4), EndDate = new DateOnly(2025, 10, 11) },
+            new() { Season = CfbDemoSeason, SlateNumber =  8, Label = "Week 8",  SlateType = "RegularSeason",         EspnWeekNumber =  8, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 10, 11), EndDate = new DateOnly(2025, 10, 18) },
+            new() { Season = CfbDemoSeason, SlateNumber =  9, Label = "Week 9",  SlateType = "RegularSeason",         EspnWeekNumber =  9, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 10, 18), EndDate = new DateOnly(2025, 10, 25) },
+            new() { Season = CfbDemoSeason, SlateNumber = 10, Label = "Week 10", SlateType = "RegularSeason",         EspnWeekNumber = 10, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 10, 25), EndDate = new DateOnly(2025, 11,  1) },
+            new() { Season = CfbDemoSeason, SlateNumber = 11, Label = "Week 11", SlateType = "RegularSeason",         EspnWeekNumber = 11, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 11,  1), EndDate = new DateOnly(2025, 11,  8) },
+            new() { Season = CfbDemoSeason, SlateNumber = 12, Label = "Week 12", SlateType = "RegularSeason",         EspnWeekNumber = 12, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 11,  8), EndDate = new DateOnly(2025, 11, 15) },
+            new() { Season = CfbDemoSeason, SlateNumber = 13, Label = "Week 13", SlateType = "RegularSeason",         EspnWeekNumber = 13, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 11, 15), EndDate = new DateOnly(2025, 11, 22) },
+            // Conference Championship Week (slate 14 — 4 picks, same as regular season)
+            new() { Season = CfbDemoSeason, SlateNumber = 14, Label = "Conf. Championships", SlateType = "ConferenceChampionship", EspnWeekNumber = 14, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 12,  5), EndDate = new DateOnly(2025, 12,  7) },
             // CFP Postseason
-            new() { Season = CfbDemoSeason, SlateNumber = 16, Label = "CFP First Round",           SlateType = "FirstRound",   StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20) },
-            new() { Season = CfbDemoSeason, SlateNumber = 17, Label = "CFP Quarterfinals",         SlateType = "Quarterfinal", StartDate = new DateOnly(2025, 12, 31), EndDate = new DateOnly(2026,  1,  1) },
-            new() { Season = CfbDemoSeason, SlateNumber = 18, Label = "CFP Semifinals",            SlateType = "Semifinal",    StartDate = new DateOnly(2026,  1,  8), EndDate = new DateOnly(2026,  1,  9) },
-            new() { Season = CfbDemoSeason, SlateNumber = 19, Label = "CFP National Championship", SlateType = "Championship", StartDate = new DateOnly(2026,  1, 19), EndDate = new DateOnly(2026,  1, 19) },
+            new() { Season = CfbDemoSeason, SlateNumber = 15, Label = "CFP First Round",   SlateType = "FirstRound",   EspnWeekNumber = 16, ScoringFormat = "NFLDivisional", StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20) },
+            new() { Season = CfbDemoSeason, SlateNumber = 16, Label = "CFP Quarterfinals", SlateType = "Quarterfinal", EspnWeekNumber = 18, ScoringFormat = "NFLDivisional", StartDate = new DateOnly(2025, 12, 31), EndDate = new DateOnly(2026,  1,  1) },
+            new() { Season = CfbDemoSeason, SlateNumber = 17, Label = "CFP Semifinals",    SlateType = "Semifinal",    EspnWeekNumber = 20, ScoringFormat = "NFLConference", StartDate = new DateOnly(2026,  1,  8), EndDate = new DateOnly(2026,  1,  9) },
+            new() { Season = CfbDemoSeason, SlateNumber = 18, Label = "CFP Championship",  SlateType = "Championship", EspnWeekNumber = 21, ScoringFormat = "NFLSuperBowl",  StartDate = new DateOnly(2026,  1, 19), EndDate = new DateOnly(2026,  1, 19) },
         };
         db.CfbSlates.AddRange(slates);
         await db.SaveChangesAsync();
@@ -839,7 +881,6 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             .Concat(Slate11Games)
             .Concat(Slate12Games)
             .Concat(Slate13Games)
-            .Concat(Slate14Games)
             .Concat(Slate15Games)
             .Concat(CfpGames);
 
@@ -878,7 +919,6 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             .Concat(Slate11Games)
             .Concat(Slate12Games)
             .Concat(Slate13Games)
-            .Concat(Slate14Games)
             .Concat(Slate15Games)
             .Concat(CfpGames);
 
@@ -890,13 +930,14 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             AwayTeam      = g.Away,
             HomeTeamScore = g.HomeScore,
             AwayTeamScore = g.AwayScore,
-            GameStatus    = "StatusFinal",
+            // Championship (slate 18) is in-progress so we can show field position in demo
+            GameStatus    = g.SlateIdx == 18 ? "StatusInProgress" : "StatusFinal",
             GameTime      = g.GameTime,
         }).ToList();
 
         db.CfbScores.AddRange(scores);
         await db.SaveChangesAsync();
-        Log.Information("DemoDataSeeder: seeded {Count} CFB scores (all slates, all final)", scores.Count);
+        Log.Information("DemoDataSeeder: seeded {Count} CFB scores (Championship in-progress, all others final)", scores.Count);
     }
 
     // CFB pick patterns — true = home team, false = away team
@@ -905,45 +946,71 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
     // Carlos: home for games 1,3,5 and away for 2,4,6
     // Dana: away for games 1,3,5 and home for 2,4,6
     // Eve: home for games 1,2,4 and away for 3,5,6
+    // Regular season: 4 picks required per slate (slate has 6 games; pick first 4)
     private static readonly Dictionary<string, bool[]> CfbRegularSeasonPickPattern = new()
     {
-        ["Alice"]  = [true,  true,  true,  true,  true,  true],
-        ["Bob"]    = [false, false, false, false, false, false],
-        ["Carlos"] = [true,  false, true,  false, true,  false],
-        ["Dana"]   = [false, true,  false, true,  false, true],
-        ["Eve"]    = [true,  true,  false, true,  false, false],
+        ["Alice"]  = [true,  true,  true,  true],
+        ["Bob"]    = [false, false, false, false],
+        ["Carlos"] = [true,  false, true,  false],
+        ["Dana"]   = [false, true,  false, true],
+        ["Eve"]    = [true,  true,  false, true],
     };
 
-    // Who picks which home team (true) or away team (false) per game index, per slate
-    // Week 8 games: MICH/PSU, ALA/TENN, OSU/ORE, UGA/MIA, LSU/TAMU, CLEM/FSU
+    // Conf. Championships (slate 14): 4 picks from 6 games (same as regular season)
+    // Slate 14 games: OSU/IU, ALA/UGA, ND/CLEM, ORE/BOIS, KSU/OU, MISS/TAMU (picking first 4)
+    private static readonly Dictionary<string, bool[]> CfbConfChampPicks = new()
+    {
+        ["Alice"]  = [true,  false, false, true],   // OSU, UGA, CLEM, ORE
+        ["Bob"]    = [false, true,  true,  false],  // IU, ALA, ND, BOIS
+        ["Carlos"] = [true,  false, true,  false],  // OSU, ALA, ND, BOIS
+        ["Dana"]   = [false, true,  false, true],   // IU, UGA, CLEM, ORE
+        ["Eve"]    = [true,  true,  false, true],   // OSU, UGA, CLEM, ORE
+    };
+
+    // CFP First Round (slate 15): 3 picks from 4 games
+    // Games: ORE/JMU, MISS/TULN, TAMU/MIA, OU/ALA (picking first 3)
+    private static readonly Dictionary<string, bool[]> CfbFirstRoundPicks = new()
+    {
+        ["Alice"]  = [true,  true,  true],   // ORE, MISS, TAMU
+        ["Bob"]    = [false, false, false],  // JMU, TULN, MIA
+        ["Carlos"] = [true,  false, true],   // ORE, TULN, TAMU
+        ["Dana"]   = [false, true,  false],  // JMU, MISS, MIA
+        ["Eve"]    = [true,  true,  true],   // ORE, MISS, TAMU
+    };
+
+    // Week 8 games: MICH/PSU, ALA/TENN, OSU/ORE, UGA/MIA, LSU/TAMU, CLEM/FSU — pick first 4
     // CFP QF:       IU/ALA,   UGA/MISS, ORE/TTU,  MIA/OSU
     // CFP SF:       IU/ORE,   MIA/UGA
     // CFP Final:    IU/MIA
     private static readonly Dictionary<string, bool[]> CfbWeek8Picks = new()
     {
-        ["Alice"]  = [true,  true,  true,  true,  true,  true],  // all favorites
-        ["Bob"]    = [false, false, false, false, false, false], // all underdogs
-        ["Carlos"] = [true,  false, true,  false, true,  true],
-        ["Dana"]   = [false, true,  false, true,  false, false],
-        ["Eve"]    = [true,  true,  false, true,  true,  false],
+        ["Alice"]  = [true,  true,  true,  true],   // MICH, ALA, OSU, UGA
+        ["Bob"]    = [false, false, false, false],  // PSU, TENN, ORE, MIA
+        ["Carlos"] = [true,  false, true,  false],  // MICH, TENN, OSU, MIA
+        ["Dana"]   = [false, true,  false, true],   // PSU, ALA, ORE, UGA
+        ["Eve"]    = [true,  true,  false, true],   // MICH, ALA, ORE, UGA
     };
 
+    // CFP Quarterfinals (slate 16): 3 picks from 4 games
+    // QF games: IU/ALA, UGA/MISS, ORE/TTU, MIA/OSU — picking first 3
     private static readonly Dictionary<string, bool[]> CfbQfPicks = new()
     {
-        ["Alice"]  = [true,  true,  true,  false], // IU, UGA, ORE, OSU
-        ["Bob"]    = [false, false, false, true],  // ALA, MISS, TTU, MIA
-        ["Carlos"] = [true,  false, true,  false], // IU, MISS, ORE, OSU
-        ["Dana"]   = [false, true,  false, true],  // ALA, UGA, TTU, MIA
-        ["Eve"]    = [true,  true,  false, false], // IU, UGA, TTU, OSU
+        ["Alice"]  = [true,  true,  true],   // IU, UGA, ORE
+        ["Bob"]    = [false, false, false],  // ALA, MISS, TTU
+        ["Carlos"] = [true,  false, true],   // IU, MISS, ORE
+        ["Dana"]   = [false, true,  false],  // ALA, UGA, TTU
+        ["Eve"]    = [true,  true,  true],   // IU, UGA, ORE
     };
 
+    // CFP Semifinals (slate 17): 2 picks from 2 games
+    // SF games: IU/ORE, MIA/UGA
     private static readonly Dictionary<string, bool[]> CfbSfPicks = new()
     {
-        ["Alice"]  = [true,  false], // IU, UGA
-        ["Bob"]    = [false, true],  // ORE, MIA
-        ["Carlos"] = [true,  true],  // IU, MIA
-        ["Dana"]   = [false, false], // ORE, UGA
-        ["Eve"]    = [true,  false], // IU, UGA
+        ["Alice"]  = [true,  false],  // IU, UGA (UGA loses — Alice misses 2nd pick)
+        ["Bob"]    = [false, true],   // ORE, MIA
+        ["Carlos"] = [true,  true],   // IU, MIA
+        ["Dana"]   = [false, false],  // ORE, UGA
+        ["Eve"]    = [true,  true],   // IU, MIA
     };
 
     private static readonly Dictionary<string, bool> CfbFinalPicks = new()
@@ -958,11 +1025,12 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
     private async Task SeedCfbPicksAsync(LeagueInfo? league, List<CfbSlates> slates)
     {
         if (league == null) return;
-        // 5 users × 101 picks each:
-        // Slates 1-7: 7×6=42, Slate 8: 6, Slates 9-14: 6×6=36, Slate 15: 6
-        // Slate 16 (FR): 4, Slate 17 (QF): 4, Slate 18 (SF): 2, Slate 19 (Champ): 1
-        // Total per user: 42+6+36+6+4+4+2+1 = 101 → 5×101 = 505
-        const int ExpectedPickCount = 505;
+        // 5 users × 65 picks each:
+        // Slates 1-7: 7×4=28, Slate 8: 4, Slates 9-13: 5×4=20, Slate 14 (Conf.Champs): 4
+        // Slate 15 (FR): 3, Slate 16 (QF): 3, Slate 17 (SF): 2, Slate 18 (Champ): 1
+        // Total per user: 28+4+20+4+3+3+2+1 = 65 → 5×65 = 325
+        // + Bob Over + Dana Under in each postseason slate (14-18) = 10 O/U picks
+        const int ExpectedPickCount = 335; // 325 spread + 10 O/U across all 5 postseason slates
         if (await db.CfbPicks.CountAsync(p => p.LeagueId == league.Id) >= ExpectedPickCount) return;
         // Clear any partial seed before re-seeding
         db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => p.LeagueId == league.Id));
@@ -973,19 +1041,19 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         void AddPick(int leagueId, string userId, int slateId, int eventId, string team) =>
             picks.Add(new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, EspnEventId = eventId, Team = team, PickType = "Spread", Season = CfbDemoSeason });
 
-        // Helper to get games for a given slate number from a static array
-        static IEnumerable<(int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)>
-            GamesForSlate(
-                (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[] arr,
-                int slateNum) =>
-            arr.Where(g => g.SlateIdx == slateNum);
+        void AddOverUnder(string uName, string userId, int slateId, int eventId, string homeTeam) {
+            if (uName == "Bob")
+                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, EspnEventId = eventId, Team = homeTeam, PickType = "Over", Season = CfbDemoSeason });
+            if (uName == "Dana")
+                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, EspnEventId = eventId, Team = homeTeam, PickType = "Under", Season = CfbDemoSeason });
+        }
 
         foreach (var (username, _) in DemoUsers)
         {
             var user = await userManager.FindByNameAsync(username);
             if (user == null) continue;
 
-            // Regular season slates 1-7 (use CfbRegularSeasonPickPattern)
+            // Regular season slates 1-7: 4 picks each (pattern.Length = 4, slate has 6 games)
             if (CfbRegularSeasonPickPattern.TryGetValue(username, out var rsPattern))
             {
                 var regularSlates = new (int SlateNum, (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[])[]
@@ -996,83 +1064,74 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
                 foreach (var (slateNum, gamesArr) in regularSlates)
                 {
                     if (slates.FirstOrDefault(s => s.SlateNumber == slateNum) is not { } slate) continue;
-                    var gamesForSlate = gamesArr; // all 6 games for this slate
-                    for (int i = 0; i < gamesForSlate.Length; i++)
-                    {
-                        var g = gamesForSlate[i];
-                        var pickHome = i < rsPattern.Length && rsPattern[i];
-                        AddPick(league.Id, user.Id, slate.Id, g.EventId, pickHome ? g.Home : g.Away);
-                    }
+                    for (int i = 0; i < Math.Min(rsPattern.Length, gamesArr.Length); i++)
+                        AddPick(league.Id, user.Id, slate.Id, gamesArr[i].EventId, rsPattern[i] ? gamesArr[i].Home : gamesArr[i].Away);
                 }
             }
 
-            // Week 8 (use CfbWeek8Picks)
+            // Week 8: 4 picks from 6 games
             if (CfbWeek8Picks.TryGetValue(username, out var w8) && slates.FirstOrDefault(s => s.SlateNumber == 8) is { } slate8)
-                for (int i = 0; i < Week8Games.Length; i++)
+                for (int i = 0; i < Math.Min(w8.Length, Week8Games.Length); i++)
                     AddPick(league.Id, user.Id, slate8.Id, Week8Games[i].EventId, w8[i] ? Week8Games[i].Home : Week8Games[i].Away);
 
-            // Regular season slates 9-14 (use CfbRegularSeasonPickPattern)
+            // Regular season slates 9-13: 4 picks each
             if (CfbRegularSeasonPickPattern.TryGetValue(username, out var rsPattern2))
             {
-                var regularSlates9to14 = new (int SlateNum, (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[])[]
+                var regularSlates9to13 = new (int SlateNum, (int SlateIdx, int EventId, string Home, string Away, double HomeSpread, double AwaySpread, double OU, int HomeScore, int AwayScore, DateTimeOffset GameTime)[])[]
                 {
                     (9, Slate9Games), (10, Slate10Games), (11, Slate11Games),
-                    (12, Slate12Games), (13, Slate13Games), (14, Slate14Games),
+                    (12, Slate12Games), (13, Slate13Games),
                 };
-                foreach (var (slateNum, gamesArr) in regularSlates9to14)
+                foreach (var (slateNum, gamesArr) in regularSlates9to13)
                 {
                     if (slates.FirstOrDefault(s => s.SlateNumber == slateNum) is not { } slate) continue;
-                    for (int i = 0; i < gamesArr.Length; i++)
-                    {
-                        var g = gamesArr[i];
-                        var pickHome = i < rsPattern2.Length && rsPattern2[i];
-                        AddPick(league.Id, user.Id, slate.Id, g.EventId, pickHome ? g.Home : g.Away);
-                    }
+                    for (int i = 0; i < Math.Min(rsPattern2.Length, gamesArr.Length); i++)
+                        AddPick(league.Id, user.Id, slate.Id, gamesArr[i].EventId, rsPattern2[i] ? gamesArr[i].Home : gamesArr[i].Away);
                 }
             }
 
-            // Slate 15: Conference Championships (use CfbRegularSeasonPickPattern)
-            if (CfbRegularSeasonPickPattern.TryGetValue(username, out var confPattern) && slates.FirstOrDefault(s => s.SlateNumber == 15) is { } slate15)
-                for (int i = 0; i < Slate15Games.Length; i++)
-                {
-                    var g = Slate15Games[i];
-                    var pickHome = i < confPattern.Length && confPattern[i];
-                    AddPick(league.Id, user.Id, slate15.Id, g.EventId, pickHome ? g.Home : g.Away);
-                }
-
-            // CFP First Round (slate 16) — use regular season pattern
-            if (CfbRegularSeasonPickPattern.TryGetValue(username, out var fr16Pattern) && slates.FirstOrDefault(s => s.SlateNumber == 16) is { } slate16)
+            // Slate 14: Conference Championships — 4 picks + O/U for Bob/Dana
+            if (CfbConfChampPicks.TryGetValue(username, out var confPattern) && slates.FirstOrDefault(s => s.SlateNumber == 14) is { } slate14Champ)
             {
-                var fr16Games = CfpGames.Where(g => g.SlateIdx == 16).ToArray();
-                for (int i = 0; i < fr16Games.Length; i++)
-                {
-                    var g = fr16Games[i];
-                    var pickHome = i < fr16Pattern.Length && fr16Pattern[i];
-                    AddPick(league.Id, user.Id, slate16.Id, g.EventId, pickHome ? g.Home : g.Away);
-                }
+                for (int i = 0; i < Math.Min(confPattern.Length, Slate15Games.Length); i++)
+                    AddPick(league.Id, user.Id, slate14Champ.Id, Slate15Games[i].EventId, confPattern[i] ? Slate15Games[i].Home : Slate15Games[i].Away);
+                AddOverUnder(username, user.Id, slate14Champ.Id, Slate15Games[0].EventId, Slate15Games[0].Home);
             }
 
-            // CFP Quarterfinals (slate 17)
-            if (CfbQfPicks.TryGetValue(username, out var qf) && slates.FirstOrDefault(s => s.SlateNumber == 17) is { } slateQf)
+            // CFP First Round (slate 15): 3 picks + O/U for Bob/Dana
+            if (CfbFirstRoundPicks.TryGetValue(username, out var fr15Pattern) && slates.FirstOrDefault(s => s.SlateNumber == 15) is { } slate15)
             {
-                var qfGames = CfpGames.Where(g => g.SlateIdx == 17).ToArray();
-                for (int i = 0; i < qfGames.Length; i++)
+                var fr15Games = CfpGames.Where(g => g.SlateIdx == 15).ToArray();
+                for (int i = 0; i < Math.Min(fr15Pattern.Length, fr15Games.Length); i++)
+                    AddPick(league.Id, user.Id, slate15.Id, fr15Games[i].EventId, fr15Pattern[i] ? fr15Games[i].Home : fr15Games[i].Away);
+                AddOverUnder(username, user.Id, slate15.Id, fr15Games[0].EventId, fr15Games[0].Home);
+            }
+
+            // CFP Quarterfinals (slate 16): 3 picks + O/U for Bob/Dana
+            if (CfbQfPicks.TryGetValue(username, out var qf) && slates.FirstOrDefault(s => s.SlateNumber == 16) is { } slateQf)
+            {
+                var qfGames = CfpGames.Where(g => g.SlateIdx == 16).ToArray();
+                for (int i = 0; i < Math.Min(qf.Length, qfGames.Length); i++)
                     AddPick(league.Id, user.Id, slateQf.Id, qfGames[i].EventId, qf[i] ? qfGames[i].Home : qfGames[i].Away);
+                AddOverUnder(username, user.Id, slateQf.Id, qfGames[0].EventId, qfGames[0].Home);
             }
 
-            // CFP Semifinals (slate 18)
-            if (CfbSfPicks.TryGetValue(username, out var sf) && slates.FirstOrDefault(s => s.SlateNumber == 18) is { } slateSf)
+            // CFP Semifinals (slate 17): 2 picks + O/U for Bob/Dana
+            if (CfbSfPicks.TryGetValue(username, out var sf) && slates.FirstOrDefault(s => s.SlateNumber == 17) is { } slateSf)
             {
-                var sfGames = CfpGames.Where(g => g.SlateIdx == 18).ToArray();
-                for (int i = 0; i < sfGames.Length; i++)
+                var sfGames = CfpGames.Where(g => g.SlateIdx == 17).ToArray();
+                for (int i = 0; i < Math.Min(sf.Length, sfGames.Length); i++)
                     AddPick(league.Id, user.Id, slateSf.Id, sfGames[i].EventId, sf[i] ? sfGames[i].Home : sfGames[i].Away);
+                AddOverUnder(username, user.Id, slateSf.Id, sfGames[0].EventId, sfGames[0].Home);
             }
 
-            // CFP Championship (slate 19)
-            if (CfbFinalPicks.TryGetValue(username, out var final) && slates.FirstOrDefault(s => s.SlateNumber == 19) is { } slateFinal)
+            // CFP Championship (slate 18): 1 spread pick + O/U for Bob/Dana (in-progress game)
+            if (slates.FirstOrDefault(s => s.SlateNumber == 18) is { } slateFinal)
             {
-                var finalGame = CfpGames.First(g => g.SlateIdx == 19);
-                AddPick(league.Id, user.Id, slateFinal.Id, finalGame.EventId, final ? finalGame.Home : finalGame.Away);
+                var finalGame = CfpGames.First(g => g.SlateIdx == 18);
+                if (CfbFinalPicks.TryGetValue(username, out var final))
+                    AddPick(league.Id, user.Id, slateFinal.Id, finalGame.EventId, final ? finalGame.Home : finalGame.Away);
+                AddOverUnder(username, user.Id, slateFinal.Id, finalGame.EventId, finalGame.Home);
             }
         }
 
@@ -1082,5 +1141,49 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
             await db.SaveChangesAsync();
             Log.Information("DemoDataSeeder: seeded {Count} CFB picks", picks.Count);
         }
+    }
+
+    private async Task SeedCfbWeekConfigAsync()
+    {
+        if (await db.CfbSeasonWeekConfigs.AnyAsync(c => c.Season == CfbDemoSeason))
+            return;
+
+        var configs = new List<CfbSeasonWeekConfig>
+        {
+            // Regular season: ESPN weeks 1-13 → IV slates 1-13
+            new() { Season = CfbDemoSeason, EspnWeekNumber =  1, IvLeagueWeekNumber =  1, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  8, 23), WeekEndDate = new DateOnly(2025,  8, 30) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber =  2, IvLeagueWeekNumber =  2, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  8, 30), WeekEndDate = new DateOnly(2025,  9,  6) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber =  3, IvLeagueWeekNumber =  3, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9,  6), WeekEndDate = new DateOnly(2025,  9, 13) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber =  4, IvLeagueWeekNumber =  4, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9, 13), WeekEndDate = new DateOnly(2025,  9, 20) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber =  5, IvLeagueWeekNumber =  5, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9, 20), WeekEndDate = new DateOnly(2025,  9, 27) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber =  6, IvLeagueWeekNumber =  6, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9, 27), WeekEndDate = new DateOnly(2025, 10,  4) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber =  7, IvLeagueWeekNumber =  7, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10,  4), WeekEndDate = new DateOnly(2025, 10, 11) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber =  8, IvLeagueWeekNumber =  8, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10, 11), WeekEndDate = new DateOnly(2025, 10, 18) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber =  9, IvLeagueWeekNumber =  9, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10, 18), WeekEndDate = new DateOnly(2025, 10, 25) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 10, IvLeagueWeekNumber = 10, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10, 25), WeekEndDate = new DateOnly(2025, 11,  1) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 11, IvLeagueWeekNumber = 11, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11,  1), WeekEndDate = new DateOnly(2025, 11,  8) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 12, IvLeagueWeekNumber = 12, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11,  8), WeekEndDate = new DateOnly(2025, 11, 15) },
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 13, IvLeagueWeekNumber = 13, WeekType = "Regular Season",           ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11, 15), WeekEndDate = new DateOnly(2025, 11, 22) },
+            // ESPN week 14: Conference Championships → IV slate 14
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 14, IvLeagueWeekNumber = 14, WeekType = "Conference Championships", ScoringFormat = "Standard",      InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12,  5), WeekEndDate = new DateOnly(2025, 12,  7) },
+            // ESPN week 15: Army-Navy (excluded)
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 15, IvLeagueWeekNumber = 99, WeekType = "Regular Season",           ScoringFormat = "NA",            InScopeIvLeague = false, WeekStartDate = new DateOnly(2025, 12, 13), WeekEndDate = new DateOnly(2025, 12, 13), Notes = "Army-Navy" },
+            // ESPN week 16: CFP First Round → IV slate 15
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 16, IvLeagueWeekNumber = 15, WeekType = "FBS Playoff",              ScoringFormat = "NFLDivisional", InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12, 19), WeekEndDate = new DateOnly(2025, 12, 20) },
+            // ESPN week 17: dead gap (excluded)
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 17, IvLeagueWeekNumber = 99, WeekType = "Dead",                     ScoringFormat = "NA",            InScopeIvLeague = false, WeekStartDate = new DateOnly(2025, 12, 25), WeekEndDate = new DateOnly(2025, 12, 27) },
+            // ESPN week 18: CFP Quarterfinals → IV slate 16
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 18, IvLeagueWeekNumber = 16, WeekType = "FBS Playoff",              ScoringFormat = "NFLDivisional", InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12, 31), WeekEndDate = new DateOnly(2026,  1,  1) },
+            // ESPN week 19: dead gap (excluded)
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 19, IvLeagueWeekNumber = 99, WeekType = "Dead",                     ScoringFormat = "NA",            InScopeIvLeague = false, WeekStartDate = new DateOnly(2026,  1,  3), WeekEndDate = new DateOnly(2026,  1,  5) },
+            // ESPN week 20: CFP Semifinals → IV slate 17
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 20, IvLeagueWeekNumber = 17, WeekType = "FBS Playoff",              ScoringFormat = "NFLConference", InScopeIvLeague = true,  WeekStartDate = new DateOnly(2026,  1,  8), WeekEndDate = new DateOnly(2026,  1,  9) },
+            // ESPN week 21: CFP Championship → IV slate 18
+            new() { Season = CfbDemoSeason, EspnWeekNumber = 21, IvLeagueWeekNumber = 18, WeekType = "FBS Playoff",              ScoringFormat = "NFLSuperBowl",  InScopeIvLeague = true,  WeekStartDate = new DateOnly(2026,  1, 19), WeekEndDate = new DateOnly(2026,  1, 19) },
+        };
+
+        db.CfbSeasonWeekConfigs.AddRange(configs);
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: seeded {Count} CfbSeasonWeekConfig rows for {Season}", configs.Count, CfbDemoSeason);
     }
 }

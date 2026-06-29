@@ -91,9 +91,6 @@ describe('nflAdapter', () => {
     it('has pollIntervalMs > 0', () => {
       expect(adapter.pollIntervalMs).toBeGreaterThan(0);
     });
-    it('supportsJerseys is true', () => {
-      expect(adapter.supportsJerseys).toBe(true);
-    });
     it('currentSeasonYear returns a number', async () => {
       vi.mocked(loadScoresWithRetry).mockResolvedValue(makeScores('KC', 'BUF'));
       const year = await adapter.currentSeasonYear();

@@ -78,11 +78,9 @@ public static class GameHelpers {
         };
     }
 
-    // Uses ESPN Style for Post Season which is resetting weeks to 1-4
+    // ESPN resets postseason weeks to 1-5: 1=Wild Card, 2=Divisional, 3=Conf., 4=Pro Bowl, 5=Super Bowl
     public static int GetEspnRequiredPicks(long week, bool isPostSeason = false) {
-        if (!isPostSeason) {
-            return 4;
-        }
+        if (!isPostSeason) return 4;
         return week switch {
             1 => 3,
             2 => 3,
@@ -91,14 +89,12 @@ public static class GameHelpers {
             5 => 1, // ESPN Treats Post Season Week 4 as the Pro Bowl - this sucks
             _ => throw new ArgumentException("Invalid week number")
         };
-
     }
 
     public static int GetRequiredPicks(long week) {
         if (week < 19) {
             return 4;
         }
-
         return week switch {
             19 => 3,
             20 => 3,
@@ -107,6 +103,15 @@ public static class GameHelpers {
             _ => throw new ArgumentException("Invalid week number")
         };
     }
+
+    // 18-slate system: Standard(1-14)=4, NFLDivisional(15-16)=3, NFLConference(17)=2, NFLSuperBowl(18)=1
+    public static int GetCfbRequiredPicks(int slateNumber) => slateNumber switch {
+        <= 14 => 4,
+        <= 16 => 3,
+        17 => 2,
+        _ => 1,
+    };
+
     public static string? DisplayDetails(Competition competition) {
         return competition.Status.Type.Name switch {
             TypeName.StatusScheduled => TimeZoneHelpers.ConvertTimeToCst(competition.Date.DateTime)

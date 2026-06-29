@@ -3,7 +3,7 @@
  * Runs against a live DEMO_MODE=true backend at cfb.localhost:5174.
  *
  * Alice's CFP Championship pick: IU (Indiana).
- * Alice's CFB Week 8 picks: all 6 home teams (MICH, ALA, OSU, UGA, LSU, CLEM).
+ * Alice's CFB Week 8 picks: first 4 home teams (MICH, ALA, OSU, UGA) — 4-pick rule.
  *
  * Regression guards:
  *  - CFB regular season selector must have 14 weeks (not 5 — old bug)
@@ -43,20 +43,20 @@ test.describe('CFB picks — demo backend', () => {
     await expect(page.getByText('MIA')).toBeVisible({ timeout: 5_000 });
   });
 
-  test('switching to Regular Season shows Week 14 (most recent)', async ({ page }) => {
+  test('switching to Regular Season shows Week 13 (most recent)', async ({ page }) => {
     // Click the season-type select and pick "Regular Season"
     const seasonTypeSelect = page.getByRole('combobox').last();
     await seasonTypeSelect.click();
     await page.getByRole('option', { name: 'Regular Season' }).click();
     await waitForSpinner(page);
 
-    // Should default to the LAST regular season week (Week 14)
+    // Should default to the LAST regular season week (Week 13 in 18-slate system)
     const weekSelect = page.getByRole('combobox').nth(1);
-    await expect(weekSelect).toContainText('Week 14', { timeout: 5_000 });
+    await expect(weekSelect).toContainText('Week 13', { timeout: 5_000 });
   });
 
   // REGRESSION GUARD: Was broken — selector was showing only 5 weeks for regular season
-  test('CFB regular season selector has 14 weeks', async ({ page }) => {
+  test('CFB regular season selector has 13 weeks', async ({ page }) => {
     // Switch to Regular Season
     const seasonTypeSelect = page.getByRole('combobox').last();
     await seasonTypeSelect.click();
@@ -66,14 +66,14 @@ test.describe('CFB picks — demo backend', () => {
     // Open the week select dropdown
     const weekSelect = page.getByRole('combobox').nth(1);
     await weekSelect.click();
-    // Count Week options — must be 14
+    // Count Week options — must be 13 (18-slate system: reg season = slates 1-13)
     const weekOptions = page.getByRole('option', { name: /^Week \d+$/ });
-    await expect(weekOptions).toHaveCount(14, { timeout: 5_000 });
+    await expect(weekOptions).toHaveCount(13, { timeout: 5_000 });
     // Close dropdown
     await page.keyboard.press('Escape');
   });
 
-  test('CFB Week 8 is accessible and shows 6 game cards', async ({ page }) => {
+  test('CFB Week 8 is accessible and Alice has 4 picks', async ({ page }) => {
     // Switch to Regular Season
     const seasonTypeSelect = page.getByRole('combobox').last();
     await seasonTypeSelect.click();
@@ -89,7 +89,7 @@ test.describe('CFB picks — demo backend', () => {
     // 6 games were seeded for Week 8 — each game card shows two team abbreviations
     await expect(page.getByText('MICH')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('PSU')).toBeVisible({ timeout: 5_000 });
-    // Alice picked all favorites — should see 6 "Picked" buttons
-    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toHaveCount(6, { timeout: 8_000 });
+    // Alice picked 4 teams (regular season max) — should see 4 "Picked" buttons
+    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toHaveCount(4, { timeout: 8_000 });
   });
 });

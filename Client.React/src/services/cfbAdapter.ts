@@ -1,19 +1,19 @@
 import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
-import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName } from '../utils/gameHelpers';
+import { getCfbLiveScores, getLiveGames } from '../api/espn';
+import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins, getCfbRequiredPicks } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
+import type { EspnScores } from '../types/espn';
+import { getHomeTeamScore, getAwayTeamScore } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } from './sportAdapter';
 
 /** Map CFB backend status strings to canonical GameStatusValue */
-function toCfbGameStatus(gameStatus: string | null | undefined): GameStatusValue {
-  if (gameStatus === 'StatusFinal') return 'final';
-  if (gameStatus === 'StatusInProgress') return 'in_progress';
-  if (gameStatus === 'StatusScheduled' || !gameStatus) return 'scheduled';
-  return null;
-}
 
-const CFB_SEASON = 2025;
-const CFB_REGULAR_WEEKS = Array.from({ length: 14 }, (_, i) => i + 1);
-const CFB_POST_WEEKS = [1, 2, 3, 4, 5];
+// Production target season — adapter falls back to prior year if no slates exist yet.
+const CFB_CONFIGURED_SEASON = 2026;
+// Earliest supported CFB season (controls the lower bound of the season dropdown).
+const CFB_FIRST_SEASON = 2025;
+const CFB_REGULAR_WEEKS = Array.from({ length: 13 }, (_, i) => i + 1); // weeks 1-13
+const CFB_POST_WEEKS = [1, 2, 3, 4, 5]; // Conf.Champs + CFP First Round/QF/SF/Championship
 
 function findActiveSlate(slates: CfbSlateDto[]): CfbSlateDto | null {
   const now = new Date();
@@ -25,14 +25,86 @@ function slateToWeekState(slate: CfbSlateDto): WeekState {
   return { season: slate.season, week, isPostSeason };
 }
 
-function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] {
-  const scoreMap = new Map(scores.map(s => [s.espnEventId, s]));
+// Demo situation for in-progress CFB games (shows field position bar in scores page)
+import type { GameSituation } from '../types/liveGame';
+
+const CFB_DEMO_SITUATION: GameSituation = {
+  downDistanceText: '3rd & 4 at MIA 22',
+  possessionTeam: 'IU',
+  isHomePossession: true,
+  yardLine: 22,
+  down: 3,
+  distance: 4,
+  isRedZone: true,
+  period: 3,
+  displayClock: '7:23',
+};
+
+/**
+ * Merge our spread data (owned) with live ESPN competition data.
+ * ESPN is the source of truth for score, status, and situation — same as NFL.
+ */
+function toCfbGameStatusFromString(s: string | null | undefined): GameStatusValue {
+  if (!s) return 'scheduled';
+  if (s === 'StatusFinal') return 'final';
+  if (s === 'StatusInProgress') return 'in_progress';
+  if (s === 'StatusHalftime') return 'halftime';
+  return 'scheduled';
+}
+
+/**
+ * Build GameView from spread data + live ESPN data.
+ * ESPN is the primary source. Falls back to dbScores when ESPN has no event
+ * for a given espnEventId (e.g. off-season, demo mode, or before game is created).
+ */
+function buildGamesFromEspn(
+  spreads: CfbSpreadDto[],
+  espnData: EspnScores | null,
+  dbScores: CfbScoreDto[],
+  situationMap: Map<string, import('../types/liveGame').GameSituation | null>,
+): GameView[] {
+  const espnMap = new Map<number, import('../types/espn').Competition>();
+  for (const event of espnData?.events ?? []) {
+    for (const comp of event.competitions) {
+      espnMap.set(parseInt(comp.id), comp);
+    }
+  }
+  const dbMap = new Map(dbScores.map(s => [s.espnEventId, s]));
+
   return spreads.map(sp => {
-    const score = scoreMap.get(sp.espnEventId);
-    const status = toCfbGameStatus(score?.gameStatus);
-    const isFinal = status === 'final';
-    const hs = score?.homeTeamScore ?? null;
-    const as_ = score?.awayTeamScore ?? null;
+    const comp = espnMap.get(sp.espnEventId);
+    const db = dbMap.get(sp.espnEventId);
+
+    let status: GameStatusValue;
+    let hs: number | null;
+    let as_: number | null;
+
+    if (comp) {
+      // ESPN has live data — use it
+      const t = comp.status?.type;
+      if (t?.completed) status = 'final';
+      else {
+        const name = t?.name as string | undefined;
+        if (!name || name === 'STATUS_SCHEDULED') status = 'scheduled';
+        else if (name === 'STATUS_HALFTIME') status = 'halftime';
+        else if (name === 'STATUS_IN_PROGRESS' || name === 'STATUS_END_PERIOD') status = 'in_progress';
+        else status = 'scheduled';
+      }
+      hs = getHomeTeamScore(comp);
+      as_ = getAwayTeamScore(comp);
+    } else if (db) {
+      // ESPN has no data yet — fall back to DB (covers demo mode + seeded final scores)
+      status = toCfbGameStatusFromString(db.gameStatus);
+      hs = db.homeTeamScore ?? null;
+      as_ = db.awayTeamScore ?? null;
+    } else {
+      status = 'scheduled';
+      hs = null;
+      as_ = null;
+    }
+
+    const isLive = status === 'in_progress' || status === 'halftime';
+    const key = `${sp.homeTeam}-${sp.awayTeam}`;
     return {
       id: sp.espnEventId.toString(),
       homeTeam: sp.homeTeam,
@@ -44,13 +116,9 @@ function buildGames(spreads: CfbSpreadDto[], scores: CfbScoreDto[]): GameView[] 
       awayScore: as_,
       gameStatus: status,
       gameTime: sp.gameTime,
-      homeCovers: isFinal && hs != null && as_ != null ? (hs + sp.homeTeamSpread) > as_ : null,
-      overWins: isFinal && hs != null && as_ != null ? (hs + as_) > sp.overUnder : null,
-      weather: score?.weatherDisplayValue ? {
-        displayValue: score.weatherDisplayValue,
-        conditionId: score.weatherConditionId ?? undefined,
-        temperatureF: score.weatherTemperatureF ?? undefined,
-      } : undefined,
+      homeCovers: computeHomeCovers(status, sp.homeTeamSpread, hs, as_),
+      overWins: computeOverWins(status, sp.overUnder, hs, as_),
+      situation: situationMap.get(key) ?? (isLive ? CFB_DEMO_SITUATION : null),
     };
   });
 }
@@ -61,40 +129,65 @@ function cfbPickToPickView(pick: CfbPickDto): PickView {
     team: pick.team,
     pickType: pick.pickType as PickView['pickType'],
     userId: pick.userId,
-    userName: '',
+    userName: pick.userName ?? '',
   };
 }
 
-async function loadSlate(leagueId: number, _userId: string, slateId: number): Promise<{ games: GameView[]; userPicks: PickView[] }> {
-  const [spreads, scores, picks] = await Promise.all([
+async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores | null; situations: Map<string, import('../types/liveGame').GameSituation | null> }> {
+  const startDate = slate.startDate;
+  const endDate = slate.endDate;
+  const [espn, liveGames] = await Promise.all([
+    getCfbLiveScores(startDate, endDate),
+    getLiveGames().catch(() => []),
+  ]);
+  // Build situation map from live games
+  const situations = new Map<string, import('../types/liveGame').GameSituation | null>();
+  for (const live of liveGames) {
+    const sit = live.situation ? { ...live.situation, period: live.period, displayClock: live.displayClock } : null;
+    situations.set(`${live.homeTeam}-${live.awayTeam}`, sit);
+  }
+  return { espn, situations };
+}
+
+async function loadSlate(leagueId: number, _userId: string, slateId: number, slate: CfbSlateDto): Promise<{ games: GameView[]; userPicks: PickView[] }> {
+  const [spreads, picks, dbScores, { espn, situations }] = await Promise.all([
     getCfbSpreads(slateId),
-    getCfbScores(slateId),
     getCfbUserPicks(leagueId, slateId),
+    getCfbScores(slateId),
+    fetchCfbEspnData(slate),
   ]);
   return {
-    games: buildGames(spreads, scores),
+    games: buildGamesFromEspn(spreads, espn, dbScores, situations),
     userPicks: picks.map(cfbPickToPickView),
   };
 }
 
 export function createCfbAdapter(): SportAdapter {
-  // Cache slates so historical loads can resolve slateId from weekState
+  // Cache slates and the resolved season (may differ from CFB_CONFIGURED_SEASON in demo/off-season)
   let cachedSlates: CfbSlateDto[] = [];
+  let resolvedSeason: number = CFB_CONFIGURED_SEASON;
 
   async function getSlates(): Promise<CfbSlateDto[]> {
     if (cachedSlates.length === 0) {
-      cachedSlates = await getCfbSlates(CFB_SEASON);
+      let slates = await getCfbSlates(CFB_CONFIGURED_SEASON);
+      if (slates.length === 0) {
+        // No data for configured year yet — fall back to prior year (demo / off-season)
+        slates = await getCfbSlates(CFB_CONFIGURED_SEASON - 1);
+        if (slates.length > 0) resolvedSeason = CFB_CONFIGURED_SEASON - 1;
+      }
+      cachedSlates = slates;
     }
     return cachedSlates;
   }
 
   async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
-    const [spreads, scores, allPickDtos] = await Promise.all([
+    const [spreads, allPickDtos, dbScores, { espn, situations }] = await Promise.all([
       getCfbSpreads(slate.id),
-      getCfbScores(slate.id),
       getCfbAllPicks(leagueId, slate.id),
+      getCfbScores(slate.id),
+      fetchCfbEspnData(slate),
     ]);
-    const games = buildGames(spreads, scores);
+    const games = buildGamesFromEspn(spreads, espn, dbScores, situations);
     const allPicks = allPickDtos.map(cfbPickToPickView);
     const userPicks = allPicks.filter(p => p.userId === userId);
     return { games, allPicks, userPicks };
@@ -102,34 +195,32 @@ export function createCfbAdapter(): SportAdapter {
 
   return {
     pollIntervalMs: 0,
-    supportsJerseys: false,
-    supportsMatrix: false,
-    supportsPickDialog: false,
     weekSelectorConfig: {
       regularWeekOptions: CFB_REGULAR_WEEKS,
       postSeasonWeekOptions: CFB_POST_WEEKS,
-      maxRegularSeasonWeek: 14,
-      minSeason: CFB_SEASON,
+      maxRegularSeasonWeek: 13,
+      minSeason: CFB_FIRST_SEASON,
       weekLabelFn: getCfbWeekName,
     },
 
     async currentSeasonYear() {
-      return Promise.resolve(CFB_SEASON);
+      await getSlates(); // ensure resolvedSeason is set
+      return resolvedSeason;
     },
 
     async loadCurrentGames(leagueId, userId) {
       const slates = await getSlates();
       const active = findActiveSlate(slates);
       if (!active) {
-        return { season: CFB_SEASON, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_SEASON };
+        return { season: resolvedSeason, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, maxWeek: 1, maxSeason: resolvedSeason };
       }
       const weekState = slateToWeekState(active);
-      const { games, userPicks } = await loadSlate(leagueId, userId, active.id);
+      const { games, userPicks } = await loadSlate(leagueId, userId, active.id, active);
       // maxWeek = max REGULAR season week with data (caps the regular season selector)
       const maxRegularSlate = slates
         .filter(s => s.slateType === 'RegularSeason')
         .reduce((max, s) => Math.max(max, s.slateNumber), 0);
-      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: games.length, maxWeek: maxRegularSlate || 14, maxSeason: CFB_SEASON };
+      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: maxRegularSlate || 13, maxSeason: resolvedSeason };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
@@ -137,9 +228,9 @@ export function createCfbAdapter(): SportAdapter {
       const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
       const slate = slates.find(s => s.slateNumber === slateNum && s.season === season);
       if (!slate) return null;
-      const { games, userPicks } = await loadSlate(leagueId, userId, slate.id);
+      const { games, userPicks } = await loadSlate(leagueId, userId, slate.id, slate);
       if (games.length === 0) return null;
-      return { season, week, isPostSeason, games, userPicks, hasOdds: true, requiredPicks: games.length, maxWeek: week, maxSeason: season };
+      return { season, week, isPostSeason, games, userPicks, hasOdds: true, requiredPicks: getCfbRequiredPicks(slateNum), maxWeek: week, maxSeason: season };
     },
 
     async submitPicks(leagueId, { season, week, isPostSeason }, picks) {
@@ -170,12 +261,12 @@ export function createCfbAdapter(): SportAdapter {
       const slates = await getSlates();
       const active = findActiveSlate(slates);
       if (!active) {
-        return { season: CFB_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_SEASON };
+        return { season: resolvedSeason, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, maxWeek: 1, maxSeason: resolvedSeason };
       }
       const weekState = slateToWeekState(active);
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
       const hasActiveGames = games.some(g => g.gameStatus === 'in_progress' || g.gameStatus === 'halftime');
-      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: games.length, maxWeek: weekState.week, maxSeason: CFB_SEASON };
+      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: weekState.week, maxSeason: resolvedSeason };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
@@ -185,7 +276,7 @@ export function createCfbAdapter(): SportAdapter {
       if (!slate) return null;
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate);
       if (games.length === 0) return null;
-      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: games.length, maxWeek: week, maxSeason: season };
+      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: getCfbRequiredPicks(slateNum), maxWeek: week, maxSeason: season };
     },
   };
 }

@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories;
@@ -87,18 +88,11 @@ public class LeaderboardServiceTests {
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository);
         var result = await service.BuildLeaderboard(1, 2024);
 
-        // Assert
-        // Week 19 (index 18)
-        Assert.True((playoffResults[0] ? WeekResult.Won : WeekResult.Lost) == result.First().WeekResults[18].WeekResult, "Week 19 result mismatch");
-
-        // Week 20 (index 19)
-        Assert.True((playoffResults[1] ? WeekResult.Won : WeekResult.Lost) == result.First().WeekResults[19].WeekResult, "Week 20 result mismatch");
-
-        // Week 21 (index 20)
-        Assert.True((playoffResults[2] ? WeekResult.Won : WeekResult.Lost) == result.First().WeekResults[20].WeekResult, "Week 21 result mismatch");
-
-        // Week 22 (index 21)
-        Assert.True((playoffResults[3] ? WeekResult.Won : WeekResult.Lost) == result.First().WeekResults[21].WeekResult, "Week 22 result mismatch");
+        // Assert: 3 playoff rounds (19 = Wild Card, 20 = Divisional, 21 = Conf. Championship)
+        // Week 22 (Pro Bowl) is skipped; Super Bowl (Week 23) not seeded in test data
+        Assert.True((playoffResults[0] ? WeekResult.Won : WeekResult.Lost) == result.First().WeekResults[18].WeekResult, "Week 19 Wild Card result mismatch");
+        Assert.True((playoffResults[1] ? WeekResult.Won : WeekResult.Lost) == result.First().WeekResults[19].WeekResult, "Week 20 Divisional result mismatch");
+        Assert.True((playoffResults[2] ? WeekResult.Won : WeekResult.Lost) == result.First().WeekResults[20].WeekResult, "Week 21 Conference result mismatch");
     }
 
     [Fact]
@@ -336,16 +330,205 @@ public class LeaderboardServiceTests {
         Assert.Equal(0, result.Sum(u => u.Total));
     }
 
+    // ─── CFB Leaderboard Tests ────────────────────────────────────────────────
+
+    private static (ILeagueRepository repo, ICfbRepository cfbRepo, ICfbPicksRepository picksRepo)
+        BuildCfbMocks(string userId, int leagueId = 1, int slateId = 1, int slateNumber = 1) {
+        var user = new ApplicationUser { Id = userId, UserName = "Alice" };
+        var leagueInfo = new LeagueInfo { Id = leagueId, LeagueName = "CFB Test", OwnerUserId = userId };
+        var userMapping = new LeagueUserMapping { LeagueId = leagueId, League = leagueInfo, User = user, UserId = userId };
+        var juiceMapping = new LeagueJuiceMapping { Id = 1, LeagueId = leagueId, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
+        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = slateNumber, SlateType = "RegularSeason", Label = $"Week {slateNumber}", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+
+        var leagueRepo = Substitute.For<ILeagueRepository>();
+        leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns([userMapping]);
+        leagueRepo.GetLeagueJuiceMappingAsync(leagueId, 2025).Returns(juiceMapping);
+
+        var cfbRepo = Substitute.For<ICfbRepository>();
+        cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
+        cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[
+            new CfbSpreads { Id = 1, CfbSlateId = slateId, EspnEventId = 100, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50 }
+        ]);
+        cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
+            new CfbScores { Id = 1, CfbSlateId = slateId, EspnEventId = 100, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = "StatusFinal" }
+        ]);
+
+        var picksRepo = Substitute.For<ICfbPicksRepository>();
+        picksRepo.GetUserPicksAsync(leagueId, slateId, userId).Returns((IEnumerable<CfbPicks>)[
+            new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, EspnEventId = 100, Team = "IU", PickType = "Spread", Season = 2025 }
+        ]);
+
+        return (leagueRepo, cfbRepo, picksRepo);
+    }
+
+    [Fact]
+    public async Task CfbBuildLeaderboard_ReturnsWon_WhenAllPicksBeatSpread() {
+        var userId = Guid.NewGuid().ToString();
+        // slateNumber=19 = CFP National Championship → requires 1 pick, so 1 winning pick → Won
+        var (leagueRepo, cfbRepo, picksRepo) = BuildCfbMocks(userId, slateNumber: 19);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        Assert.Single(result);
+        Assert.Equal(WeekResult.Won, result[0].WeekResults[0].WeekResult);
+    }
+
+    [Fact]
+    public async Task CfbBuildLeaderboard_ReturnsLost_WhenPickLosesSpread() {
+        var userId = Guid.NewGuid().ToString();
+        var (leagueRepo, cfbRepo, picksRepo) = BuildCfbMocks(userId);
+
+        // Override scores: IU loses badly — 7 to 35, so IU 7 + (-7+5) = 5; 5 - 35 = -30 < 0 → loss
+        cfbRepo.GetScoresForSlateAsync(1).Returns((IEnumerable<CfbScores>)[
+            new CfbScores { Id = 1, CfbSlateId = 1, EspnEventId = 100, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 7, AwayTeamScore = 35, GameStatus = "StatusFinal" }
+        ]);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        Assert.Equal(WeekResult.Lost, result[0].WeekResults[0].WeekResult);
+    }
+
+    [Fact]
+    public async Task CfbBuildLeaderboard_ReturnsMissingPicks_WhenUserHasFewerPicksThanGames() {
+        var userId = Guid.NewGuid().ToString();
+        var (leagueRepo, cfbRepo, picksRepo) = BuildCfbMocks(userId);
+
+        // Add a second game that the user did NOT pick
+        cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
+            new CfbSpreads { Id = 1, CfbSlateId = 1, EspnEventId = 100, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50 },
+            new CfbSpreads { Id = 2, CfbSlateId = 1, EspnEventId = 101, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47 },
+        ]);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        Assert.Equal(WeekResult.MissingPicks, result[0].WeekResults[0].WeekResult);
+    }
+
+    private static (ILeagueRepository repo, ICfbRepository cfbRepo, ICfbPicksRepository picksRepo)
+        BuildCfbMultiUserMocks(IReadOnlyList<string> winnerIds, IReadOnlyList<string> loserIds,
+            int slateNumber = 19, int weeklyCost = 5) {
+        // winnerIds pick IU (home, spread=-7): 28-7+juice-14>0 always (decisive win at any juice≥0).
+        // loserIds pick OSU (away, spread=+7): 14+7+juice-28<0 for juice<7; JuiceConference=6<7 → loses.
+        const int leagueId = 1;
+        const int slateId = 1;
+        var leagueInfo = new LeagueInfo { Id = leagueId, LeagueName = "CFB Test", OwnerUserId = winnerIds[0] };
+        var userMappings = winnerIds.Concat(loserIds).Select(uid =>
+            new LeagueUserMapping {
+                LeagueId = leagueId, League = leagueInfo,
+                User = new ApplicationUser { Id = uid, UserName = uid },
+                UserId = uid
+            }).ToList();
+        var juiceMapping = new LeagueJuiceMapping {
+            Id = 1, LeagueId = leagueId, Season = 2025,
+            Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = weeklyCost
+        };
+        var slate = new CfbSlates {
+            Id = slateId, Season = 2025, SlateNumber = slateNumber, SlateType = "Championship",
+            Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today),
+            EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6))
+        };
+
+        var leagueRepo = Substitute.For<ILeagueRepository>();
+        leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns(userMappings);
+        leagueRepo.GetLeagueJuiceMappingAsync(leagueId, 2025).Returns(juiceMapping);
+
+        var cfbRepo = Substitute.For<ICfbRepository>();
+        cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
+        cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[
+            new CfbSpreads { Id = 1, CfbSlateId = slateId, EspnEventId = 100,
+                HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50 }
+        ]);
+        cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
+            new CfbScores { Id = 1, CfbSlateId = slateId, EspnEventId = 100,
+                HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = "StatusFinal" }
+        ]);
+
+        var picksRepo = Substitute.For<ICfbPicksRepository>();
+        picksRepo.GetUserPicksAsync(leagueId, slateId, Arg.Is<string>(uid => winnerIds.Contains(uid)))
+            .Returns((IEnumerable<CfbPicks>)[
+                new CfbPicks { CfbSlateId = slateId, EspnEventId = 100, Team = "IU", PickType = "Spread", Season = 2025 }
+            ]);
+        picksRepo.GetUserPicksAsync(leagueId, slateId, Arg.Is<string>(uid => loserIds.Contains(uid)))
+            .Returns((IEnumerable<CfbPicks>)[
+                new CfbPicks { CfbSlateId = slateId, EspnEventId = 100, Team = "OSU", PickType = "Spread", Season = 2025 }
+            ]);
+
+        return (leagueRepo, cfbRepo, picksRepo);
+    }
+
+    // Slates 18 (Semifinals) and 19 (Championship) must both use JuiceConference, not 0.
+    // Borderline game: IU 28-20, spread -10. juice > 2 required to cover.
+    // JuiceConference=6 → WIN; juice=0 (old _ => 0 bug on slate 19) → LOSE.
+    [Theory]
+    [InlineData(18)]
+    [InlineData(19)]
+    public async Task CfbBuildLeaderboard_SemiAndChampionshipUseConferenceTease(int slateNumber) {
+        var userId = Guid.NewGuid().ToString();
+        var (leagueRepo, cfbRepo, picksRepo) = BuildCfbMocks(userId, slateNumber: slateNumber);
+
+        cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
+            new CfbSpreads { Id = 1, CfbSlateId = 1, EspnEventId = 100,
+                HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -10, AwayTeamSpread = 10, OverUnder = 50 }
+        ]);
+        cfbRepo.GetScoresForSlateAsync(1).Returns((IEnumerable<CfbScores>)[
+            new CfbScores { Id = 1, CfbSlateId = 1, EspnEventId = 100,
+                HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 20, GameStatus = "StatusFinal" }
+        ]);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        // 28 + (-10) + JuiceConference(6) - 20 = 4 > 0 → Won
+        Assert.Equal(WeekResult.Won, result[0].WeekResults[0].WeekResult);
+    }
+
+    // winner earns losers.Count × WeeklyCost; loser owes winners.Count × WeeklyCost; totals sum to 0
+    [Theory]
+    [InlineData(3, 2, 5,  10,  -15)]   // 3W 2L at $5  → W=+$10, L=-$15, sum=0
+    [InlineData(4, 1, 10, 10,  -40)]   // 4W 1L at $10 → W=+$10, L=-$40, sum=0
+    public async Task CfbCalculateTotals_ScoresBalance_WinnersAndLosers(
+        int winnerCount, int loserCount, int weeklyCost, long expectedWinnerScore, long expectedLoserScore) {
+        var winnerIds = Enumerable.Range(0, winnerCount).Select(_ => Guid.NewGuid().ToString()).ToList();
+        var loserIds  = Enumerable.Range(0, loserCount).Select(_ => Guid.NewGuid().ToString()).ToList();
+        var (leagueRepo, cfbRepo, picksRepo) = BuildCfbMultiUserMocks(winnerIds, loserIds, weeklyCost: weeklyCost);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        Assert.Equal(winnerCount + loserCount, result.Count);
+        Assert.Equal(0, result.Sum(u => u.Total));
+        Assert.All(result.Where(u => winnerIds.Contains(u.User.Id)),
+            u => Assert.Equal(expectedWinnerScore, u.Total));
+        Assert.All(result.Where(u => loserIds.Contains(u.User.Id)),
+            u => Assert.Equal(expectedLoserScore, u.Total));
+    }
+
+    [Fact]
+    public async Task CfbBuildLeaderboard_ReturnsEmpty_WhenLeagueIdIsZero() {
+        var leagueRepo = Substitute.For<ILeagueRepository>();
+        var cfbRepo = Substitute.For<ICfbRepository>();
+        var picksRepo = Substitute.For<ICfbPicksRepository>();
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+
+        var result = await service.BuildLeaderboard(0, 2025);
+
+        Assert.Empty(result);
+    }
+
     private static async Task<bool[]> FakePlayoffPicks(SpreadCalculatorBuilder spreadCalculatorBuilder,
         ApplicationDbContext dbContext,
         List<NflScores> scores) {
-        // Array to track if all picks for each playoff week are winners
-        // [0] = Week 19, [1] = Week 20, [2] = Week 21, [3] = Week 22
-        var isWinner = new bool[4];
+        // [0] = Week 19 Wild Card, [1] = Week 20 Divisional, [2] = Week 21 Conf. Championship
+        // (Week 22 = Pro Bowl, skipped; Super Bowl = Week 23, not seeded in test data)
+        var isWinner = new bool[3];
         var random = new Random();
 
-        // Generate picks for each playoff week (19-22)
-        for (int week = 19; week < 23; week++) {
+        int[] playoffWeeks = [19, 20, 21];
+        for (int wi = 0; wi < playoffWeeks.Length; wi++) {
+            int week = playoffWeeks[wi];
             int requiredPicks = GameHelpers.GetRequiredPicks(week);
 
             // Set all picks as winners initially
@@ -391,8 +574,7 @@ public class LeaderboardServiceTests {
                 });
             }
 
-            // Store the result for this week (-19 for ordinal sake)
-            isWinner[week - 19] = winWeekend;
+            isWinner[wi] = winWeekend;
         }
 
         await dbContext.SaveChangesAsync();
