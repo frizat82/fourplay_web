@@ -27,6 +27,18 @@ public class EspnController(IEspnApiService espnApiService, IEspnCacheService es
         return Ok(scores ?? new EspnScores());
     }
 
+    /// <summary>
+    /// Returns live CFB game data from ESPN for a slate's date window.
+    /// Frontend passes start/end dates (YYYY-MM-DD) matching the slate's StartDate/EndDate.
+    /// </summary>
+    [HttpGet("cfb/scores")]
+    [ProducesResponseType(typeof(EspnScores), StatusCodes.Status200OK)]
+    public async Task<ActionResult<EspnScores?>> GetCfbScores([FromQuery] DateOnly startDate, [FromQuery] DateOnly endDate)
+    {
+        var scores = await espnApiService.GetCfbScores(startDate, endDate);
+        return Ok(scores ?? new EspnScores());
+    }
+
     [HttpGet("livegames")]
     [ProducesResponseType(typeof(List<LiveGameDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<LiveGameDto>>> GetLiveGames()

@@ -9,7 +9,8 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { getEspnRequiredPicks } from '../utils/gameHelpers';
+import { getEspnRequiredPicks, getCfbRequiredPicks } from '../utils/gameHelpers';
+import { useSportContext } from '../services/sport';
 import PageHeader from '../components/PageHeader';
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -74,7 +75,7 @@ function TeaseFormula() {
       <Typography color="text.secondary" fontWeight={500}>
         +
       </Typography>
-      <Chip label="13 pt tease" size="small" color="secondary" variant="outlined" />
+      <Chip label="tease pts" size="small" color="secondary" variant="outlined" />
       <Typography color="text.secondary" fontWeight={500}>
         =
       </Typography>
@@ -108,7 +109,7 @@ function MatchupExample() {
           color="text.secondary"
           sx={{ letterSpacing: '0.06em', textTransform: 'uppercase' }}
         >
-          Week 1 · 2026 · SEA hosts CHI
+          Week 1 · 2026 · SEA hosts CHI · 13-pt tease example
         </Typography>
         <Typography variant="caption" color="text.secondary">
           Vegas → Teased
@@ -221,17 +222,22 @@ function ScenarioExample() {
 }
 
 function PlayoffGrid() {
-  const wildCardPicks = getEspnRequiredPicks(1, true);
-  const divisionalPicks = getEspnRequiredPicks(3, true);
-  const championshipPicks = getEspnRequiredPicks(4, true);
-  const superBowlPicks = getEspnRequiredPicks(5, true);
+  const { isCfb } = useSportContext();
 
-  const rounds = [
-    { round: 'Wild Card', picks: wildCardPicks },
-    { round: 'Divisional', picks: divisionalPicks },
-    { round: 'Championship', picks: championshipPicks },
-    { round: 'Super Bowl', picks: superBowlPicks },
-  ];
+  const rounds = isCfb
+    ? [
+        { round: 'Conf. Championships', picks: getCfbRequiredPicks(14) },
+        { round: 'First Round', picks: getCfbRequiredPicks(15) },
+        { round: 'Quarterfinals', picks: getCfbRequiredPicks(16) },
+        { round: 'Semifinals', picks: getCfbRequiredPicks(17) },
+        { round: 'Championship', picks: getCfbRequiredPicks(18) },
+      ]
+    : [
+        { round: 'Wild Card', picks: getEspnRequiredPicks(1, true) },
+        { round: 'Divisional', picks: getEspnRequiredPicks(2, true) },
+        { round: 'Championship', picks: getEspnRequiredPicks(3, true) },
+        { round: 'Super Bowl', picks: getEspnRequiredPicks(5, true) },
+      ];
 
   return (
     <Grid container spacing={1}>
@@ -285,7 +291,8 @@ export function RulesContent() {
         <SectionLabel>The tease — the whole game</SectionLabel>
         <Box sx={{ bgcolor: 'action.hover', borderRadius: 2, p: 2, mb: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            Every Vegas line is teased <strong>13 points</strong> in your favor. This moves the
+            Every Vegas line is teased by{' '}
+            <strong>your league&apos;s configured amount</strong> in your favor. This moves the
             spread dramatically — but you still have to get all{' '}
             <strong>{regularPicks} picks right</strong> to win the week.
           </Typography>
@@ -394,13 +401,18 @@ export function RulesContent() {
 }
 
 export default function RulesPage() {
+  const { isCfb } = useSportContext();
   return (
     <Card sx={{ minHeight: 'calc(100vh - 128px)' }}>
       <CardContent>
         <Box sx={{ mb: 2 }}>
           <PageHeader
             title="How IV League Works"
-            subtitle="Pick four teased lines each week. Sounds easy — it isn't."
+            subtitle={
+              isCfb
+                ? 'Pick four teased lines each week. Fewer picks in the CFP. Still not easy.'
+                : "Pick four teased lines each week. Sounds easy — it isn't."
+            }
           />
         </Box>
         <RulesContent />

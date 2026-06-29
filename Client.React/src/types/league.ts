@@ -52,6 +52,7 @@ export interface CfbScoreDto {
 export interface CfbPickDto {
   id: number;
   userId: string;
+  userName: string;
   leagueId: number;
   cfbSlateId: number;
   espnEventId: number;

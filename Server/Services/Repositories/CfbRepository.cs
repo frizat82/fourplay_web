@@ -48,6 +48,20 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         return await db.CfbScores.Where(s => s.CfbSlateId == cfbSlateId).ToListAsync();
     }
 
+    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetWeekConfigsForSeasonAsync(int season) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.CfbSeasonWeekConfigs
+            .Where(c => c.Season == season)
+            .OrderBy(c => c.EspnWeekNumber)
+            .ToListAsync();
+    }
+
+    public async Task AddWeekConfigsAsync(IEnumerable<CfbSeasonWeekConfig> configs) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        db.CfbSeasonWeekConfigs.AddRange(configs);
+        await db.SaveChangesAsync();
+    }
+
     public async Task UpsertCfbScoresAsync(IEnumerable<CfbScores> scores) {
         await using var db = await dbFactory.CreateDbContextAsync();
         var scoreList = scores.ToList();

@@ -11,7 +11,7 @@ export default function LogoutPage() {
     let active = true;
     const fallback = window.setTimeout(() => {
       if (active) {
-        navigate('/account/login', { replace: true });
+        navigate('/', { replace: true });
       }
     }, 3500);
 
@@ -21,7 +21,7 @@ export default function LogoutPage() {
       } finally {
         if (active) {
           window.clearTimeout(fallback);
-          navigate('/account/login', { replace: true });
+          navigate('/', { replace: true });
         }
       }
     };
