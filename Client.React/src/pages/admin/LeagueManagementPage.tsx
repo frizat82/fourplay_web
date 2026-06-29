@@ -7,8 +7,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   Grid,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -23,17 +27,15 @@ import { useSession } from '../../services/session';
 import { useAuth } from '../../services/auth';
 import { useToast } from '../../services/toast';
 import {
-  addLeagueInfo,
-  addLeagueJuiceMapping,
   addLeagueUserMapping,
-  getLeagueByName,
+  assignLeagueOwner,
+  createLeague,
   getLeagueJuice,
   getLeagueUserMappingsForUser,
   getUsers,
-  leagueExists,
 } from '../../api/league';
 import type {
-  CreateLeagueModel,
+  LeagueCreateDto,
   LeagueInfoDto,
   LeagueJuiceMappingDto,
   LeagueUserMappingDto,
@@ -57,14 +59,21 @@ export default function AdminLeagueManagementPage() {
   const [selectedUser, setSelectedUser] = useState<UserSummaryDto | null>(null);
   const [selectedLeague, setSelectedLeague] = useState<LeagueInfoDto | null>(null);
 
-  const [leagueForm, setLeagueForm] = useState<CreateLeagueModel>({
+  const [leagueForm, setLeagueForm] = useState<Omit<LeagueCreateDto, 'ownerUserId'> & { ownerUserId: string }>({
     leagueName: '',
+    leagueType: 'Nfl',
+    ownerUserId: '',
+    season: new Date().getFullYear(),
     juice: 0,
     juiceDivisional: 0,
     juiceConference: 0,
-    season: new Date().getFullYear(),
     weeklyCost: 0,
   });
+
+  // Assign-owner state
+  const [ownerDialogOpen, setOwnerDialogOpen] = useState(false);
+  const [ownerTargetLeague, setOwnerTargetLeague] = useState<LeagueInfoDto | null>(null);
+  const [newOwnerId, setNewOwnerId] = useState('');
 
   const leagueList = useMemo(() => {
     const list: LeagueInfoDto[] = [];
@@ -115,14 +124,25 @@ export default function AdminLeagueManagementPage() {
     }
   }, [currentLeague, loadMappings, loadUserLeagueMappings]);
 
+  const loadAllUsers = useCallback(async () => {
+    const users = await getUsers();
+    setAvailableUsers(users);
+  }, []);
+
   const openAddMapping = async () => {
     if (!user?.userId) return;
-    const users = await getUsers();
-    const list = users.filter((u) => u.id !== user.userId);
-    setAvailableUsers(list);
+    await loadAllUsers();
+    setAvailableUsers((prev) => prev.filter((u) => u.id !== user.userId));
     setSelectedUser(null);
     setSelectedLeague(null);
     setMappingDialogOpen(true);
+  };
+
+  const openAssignOwner = async (league: LeagueInfoDto) => {
+    await loadAllUsers();
+    setOwnerTargetLeague(league);
+    setNewOwnerId('');
+    setOwnerDialogOpen(true);
   };
 
   const handleAddMapping = async () => {
@@ -146,71 +166,31 @@ export default function AdminLeagueManagementPage() {
     await loadUserLeagueMappings();
   };
 
-  const ensureUserExists = async (existingLeague: LeagueInfoDto) => {
-    if (!user?.userId) return;
-    const leagueUserInfo = await getLeagueUserMappingsForUser(user.userId);
-    if (!leagueUserInfo.find((l) => l.leagueName === existingLeague.leagueName)) {
-      await addLeagueUserMapping({
-        id: 0,
-        leagueId: existingLeague.id,
-        leagueName: existingLeague.leagueName,
-        userId: user.userId,
-        userName: user.name ?? '',
-        leagueOwnerUserId: user.userId,
-        leagueType: 0,
-        dateCreated: new Date().toISOString(),
-      });
-    }
-    await loadUserLeagueMappings();
-  };
-
   const handleAddLeague = async () => {
     if (!user?.userId) return;
     try {
-      const exists = await leagueExists(leagueForm.leagueName);
-      if (!exists) {
-        await addLeagueInfo({
-          id: 0,
-          leagueName: leagueForm.leagueName,
-          ownerUserId: user.userId,
-          leagueType: 'Nfl',
-          dateCreated: new Date().toISOString(),
-        });
-      }
-
-    const leagueExistsForSeason = await leagueExists(leagueForm.leagueName, leagueForm.season);
-    if (leagueExistsForSeason) {
-      const existing = await getLeagueByName(leagueForm.leagueName);
-      toast.push(`League Already Exists ${leagueForm.leagueName}:${leagueForm.season}`, 'error');
-      if (existing) {
-        await ensureUserExists(existing);
-      }
-      return;
-    }
-
-      const existingLeague = await getLeagueByName(leagueForm.leagueName);
-      if (existingLeague) {
-        await addLeagueJuiceMapping({
-          id: 0,
-          leagueId: existingLeague.id,
-          leagueName: existingLeague.leagueName,
-          season: leagueForm.season,
-          juice: leagueForm.juice,
-          juiceDivisional: leagueForm.juiceDivisional,
-          juiceConference: leagueForm.juiceConference,
-          weeklyCost: leagueForm.weeklyCost,
-          dateCreated: new Date().toISOString(),
-        });
-        toast.push('League Season Added', 'success');
-        await ensureUserExists(existingLeague);
-        await loadMappings();
-      } else {
-        toast.push(`Error Loading League ${leagueForm.leagueName}:${leagueForm.season}`, 'error');
-      }
+      await createLeague({ ...leagueForm, ownerUserId: leagueForm.ownerUserId || user.userId });
+      toast.push('League created', 'success');
+      await loadUserLeagueMappings();
+      await loadMappings();
     } catch {
-      toast.push('Error adding league', 'error');
+      toast.push('Error creating league', 'error');
     } finally {
       setLeagueDialogOpen(false);
+    }
+  };
+
+  const handleAssignOwner = async () => {
+    if (!ownerTargetLeague || !newOwnerId) return;
+    try {
+      await assignLeagueOwner(ownerTargetLeague.id, newOwnerId);
+      toast.push('Owner updated', 'success');
+      setOwnerDialogOpen(false);
+      setOwnerTargetLeague(null);
+      setNewOwnerId('');
+      await loadUserLeagueMappings();
+    } catch {
+      toast.push('Failed to assign owner', 'error');
     }
   };
 
@@ -234,6 +214,8 @@ export default function AdminLeagueManagementPage() {
                       <TableRow>
                         <TableCell>League</TableCell>
                         <TableCell>User</TableCell>
+                        <TableCell>Owner ID</TableCell>
+                        <TableCell>Actions</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -241,6 +223,24 @@ export default function AdminLeagueManagementPage() {
                         <TableRow key={`${mapping.leagueId}-${mapping.userId}`}>
                           <TableCell>{mapping.leagueName}</TableCell>
                           <TableCell>{mapping.userName}</TableCell>
+                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {mapping.leagueOwnerUserId ?? '—'}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => void openAssignOwner({
+                                id: mapping.leagueId,
+                                leagueName: mapping.leagueName ?? '',
+                                ownerUserId: mapping.leagueOwnerUserId ?? '',
+                                leagueType: 'Nfl',
+                                dateCreated: mapping.dateCreated,
+                              })}
+                            >
+                              Assign Owner
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -345,13 +345,37 @@ export default function AdminLeagueManagementPage() {
       </Dialog>
 
       <Dialog open={leagueDialogOpen} onClose={() => setLeagueDialogOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>Add League</DialogTitle>
+        <DialogTitle>Create League</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="League"
+              label="League Name"
               value={leagueForm.leagueName}
               onChange={(e) => setLeagueForm({ ...leagueForm, leagueName: e.target.value })}
+            />
+            <FormControl size="small">
+              <InputLabel>Sport</InputLabel>
+              <Select
+                value={leagueForm.leagueType}
+                label="Sport"
+                onChange={(e) => setLeagueForm({ ...leagueForm, leagueType: e.target.value })}
+              >
+                <MenuItem value="Nfl">NFL</MenuItem>
+                <MenuItem value="Cfb">CFB</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              label="Owner User ID"
+              value={leagueForm.ownerUserId}
+              onChange={(e) => setLeagueForm({ ...leagueForm, ownerUserId: e.target.value })}
+              helperText="Leave blank to assign yourself as owner"
+            />
+            <TextField
+              label="Season (Year)"
+              type="number"
+              value={leagueForm.season}
+              onChange={(e) => setLeagueForm({ ...leagueForm, season: Number(e.target.value) })}
+              inputProps={{ min: new Date().getFullYear() }}
             />
             <TextField
               label="Juice (Teaser)"
@@ -377,24 +401,47 @@ export default function AdminLeagueManagementPage() {
               value={leagueForm.weeklyCost}
               onChange={(e) => setLeagueForm({ ...leagueForm, weeklyCost: Number(e.target.value) })}
             />
-            <TextField
-              label="Season (Year)"
-              type="number"
-              value={leagueForm.season}
-              onChange={(e) => setLeagueForm({ ...leagueForm, season: Number(e.target.value) })}
-              inputProps={{ min: new Date().getFullYear() }}
-            />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setLeagueDialogOpen(false)}>Cancel</Button>
           <Button
             variant="contained"
-            color="error"
-            onClick={handleAddLeague}
+            onClick={() => void handleAddLeague()}
             disabled={!leagueForm.leagueName || !leagueForm.season}
           >
-            Add League
+            Create League
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={ownerDialogOpen} onClose={() => setOwnerDialogOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Assign Owner — {ownerTargetLeague?.leagueName}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Current owner: {ownerTargetLeague?.ownerUserId || 'none'}
+            </Typography>
+            <TextField
+              select
+              label="New Owner"
+              SelectProps={{ native: true }}
+              value={newOwnerId}
+              onChange={(e) => setNewOwnerId(e.target.value)}
+            >
+              <option value="" />
+              {availableUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.email ?? u.userName ?? u.id}
+                </option>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOwnerDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={() => void handleAssignOwner()} disabled={!newOwnerId}>
+            Assign
           </Button>
         </DialogActions>
       </Dialog>
