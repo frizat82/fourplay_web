@@ -9,5 +9,7 @@ public class CfbSlates {
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
     public DateTimeOffset? FirstGameUtc { get; set; } // earliest kickoff, drives pick lock time
+    public int? EspnWeekNumber { get; set; }          // actual ESPN week for API queries (decoupled from SlateNumber)
+    public string? ScoringFormat { get; set; }        // "Standard" | "NFLDivisional" | "NFLConference" | "NFLSuperBowl"
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
 }

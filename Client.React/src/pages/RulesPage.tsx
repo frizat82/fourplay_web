@@ -226,11 +226,11 @@ function PlayoffGrid() {
 
   const rounds = isCfb
     ? [
-        { round: 'Conf. Championships', picks: getCfbRequiredPicks(15) },
-        { round: 'First Round', picks: getCfbRequiredPicks(16) },
-        { round: 'Quarterfinals', picks: getCfbRequiredPicks(17) },
-        { round: 'Semifinals', picks: getCfbRequiredPicks(18) },
-        { round: 'Championship', picks: getCfbRequiredPicks(19) },
+        { round: 'Conf. Championships', picks: getCfbRequiredPicks(14) },
+        { round: 'First Round', picks: getCfbRequiredPicks(15) },
+        { round: 'Quarterfinals', picks: getCfbRequiredPicks(16) },
+        { round: 'Semifinals', picks: getCfbRequiredPicks(17) },
+        { round: 'Championship', picks: getCfbRequiredPicks(18) },
       ]
     : [
         { round: 'Wild Card', picks: getEspnRequiredPicks(1, true) },
