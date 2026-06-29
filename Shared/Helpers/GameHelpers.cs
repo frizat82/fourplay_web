@@ -104,11 +104,11 @@ public static class GameHelpers {
         };
     }
 
-    // CFB mirrors NFL postseason pattern: Conf.Champs(15)=3, FirstRound(16)=2, QF(17)=2, SF(18)=1, Champ(19)=1
+    // 18-slate system: Standard(1-14)=4, NFLDivisional(15-16)=3, NFLConference(17)=2, NFLSuperBowl(18)=1
     public static int GetCfbRequiredPicks(int slateNumber) => slateNumber switch {
         <= 14 => 4,
-        15 => 3,
-        16 or 17 => 2,
+        <= 16 => 3,
+        17 => 2,
         _ => 1,
     };
 

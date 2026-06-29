@@ -22,8 +22,8 @@ import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../a
 import { getCfbLiveScores, getLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
-  id: 10, season: 2025, slateNumber: 8, label: 'Week 8',
-  slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18',
+  id: 10, season: 2026, slateNumber: 8, label: 'Week 8',
+  slateType: 'RegularSeason', startDate: '2026-10-20', endDate: '2026-10-26',
 };
 const spread: CfbSpreadDto = {
   id: 1, cfbSlateId: 10, espnEventId: 999, homeTeam: 'MICH', awayTeam: 'PSU',
@@ -33,10 +33,10 @@ const spread: CfbSpreadDto = {
 
 /** Minimal EspnScores with one final game matching espnEventId=999 */
 const espnFinalGame: EspnScores = {
-  leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 },
+  leagues: [], season: { year: 2026, type: 2 }, week: { number: 8 },
   events: [{
-    id: '999', date: '2025-10-11T20:00:00Z',
-    season: { year: 2025, type: 2 }, week: { number: 8 },
+    id: '999', date: '2026-10-24T20:00:00Z',
+    season: { year: 2026, type: 2 }, week: { number: 8 },
     competitions: [{
       id: '999', date: '2025-10-11T20:00:00Z',
       status: { type: { id: 3, name: 'STATUS_FINAL', completed: true, description: 'Final', state: 'post', detail: 'Final', shortDetail: 'Final' }, clock: 0, period: 4, displayClock: '0:00' },
@@ -104,7 +104,7 @@ describe('cfbAdapter', () => {
     it('maps CfbPickDto to PickView with stringified gameId', async () => {
       const pick: CfbPickDto = {
         id: 1, userId: 'user1', userName: 'user1', leagueId: 1, cfbSlateId: 10,
-        espnEventId: 999, team: 'MICH', pickType: 'Spread', season: 2025,
+        espnEventId: 999, team: 'MICH', pickType: 'Spread', season: 2026,
       };
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
@@ -127,13 +127,13 @@ describe('cfbAdapter', () => {
       const result = await adapter.loadCurrentGames(1, 'user1');
       expect(result.week).toBe(8);
       expect(result.isPostSeason).toBe(false);
-      expect(result.season).toBe(2025);
+      expect(result.season).toBe(2026);
     });
 
     it('game shows scheduled when ESPN has no matching event', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(getCfbLiveScores).mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
+      vi.mocked(getCfbLiveScores).mockResolvedValue({ leagues: [], season: { year: 2026, type: 2 }, week: { number: 8 }, events: [] });
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -146,8 +146,8 @@ describe('cfbAdapter', () => {
     it('pollIntervalMs is 0 (no polling)', () => {
       expect(adapter.pollIntervalMs).toBe(0);
     });
-    it('currentSeasonYear returns 2025', async () => {
-      expect(await adapter.currentSeasonYear()).toBe(2025);
+    it('currentSeasonYear returns 2026', async () => {
+      expect(await adapter.currentSeasonYear()).toBe(2026);
     });
     it('weekLabelFn returns CFP Championship for week 5 postseason', () => {
       const fn = adapter.weekSelectorConfig.weekLabelFn!;
