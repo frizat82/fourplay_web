@@ -45,6 +45,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     document.title = 'Log in';
+    return () => { document.title = 'IV League'; };
   }, []);
 
   const onSubmit = async (values: FormValues) => {
