@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
@@ -81,6 +82,22 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     public async Task<IActionResult> DeletePicks(int leagueId, int cfbSlateId) {
         await repo.DeletePicksAsync(leagueId, cfbSlateId, CurrentUserId);
         return Ok();
+    }
+
+    [HttpGet("week-configs/{season:int}")]
+    [Authorize(Roles = AppRoles.Administrator)]
+    public async Task<ActionResult<List<CfbSeasonWeekConfigDto>>> GetWeekConfigs(int season) {
+        var configs = await cfbRepo.GetWeekConfigsForSeasonAsync(season);
+        var dtos = configs.Select(c => new CfbSeasonWeekConfigDto(
+            c.EspnWeekNumber,
+            c.IvLeagueWeekNumber,
+            c.WeekType,
+            c.ScoringFormat,
+            c.InScopeIvLeague,
+            c.WeekStartDate,
+            c.WeekEndDate,
+            c.Notes));
+        return Ok(dtos);
     }
 }
 

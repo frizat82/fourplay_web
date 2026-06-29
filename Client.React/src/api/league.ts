@@ -7,7 +7,14 @@ import type {
   NflPickDto,
 } from '../types/picks';
 import type { LeagueUserMappingDto, NflWeekDto } from '../types/league';
-import type { LeagueInfoDto, LeagueJuiceMappingDto, UserSummaryDto } from '../types/admin';
+import type {
+  LeagueInfoDto,
+  LeagueJuiceMappingDto,
+  LeagueCostDto,
+  LeagueJuiceUpdateDto,
+  LeagueCreateDto,
+  UserSummaryDto,
+} from '../types/admin';
 
 export async function getLeagueUserMappingsForUser(userId: string) {
   const { data } = await http.get<LeagueUserMappingDto[]>(
@@ -105,5 +112,42 @@ export async function calculateSpreadBatch(
     `/api/league/${leagueId}/odds/${season}/${week}/calculate-batch`,
     request
   );
+  return data;
+}
+
+// Commissioner portal API
+
+export async function getMyLeagues() {
+  const { data } = await http.get<LeagueInfoDto[]>('/api/league/my-leagues');
+  return data ?? [];
+}
+
+export async function getLeagueCost(leagueId: number) {
+  const { data } = await http.get<LeagueCostDto>(`/api/league/${leagueId}/cost`);
+  return data;
+}
+
+export async function updateLeagueJuice(leagueId: number, season: number, dto: LeagueJuiceUpdateDto) {
+  await http.put(`/api/league/${leagueId}/juice/${season}`, dto);
+}
+
+export async function rollForwardJuice(leagueId: number, toSeason: number) {
+  await http.post(`/api/league/${leagueId}/juice/roll-forward/${toSeason}`, {});
+}
+
+export async function removeLeagueMember(leagueId: number, userId: string) {
+  await http.delete(`/api/league/${leagueId}/members/${encodeURIComponent(userId)}`);
+}
+
+export async function inviteToLeague(leagueId: number, email: string) {
+  await http.post(`/api/league/${leagueId}/invite`, { email });
+}
+
+export async function assignLeagueOwner(leagueId: number, newOwnerUserId: string) {
+  await http.put(`/api/league/${leagueId}/owner/${encodeURIComponent(newOwnerUserId)}`, {});
+}
+
+export async function createLeague(dto: LeagueCreateDto) {
+  const { data } = await http.post<LeagueInfoDto>('/api/league/create', dto);
   return data;
 }

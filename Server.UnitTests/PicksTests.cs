@@ -52,7 +52,8 @@ public class PicksTests
             NullLogger<LeagueController>.Instance,
             BuildUserManager(),
             Substitute.For<ISpreadCalculatorBuilder>(),
-            espnCacheService);
+            espnCacheService,
+            Substitute.For<IInvitationService>());
 
         var httpContext = new DefaultHttpContext();
         if (principal is not null)
