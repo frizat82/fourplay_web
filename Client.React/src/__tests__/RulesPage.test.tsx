@@ -108,22 +108,22 @@ describe('RulesPage — CFB playoff grid', () => {
     expect(screen.getByText(/fewer picks in the cfp/i)).toBeInTheDocument();
   });
 
-  it('shows Conf. Championships with 3 picks', () => {
+  it('shows Conf. Championships with 4 picks', () => {
     renderPage();
     const section = screen.getByText(/conf\. championships/i).closest('div');
+    expect(section).toHaveTextContent('4');
+  });
+
+  it('shows First Round with 3 picks', () => {
+    renderPage();
+    const section = screen.getByText(/first round/i).closest('div');
     expect(section).toHaveTextContent('3');
   });
 
-  it('shows First Round with 2 picks', () => {
-    renderPage();
-    const section = screen.getByText(/first round/i).closest('div');
-    expect(section).toHaveTextContent('2');
-  });
-
-  it('shows Quarterfinals with 2 picks', () => {
+  it('shows Quarterfinals with 3 picks', () => {
     renderPage();
     const section = screen.getByText(/quarterfinals/i).closest('div');
-    expect(section).toHaveTextContent('2');
+    expect(section).toHaveTextContent('3');
   });
 
   it('shows Championship with 1 pick', () => {

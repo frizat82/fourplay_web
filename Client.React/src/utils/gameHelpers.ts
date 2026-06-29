@@ -15,8 +15,8 @@ export function spreadLabel(spread: number): string {
   return spread > 0 ? `+${spread}` : `${spread}`;
 }
 
-// CFB: SlateNumber 1-14 = regular season weeks, 15-19 = postseason
-// isPostSeason=false → week 1-14; isPostSeason=true → week 1-5 (conf champs + 4 CFP rounds)
+// CFB 18-slate system: SlateNumbers 1-13 = regular season, 14-18 = postseason
+// Postseason: 14=Conf.Champs, 15=CFP First Round, 16=CFP QF, 17=CFP SF, 18=CFP Championship
 export function getCfbWeekName(week: number, isPostSeason = false): string {
   if (!isPostSeason) return `Week ${week}`;
   switch (week) {
@@ -30,13 +30,13 @@ export function getCfbWeekName(week: number, isPostSeason = false): string {
 }
 
 export function cfbSlateNumberToWeek(slateNumber: number): { week: number; isPostSeason: boolean } {
-  return slateNumber <= 14
+  return slateNumber <= 13
     ? { week: slateNumber, isPostSeason: false }
-    : { week: slateNumber - 14, isPostSeason: true };
+    : { week: slateNumber - 13, isPostSeason: true };
 }
 
 export function cfbWeekToSlateNumber(week: number, isPostSeason: boolean): number {
-  return isPostSeason ? 14 + week : week;
+  return isPostSeason ? 13 + week : week;
 }
 
 export function getWeekName(week: number, isPostSeason = false) {
@@ -68,11 +68,11 @@ export function getEspnRequiredPicks(week: number, isPostSeason = false) {
   }
 }
 
-// CFB postseason mirrors NFL: Conf.Champs(15)=3, FirstRound(16)=2, QF(17)=2, SF(18)=1, Champ(19)=1
+// 18-slate system: Standard(1-14)=4, NFLDivisional(15-16)=3, NFLConference(17)=2, NFLSuperBowl(18)=1
 export function getCfbRequiredPicks(slateNumber: number): number {
   if (slateNumber <= 14) return 4;
-  if (slateNumber === 15) return 3;
-  if (slateNumber <= 17) return 2;
+  if (slateNumber <= 16) return 3;
+  if (slateNumber === 17) return 2;
   return 1;
 }
 
