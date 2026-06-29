@@ -104,16 +104,17 @@ public class GameHelpersTests
     }
 
     // ─── GetCfbRequiredPicks ──────────────────────────────────────────────────
+    // 18-slate system: 1-14=Standard(4), 15-16=NFLDivisional(3), 17=NFLConference(2), 18=NFLSuperBowl(1)
 
     [Theory]
     [InlineData(1,  4)]
     [InlineData(7,  4)]
-    [InlineData(14, 4)]  // last regular-season slate
-    [InlineData(15, 3)]  // Conf. Championships
-    [InlineData(16, 2)]  // CFP First Round
-    [InlineData(17, 2)]  // CFP Quarterfinals
-    [InlineData(18, 1)]  // CFP Semifinals
-    [InlineData(19, 1)]  // CFP National Championship
+    [InlineData(13, 4)]  // last regular-season week
+    [InlineData(14, 4)]  // Conf. Championships (Standard format — same pick count as regular season)
+    [InlineData(15, 3)]  // CFP First Round (NFLDivisional)
+    [InlineData(16, 3)]  // CFP Quarterfinals (NFLDivisional)
+    [InlineData(17, 2)]  // CFP Semifinals (NFLConference)
+    [InlineData(18, 1)]  // CFP Championship (NFLSuperBowl)
     public void GetCfbRequiredPicks_ReturnsCorrectCount(int slateNumber, int expected)
     {
         Assert.Equal(expected, GameHelpers.GetCfbRequiredPicks(slateNumber));

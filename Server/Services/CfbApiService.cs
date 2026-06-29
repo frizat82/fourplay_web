@@ -25,4 +25,16 @@ public class CfbApiService(HttpClient httpClient) : ICfbApiService {
         var json = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<EspnScores>(json, _opts);
     }
+
+    // Week-based query: seasontype=2 for regular/conf-champs, seasontype=3 for CFP rounds.
+    // Fixes the broken groups=80 date-range approach — one call per slate, no date iteration.
+    public async Task<EspnScores?> GetScoresByWeekAsync(int week, bool isPostSeason) {
+        var seasonType = isPostSeason ? 3 : 2;
+        var limit = isPostSeason ? 50 : 100;
+        var url = $"/apis/site/v2/sports/football/college-football/scoreboard?week={week}&seasontype={seasonType}&limit={limit}";
+        var response = await httpClient.GetAsync(url);
+        if (!response.IsSuccessStatusCode) return null;
+        var json = await response.Content.ReadAsStringAsync();
+        return JsonSerializer.Deserialize<EspnScores>(json, _opts);
+    }
 }
