@@ -120,7 +120,8 @@ public class LeagueController(
     [ProducesResponseType(typeof(List<LeagueUserMappingDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<LeagueUserMappingDto>>> GetLeagueUserMappings(int leagueId) {
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
+        var league = await repo.GetLeagueInfoAsync(leagueId);
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
             return Forbid();
         var mappings = await repo.GetLeagueUserMappingsAsync(leagueId);
         var dtoMappings = mappings.Select(m => new LeagueUserMappingDto {
