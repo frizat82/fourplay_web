@@ -71,4 +71,38 @@ export interface EmailRequest {
   htmlBody: string;
 }
 
+export interface LeagueCostDto {
+  memberCount: number;
+  cost: number;
+}
+
+export interface LeagueJuiceUpdateDto {
+  juice: number;
+  juiceDivisional: number;
+  juiceConference: number;
+  weeklyCost: number;
+}
+
+export interface LeagueCreateDto {
+  leagueName: string;
+  leagueType: string;
+  ownerUserId: string;
+  season: number;
+  juice: number;
+  juiceDivisional: number;
+  juiceConference: number;
+  weeklyCost: number;
+}
+
+export interface CfbSeasonWeekConfigDto {
+  espnWeekNumber: number;
+  ivLeagueWeekNumber: number;
+  weekType: string;
+  scoringFormat: string;
+  inScopeIvLeague: boolean;
+  weekStartDate: string;
+  weekEndDate: string;
+  notes?: string | null;
+}
+
 export type { LeagueUserMappingDto };
