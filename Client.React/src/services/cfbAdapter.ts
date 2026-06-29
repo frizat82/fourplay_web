@@ -8,9 +8,12 @@ import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } fro
 
 /** Map CFB backend status strings to canonical GameStatusValue */
 
-const CFB_SEASON = 2025;
-const CFB_REGULAR_WEEKS = Array.from({ length: 14 }, (_, i) => i + 1);
-const CFB_POST_WEEKS = [1, 2, 3, 4, 5];
+// Production target season — adapter falls back to prior year if no slates exist yet.
+const CFB_CONFIGURED_SEASON = 2026;
+// Earliest supported CFB season (controls the lower bound of the season dropdown).
+const CFB_FIRST_SEASON = 2025;
+const CFB_REGULAR_WEEKS = Array.from({ length: 13 }, (_, i) => i + 1); // weeks 1-13
+const CFB_POST_WEEKS = [1, 2, 3, 4, 5]; // Conf.Champs + CFP First Round/QF/SF/Championship
 
 function findActiveSlate(slates: CfbSlateDto[]): CfbSlateDto | null {
   const now = new Date();
@@ -160,12 +163,19 @@ async function loadSlate(leagueId: number, _userId: string, slateId: number, sla
 }
 
 export function createCfbAdapter(): SportAdapter {
-  // Cache slates so historical loads can resolve slateId from weekState
+  // Cache slates and the resolved season (may differ from CFB_CONFIGURED_SEASON in demo/off-season)
   let cachedSlates: CfbSlateDto[] = [];
+  let resolvedSeason: number = CFB_CONFIGURED_SEASON;
 
   async function getSlates(): Promise<CfbSlateDto[]> {
     if (cachedSlates.length === 0) {
-      cachedSlates = await getCfbSlates(CFB_SEASON);
+      let slates = await getCfbSlates(CFB_CONFIGURED_SEASON);
+      if (slates.length === 0) {
+        // No data for configured year yet — fall back to prior year (demo / off-season)
+        slates = await getCfbSlates(CFB_CONFIGURED_SEASON - 1);
+        if (slates.length > 0) resolvedSeason = CFB_CONFIGURED_SEASON - 1;
+      }
+      cachedSlates = slates;
     }
     return cachedSlates;
   }
@@ -188,20 +198,21 @@ export function createCfbAdapter(): SportAdapter {
     weekSelectorConfig: {
       regularWeekOptions: CFB_REGULAR_WEEKS,
       postSeasonWeekOptions: CFB_POST_WEEKS,
-      maxRegularSeasonWeek: 14,
-      minSeason: CFB_SEASON,
+      maxRegularSeasonWeek: 13,
+      minSeason: CFB_FIRST_SEASON,
       weekLabelFn: getCfbWeekName,
     },
 
     async currentSeasonYear() {
-      return Promise.resolve(CFB_SEASON);
+      await getSlates(); // ensure resolvedSeason is set
+      return resolvedSeason;
     },
 
     async loadCurrentGames(leagueId, userId) {
       const slates = await getSlates();
       const active = findActiveSlate(slates);
       if (!active) {
-        return { season: CFB_SEASON, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_SEASON };
+        return { season: resolvedSeason, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, maxWeek: 1, maxSeason: resolvedSeason };
       }
       const weekState = slateToWeekState(active);
       const { games, userPicks } = await loadSlate(leagueId, userId, active.id, active);
@@ -209,7 +220,7 @@ export function createCfbAdapter(): SportAdapter {
       const maxRegularSlate = slates
         .filter(s => s.slateType === 'RegularSeason')
         .reduce((max, s) => Math.max(max, s.slateNumber), 0);
-      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: maxRegularSlate || 14, maxSeason: CFB_SEASON };
+      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: maxRegularSlate || 13, maxSeason: resolvedSeason };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
@@ -250,12 +261,12 @@ export function createCfbAdapter(): SportAdapter {
       const slates = await getSlates();
       const active = findActiveSlate(slates);
       if (!active) {
-        return { season: CFB_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_SEASON };
+        return { season: resolvedSeason, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, maxWeek: 1, maxSeason: resolvedSeason };
       }
       const weekState = slateToWeekState(active);
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
       const hasActiveGames = games.some(g => g.gameStatus === 'in_progress' || g.gameStatus === 'halftime');
-      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: weekState.week, maxSeason: CFB_SEASON };
+      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: weekState.week, maxSeason: resolvedSeason };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {

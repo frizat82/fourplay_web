@@ -43,20 +43,20 @@ test.describe('CFB picks — demo backend', () => {
     await expect(page.getByText('MIA')).toBeVisible({ timeout: 5_000 });
   });
 
-  test('switching to Regular Season shows Week 14 (most recent)', async ({ page }) => {
+  test('switching to Regular Season shows Week 13 (most recent)', async ({ page }) => {
     // Click the season-type select and pick "Regular Season"
     const seasonTypeSelect = page.getByRole('combobox').last();
     await seasonTypeSelect.click();
     await page.getByRole('option', { name: 'Regular Season' }).click();
     await waitForSpinner(page);
 
-    // Should default to the LAST regular season week (Week 14)
+    // Should default to the LAST regular season week (Week 13 in 18-slate system)
     const weekSelect = page.getByRole('combobox').nth(1);
-    await expect(weekSelect).toContainText('Week 14', { timeout: 5_000 });
+    await expect(weekSelect).toContainText('Week 13', { timeout: 5_000 });
   });
 
   // REGRESSION GUARD: Was broken — selector was showing only 5 weeks for regular season
-  test('CFB regular season selector has 14 weeks', async ({ page }) => {
+  test('CFB regular season selector has 13 weeks', async ({ page }) => {
     // Switch to Regular Season
     const seasonTypeSelect = page.getByRole('combobox').last();
     await seasonTypeSelect.click();
@@ -66,9 +66,9 @@ test.describe('CFB picks — demo backend', () => {
     // Open the week select dropdown
     const weekSelect = page.getByRole('combobox').nth(1);
     await weekSelect.click();
-    // Count Week options — must be 14
+    // Count Week options — must be 13 (18-slate system: reg season = slates 1-13)
     const weekOptions = page.getByRole('option', { name: /^Week \d+$/ });
-    await expect(weekOptions).toHaveCount(14, { timeout: 5_000 });
+    await expect(weekOptions).toHaveCount(13, { timeout: 5_000 });
     // Close dropdown
     await page.keyboard.press('Escape');
   });

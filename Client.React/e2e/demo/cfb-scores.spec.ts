@@ -60,12 +60,12 @@ test.describe('CFB scores — demo backend', () => {
     await expect(errorBadges.first()).toBeVisible({ timeout: 5_000 });
   });
 
-  // REGRESSION: switching to regular season must show Week 14 (same race-condition fix as NFL)
-  test('regular season selector shows Week 14 by default after switch', async ({ page }) => {
+  // REGRESSION: switching to regular season must show Week 13 (18-slate system; same race-condition fix as NFL)
+  test('regular season selector shows Week 13 by default after switch', async ({ page }) => {
     const seasonTypeSelect = page.getByRole('combobox').last();
     await seasonTypeSelect.click();
     await page.getByRole('option', { name: 'Regular Season' }).click();
-    await expect(page.getByRole('combobox').nth(1)).toContainText('Week 14', { timeout: 8_000 });
+    await expect(page.getByRole('combobox').nth(1)).toContainText('Week 13', { timeout: 8_000 });
   });
 
   test('week selector is visible', async ({ page }) => {
