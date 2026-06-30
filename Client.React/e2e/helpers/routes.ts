@@ -295,6 +295,56 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    // ── Commissioner portal ────────────────────────────────────────────────
+    if (url.includes('/api/league/my-leagues') && method === 'GET') {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          authUser.claims.some(c => c.value === 'Administrator')
+            ? []
+            : [{ id: TEST_LEAGUE_ID, leagueName: 'Test League', leagueType: 'Nfl', ownerUserId: authUser.userId, dateCreated: new Date().toISOString() }]
+        ),
+      });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/\d+\/cost$/) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ memberCount: 5, cost: 100 }) });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/\d+\/juice$/) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 1, leagueId: TEST_LEAGUE_ID, season: TEST_SEASON, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5 }]) });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/\d+\/juice\//) && (method === 'PUT' || method === 'POST')) {
+      void route.fulfill({ status: 204 });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/\d+\/members\//) && method === 'DELETE') {
+      void route.fulfill({ status: 204 });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/\d+\/invite$/) && method === 'POST') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/\d+\/users$/) && method === 'GET') {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { id: 'u1', leagueId: TEST_LEAGUE_ID, userId: authUser.userId, userName: authUser.name, leagueName: 'Test League', leagueOwnerUserId: authUser.userId, leagueType: 0, dateCreated: new Date().toISOString() },
+        ]),
+      });
+      return;
+    }
+
     // Pass through anything else (shouldn't happen in happy path)
     void route.continue();
   });
