@@ -523,4 +523,55 @@ public class PicksTests
         var returned = Assert.IsAssignableFrom<IEnumerable<NflPickDto>>(ok.Value).ToList();
         Assert.Equal(2, returned.Count);
     }
+
+    /// <summary>
+    /// ESPN says STATUS_SCHEDULED but the scheduled kickoff time is in the past — the
+    /// cache is just stale. Picks must be revealed because the game has de facto started.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaguePicks_ShowsOtherPicksForScheduledStatus_WhenKickoffTimeHasPassed()
+    {
+        var repo = BuildRepoWithPicks(
+            MakeNflPick(UserId,      "BUF"),
+            MakeNflPick(OtherUserId, "MIA"));
+
+        // Build a stale-cache scenario: ESPN still says SCHEDULED but Date is 30 min ago
+        var staleScheduled = new EspnScores
+        {
+            Events =
+            [
+                new Event
+                {
+                    Id = "e1", Season = new Season { Year = Season, Type = 2 }, Week = new Week { Number = Week },
+                    Date = DateTimeOffset.UtcNow.AddMinutes(-30),
+                    Competitions =
+                    [
+                        new Competition
+                        {
+                            Id = "c1", Date = DateTimeOffset.UtcNow.AddMinutes(-30),
+                            Competitors =
+                            [
+                                new Competitor { Team = new EspnTeam { Abbreviation = "BUF" }, HomeAway = HomeAway.Home },
+                                new Competitor { Team = new EspnTeam { Abbreviation = "MIA" }, HomeAway = HomeAway.Away }
+                            ],
+                            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Completed = false } },
+                            Odds = []
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns(staleScheduled);
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+
+        var result = await controller.GetLeaguePicks(LeagueId, Season, Week);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<NflPickDto>>(ok.Value).ToList();
+        // Both picks must be visible — the game has kicked off even though ESPN cache is stale
+        Assert.Equal(2, returned.Count);
+    }
 }

@@ -11,9 +11,9 @@ export async function getInvitationsByUser(userId: string) {
   return data;
 }
 
-export async function createInvitation(email: string, invitedByUserId: string, leagueId?: number | null) {
+export async function createInvitation(email: string, invitedByUserId: string, leagueId?: number | null, isLeagueOwner?: boolean) {
   const { data } = await http.post<InvitationDto>('/api/invitations', undefined, {
-    params: { email, invitedByUserId, ...(leagueId != null ? { leagueId } : {}) },
+    params: { email, invitedByUserId, ...(leagueId != null ? { leagueId } : {}), ...(isLeagueOwner ? { isLeagueOwner } : {}) },
   });
   return data;
 }
