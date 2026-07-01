@@ -243,6 +243,7 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
             registeredUserName: null,
             isExpired: false,
             isValid: true,
+            isLeagueOwner: false,
           },
         ]),
       });
@@ -331,6 +332,23 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
 
     if (url.match(/\/api\/league\/\d+\/invite$/) && method === 'POST') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/\d+\/owner\//) && method === 'PUT') {
+      void route.fulfill({ status: 204 });
+      return;
+    }
+
+    // ── CFB week configs ───────────────────────────────────────────────────
+    if (url.includes('/api/cfb/week-configs/') && method === 'GET') {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { espnWeekNumber: 1, ivLeagueWeekNumber: 1, weekType: 'RegularSeason', scoringFormat: 'Spread', inScopeIvLeague: true, weekStartDate: '2025-08-30', weekEndDate: '2025-09-01', notes: null },
+        ]),
+      });
       return;
     }
 

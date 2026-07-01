@@ -13,7 +13,7 @@ function makeGame(id: string, status: GameView['gameStatus']): GameView {
     homeScore: null,
     awayScore: null,
     gameStatus: status,
-    gameTime: new Date().toISOString(),
+    gameTime: new Date(Date.now() + 3_600_000).toISOString(), // 1 hour in the future by default
   };
 }
 
@@ -101,5 +101,20 @@ describe('revealPicksForStartedGames', () => {
     const games = [makeGame('g1', 'in_progress')];
     const result = revealPicksForStartedGames([], games, ME);
     expect(result).toHaveLength(0);
+  });
+
+  it('reveals picks when status is scheduled but game time has already passed', () => {
+    const pastGame = { ...makeGame('g1', 'scheduled'), gameTime: new Date(Date.now() - 60_000).toISOString() };
+    const picks = [makePick('g1', ME), makePick('g1', OTHER)];
+    const result = revealPicksForStartedGames(picks, [pastGame], ME);
+    expect(result).toHaveLength(2);
+  });
+
+  it('hides picks when status is scheduled and game time is still in the future', () => {
+    const futureGame = { ...makeGame('g1', 'scheduled'), gameTime: new Date(Date.now() + 60_000).toISOString() };
+    const picks = [makePick('g1', ME), makePick('g1', OTHER)];
+    const result = revealPicksForStartedGames(picks, [futureGame], ME);
+    expect(result).toHaveLength(1);
+    expect(result[0].userId).toBe(ME);
   });
 });

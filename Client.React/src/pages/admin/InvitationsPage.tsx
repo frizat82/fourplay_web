@@ -7,12 +7,14 @@ import {
   Chip,
   CircularProgress,
   FormControl,
+  FormControlLabel,
   IconButton,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -39,6 +41,7 @@ export default function AdminInvitationsPage() {
   const [showExpired, setShowExpired] = useState(true);
   const [email, setEmail] = useState('');
   const [selectedLeagueId, setSelectedLeagueId] = useState<number | ''>('');
+  const [isLeagueOwner, setIsLeagueOwner] = useState(false);
   const [leagues, setLeagues] = useState<LeagueUserMappingDto[]>([]);
   const [creating, setCreating] = useState(false);
   const toast = useToast();
@@ -116,7 +119,7 @@ export default function AdminInvitationsPage() {
     setCreating(true);
     try {
       const leagueId = selectedLeagueId !== '' ? selectedLeagueId : null;
-      const invitation = await createInvitation(email, user.userId, leagueId);
+      const invitation = await createInvitation(email, user.userId, leagueId, leagueId != null ? isLeagueOwner : false);
       toast.push(`Invitation created for ${email}`, 'success');
       await sendEmail({
         toEmail: invitation.email,
@@ -125,6 +128,7 @@ export default function AdminInvitationsPage() {
       });
       await loadInvitations();
       setEmail('');
+      setIsLeagueOwner(false);
     } catch {
       toast.push('Error creating invitation', 'error');
     } finally {
@@ -215,6 +219,16 @@ export default function AdminInvitationsPage() {
                 ))}
               </Select>
             </FormControl>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isLeagueOwner}
+                  onChange={(e) => setIsLeagueOwner(e.target.checked)}
+                  disabled={selectedLeagueId === ''}
+                />
+              }
+              label="Make commissioner"
+            />
             <Button variant="contained" onClick={handleCreateInvitation} disabled={creating}>
               {creating ? 'Inviting...' : 'Invite'}
             </Button>
@@ -246,6 +260,7 @@ export default function AdminInvitationsPage() {
                 <TableCell>Date Created</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>League</TableCell>
+                <TableCell>Commissioner?</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Expires</TableCell>
                 <TableCell>Used By</TableCell>
@@ -258,6 +273,7 @@ export default function AdminInvitationsPage() {
                   <TableCell>{new Date(invitation.createdAt).toLocaleString()}</TableCell>
                   <TableCell>{invitation.email}</TableCell>
                   <TableCell>{invitation.leagueName ?? '-'}</TableCell>
+                  <TableCell>{invitation.isLeagueOwner ? <Chip size="small" label="Yes" color="warning" /> : '-'}</TableCell>
                   <TableCell>
                     {invitation.isUsed ? (
                       <Chip size="small" label="Used" color="success" />
