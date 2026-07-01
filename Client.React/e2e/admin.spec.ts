@@ -40,6 +40,38 @@ test.describe('Admin pages (administrator role)', () => {
   });
 
   // -----------------------------------------------------------------------
+  // CFB Schedule Config
+  // -----------------------------------------------------------------------
+  test('CFB Schedule Config page renders heading and ESPN Week column', async ({ page }) => {
+    await adminAuth(page, '/admin/cfb-schedule');
+    await waitForSpinner(page);
+
+    await expect(page.getByRole('heading', { name: /CFB Schedule Config/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('columnheader', { name: 'ESPN Week' })).toBeVisible({ timeout: 5000 });
+  });
+
+  // -----------------------------------------------------------------------
+  // League Management — dialogs
+  // -----------------------------------------------------------------------
+  test('League Management — Add League button opens Create League dialog', async ({ page }) => {
+    await adminAuth(page, '/admin/leagueManagement');
+    await waitForSpinner(page);
+
+    await page.getByRole('button', { name: /add league/i }).click();
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole('dialog').getByRole('heading', { name: /create league/i })).toBeVisible({ timeout: 3000 });
+  });
+
+  test('League Management — Assign Owner button opens Assign Owner dialog', async ({ page }) => {
+    await adminAuth(page, '/admin/leagueManagement');
+    await waitForSpinner(page);
+
+    await page.getByRole('button', { name: /assign owner/i }).first().click();
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole('dialog').getByRole('heading', { name: /assign owner/i })).toBeVisible({ timeout: 3000 });
+  });
+
+  // -----------------------------------------------------------------------
   // Non-admin is redirected away from admin pages
   // -----------------------------------------------------------------------
   test('non-admin user is redirected to dashboard', async ({ page }) => {

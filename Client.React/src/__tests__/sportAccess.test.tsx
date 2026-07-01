@@ -25,6 +25,8 @@ const sessionState = {
   hasNflAccess: true,
   hasCfbAccess: true,
   leaguesLoaded: true,
+  isLeagueOwner: false,
+  ownedLeagues: [] as { id: number; leagueName: string; leagueType: string; ownerUserId: string; dateCreated: string }[],
 };
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 
@@ -46,7 +48,7 @@ describe('Sport access control', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset to defaults
-    Object.assign(sessionState, { currentLeague: 1, hasNflAccess: true, hasCfbAccess: true, leaguesLoaded: true });
+    Object.assign(sessionState, { currentLeague: 1, hasNflAccess: true, hasCfbAccess: true, leaguesLoaded: true, isLeagueOwner: false, ownedLeagues: [] });
     Object.assign(sportContext, { sport: 'NFL', isCfb: false, isNfl: true });
   });
 
@@ -89,5 +91,17 @@ describe('Sport access control', () => {
     renderLayout();
     expect(screen.getByText(/No.*access/i)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Go to/i })).not.toBeInTheDocument();
+  });
+
+  it('isLeagueOwner nav link is visible when user owns a league', () => {
+    sessionState.isLeagueOwner = true;
+    renderLayout();
+    expect(screen.getByRole('link', { name: /my leagues/i })).toBeInTheDocument();
+  });
+
+  it('isLeagueOwner nav link is hidden when user does not own a league', () => {
+    sessionState.isLeagueOwner = false;
+    renderLayout();
+    expect(screen.queryByRole('link', { name: /my leagues/i })).not.toBeInTheDocument();
   });
 });
