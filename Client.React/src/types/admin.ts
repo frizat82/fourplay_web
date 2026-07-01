@@ -63,6 +63,7 @@ export interface InvitationDto {
   isValid: boolean;
   leagueId?: number | null;
   leagueName?: string | null;
+  isLeagueOwner: boolean;
 }
 
 export interface EmailRequest {

@@ -290,6 +290,14 @@ public class AuthController(
                 LeagueId = invitation.LeagueId.Value,
                 UserId = newUser.Id,
             });
+
+            if (invitation.IsLeagueOwner)
+            {
+                var leagueInfo = await db.LeagueInfo.FindAsync(invitation.LeagueId.Value);
+                if (leagueInfo is not null)
+                    leagueInfo.OwnerUserId = newUser.Id;
+            }
+
             await db.SaveChangesAsync();
         }
 
