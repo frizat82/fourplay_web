@@ -19,4 +19,5 @@ public class InvitationDto
     public bool IsValid { get; set; }
     public int? LeagueId { get; set; }
     public string? LeagueName { get; set; }
+    public bool IsLeagueOwner { get; set; }
 }

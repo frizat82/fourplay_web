@@ -190,6 +190,104 @@ public class InvitationLeagueTests
         Assert.Empty(db.LeagueUserMapping);
     }
 
+    // ── IsLeagueOwner tests (#95) ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateInvitation_StoresIsLeagueOwner_WhenTrue()
+    {
+        var db = BuildDb(nameof(CreateInvitation_StoresIsLeagueOwner_WhenTrue));
+        var service = new InvitationService(BuildFactory(db));
+
+        var result = await service.CreateInvitationAsync("owner@example.com", "admin-1", leagueId: 5, isLeagueOwner: true);
+
+        Assert.True(result.IsLeagueOwner);
+    }
+
+    [Fact]
+    public async Task CreateUser_SetsLeagueOwner_WhenInvitationIsLeagueOwner()
+    {
+        var db = BuildDb(nameof(CreateUser_SetsLeagueOwner_WhenInvitationIsLeagueOwner));
+        // Seed an existing league with a placeholder owner
+        db.LeagueInfo.Add(new LeagueInfo { Id = 5, LeagueName = "Test League", OwnerUserId = "original-owner", LeagueType = FourPlayWebApp.Shared.Models.Enum.LeagueType.Nfl });
+        await db.SaveChangesAsync();
+
+        var userManager = BuildUserManager();
+        var invitationService = Substitute.For<IInvitationService>();
+        var config = Substitute.For<IConfiguration>();
+
+        var invitation = new Invitation
+        {
+            Id = 1,
+            InvitationCode = "owner-code",
+            Email = "newowner@example.com",
+            LeagueId = 5,
+            IsLeagueOwner = true,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+        };
+
+        invitationService.ValidateInvitationAsync("owner-code").Returns(invitation);
+        invitationService.MarkInvitationAsUsedAsync("owner-code", Arg.Any<string>()).Returns(true);
+        userManager.FindByEmailAsync("newowner@example.com").Returns((ApplicationUser?)null);
+        userManager.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>()).Returns(IdentityResult.Success);
+        userManager.GenerateEmailConfirmationTokenAsync(Arg.Any<ApplicationUser>()).Returns("token");
+        config["App:BaseUrl"].Returns("http://localhost");
+
+        var controller = BuildAuthController(userManager, invitationService, config, db);
+        await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "newowner",
+            Email = "newowner@example.com",
+            Password = "Pass@123",
+            Code = "owner-code",
+        });
+
+        var league = await db.LeagueInfo.FindAsync(5);
+        Assert.NotNull(league);
+        Assert.NotEqual("original-owner", league.OwnerUserId);
+    }
+
+    [Fact]
+    public async Task CreateUser_DoesNotSetLeagueOwner_WhenIsLeagueOwnerFalse()
+    {
+        var db = BuildDb(nameof(CreateUser_DoesNotSetLeagueOwner_WhenIsLeagueOwnerFalse));
+        db.LeagueInfo.Add(new LeagueInfo { Id = 5, LeagueName = "Test League", OwnerUserId = "original-owner", LeagueType = FourPlayWebApp.Shared.Models.Enum.LeagueType.Nfl });
+        await db.SaveChangesAsync();
+
+        var userManager = BuildUserManager();
+        var invitationService = Substitute.For<IInvitationService>();
+        var config = Substitute.For<IConfiguration>();
+
+        var invitation = new Invitation
+        {
+            Id = 2,
+            InvitationCode = "player-code",
+            Email = "player@example.com",
+            LeagueId = 5,
+            IsLeagueOwner = false,
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+        };
+
+        invitationService.ValidateInvitationAsync("player-code").Returns(invitation);
+        invitationService.MarkInvitationAsUsedAsync("player-code", Arg.Any<string>()).Returns(true);
+        userManager.FindByEmailAsync("player@example.com").Returns((ApplicationUser?)null);
+        userManager.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>()).Returns(IdentityResult.Success);
+        userManager.GenerateEmailConfirmationTokenAsync(Arg.Any<ApplicationUser>()).Returns("token");
+        config["App:BaseUrl"].Returns("http://localhost");
+
+        var controller = BuildAuthController(userManager, invitationService, config, db);
+        await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "player",
+            Email = "player@example.com",
+            Password = "Pass@123",
+            Code = "player-code",
+        });
+
+        var league = await db.LeagueInfo.FindAsync(5);
+        Assert.NotNull(league);
+        Assert.Equal("original-owner", league.OwnerUserId);
+    }
+
     // ── Builder ───────────────────────────────────────────────────────────────
 
     private static AuthController BuildAuthController(
