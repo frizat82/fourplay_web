@@ -143,8 +143,8 @@ describe('cfbAdapter', () => {
   });
 
   describe('config', () => {
-    it('pollIntervalMs is 0 (no polling)', () => {
-      expect(adapter.pollIntervalMs).toBe(0);
+    it('pollIntervalMs is 60s (1-minute fallback polling)', () => {
+      expect(adapter.pollIntervalMs).toBe(60_000);
     });
     it('currentSeasonYear returns 2026', async () => {
       expect(await adapter.currentSeasonYear()).toBe(2026);

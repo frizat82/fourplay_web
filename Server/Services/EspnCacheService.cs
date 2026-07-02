@@ -1,5 +1,6 @@
 ﻿using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services;
@@ -14,6 +15,9 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
 
     private const string _cacheKey = "espn-scores";
+    private string? _lastFingerprint;
+
+    public event Action? ScoresChanged;
 
     public EspnCacheService(IEspnApiService espnApiService, IMemoryCache memoryCache)
     {
@@ -55,17 +59,28 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 
     private async Task RefreshScoresAsync()
     {
+        await Task.Yield(); // defer to thread pool so subscribers can register before first event
         try
         {
             var scores = await _espnApiService.GetScores();
-            if (scores != null)
-            {
-                _memoryCache.Set(_cacheKey, scores, TimeSpan.FromMinutes(5));
+            if (scores == null) return;
+
+            _memoryCache.Set(_cacheKey, scores, TimeSpan.FromMinutes(5));
+
+            var fp = string.Join("|", scores.Events?.Select(e => {
+                var c = e.Competitions.FirstOrDefault();
+                var home = c?.Competitors.FirstOrDefault(x => x.HomeAway == HomeAway.Home);
+                var away = c?.Competitors.FirstOrDefault(x => x.HomeAway == HomeAway.Away);
+                return $"{e.Id}:{home?.Score}:{away?.Score}:{c?.Status.Type.Name}";
+            }) ?? []);
+
+            if (fp != _lastFingerprint) {
+                _lastFingerprint = fp;
+                ScoresChanged?.Invoke();
             }
         }
         catch (Exception ex)
         {
-            // Optional: log errors but keep last good value
             Console.WriteLine($"Failed to refresh scores: {ex.Message}");
         }
     }
