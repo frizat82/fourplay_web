@@ -101,6 +101,11 @@ public class EspnSitutation {
     [JsonPropertyName("possession")]
     public string Possession { get; set; }
 }
+public class CuratedRankInfo {
+    [JsonPropertyName("current")]
+    public int Current { get; set; }  // 99 = unranked by ESPN
+}
+
 public class Competitor
 {
     [JsonPropertyName("id")]
@@ -115,6 +120,8 @@ public class Competitor
     public long Score { get; set; }
     [JsonPropertyName("records")]
     public EspnRecord[] Records { get; set; }
+    [JsonPropertyName("curatedRank")]
+    public CuratedRankInfo? CuratedRank { get; set; }
 }
 public class EspnRecord
 {
