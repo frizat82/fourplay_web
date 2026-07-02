@@ -22,7 +22,8 @@ public static class InvitationMapper
             IsExpired = invitation.IsExpired,
             IsValid = invitation.IsValid,
             LeagueId = invitation.LeagueId,
-            LeagueName = invitation.League?.LeagueName
+            LeagueName = invitation.League?.LeagueName,
+            IsLeagueOwner = invitation.IsLeagueOwner
         };
     }
 

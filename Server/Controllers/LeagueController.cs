@@ -304,7 +304,7 @@ public class LeagueController(
             if (espnScores?.Events is not null) {
                 var notStartedTeams = espnScores.Events
                     .SelectMany(e => e.Competitions)
-                    .Where(c => c.Status?.Type?.Name == TypeName.StatusScheduled)
+                    .Where(c => c.Status?.Type?.Name == TypeName.StatusScheduled && c.Date > DateTimeOffset.UtcNow)
                     .SelectMany(c => c.Competitors.Select(comp => comp.Team?.Abbreviation))
                     .Where(a => a is not null)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase)!;
