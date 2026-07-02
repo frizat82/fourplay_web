@@ -37,4 +37,14 @@ public class CfbApiService(HttpClient httpClient) : ICfbApiService {
         var json = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<EspnScores>(json, _opts);
     }
+
+    // ESPN week=999 is the explicit CFP-only bucket — returns all CFP playoff games regardless of round.
+    // Use date filtering downstream to isolate the specific round.
+    public async Task<EspnScores?> GetCfpGamesAsync() {
+        var url = "/apis/site/v2/sports/football/college-football/scoreboard?week=999&seasontype=3&limit=100";
+        var response = await httpClient.GetAsync(url);
+        if (!response.IsSuccessStatusCode) return null;
+        var json = await response.Content.ReadAsStringAsync();
+        return JsonSerializer.Deserialize<EspnScores>(json, _opts);
+    }
 }
