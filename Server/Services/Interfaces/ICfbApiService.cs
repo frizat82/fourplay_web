@@ -6,4 +6,5 @@ public interface ICfbApiService {
     Task<EspnScores?> GetScoresByDateAsync(DateOnly date);
     Task<EspnScores?> GetTop25ByDateAsync(DateOnly date);
     Task<EspnScores?> GetScoresByWeekAsync(int week, bool isPostSeason);
+    Task<EspnScores?> GetCfpGamesAsync();
 }
