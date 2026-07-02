@@ -4,4 +4,5 @@ namespace FourPlayWebApp.Server.Services.Interfaces;
 public interface IEspnCacheService
 {
     Task<EspnScores?> GetScoresAsync();
+    event Action? ScoresChanged;
 }

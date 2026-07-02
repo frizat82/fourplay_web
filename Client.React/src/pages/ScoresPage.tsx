@@ -123,7 +123,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     return () => document.removeEventListener('visibilitychange', h);
   }, []);
 
-  // Load + poll
+  // Load + poll (fallback — SSE is primary when active games exist)
   useEffect(() => {
     if (!isCurrentWeek || !isPageVisible || !leaguesLoaded) return;
     void reload();
@@ -131,6 +131,15 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     const interval = setInterval(() => void reload(), data?.hasActiveGames ? adapter.pollIntervalMs : adapter.pollIntervalMs * 4);
     return () => clearInterval(interval);
   }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded, data?.hasActiveGames, adapter.pollIntervalMs]);
+
+  // SSE — primary update mechanism when on current NFL week with active games
+  useEffect(() => {
+    if (!isCurrentWeek || !isPageVisible || !leaguesLoaded || !data?.hasActiveGames || !adapter.sseUrl) return;
+    const es = new EventSource(adapter.sseUrl, { withCredentials: true });
+    es.onmessage = () => void reload();
+    es.onerror = () => es.close(); // fallback polling takes over
+    return () => es.close();
+  }, [isCurrentWeek, isPageVisible, leaguesLoaded, data?.hasActiveGames, adapter.sseUrl, reload]);
 
   const handleWeekChange = useCallback((week: number, meta?: { isPostSeason?: boolean }) => {
     const isPostSeason = meta?.isPostSeason ?? data?.isPostSeason ?? false;
