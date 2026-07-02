@@ -239,4 +239,28 @@ public class CfbScoresJobTests
         await _cfbApi.DidNotReceive().GetScoresByWeekAsync(Arg.Any<int>(), Arg.Any<bool>());
         await _repo.Received(1).UpsertCfbScoresAsync(Arg.Any<IEnumerable<CfbScores>>());
     }
+
+    [Fact]
+    public async Task Execute_ExcludesCfpGame_WhenOutsideSlateDateRange()
+    {
+        var slate = new CfbSlates {
+            Id = 2, Season = 2026, SlateNumber = 15,
+            Label = "CFP First Round", SlateType = "FirstRound",
+            StartDate = new DateOnly(2025, 12, 19),
+            EndDate   = new DateOnly(2025, 12, 20),
+            EspnWeekNumber = 16,
+            ScoringFormat  = "NFLDivisional",
+        };
+        // Build a scoreboard with a game on Jan 1 — outside the Dec 19-20 slate window
+        var wrongRoundScoreboard = BuildScoreboard(status: TypeName.StatusFinal);
+        wrongRoundScoreboard.Events[0].Competitions[0].Date =
+            new DateTimeOffset(2026, 1, 1, 18, 0, 0, TimeSpan.Zero);
+
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([slate]);
+        _cfbApi.GetCfpGamesAsync().Returns(wrongRoundScoreboard);
+
+        await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().UpsertCfbScoresAsync(Arg.Any<IEnumerable<CfbScores>>());
+    }
 }
