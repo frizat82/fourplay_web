@@ -24,13 +24,28 @@ public class CfbScoresJob(ICfbApiService cfbApi, ICfbRepository repo) : IJob {
         var scores = new List<CfbScores>();
 
         foreach (var slate in slates) {
-            EspnScores? scoreboard;
             if (slate.EspnWeekNumber.HasValue) {
-                var isCfp = CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat);
-                scoreboard = await cfbApi.GetScoresByWeekAsync(slate.EspnWeekNumber.Value, isCfp);
+                if (CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat)) {
+                    // CFP: week=999 ESPN bucket returns all CFP games; filter to this round by date
+                    var scoreboard = await cfbApi.GetCfpGamesAsync();
+                    if (scoreboard?.Events is null) continue;
+                    var cfpEvents = scoreboard.Events.Where(e => {
+                        var comp = e.Competitions.FirstOrDefault();
+                        return comp is not null
+                            && comp.Date.Date >= slate.StartDate.ToDateTime(TimeOnly.MinValue).Date
+                            && comp.Date.Date <= slate.EndDate.ToDateTime(TimeOnly.MaxValue).Date;
+                    });
+                    AppendScores(scores, slate, cfpEvents);
+                } else {
+                    // Regular season / conf-champs: filter to ranked teams only
+                    var scoreboard = await cfbApi.GetScoresByWeekAsync(slate.EspnWeekNumber.Value, isPostSeason: false);
+                    if (scoreboard?.Events is null) continue;
+                    var rankedEvents = scoreboard.Events.Where(e =>
+                        e.Competitions.Any(c => CfbSlateHelpers.HasRankedTeam(c.Competitors)));
+                    AppendScores(scores, slate, rankedEvents);
+                }
             } else {
                 // Legacy fallback: date-range iteration for slates missing EspnWeekNumber
-                scoreboard = null;
                 for (var date = slate.StartDate; date <= slate.EndDate; date = date.AddDays(1)) {
                     var daily = CfbSlateHelpers.IsTop25Slate(slate.SlateType)
                         ? await cfbApi.GetTop25ByDateAsync(date)
@@ -38,11 +53,7 @@ public class CfbScoresJob(ICfbApiService cfbApi, ICfbRepository repo) : IJob {
                     if (daily?.Events is null) continue;
                     AppendScores(scores, slate, daily.Events);
                 }
-                continue;
             }
-
-            if (scoreboard?.Events is null) continue;
-            AppendScores(scores, slate, scoreboard.Events);
         }
 
         if (scores.Count > 0) {

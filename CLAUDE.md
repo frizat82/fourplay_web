@@ -76,6 +76,25 @@ Admin pages are at `/admin/leagueManagement` — **only visible to `isAdmin(user
 - Red → Green → Refactor is the only acceptable order
 - If you catch yourself writing code without a failing test, stop and write the test first
 
+### What Requires a Test (mandatory checklist per feature)
+Every new or changed feature MUST have all of the following before the bead is closeable:
+
+| What changed | Required test |
+|---|---|
+| New backend controller endpoint | xUnit test in `Server.UnitTests/` covering: happy path, auth/ownership 403, and any error branch |
+| New frontend pure function / helper | Vitest unit test in `src/__tests__/` covering edge cases |
+| New page or significant UI component | At minimum: one e2e-mock Playwright test in `e2e/` (happy path + empty/error state) |
+| New nav link or conditional UI element | Unit test asserting visibility rules (shown/hidden based on role/state) |
+| New API route added to routes.ts helpers | Verify mock is wired — if missing, `isLeagueOwner` / session state silently falls back to defaults |
+| Security guard (ownership/admin check) | xUnit test: Forbid for unauthorized caller, Ok for authorized caller, Ok for admin |
+| Pick reveal / game kickoff logic | Unit test: scheduled=hidden, in_progress=visible, own picks always visible, ESPN null=fail-open |
+
+### Common Test Gaps to Watch For
+- **Controller ownership guard** — every new `Forbid()` branch needs its own test; don't assume coverage from similar endpoints
+- **Session-derived flags** (`isLeagueOwner`, `ownedLeagues`, sport filter) — test in `session.test.tsx`, not just in e2e
+- **New page with no route in `routes.ts`** — will 404 silently in all existing e2e tests; add the mock
+- **Frontend pick reveal** — `revealPicksForStartedGames` is tested in `sportAdapter.test.ts`; if you change it, update those tests first
+
 ## CRITICAL: Branch Rules
 - **NEVER push or commit directly to `main`** — all changes go through a PR
 - Branch flow: `feature/*` → PR → `dev` → PR → `main`
@@ -128,7 +147,8 @@ Every new user-facing feature MUST have:
 
 ### Definition of Done
 A bead is closeable ONLY when:
-- Full test suite passes: `dotnet test` + `npm run test -- --run` (189+ tests) + `npm run test:e2e -- --project=chromium` (40+ tests)
+- Full test suite passes: `dotnet test` + `npm run test -- --run` (208+ tests) + `npm run test:e2e -- --project=chromium` (47+ tests)
+- Every item in the **mandatory checklist** above is satisfied
 - `/simplify` and `/feature-dev:code-review` have been run and issues addressed
 - PR merged to `dev`, then PR merged to `main`
 
