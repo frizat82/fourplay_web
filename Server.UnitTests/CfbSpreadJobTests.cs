@@ -190,4 +190,45 @@ public class CfbSpreadJobTests
         await _repo.Received(1).AddCfbSpreadsAsync(
             Arg.Is<IEnumerable<CfbSpreads>>(s => s.Count() == 1));
     }
+
+    // ── CFP routing tests (frizat-vaw) ───────────────────────────────────────
+
+    private static CfbSlates BuildCfpSlate() => new()
+    {
+        Id = 2, Season = 2026, SlateNumber = 15,
+        Label = "CFP First Round", SlateType = "FirstRound",
+        StartDate = new DateOnly(2025, 12, 19),
+        EndDate   = new DateOnly(2025, 12, 20),
+        EspnWeekNumber = 16,
+        ScoringFormat  = "NFLDivisional",
+    };
+
+    [Fact]
+    public async Task Execute_UsesCfpGamesAsync_ForCfpSlate()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildCfpSlate()]);
+        _cfbApi.GetCfpGamesAsync().Returns(BuildScoreboard()); // game date Dec 19, within slate
+        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
+
+        await BuildJob().Execute(_context);
+
+        await _cfbApi.Received(1).GetCfpGamesAsync();
+        await _cfbApi.DidNotReceive().GetScoresByWeekAsync(Arg.Any<int>(), Arg.Any<bool>());
+        await _repo.Received(1).AddCfbSpreadsAsync(Arg.Any<IEnumerable<CfbSpreads>>());
+    }
+
+    [Fact]
+    public async Task Execute_ExcludesCfpSpread_WhenOutsideSlateDateRange()
+    {
+        var scoreboard = BuildScoreboard();
+        scoreboard.Events[0].Competitions[0].Date =
+            new DateTimeOffset(2026, 1, 1, 18, 0, 0, TimeSpan.Zero);
+
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildCfpSlate()]);
+        _cfbApi.GetCfpGamesAsync().Returns(scoreboard);
+
+        await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().AddCfbSpreadsAsync(Arg.Any<IEnumerable<CfbSpreads>>());
+    }
 }
