@@ -19,15 +19,16 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 
     public event Action? ScoresChanged;
 
-    public EspnCacheService(IEspnApiService espnApiService, IMemoryCache memoryCache)
+    private readonly TimeSpan _initialDelay;
+
+    public EspnCacheService(IEspnApiService espnApiService, IMemoryCache memoryCache, TimeSpan? initialDelay = null)
     {
         _espnApiService = espnApiService;
         _memoryCache = memoryCache;
+        _initialDelay = initialDelay ?? TimeSpan.Zero;
 
-        // Refresh every 2 minutes
         _timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
 
-        // Fire initial refresh immediately
         _ = RefreshLoopAsync();
     }
 
@@ -59,7 +60,8 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 
     private async Task RefreshScoresAsync()
     {
-        await Task.Yield(); // defer to thread pool so subscribers can register before first event
+        if (_initialDelay > TimeSpan.Zero)
+            await Task.Delay(_initialDelay);
         try
         {
             var scores = await _espnApiService.GetScores();
