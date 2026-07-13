@@ -94,6 +94,8 @@ export interface SportAdapter {
 
   // Shared config
   pollIntervalMs: number;
+  /** SSE endpoint URL for live score push. Undefined on adapters that don't support it (e.g. CFB). */
+  sseUrl?: string;
   // loadJerseys is optional — if defined, PicksPage shows jerseys when data is non-empty
   weekSelectorConfig: {
     regularWeekOptions?: number[];
