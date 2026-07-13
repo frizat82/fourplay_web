@@ -195,7 +195,7 @@ export function createCfbAdapter(): SportAdapter {
   }
 
   return {
-    pollIntervalMs: 0,
+    pollIntervalMs: 60_000,
     weekSelectorConfig: {
       regularWeekOptions: CFB_REGULAR_WEEKS,
       postSeasonWeekOptions: CFB_POST_WEEKS,

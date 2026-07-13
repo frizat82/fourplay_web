@@ -165,6 +165,12 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    // ── ESPN live-stream (SSE) — return empty body so EventSource doesn't hang ─
+    if (url.includes('/api/espn/live-stream') && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
+      return;
+    }
+
     // ── ESPN scores/week — historical ──────────────────────────────────────
     if (url.includes('/api/espn/scores/week/') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(scoresData) });

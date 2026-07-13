@@ -1,5 +1,6 @@
 ﻿using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services;
@@ -14,16 +15,20 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
 
     private const string _cacheKey = "espn-scores";
+    private string? _lastFingerprint;
 
-    public EspnCacheService(IEspnApiService espnApiService, IMemoryCache memoryCache)
+    public event Action? ScoresChanged;
+
+    private readonly TimeSpan _initialDelay;
+
+    public EspnCacheService(IEspnApiService espnApiService, IMemoryCache memoryCache, TimeSpan? initialDelay = null)
     {
         _espnApiService = espnApiService;
         _memoryCache = memoryCache;
+        _initialDelay = initialDelay ?? TimeSpan.Zero;
 
-        // Refresh every 2 minutes
         _timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
 
-        // Fire initial refresh immediately
         _ = RefreshLoopAsync();
     }
 
@@ -55,17 +60,29 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 
     private async Task RefreshScoresAsync()
     {
+        if (_initialDelay > TimeSpan.Zero)
+            await Task.Delay(_initialDelay);
         try
         {
             var scores = await _espnApiService.GetScores();
-            if (scores != null)
-            {
-                _memoryCache.Set(_cacheKey, scores, TimeSpan.FromMinutes(5));
+            if (scores == null) return;
+
+            _memoryCache.Set(_cacheKey, scores, TimeSpan.FromMinutes(5));
+
+            var fp = string.Join("|", scores.Events?.Select(e => {
+                var c = e.Competitions.FirstOrDefault();
+                var home = c?.Competitors.FirstOrDefault(x => x.HomeAway == HomeAway.Home);
+                var away = c?.Competitors.FirstOrDefault(x => x.HomeAway == HomeAway.Away);
+                return $"{e.Id}:{home?.Score}:{away?.Score}:{c?.Status.Type.Name}";
+            }) ?? []);
+
+            if (fp != _lastFingerprint) {
+                _lastFingerprint = fp;
+                ScoresChanged?.Invoke();
             }
         }
         catch (Exception ex)
         {
-            // Optional: log errors but keep last good value
             Console.WriteLine($"Failed to refresh scores: {ex.Message}");
         }
     }
