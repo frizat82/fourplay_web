@@ -104,10 +104,11 @@ public class EspnCacheServiceTests : IAsyncDisposable
             Task.FromResult<EspnScores?>(second));
 
         int fireCount = 0;
-        await using var svc = new EspnCacheService(_espnApi, _memoryCache);
+        // initialDelay gives us time to subscribe before the first refresh fires
+        await using var svc = new EspnCacheService(_espnApi, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
         svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
 
-        await Task.Delay(100);
+        await Task.Delay(300);
 
         Assert.Equal(1, fireCount); // fired once for initial data
     }
@@ -120,10 +121,10 @@ public class EspnCacheServiceTests : IAsyncDisposable
         _espnApi.GetScores().Returns(Task.FromResult<EspnScores?>(scores));
 
         int fireCount = 0;
-        await using var svc = new EspnCacheService(_espnApi, _memoryCache);
+        await using var svc = new EspnCacheService(_espnApi, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
         svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
 
-        await Task.Delay(100);
+        await Task.Delay(300);
 
         Assert.Equal(1, fireCount); // fired once on initial load — no second fire since data unchanged
     }
@@ -134,10 +135,10 @@ public class EspnCacheServiceTests : IAsyncDisposable
         _espnApi.GetScores().Returns(Task.FromResult<EspnScores?>(null));
 
         int fireCount = 0;
-        await using var svc = new EspnCacheService(_espnApi, _memoryCache);
+        await using var svc = new EspnCacheService(_espnApi, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
         svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
 
-        await Task.Delay(100);
+        await Task.Delay(300);
 
         Assert.Equal(0, fireCount);
     }
