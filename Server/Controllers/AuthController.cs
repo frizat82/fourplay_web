@@ -358,6 +358,8 @@ public class AuthController(
         var result = await userManager.ResetPasswordAsync(user, model.Token, model.Password);
         if (!result.Succeeded)
             return BadRequest("Invalid request.");
+
+        await refreshTokenService.RevokeAllUserTokensAsync(user.Id);
         return Ok();
     }
     [HttpPost("change-password")]
@@ -375,7 +377,17 @@ public class AuthController(
         var result = await userManager.ChangePasswordAsync(user, model.CurrentPassword, model.Password);
         if (!result.Succeeded)
             return BadRequest("Invalid request.");
-        return Ok();
+
+        // Revoke all outstanding refresh tokens (other devices logged out).
+        // Then re-issue a fresh pair so this caller stays logged in.
+        await refreshTokenService.RevokeAllUserTokensAsync(userId!);
+        var (jwt, jwtExpires) = await jwtTokenService.GenerateAccessTokenAsync(user, rememberMe: false);
+        Response.Cookies.Append("AuthToken", jwt ?? string.Empty, BuildCookieOptions(jwtExpires));
+        var newRefresh = await refreshTokenService.IssueTokenAsync(user, _refreshTokenLifetime);
+        if (newRefresh is not null)
+            Response.Cookies.Append("RefreshToken", newRefresh.Token, BuildCookieOptions(newRefresh.Expires));
+
+        return Ok(new { ok = true });
     }
     [HttpPost("request-email-confirmation")]
     [AllowAnonymous]
