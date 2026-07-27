@@ -36,6 +36,9 @@ public class LeagueController(
     [HttpGet("{leagueId:int}")]
     [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<LeagueInfoDto>> GetLeagueInfo(int leagueId) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
+            return Forbid();
         var info = await repo.GetLeagueInfoAsync(leagueId);
         var dtoInfos = new LeagueInfoDto {
             LeagueName = info.LeagueName,
@@ -82,6 +85,9 @@ public class LeagueController(
     [HttpGet("{leagueId:int}/juice")]
     [ProducesResponseType(typeof(List<LeagueJuiceMappingDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<LeagueJuiceMappingDto>>> GetLeagueJuice(int leagueId) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
+            return Forbid();
         var mappings = await repo.GetLeagueJuiceMappingAsync(leagueId);
         var dtoMappings = mappings.Select(m => new LeagueJuiceMappingDto {
             LeagueId = m.LeagueId,
@@ -99,6 +105,9 @@ public class LeagueController(
     [HttpGet("{leagueId:int}/juice/{season:int}")]
     [ProducesResponseType(typeof(LeagueJuiceMappingDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<LeagueJuiceMappingDto?>> GetLeagueJuiceForSeason(int leagueId, int season) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
+            return Forbid();
         var mapping = await repo.GetLeagueJuiceMappingAsync(leagueId, season);
         if (mapping == null) return Ok(null);
 
@@ -609,7 +618,12 @@ public class LeagueController(
     [HttpGet("exists/user-in-league/{userId}/{leagueId:int}")]
     [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
     public async Task<ActionResult<bool>> UserExistsInLeague(string userId, int leagueId)
-        => Ok(await repo.UserExistsInLeagueAsync(userId, leagueId));
+    {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && !string.Equals(callerId, userId, StringComparison.Ordinal))
+            return Forbid();
+        return Ok(await repo.UserExistsInLeagueAsync(userId, leagueId));
+    }
 
     // ---------- Adds for core entities ----------
     [HttpPost("league-user")]
