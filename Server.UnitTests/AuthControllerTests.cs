@@ -109,10 +109,10 @@ public class AuthControllerTests
     private static ClaimsPrincipal BuildPrincipal(string userId) =>
         TestPrincipalFactory.Build(userId);
 
-    // ── Test 1: User not found → Unauthorized ────────────────────────────────
+    // ── Test 1: User not found → same shape as wrong password (no enumeration) ──
 
     [Fact]
-    public async Task Login_UserNotFound_ReturnsUnauthorized()
+    public async Task Login_UserNotFound_ReturnsOk_WithSucceededFalse_AndInvalidCredentialsMessage()
     {
         var userManager = BuildUserManager();
         userManager.FindByNameAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
@@ -127,7 +127,10 @@ public class AuthControllerTests
             RememberMe = false,
         });
 
-        Assert.IsType<UnauthorizedResult>(result.Result);
+        var ok  = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<SignInResultDto>(ok.Value);
+        Assert.False(dto.Succeeded);
+        Assert.Equal("Invalid credentials", dto.Message);
     }
 
     // ── Test 2: Wrong password → Ok with Succeeded=false ─────────────────────
@@ -319,10 +322,10 @@ public class AuthControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
 
-    // ── Bonus Test 7: FindByName returns null, FindByEmail also null → Unauthorized ─
+    // ── Bonus Test 7: FindByName returns null, FindByEmail also null → same as wrong password ─
 
     [Fact]
-    public async Task Login_BothLookupsFail_ReturnsUnauthorized()
+    public async Task Login_BothLookupsFail_ReturnsOk_WithSucceededFalse()
     {
         var userManager = BuildUserManager();
         userManager.FindByNameAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
@@ -337,7 +340,10 @@ public class AuthControllerTests
             RememberMe = false,
         });
 
-        Assert.IsType<UnauthorizedResult>(result.Result);
+        var ok  = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<SignInResultDto>(ok.Value);
+        Assert.False(dto.Succeeded);
+        Assert.Equal("Invalid credentials", dto.Message);
     }
 
     // ── Bonus Test 8: Successful login with RememberMe=true issues refresh token ─
@@ -443,5 +449,65 @@ public class AuthControllerTests
 
         // Must return 200, not 400 — leaking user existence is a security issue
         Assert.IsType<OkResult>(result.Result);
+    }
+
+    // ── Rate limiter attribute coverage ──────────────────────────────────────
+
+    [Fact]
+    public void ResetPassword_HasRateLimitingAttribute()
+    {
+        var method = typeof(AuthController).GetMethod("ResetPassword");
+        Assert.NotNull(method);
+        var attr = method!.GetCustomAttributes(
+            typeof(Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute), inherit: false)
+            .Cast<Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>()
+            .SingleOrDefault();
+        Assert.NotNull(attr);
+        Assert.Equal("forgot", attr!.PolicyName);
+    }
+
+    [Fact]
+    public void RequestEmailConfirmation_HasRateLimitingAttribute()
+    {
+        var method = typeof(AuthController).GetMethod("RequestEmailConfirmation");
+        Assert.NotNull(method);
+        var attr = method!.GetCustomAttributes(
+            typeof(Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute), inherit: false)
+            .Cast<Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>()
+            .SingleOrDefault();
+        Assert.NotNull(attr);
+        Assert.Equal("forgot", attr!.PolicyName);
+    }
+
+    // ── Unknown user and wrong password return identical response shape ────────
+
+    [Fact]
+    public async Task Login_UnknownUser_AndWrongPassword_ReturnIdenticalStatusAndDtoShape()
+    {
+        // Unknown user
+        var umNotFound = BuildUserManager();
+        umNotFound.FindByNameAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
+        umNotFound.FindByEmailAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
+        var notFoundResult = await BuildController(userManager: umNotFound).Login(
+            new LoginRequest { Username = "ghost", Password = "any", RememberMe = false });
+
+        // Wrong password
+        var umBadPass = BuildUserManager();
+        var user      = BuildUser();
+        umBadPass.FindByNameAsync(user.UserName!).Returns(user);
+        var sm = BuildSignInManager(umBadPass);
+        sm.PasswordSignInAsync(user, Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>())
+          .Returns(Microsoft.AspNetCore.Identity.SignInResult.Failed);
+        var badPassResult = await BuildController(userManager: umBadPass, signInManager: sm).Login(
+            new LoginRequest { Username = user.UserName!, Password = "wrong", RememberMe = false });
+
+        var okNotFound = Assert.IsType<OkObjectResult>(notFoundResult.Result);
+        var okBadPass  = Assert.IsType<OkObjectResult>(badPassResult.Result);
+        var dtoNotFound = Assert.IsType<SignInResultDto>(okNotFound.Value);
+        var dtoBadPass  = Assert.IsType<SignInResultDto>(okBadPass.Value);
+
+        Assert.Equal(okNotFound.StatusCode, okBadPass.StatusCode);
+        Assert.Equal(dtoNotFound.Succeeded, dtoBadPass.Succeeded);
+        Assert.Equal(dtoNotFound.Message, dtoBadPass.Message);
     }
 }

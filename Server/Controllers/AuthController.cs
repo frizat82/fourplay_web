@@ -56,7 +56,7 @@ public class AuthController(
                        ?? await userManager.FindByEmailAsync(req.Username);
 
             if (user is null)
-                return Unauthorized();
+                return Ok(new SignInResultDto { Succeeded = false, Message = "Invalid credentials" });
 
             var result = await signInManager.PasswordSignInAsync(
                 user,
@@ -341,6 +341,7 @@ public class AuthController(
     }
     [HttpPost("reset-password")]
     [AllowAnonymous] // User is not logged in
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("forgot")]
     public async Task<ActionResult<string>> ResetPassword([FromBody] ResetPasswordRequest model)
     {
         if (string.IsNullOrWhiteSpace(model.Email) ||
@@ -378,6 +379,7 @@ public class AuthController(
     }
     [HttpPost("request-email-confirmation")]
     [AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("forgot")]
     public async Task<ActionResult<string>> RequestEmailConfirmation([FromBody] RequestEmailConfirmation request)
     {
         var user = await userManager.FindByEmailAsync(request.Email);
