@@ -407,4 +407,155 @@ public class LeagueOwnershipTests
 
         Assert.IsType<ConflictObjectResult>(result);
     }
+
+    // ─── mon.6: membership guards on info / juice / userExists ─────────────
+
+    private static LeagueInfo StubLeague(int id = 1) =>
+        new() { Id = id, LeagueName = "Test", OwnerUserId = OwnerId };
+
+    // GetLeagueInfo
+
+    [Fact]
+    public async Task GetLeagueInfo_ReturnsForbid_ForNonMember()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.GetLeagueInfoAsync(1).Returns(StubLeague());
+        repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
+
+        var result = await ctrl.GetLeagueInfo(1);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueInfo_ReturnsOk_ForMember()
+    {
+        const string memberId = "member-003";
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(memberId));
+        repo.GetLeagueInfoAsync(1).Returns(StubLeague());
+        repo.UserExistsInLeagueAsync(memberId, 1).Returns(true);
+
+        var result = await ctrl.GetLeagueInfo(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueInfo_ReturnsOk_ForAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetLeagueInfoAsync(1).Returns(StubLeague());
+
+        var result = await ctrl.GetLeagueInfo(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // GetLeagueJuice
+
+    [Fact]
+    public async Task GetLeagueJuice_ReturnsForbid_ForNonMember()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
+
+        var result = await ctrl.GetLeagueJuice(1);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueJuice_ReturnsOk_ForMember()
+    {
+        const string memberId = "member-003";
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(memberId));
+        repo.UserExistsInLeagueAsync(memberId, 1).Returns(true);
+        repo.GetLeagueJuiceMappingAsync(1).Returns([]);
+
+        var result = await ctrl.GetLeagueJuice(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueJuice_ReturnsOk_ForAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetLeagueJuiceMappingAsync(1).Returns([]);
+
+        var result = await ctrl.GetLeagueJuice(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // GetLeagueJuiceForSeason
+
+    [Fact]
+    public async Task GetLeagueJuiceForSeason_ReturnsForbid_ForNonMember()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
+
+        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueJuiceForSeason_ReturnsOk_ForMember()
+    {
+        const string memberId = "member-003";
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(memberId));
+        repo.UserExistsInLeagueAsync(memberId, 1).Returns(true);
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns((LeagueJuiceMapping?)null);
+
+        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueJuiceForSeason_ReturnsOk_ForAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns((LeagueJuiceMapping?)null);
+
+        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // UserExistsInLeague — self-lookup or admin only
+
+    [Fact]
+    public async Task UserExistsInLeague_ReturnsForbid_ForNonSelf()
+    {
+        var (ctrl, _) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+
+        var result = await ctrl.UserExistsInLeague(OwnerId, 1);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UserExistsInLeague_ReturnsOk_ForSelf()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.UserExistsInLeagueAsync(OwnerId, 1).Returns(true);
+
+        var result = await ctrl.UserExistsInLeague(OwnerId, 1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UserExistsInLeague_ReturnsOk_ForAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.UserExistsInLeagueAsync(OwnerId, 1).Returns(false);
+
+        var result = await ctrl.UserExistsInLeague(OwnerId, 1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
 }
