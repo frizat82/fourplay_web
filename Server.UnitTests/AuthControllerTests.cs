@@ -479,6 +479,111 @@ public class AuthControllerTests
         Assert.Equal("forgot", attr!.PolicyName);
     }
 
+    // ── mon.7: Token revocation on password change/reset ──────────────────────
+
+    [Fact]
+    public async Task ChangePassword_Success_RevokesAllUserTokens()
+    {
+        const string userId = "user-99";
+        var user        = BuildUser(id: userId);
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+        userManager.ChangePasswordAsync(user, Arg.Any<string>(), Arg.Any<string>())
+                   .Returns(IdentityResult.Success);
+
+        var refreshService = Substitute.For<IRefreshTokenService>();
+        refreshService.IssueTokenAsync(user, Arg.Any<TimeSpan>())
+                      .Returns(new FourPlayWebApp.Server.Models.Identity.RefreshToken
+                      {
+                          Token = "new-refresh", UserId = userId,
+                          Expires = DateTimeOffset.UtcNow.AddDays(14)
+                      });
+
+        var jwtService = Substitute.For<IJwtTokenService>();
+        jwtService.GenerateAccessTokenAsync(user, Arg.Any<bool>())
+                  .Returns(("new.jwt", DateTime.UtcNow.AddHours(1)));
+
+        var controller = BuildController(
+            userManager: userManager,
+            refreshTokenService: refreshService,
+            jwtTokenService: jwtService,
+            principal: BuildPrincipal(userId));
+
+        await controller.ChangePassword(new ChangePassword
+        {
+            CurrentPassword = "Old!1", Password = "New!2"
+        });
+
+        await refreshService.Received(1).RevokeAllUserTokensAsync(userId);
+    }
+
+    [Fact]
+    public async Task ChangePassword_Success_ReissuesNewTokenSoCallerStaysLoggedIn()
+    {
+        const string userId = "user-99";
+        var user        = BuildUser(id: userId);
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+        userManager.ChangePasswordAsync(user, Arg.Any<string>(), Arg.Any<string>())
+                   .Returns(IdentityResult.Success);
+
+        var fakeRefresh = new FourPlayWebApp.Server.Models.Identity.RefreshToken
+        {
+            Token = "brand-new-refresh", UserId = userId,
+            Expires = DateTimeOffset.UtcNow.AddDays(14)
+        };
+        var refreshService = Substitute.For<IRefreshTokenService>();
+        refreshService.IssueTokenAsync(user, Arg.Any<TimeSpan>()).Returns(fakeRefresh);
+
+        var jwtService = Substitute.For<IJwtTokenService>();
+        jwtService.GenerateAccessTokenAsync(user, Arg.Any<bool>())
+                  .Returns(("brand.new.jwt", DateTime.UtcNow.AddHours(1)));
+
+        var controller = BuildController(
+            userManager: userManager,
+            refreshTokenService: refreshService,
+            jwtTokenService: jwtService,
+            principal: BuildPrincipal(userId));
+
+        var result = await controller.ChangePassword(new ChangePassword
+        {
+            CurrentPassword = "Old!1", Password = "New!2"
+        });
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        // New AuthToken cookie must be set
+        var authCookie = controller.HttpContext.Response.Headers["Set-Cookie"]
+            .FirstOrDefault(h => h is not null && h.StartsWith("AuthToken="));
+        Assert.NotNull(authCookie);
+        Assert.Contains("brand.new.jwt", authCookie);
+    }
+
+    [Fact]
+    public async Task ResetPassword_Success_RevokesAllUserTokens()
+    {
+        const string userId = "user-88";
+        var user        = BuildUser(id: userId, userName: "resetuser");
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync(user.Email!).Returns(user);
+        userManager.ResetPasswordAsync(user, Arg.Any<string>(), Arg.Any<string>())
+                   .Returns(IdentityResult.Success);
+
+        var refreshService = Substitute.For<IRefreshTokenService>();
+
+        var controller = BuildController(
+            userManager: userManager,
+            refreshTokenService: refreshService);
+
+        await controller.ResetPassword(new ResetPasswordRequest
+        {
+            Email    = user.Email!,
+            Token    = "valid-reset-token",
+            Password = "New!3"
+        });
+
+        await refreshService.Received(1).RevokeAllUserTokensAsync(userId);
+    }
+
     // ── Unknown user and wrong password return identical response shape ────────
 
     [Fact]
