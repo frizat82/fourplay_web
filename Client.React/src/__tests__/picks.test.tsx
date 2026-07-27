@@ -1,5 +1,6 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PicksPage from '../pages/PicksPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCompetition, createPick, createScores, createSpreadResponse } from '../test/fixtures';
@@ -104,8 +105,15 @@ const setupDefaults = async (options?: {
   });
 };
 
+const renderWithClient = (ui: React.ReactElement) => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+  });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+};
+
 const renderPage = async () => {
-  render(<PicksPage adapter={createNflAdapter()} />);
+  renderWithClient(<PicksPage adapter={createNflAdapter()} />);
   await screen.findByText(/^Picks$/i);
   await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
 };
@@ -127,13 +135,13 @@ describe('PicksPage', () => {
   it('shows no league message when no league selected', async () => {
     sessionState.currentLeague = null;
     await setupDefaults();
-    render(<PicksPage adapter={createNflAdapter()} />);
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
     await screen.findByText(/Please select a league/i);
   });
 
   it('shows odds not posted when odds missing', async () => {
     await setupDefaults({ oddsExist: false });
-    render(<PicksPage adapter={createNflAdapter()} />);
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
     await screen.findByText(/Odds Not Posted/i);
   });
 
@@ -373,6 +381,97 @@ describe('PicksPage', () => {
     controls.forEach((control) => {
       expect(within(control).getByRole('button', { name: /^Over$/i })).toBeInTheDocument();
       expect(within(control).getByRole('button', { name: /^Under$/i })).toBeInTheDocument();
+    });
+  });
+
+  // ── Background refresh behavior (frizat-mon.5) ─────────────────────────────
+  // The poll refetch must be invisible: no spinner, and pending (unsubmitted)
+  // selections must survive. NFL poll interval is 300s (nflAdapter.pollIntervalMs).
+  describe('background poll refresh', () => {
+    const POLL_MS = 300_000;
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('preserves pending picks across a background poll refetch', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await setupDefaults();
+      await renderPage();
+
+      await user.click(screen.getAllByRole('button', { name: /^Pick$/i })[0]);
+      await screen.findByRole('button', { name: /picked/i });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_MS);
+      });
+
+      expect(screen.getAllByRole('button', { name: /picked/i }).length).toBe(1);
+    });
+
+    it('does not show the full-page spinner during a background refetch', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      await setupDefaults();
+      await renderPage();
+
+      // Hold the next fetch in-flight forever so we can observe mid-refetch UI
+      mockedLoadScoresWithRetry.mockImplementation(() => new Promise(() => {}));
+      mockedGetScores.mockImplementation(() => new Promise(() => {}));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_MS);
+      });
+
+      // Grid stays mounted, no spinner replaces the page
+      expect(screen.queryByRole('progressbar')).toBeNull();
+      expect(screen.getAllByRole('button', { name: /^Pick$/i }).length).toBeGreaterThan(0);
+    });
+
+    it('drops a pending pick with a toast when its game locks during refetch', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+      await setupDefaults({ gameDate: futureDate });
+      await renderPage();
+
+      await user.click(screen.getAllByRole('button', { name: /^Pick$/i })[0]);
+      await screen.findByRole('button', { name: /picked/i });
+
+      // Next poll: same games but kickoff has passed
+      const pastDate = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const startedScores = createScores({
+        week: 2,
+        postSeason: false,
+        events: [
+          {
+            id: '1',
+            season: { year: 2024, type: 2 },
+            week: { number: 2 },
+            date: pastDate,
+            competitions: [createCompetition({ homeTeam: 'BUF', awayTeam: 'MIA', gameStarted: true, date: pastDate })],
+          },
+          {
+            id: '2',
+            season: { year: 2024, type: 2 },
+            week: { number: 2 },
+            date: pastDate,
+            competitions: [createCompetition({ homeTeam: 'DAL', awayTeam: 'NYG', gameStarted: true, date: pastDate })],
+          },
+        ],
+      });
+      mockedGetScores.mockResolvedValue(startedScores);
+      mockedLoadScoresWithRetry.mockResolvedValue(startedScores);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_MS);
+      });
+
+      expect(screen.queryByRole('button', { name: /picked/i })).toBeNull();
+      expect(toastState.push).toHaveBeenCalledWith(
+        expect.stringMatching(/game.*(started|kicked off)/i),
+        expect.anything(),
+      );
     });
   });
 });
