@@ -3,8 +3,14 @@
  * If either adapter stops returning GameCard-renderable data, these tests fail.
  */
 import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import PicksPage from '../pages/PicksPage';
+
+const renderWithClient = (ui: React.ReactElement) => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+};
 import { createCfbAdapter } from '../services/cfbAdapter';
 import { createNflAdapter } from '../services/nflAdapter';
 import type { CfbSlateDto, CfbSpreadDto } from '../types/league';
@@ -55,12 +61,12 @@ describe('NFL PicksPage — GameCard layout regression', () => {
   });
 
   it('renders Pick buttons (GameCard pick mode)', async () => {
-    render(<PicksPage adapter={createNflAdapter()} />);
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
     await waitFor(() => expect(screen.getAllByRole('button', { name: /^pick$/i }).length).toBeGreaterThan(0));
   });
 
   it('renders spread label -3 (GameCard spread display)', async () => {
-    render(<PicksPage adapter={createNflAdapter()} />);
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
     await waitFor(() => expect(screen.getByText('-3')).toBeInTheDocument());
   });
 });
@@ -98,12 +104,12 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
   });
 
   it('renders Pick buttons (GameCard pick mode)', async () => {
-    render(<PicksPage adapter={createCfbAdapter()} />);
+    renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
     await waitFor(() => expect(screen.getAllByRole('button', { name: /^pick$/i }).length).toBeGreaterThan(0));
   });
 
   it('renders spread labels -3.5 and +3.5 (GameCard spread display)', async () => {
-    render(<PicksPage adapter={createCfbAdapter()} />);
+    renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
     await waitFor(() => {
       expect(screen.getByText('-3.5')).toBeInTheDocument();
       expect(screen.getByText('+3.5')).toBeInTheDocument();
@@ -111,7 +117,7 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
   });
 
   it('renders TeamHelmet for both teams', async () => {
-    render(<PicksPage adapter={createCfbAdapter()} />);
+    renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
     await waitFor(() => {
       expect(screen.getByTestId('helmet-MICH')).toBeInTheDocument();
       expect(screen.getByTestId('helmet-PSU')).toBeInTheDocument();
@@ -122,7 +128,7 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
     vi.mocked(getCfbUserPicks).mockResolvedValue([
       { id: 1, userId: 'u1', userName: 'u1', leagueId: 1, cfbSlateId: 1, espnEventId: 100, team: 'MICH', pickType: 'Spread', season: 2025 }
     ]);
-    render(<PicksPage adapter={createCfbAdapter()} />);
+    renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
     await waitFor(() => expect(screen.getByRole('button', { name: /^picked$/i })).toBeInTheDocument());
   });
 });
