@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -8,6 +8,7 @@ import {
   Typography,
 } from '@mui/material';
 import CheckroomIcon from '@mui/icons-material/Checkroom';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../components/PageHeader';
 import WeekYearSelector from '../components/WeekYearSelector';
 import NoLeague from '../components/NoLeague';
@@ -36,115 +37,73 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const { currentLeague, leaguesLoaded } = useSession();
   const { user } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
-  const [loading, setLoading] = useState(true);
-  const [games, setGames] = useState<GameView[]>([]);
-  const [hasOdds, setHasOdds] = useState(false);
-  const [requiredPicks, setRequiredPicks] = useState(4);
-  const [isPostSeason, setIsPostSeason] = useState(false);
-  const [week, setWeek] = useState(0);
-  const [season, setSeason] = useState(new Date().getFullYear());
-  const [existingPicks, setExistingPicks] = useState<Set<string>>(new Set());
+  // null = live current week (polls in background); non-null = historical navigation
+  const [weekState, setWeekState] = useState<WeekState | null>(null);
+  // Pending (unsubmitted) selections — local state only, never touched by refetches
   const [userPicks, setUserPicks] = useState<Set<string>>(new Set());
   const [storingPicks, setStoringPicks] = useState(false);
   const [showJerseys, setShowJerseys] = useState(false);
-  const [jerseyCache, setJerseyCache] = useState<Record<string, string>>({});
-  const [isCurrentWeek, setIsCurrentWeek] = useState(true);
-  const [maxWeek, setMaxWeek] = useState(adapter.weekSelectorConfig.maxRegularSeasonWeek);
-  const [maxSeason, setMaxSeason] = useState(adapter.weekSelectorConfig.minSeason);
-  const [isPageVisible, setIsPageVisible] = useState(true);
 
-  function applyLoaded(loaded: { games: GameView[]; hasOdds: boolean; requiredPicks: number; season: number; week: number; isPostSeason: boolean; existingPicks?: Set<string> }) {
-    setGames(loaded.games);
-    setHasOdds(loaded.hasOdds);
-    setRequiredPicks(loaded.requiredPicks);
-    setSeason(loaded.season);
-    setWeek(loaded.week);
-    setIsPostSeason(loaded.isPostSeason);
-    if (loaded.existingPicks !== undefined) {
-      setExistingPicks(loaded.existingPicks);
-    }
-    setUserPicks(new Set());
-  }
+  const isCurrentWeek = weekState === null;
+  const enabled = leaguesLoaded && !!currentLeague && !!user?.userId;
 
-  const reload = useCallback(async () => {
-    if (!currentLeague || !user?.userId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const result = await adapter.loadCurrentGames(currentLeague, user.userId);
-      const ep = new Set(result.userPicks.map(p => pickKey(p.gameId, p.team, p.pickType)));
-      applyLoaded({ ...result, existingPicks: ep });
-      setIsCurrentWeek(true);
-      setMaxWeek(result.maxWeek);
-      setMaxSeason(result.maxSeason);
-      if (adapter.loadJerseys) {
-        adapter.loadJerseys(result.season, result.week).then(setJerseyCache).catch(() => {});
-      }
-    } catch (err) {
-      console.error('[PicksPage] loadCurrentGames failed:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentLeague, user?.userId, adapter]);
+  const { data, isLoading } = useQuery({
+    queryKey: [adapter.sport, 'picks', currentLeague, user?.userId, weekState],
+    queryFn: () => weekState
+      ? adapter.loadHistoricalGames(currentLeague!, user!.userId, weekState)
+      : adapter.loadCurrentGames(currentLeague!, user!.userId),
+    enabled,
+    refetchInterval: isCurrentWeek && adapter.pollIntervalMs > 0 ? adapter.pollIntervalMs : false,
+    placeholderData: keepPreviousData,
+  });
 
-  const loadHistoricalWeek = useCallback(async (state: WeekState) => {
-    if (!currentLeague || !user?.userId) return;
-    setLoading(true);
-    try {
-      const result = await adapter.loadHistoricalGames(currentLeague, user.userId, state);
-      if (!result) {
-        setGames([]);
-        setHasOdds(false);
-        return;
-      }
-      const ep = new Set(result.userPicks.map(p => pickKey(p.gameId, p.team, p.pickType)));
-      applyLoaded({ ...result, existingPicks: ep });
-      if (adapter.loadJerseys) {
-        adapter.loadJerseys(result.season, result.week).then(setJerseyCache).catch(() => {});
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [currentLeague, user?.userId, adapter]);
+  const games = useMemo(() => data?.games ?? [], [data]);
+  const hasOdds = data?.hasOdds ?? false;
+  const requiredPicks = data?.requiredPicks ?? 4;
+  const season = weekState?.season ?? data?.season ?? new Date().getFullYear();
+  const week = weekState?.week ?? data?.week ?? 0;
+  const isPostSeason = weekState?.isPostSeason ?? data?.isPostSeason ?? false;
+  const maxWeek = data?.maxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
+  const maxSeason = data?.maxSeason ?? adapter.weekSelectorConfig.minSeason;
 
-  // Page visibility
+  const existingPicks = useMemo(
+    () => new Set((data?.userPicks ?? []).map(p => pickKey(p.gameId, p.team, p.pickType))),
+    [data],
+  );
+
+  // Reconcile pending selections after each (background) refresh: drop only picks
+  // that are now submitted server-side or whose game has locked since selection.
   useEffect(() => {
-    const handler = () => setIsPageVisible(!document.hidden);
-    document.addEventListener('visibilitychange', handler);
-    return () => document.removeEventListener('visibilitychange', handler);
-  }, []);
+    if (!data) return;
+    const lockedIds = new Set(games.filter(gameIsLocked).map(g => g.id));
+    const kept = [...userPicks].filter(k => !existingPicks.has(k) && !lockedIds.has(k.split('|')[0]));
+    if (kept.length === userPicks.size) return;
+    const droppedByLock = [...userPicks].some(k => !existingPicks.has(k) && lockedIds.has(k.split('|')[0]));
+    setUserPicks(new Set(kept));
+    if (droppedByLock) toast.push('Selection removed — game already kicked off', 'warning');
+  }, [data, games, existingPicks, userPicks, toast]);
 
-  // Load + polling
-  useEffect(() => {
-    if (!isCurrentWeek || !isPageVisible || !leaguesLoaded) return;
-    void reload();
-    if (adapter.pollIntervalMs <= 0) return;
-    const interval = setInterval(() => void reload(), adapter.pollIntervalMs);
-    return () => clearInterval(interval);
-  }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded, adapter.pollIntervalMs]);
+  const { data: jerseyCache = {} } = useQuery({
+    queryKey: [adapter.sport, 'jerseys', data?.season, data?.week],
+    queryFn: () => adapter.loadJerseys!(data!.season, data!.week),
+    enabled: !!adapter.loadJerseys && !!data,
+    staleTime: Infinity,
+    retry: false,
+  });
 
   const handleWeekChange = useCallback((newWeek: number, meta?: { isPostSeason?: boolean }) => {
-    const ps = meta?.isPostSeason ?? isPostSeason;
-    setWeek(newWeek);
-    setIsPostSeason(ps);
-    setIsCurrentWeek(false);
-    void loadHistoricalWeek({ season, week: newWeek, isPostSeason: ps });
-  }, [isPostSeason, season, loadHistoricalWeek]);
+    setWeekState({ season, week: newWeek, isPostSeason: meta?.isPostSeason ?? isPostSeason });
+  }, [season, isPostSeason]);
 
   const handleSeasonChange = useCallback((newSeason: number) => {
-    setSeason(newSeason);
-    setIsCurrentWeek(false);
-    void loadHistoricalWeek({ season: newSeason, week, isPostSeason });
-  }, [week, isPostSeason, loadHistoricalWeek]);
+    setWeekState({ season: newSeason, week, isPostSeason });
+  }, [week, isPostSeason]);
 
-  const handleSeasonTypeChange = useCallback((ps: boolean) => {
-    // WeekYearSelector.handleSeasonTypeSelect also calls onWeekChange with the last available
-    // week — that handleWeekChange call loads the correct historical week. Don't double-load here.
-    setIsPostSeason(ps);
-    setIsCurrentWeek(false);
+  const handleSeasonTypeChange = useCallback((_ps: boolean) => {
+    // WeekYearSelector.handleSeasonTypeSelect also calls onWeekChange with the last
+    // available week and meta.isPostSeason — that call drives the load. No-op here.
   }, []);
 
   // Pick management
@@ -175,7 +134,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       await adapter.submitPicks(currentLeague, { season, week, isPostSeason }, picks);
       toast.push(`${picks.length} Pick(s) Added`, 'success');
       setUserPicks(new Set());
-      await reload();
+      await queryClient.invalidateQueries({ queryKey: [adapter.sport, 'picks', currentLeague] });
     } catch {
       toast.push('Error Adding Picks', 'error');
     } finally {
@@ -188,7 +147,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     setUserPicks(new Set());
   };
 
-  if (loading) return (
+  // First load only — background refetches (polling, SSE-adjacent) keep the grid mounted
+  if (!leaguesLoaded || isLoading) return (
     <Box><PageHeader title="Picks" />
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
     </Box>
@@ -220,7 +180,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
           />
           {!isCurrentWeek && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>
-              <Button size="small" variant="outlined" onClick={() => { setIsCurrentWeek(true); void reload(); }}>
+              <Button size="small" variant="outlined" onClick={() => setWeekState(null)}>
                 Current Week
               </Button>
             </Box>

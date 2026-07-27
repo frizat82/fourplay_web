@@ -25,6 +25,7 @@ import { getLeaderboard } from '../api/leaderboard';
 const mockedGetLeaderboard = vi.mocked(getLeaderboard);
 
 const mockAdapter: SportAdapter = {
+  sport: 'nfl',
   loadCurrentGames: vi.fn(),
   loadHistoricalGames: vi.fn(),
   loadCurrentScores: vi.fn(),
