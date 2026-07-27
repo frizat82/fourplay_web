@@ -11,6 +11,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 {
     private readonly IEspnApiService _espnApiService;
     private readonly IMemoryCache _memoryCache;
+    private readonly INflCurrentWeekService _nflCurrentWeekService;
     private readonly PeriodicTimer? _timer;
     private readonly CancellationTokenSource _cts = new();
 
@@ -21,10 +22,11 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 
     private readonly TimeSpan _initialDelay;
 
-    public EspnCacheService(IEspnApiService espnApiService, IMemoryCache memoryCache, TimeSpan? initialDelay = null)
+    public EspnCacheService(IEspnApiService espnApiService, IMemoryCache memoryCache, INflCurrentWeekService nflCurrentWeekService, TimeSpan? initialDelay = null)
     {
         _espnApiService = espnApiService;
         _memoryCache = memoryCache;
+        _nflCurrentWeekService = nflCurrentWeekService;
         _initialDelay = initialDelay ?? TimeSpan.Zero;
 
         _timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
@@ -64,7 +66,8 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
             await Task.Delay(_initialDelay);
         try
         {
-            var scores = await _espnApiService.GetScores();
+            var week = await _nflCurrentWeekService.GetCurrentWeekAsync();
+            var scores = await _espnApiService.GetWeekScores(week.EspnWeek, week.Season, week.IsPostSeason);
             if (scores == null) return;
 
             _memoryCache.Set(_cacheKey, scores, TimeSpan.FromMinutes(5));

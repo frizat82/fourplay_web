@@ -12,7 +12,8 @@ namespace FourPlayWebApp.Server.UnitTests;
 
 /// <summary>
 /// Tests for NflScoresJob — fetches completed game scores from ESPN and upserts
-/// them into the database, and also upserts NFL week calendar data.
+/// them into the database, and also seeds NflWeeks from the NflSeasonWeekConfig
+/// control table.
 /// </summary>
 public class NflScoresJobTests
 {
@@ -30,9 +31,9 @@ public class NflScoresJobTests
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
                 .Returns((EspnScores?)null);
 
-        // Default: season scores return an empty response with no leagues/calendar
-        _espnApi.GetSeasonScores(Arg.Any<int>())
-                .Returns(new EspnScores { Leagues = Array.Empty<EspnLeague>() });
+        // Default: no season week configs (empty control table → no weeks to upsert)
+        _repo.GetNflSeasonWeekConfigsAsync()
+             .Returns(new List<NflSeasonWeekConfig>());
     }
 
     private NflScoresJob BuildJob() => new(_espnApi, _repo);
@@ -93,6 +94,19 @@ public class NflScoresJobTests
             }
         };
     }
+
+    private static NflSeasonWeekConfig BuildConfig(int weekId, int season, bool isPostSeason = false) =>
+        new()
+        {
+            Id = weekId,
+            Season = season,
+            WeekId = weekId,
+            WeekLabel = $"Week {weekId}",
+            WeekType = isPostSeason ? "PostSeason" : "RegularSeason",
+            ScoringFormat = "Standard",
+            WeekStartDatetime = new DateTime(season, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(weekId * 7),
+            WeekEndDatetime = new DateTime(season, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(weekId * 7 + 7),
+        };
 
     // -----------------------------------------------------------------------
     // UpsertNflScoresAsync — called when completed games exist
@@ -187,125 +201,91 @@ public class NflScoresJobTests
     }
 
     // -----------------------------------------------------------------------
-    // GetSeasonScores null / empty guards
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public async Task Execute_WhenGetSeasonScoresReturnsNullLeagues_DoesNotCallUpsertWeeks()
-    {
-        _espnApi.GetSeasonScores(Arg.Any<int>())
-                .Returns(new EspnScores { Leagues = null });
-
-        await BuildJob().Execute(_context);
-
-        await _repo.DidNotReceive().UpsertNflWeeksAsync(Arg.Any<List<NflWeeks>>());
-    }
-
-    [Fact]
-    public async Task Execute_WhenGetSeasonScoresReturnsEmptyLeagues_DoesNotCallUpsertWeeks()
-    {
-        // Default setup already returns empty leagues
-
-        await BuildJob().Execute(_context);
-
-        await _repo.DidNotReceive().UpsertNflWeeksAsync(Arg.Any<List<NflWeeks>>());
-    }
-
-    // -----------------------------------------------------------------------
-    // ESPN API exception — job must not rethrow
+    // ESPN API exception — job propagates it
     // -----------------------------------------------------------------------
 
     [Fact]
     public async Task Execute_WhenGetWeekScoresThrows_Rethrows()
     {
-        // NflScoresJob has no try/catch — an exception from GetWeekScores will
-        // propagate; verify the exact behaviour by asserting it does NOT swallow
-        // the exception (the job propagates it).
+        // NflScoresJob has no try/catch — an exception from GetWeekScores will propagate
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), false)
                 .ThrowsAsync(new HttpRequestException("ESPN down"));
 
-        // The job does NOT catch exceptions — it re-throws.
         await Assert.ThrowsAsync<HttpRequestException>(() => BuildJob().Execute(_context));
     }
 
     // -----------------------------------------------------------------------
-    // Calendar null-guard — no RegularSeason or PostSeason entry
+    // UpsertNflWeeksAsync — seeded from NflSeasonWeekConfig control table
     // -----------------------------------------------------------------------
 
-    private static EspnScores BuildSeasonScores(bool includeRegularSeason, bool includePostSeason)
-    {
-        var entries = new List<EspnCalendar>();
-        if (includeRegularSeason)
-        {
-            entries.Add(new EspnCalendar
-            {
-                Value = (long)TypeOfSeason.RegularSeason,
-                Entries = new[]
-                {
-                    new CalendarEntry { Value = 1, StartDate = new DateTimeOffset(2025, 9, 4, 0, 0, 0, TimeSpan.Zero), EndDate = new DateTimeOffset(2025, 9, 10, 0, 0, 0, TimeSpan.Zero) }
-                }
-            });
-        }
-        if (includePostSeason)
-        {
-            entries.Add(new EspnCalendar
-            {
-                Value = (long)TypeOfSeason.PostSeason,
-                Entries = new[]
-                {
-                    new CalendarEntry { Value = 1, StartDate = new DateTimeOffset(2026, 1, 11, 0, 0, 0, TimeSpan.Zero), EndDate = new DateTimeOffset(2026, 1, 19, 0, 0, 0, TimeSpan.Zero) }
-                }
-            });
-        }
-
-        return new EspnScores
-        {
-            Leagues = new[]
-            {
-                new EspnLeague
-                {
-                    Season = new LeagueSeason { Year = 2025 },
-                    Calendar = entries.ToArray()
-                }
-            }
-        };
-    }
-
     [Fact]
-    public async Task Execute_WhenCalendarHasNoRegularSeasonEntry_DoesNotThrow()
+    public async Task Execute_WhenSeasonWeekConfigIsEmpty_DoesNotCallUpsertWeeks()
     {
-        _espnApi.GetSeasonScores(Arg.Any<int>())
-                .Returns(BuildSeasonScores(includeRegularSeason: false, includePostSeason: true));
-
-        // Should not throw NullReferenceException when regularSeason is null.
-        // The job continues and processes postSeason entries.
-        var exception = await Record.ExceptionAsync(() => BuildJob().Execute(_context));
-        Assert.Null(exception);
-    }
-
-    [Fact]
-    public async Task Execute_WhenCalendarHasNoPostSeasonEntry_DoesNotThrow()
-    {
-        _espnApi.GetSeasonScores(Arg.Any<int>())
-                .Returns(BuildSeasonScores(includeRegularSeason: true, includePostSeason: false));
-
-        // Should not throw NullReferenceException when postSeason is null
+        // Default constructor stub returns empty list
         await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().UpsertNflWeeksAsync(Arg.Any<List<NflWeeks>>());
+    }
+
+    [Fact]
+    public async Task Execute_WhenSeasonWeekConfigHasEntries_CallsUpsertWeeks()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync()
+             .Returns(new List<NflSeasonWeekConfig>
+             {
+                 BuildConfig(weekId: 1, season: 2025),
+                 BuildConfig(weekId: 2, season: 2025),
+             });
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).UpsertNflWeeksAsync(Arg.Is<List<NflWeeks>>(l => l.Count == 2));
+    }
+
+    [Fact]
+    public async Task Execute_WhenSeasonWeekConfigHasEntries_MapsWeekIdToNflWeek()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync()
+             .Returns(new List<NflSeasonWeekConfig> { BuildConfig(weekId: 5, season: 2025) });
+
+        List<NflWeeks>? captured = null;
+        await _repo.UpsertNflWeeksAsync(Arg.Do<List<NflWeeks>>(l => captured = l));
+
+        await BuildJob().Execute(_context);
+
+        Assert.NotNull(captured);
+        Assert.Single(captured);
+        Assert.Equal(5, captured[0].NflWeek);
+        Assert.Equal(2025, captured[0].Season);
+    }
+
+    [Fact]
+    public async Task Execute_WhenSeasonWeekConfigHasPostseasonEntry_MapsWeekId19()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync()
+             .Returns(new List<NflSeasonWeekConfig> { BuildConfig(weekId: 19, season: 2025, isPostSeason: true) });
+
+        List<NflWeeks>? captured = null;
+        await _repo.UpsertNflWeeksAsync(Arg.Do<List<NflWeeks>>(l => captured = l));
+
+        await BuildJob().Execute(_context);
+
+        Assert.NotNull(captured);
+        Assert.Single(captured);
+        Assert.Equal(19, captured[0].NflWeek); // Wild Card maps to canonical week 19
+        Assert.Equal(2025, captured[0].Season);
     }
 
     // -----------------------------------------------------------------------
-    // Season week mapping — correct NflWeek assigned
+    // Season week mapping — correct NflWeek assigned for scores
     // -----------------------------------------------------------------------
 
     [Fact]
     public async Task Execute_RegularSeasonWeek1_AssignsWeek1ToNflWeek()
     {
-        // The job loops weeks 1..18 and breaks when GetWeekScores returns null.
-        // Use week 1 so the loop reaches it before hitting a null break.
         var year = DateTime.UtcNow.Year;
         _espnApi.GetWeekScores(1, year, false)
                 .Returns(BuildWeekScores(1, year, isFinal: true));
-        // Weeks 2+ return null (default) so the loop breaks cleanly after week 1.
 
         List<NflScores>? captured = null;
         _repo.When(r => r.UpsertNflScoresAsync(Arg.Any<List<NflScores>>()))
