@@ -18,7 +18,6 @@ namespace FourPlayWebApp.Server.UnitTests {
 
             // Act
             var sportsData = await baseService.GetWeekScores(1, 2025);
-            var activeScores = await baseService.GetScores();
             // Assert
             Assert.NotNull(sportsData);
             Assert.NotEmpty(sportsData.Events);
@@ -26,8 +25,6 @@ namespace FourPlayWebApp.Server.UnitTests {
 
             // Additional validation
             var firstSport = sportsData.Events.First();
-            var activeSport =
-                activeScores.Events.SelectMany(x => x.Competitions.Where(x => !x.Status.Type.Completed));
             Assert.NotNull(firstSport);
             Assert.False(string.IsNullOrWhiteSpace(firstSport.Id));
             var competition = firstSport.Competitions.First();
