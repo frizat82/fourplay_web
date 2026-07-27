@@ -116,6 +116,7 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
 
 export function createNflAdapter(): SportAdapter {
   return {
+    sport: 'nfl',
     pollIntervalMs: 300_000,
     sseUrl: `${import.meta.env.VITE_API_TARGET ?? ''}/api/espn/live-stream`,
     weekSelectorConfig: {
