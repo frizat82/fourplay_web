@@ -2,6 +2,7 @@
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
+using FourPlayWebApp.Server.Models.Mappers;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
@@ -189,24 +190,14 @@ public class LeagueController(
     [ProducesResponseType(typeof(List<NflScoreDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<NflScoreDto>>> GetScores(int season, int week) {
         var scores = await repo.GetNflScoresAsync(season, week);
-        return Ok(scores.Select(s => new NflScoreDto {
-            Id = s.Id, Season = s.Season, NflWeek = s.NflWeek,
-            HomeTeam = s.HomeTeam, AwayTeam = s.AwayTeam,
-            HomeTeamScore = s.HomeTeamScore, AwayTeamScore = s.AwayTeamScore,
-            GameTime = s.GameTime,
-        }).ToList());
+        return Ok(scores.Select(s => s.ToDto()).ToList());
     }
 
     [HttpGet("scores/{season:int}")]
     [ProducesResponseType(typeof(List<NflScoreDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<NflScoreDto>>> GetScoresForSeason(int season) {
         var scores = await repo.GetAllNflScoresForSeasonAsync(season);
-        return Ok(scores.Select(s => new NflScoreDto {
-            Id = s.Id, Season = s.Season, NflWeek = s.NflWeek,
-            HomeTeam = s.HomeTeam, AwayTeam = s.AwayTeam,
-            HomeTeamScore = s.HomeTeamScore, AwayTeamScore = s.AwayTeamScore,
-            GameTime = s.GameTime,
-        }).ToList());
+        return Ok(scores.Select(s => s.ToDto()).ToList());
     }
 
     // Upsert scores
@@ -242,24 +233,14 @@ public class LeagueController(
     [ProducesResponseType(typeof(List<NflSpreadDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<NflSpreadDto>>> GetSpreads(int season, int week) {
         var spreads = await repo.GetNflSpreadsAsync(season, week);
-        return Ok((spreads ?? []).Select(s => new NflSpreadDto {
-            Id = s.Id, Season = s.Season, NflWeek = s.NflWeek,
-            HomeTeam = s.HomeTeam, AwayTeam = s.AwayTeam,
-            HomeTeamSpread = s.HomeTeamSpread, AwayTeamSpread = s.AwayTeamSpread,
-            OverUnder = s.OverUnder, GameTime = s.GameTime,
-        }).ToList());
+        return Ok((spreads ?? []).Select(s => s.ToDto()).ToList());
     }
 
     [HttpGet("spreads/{season:int}")]
     [ProducesResponseType(typeof(List<NflSpreadDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<NflSpreadDto>>> GetSpreadsForSeason(int season) {
         var spreads = await repo.GetAllNflSpreadsForSeasonAsync(season);
-        return Ok(spreads.Select(s => new NflSpreadDto {
-            Id = s.Id, Season = s.Season, NflWeek = s.NflWeek,
-            HomeTeam = s.HomeTeam, AwayTeam = s.AwayTeam,
-            HomeTeamSpread = s.HomeTeamSpread, AwayTeamSpread = s.AwayTeamSpread,
-            OverUnder = s.OverUnder, GameTime = s.GameTime,
-        }).ToList());
+        return Ok(spreads.Select(s => s.ToDto()).ToList());
     }
 
     // Only-add-new spreads (no duplicates)
