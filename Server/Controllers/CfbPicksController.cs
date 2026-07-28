@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Auth;
+using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
@@ -12,6 +13,12 @@ namespace FourPlayWebApp.Server.Controllers;
 [Route("api/cfb")]
 [Authorize]
 public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo) : ControllerBase {
+    [HttpGet("current-slate")]
+    public async Task<IActionResult> GetCurrentSlate([FromServices] ICfbCurrentSlateService svc) {
+        var slate = await svc.GetCurrentSlateAsync();
+        return slate is null ? NotFound() : Ok(slate);
+    }
+
     [HttpGet("slates/{season}")]
     public async Task<IActionResult> GetSlates(int season) =>
         Ok(await cfbRepo.GetSlatesForSeasonAsync(season));

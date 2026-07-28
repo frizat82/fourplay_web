@@ -252,6 +252,7 @@ builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
 builder.Services.AddScoped<ICfbRepository, CfbRepository>();
 builder.Services.AddScoped<ICfbPicksRepository, CfbPicksRepository>();
 builder.Services.AddSingleton<INflCurrentWeekService, NflCurrentWeekService>();
+builder.Services.AddScoped<ICfbCurrentSlateService, CfbCurrentSlateService>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 
