@@ -75,8 +75,8 @@ test.describe('Picks page (authenticated)', () => {
 
     await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
 
-    // Click the first Pick button to select a team
-    await page.getByRole('button', { name: 'Pick', exact: true }).first().click();
+    // Click the first Pick button — matches "Pick BUF", "Pick MIA" etc.
+    await page.getByRole('button', { name: /^Pick \w/i }).first().click();
 
     // Wait for the submit button to become enabled
     const submitButton = page.getByRole('button', { name: /submit pick\(s\)/i });
