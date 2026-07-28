@@ -3,6 +3,12 @@ import type { CfbSeasonWeekConfigDto } from '../types/admin';
 
 const BASE = '/api/cfb';
 
+export async function getCfbCurrentSlate(): Promise<CfbSlateDto | null> {
+  const res = await fetch(`${BASE}/current-slate`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export async function getCfbSlates(season: number): Promise<CfbSlateDto[]> {
   const res = await fetch(`${BASE}/slates/${season}`);
   if (!res.ok) return [];
