@@ -12,7 +12,7 @@ test.describe('Picks page (authenticated)', () => {
     await expect(page.getByRole('heading', { name: 'Picks', exact: true })).toBeVisible({ timeout: 5000 });
 
     // Game rows should be rendered (BUF/MIA and DAL/NYG)
-    await expect(page.getByRole('button', { name: 'Pick', exact: true }).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: /^Pick \w/i }).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('shows pick buttons for upcoming games', async ({ page }) => {
@@ -21,8 +21,8 @@ test.describe('Picks page (authenticated)', () => {
     await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
 
     // Games are in the future (gameStarted: false), so Pick buttons are not locked
-    // Use exact: true to match "Pick" not "Submit Pick(s)"
-    const pickButtons = page.getByRole('button', { name: 'Pick', exact: true });
+    // Match "Pick BUF", "Pick MIA" etc. — not "Submit Pick(s)"
+    const pickButtons = page.getByRole('button', { name: /^Pick \w/i });
     await expect(pickButtons.first()).toBeVisible({ timeout: 5000 });
     await expect(pickButtons.first()).toBeEnabled();
 
@@ -35,12 +35,12 @@ test.describe('Picks page (authenticated)', () => {
 
     await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
 
-    const firstPickButton = page.getByRole('button', { name: 'Pick', exact: true }).first();
+    const firstPickButton = page.getByRole('button', { name: /^Pick \w/i }).first();
     await expect(firstPickButton).toBeVisible({ timeout: 5000 });
     await firstPickButton.click();
 
-    // After clicking, the button should change to "Picked"
-    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toBeVisible({ timeout: 3000 });
+    // After clicking, the button should change to "{team} picked" (pending state)
+    await expect(page.getByRole('button', { name: /\bpicked\b/i })).toBeVisible({ timeout: 3000 });
   });
 
   test('submit button disabled with no picks selected', async ({ page }) => {
@@ -63,8 +63,8 @@ test.describe('Picks page (authenticated)', () => {
     const submitButton = page.getByRole('button', { name: /submit pick\(s\)/i });
     await expect(submitButton).toBeDisabled({ timeout: 5000 });
 
-    // Click the first Pick button (exact match to avoid hitting "Submit Pick(s)")
-    await page.getByRole('button', { name: 'Pick', exact: true }).first().click();
+    // Click the first Pick button — matches "Pick BUF", "Pick MIA" etc.
+    await page.getByRole('button', { name: /^Pick \w/i }).first().click();
 
     // Submit should now be enabled
     await expect(submitButton).toBeEnabled({ timeout: 3000 });
