@@ -107,9 +107,6 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   }, []);
 
   // Pick management
-  const isSelected = (gameId: string, team: string, pickType = 'Spread') =>
-    userPicks.has(pickKey(gameId, team, pickType)) || existingPicks.has(pickKey(gameId, team, pickType));
-
   const remainingPicks = requiredPicks - userPicks.size - existingPicks.size;
   const isPicksLocked = () => remainingPicks <= 0;
 
@@ -224,10 +221,16 @@ export default function PicksPage({ adapter }: PicksPageProps) {
         )}
 
         {games.map(game => {
-          const homePickState: PickState = isSelected(game.id, game.homeTeam) ? 'submitted' : 'none';
-          const awayPickState: PickState = isSelected(game.id, game.awayTeam) ? 'submitted' : 'none';
-          const overPickState: PickState = isSelected(game.id, game.homeTeam, 'Over') ? 'submitted' : 'none';
-          const underPickState: PickState = isSelected(game.id, game.homeTeam, 'Under') ? 'submitted' : 'none';
+          const pickStateFor = (gameId: string, team: string, pickType = 'Spread'): PickState => {
+            const key = pickKey(gameId, team, pickType);
+            if (existingPicks.has(key)) return 'submitted'; // server-confirmed → Locked in
+            if (userPicks.has(key)) return 'pending';       // in-session → Picked (toggleable)
+            return 'none';
+          };
+          const homePickState = pickStateFor(game.id, game.homeTeam);
+          const awayPickState = pickStateFor(game.id, game.awayTeam);
+          const overPickState = pickStateFor(game.id, game.homeTeam, 'Over');
+          const underPickState = pickStateFor(game.id, game.homeTeam, 'Under');
           const locked = gameIsLocked(game);
 
           return (
