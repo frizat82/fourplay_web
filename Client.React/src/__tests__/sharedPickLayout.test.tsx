@@ -62,7 +62,7 @@ describe('NFL PicksPage — GameCard layout regression', () => {
 
   it('renders Pick buttons (GameCard pick mode)', async () => {
     renderWithClient(<PicksPage adapter={createNflAdapter()} />);
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /^pick$/i }).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^Pick /i }).length).toBeGreaterThan(0));
   });
 
   it('renders spread label -3 (GameCard spread display)', async () => {
@@ -105,7 +105,7 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
 
   it('renders Pick buttons (GameCard pick mode)', async () => {
     renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /^pick$/i }).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^Pick /i }).length).toBeGreaterThan(0));
   });
 
   it('renders spread labels -3.5 and +3.5 (GameCard spread display)', async () => {
@@ -124,11 +124,11 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
     });
   });
 
-  it('shows Picked when pick already submitted', async () => {
+  it('shows Locked in when pick already submitted', async () => {
     vi.mocked(getCfbUserPicks).mockResolvedValue([
       { id: 1, userId: 'u1', userName: 'u1', leagueId: 1, cfbSlateId: 1, espnEventId: 100, team: 'MICH', pickType: 'Spread', season: 2025 }
     ]);
     renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
-    await waitFor(() => expect(screen.getByRole('button', { name: /^picked$/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /MICH locked in/i })).toBeInTheDocument());
   });
 });
