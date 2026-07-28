@@ -31,9 +31,8 @@ test.describe('CFB picks — demo backend', () => {
   });
 
   test('Alice sees her CFP Championship pick (IU)', async ({ page }) => {
-    // Alice picked IU (Indiana) for the Championship
-    // The "Picked" button for IU should be visible
-    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toBeVisible({ timeout: 8_000 });
+    // Alice picked IU (Indiana) for the Championship — server-confirmed → "IU locked in"
+    await expect(page.getByRole('button', { name: /locked in/i })).toBeVisible({ timeout: 8_000 });
     // IU team abbreviation should appear in a Picked row
     await expect(page.getByText('IU')).toBeVisible({ timeout: 5_000 });
   });
@@ -89,7 +88,7 @@ test.describe('CFB picks — demo backend', () => {
     // 6 games were seeded for Week 8 — each game card shows two team abbreviations
     await expect(page.getByText('MICH')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('PSU')).toBeVisible({ timeout: 5_000 });
-    // Alice picked 4 teams (regular season max) — should see 4 "Picked" buttons
-    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toHaveCount(4, { timeout: 8_000 });
+    // Alice picked 4 teams (regular season max) — server-confirmed → 4 "locked in" buttons
+    await expect(page.getByRole('button', { name: /locked in/i })).toHaveCount(4, { timeout: 8_000 });
   });
 });
