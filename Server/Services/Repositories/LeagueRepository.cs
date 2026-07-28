@@ -22,46 +22,28 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     }
 
     public async Task<List<LeagueUserMapping>> GetLeagueUserMappingsAsync(ApplicationUser user) {
-        try {
-            await using var db = await dbContextFactory.CreateDbContextAsync();
-            return await db.LeagueUserMapping
-                .Where(lum => lum.UserId == user.Id)
-                .Include(lum => lum.User)
-                .Include(lum => lum.League)
-                .ToListAsync();
-        }
-        catch (Exception ex) {
-            _logger.LogError(ex, "Failed to get league user mappings for user {UserId}", user?.Id);
-            return new List<LeagueUserMapping>();
-        }
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.LeagueUserMapping
+            .Where(lum => lum.UserId == user.Id)
+            .Include(lum => lum.User)
+            .Include(lum => lum.League)
+            .ToListAsync();
     }
 
     public async Task<LeagueJuiceMapping?> GetLeagueJuiceMappingAsync(int leagueId, int season) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        try {
-            return await db.LeagueJuiceMapping
-                .Where(ljm => ljm.LeagueId == leagueId && ljm.Season == season)
-                .Include(ljm => ljm.League)
-                .FirstOrDefaultAsync();
-        }
-        catch (Exception ex) {
-            _logger.LogError(ex, "Failed to get league juice mapping for league {LeagueId}, season {Season}", leagueId, season);
-            return null;
-        }
+        return await db.LeagueJuiceMapping
+            .Where(ljm => ljm.LeagueId == leagueId && ljm.Season == season)
+            .Include(ljm => ljm.League)
+            .FirstOrDefaultAsync();
     }
 
     public async Task<List<LeagueJuiceMapping>> GetLeagueJuiceMappingAsync(int leagueId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        try {
-            return await db.LeagueJuiceMapping
-                .Where(ljm => ljm.LeagueId == leagueId)
-                .Include(ljm => ljm.League)
-                .ToListAsync();
-        }
-        catch (Exception ex) {
-            _logger.LogError(ex, "Failed to get league juice mappings for league {LeagueId}", leagueId);
-            return new List<LeagueJuiceMapping>();
-        }
+        return await db.LeagueJuiceMapping
+            .Where(ljm => ljm.LeagueId == leagueId)
+            .Include(ljm => ljm.League)
+            .ToListAsync();
     }
 
     public async Task<LeagueInfo> GetLeagueInfoAsync(int leagueId) {
