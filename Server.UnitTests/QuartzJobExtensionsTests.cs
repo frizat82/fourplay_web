@@ -15,23 +15,19 @@ public class QuartzJobExtensionsTests
         public Task Execute(IJobExecutionContext context) => Task.CompletedTask;
     }
 
-    [Fact]
-    public async Task ScheduleCstCronJob_RegistersTriggerWithChicagoTimezone()
+    private static async Task<IScheduler> BuildSchedulerWith(string identity, string description, string cron)
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddQuartz(q =>
-        {
-            q.ScheduleCstCronJob<StubJob>(
-                "Stub Thu 10am",
-                "Test description",
-                "0 0 10 ? * THU");
-        });
-
+        services.AddQuartz(q => q.ScheduleCstCronJob<StubJob>(identity, description, cron));
         var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredService<ISchedulerFactory>();
-        var scheduler = await factory.GetScheduler();
+        return await provider.GetRequiredService<ISchedulerFactory>().GetScheduler();
+    }
 
+    [Fact]
+    public async Task ScheduleCstCronJob_RegistersTriggerWithChicagoTimezone()
+    {
+        var scheduler = await BuildSchedulerWith("Stub Thu 10am", "Test description", "0 0 10 ? * THU");
         var trigger = (ICronTrigger)await scheduler.GetTrigger(new TriggerKey("Stub Thu 10am"));
 
         Assert.NotNull(trigger);
@@ -42,20 +38,7 @@ public class QuartzJobExtensionsTests
     [Fact]
     public async Task ScheduleCstCronJob_TriggerDescriptionIsSet()
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddQuartz(q =>
-        {
-            q.ScheduleCstCronJob<StubJob>(
-                "Stub Fri 1am",
-                "Runs early Friday",
-                "0 0 1 ? * FRI");
-        });
-
-        var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredService<ISchedulerFactory>();
-        var scheduler = await factory.GetScheduler();
-
+        var scheduler = await BuildSchedulerWith("Stub Fri 1am", "Runs early Friday", "0 0 1 ? * FRI");
         var trigger = await scheduler.GetTrigger(new TriggerKey("Stub Fri 1am"));
 
         Assert.NotNull(trigger);

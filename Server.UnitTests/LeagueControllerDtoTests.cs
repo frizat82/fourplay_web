@@ -10,7 +10,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
@@ -36,11 +35,7 @@ public class LeagueControllerDtoTests
 
         controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext
-            {
-                User = new ClaimsPrincipal(new ClaimsIdentity(
-                    [new Claim(ClaimTypes.NameIdentifier, "user-1")], "Test"))
-            }
+            HttpContext = new DefaultHttpContext { User = TestPrincipalFactory.Build("user-1") }
         };
         return controller;
     }
