@@ -145,11 +145,15 @@ describe('cfbAdapter', () => {
   });
 
   describe('config', () => {
-    it('pollIntervalMs is 60s (1-minute fallback polling)', () => {
-      expect(adapter.pollIntervalMs).toBe(60_000);
+    it('pollIntervalMs is 300s (SSE primary; poll is fallback)', () => {
+      expect(adapter.pollIntervalMs).toBe(300_000);
     });
     it('currentSeasonYear returns 2026', async () => {
       expect(await adapter.currentSeasonYear()).toBe(2026);
+    });
+    it('sseUrl points at CFB live-stream endpoint', () => {
+      expect(adapter.sseUrl).toBeDefined();
+      expect(adapter.sseUrl).toContain('/api/cfb/live-stream');
     });
     it('weekLabelFn returns CFP Championship for week 5 postseason', () => {
       const fn = adapter.weekSelectorConfig.weekLabelFn!;

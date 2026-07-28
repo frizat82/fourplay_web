@@ -6,6 +6,7 @@ using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using FourPlayWebApp.Server.Infrastructure;
 
 namespace FourPlayWebApp.Server.Controllers;
 
@@ -90,6 +91,13 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         await repo.DeletePicksAsync(leagueId, cfbSlateId, CurrentUserId);
         return Ok();
     }
+
+    [HttpGet("live-stream")]
+    public Task LiveStream([FromServices] ICfbScoreChangeNotifier notifier, CancellationToken ct) =>
+        SseHelper.StreamAsync(Response,
+            h => notifier.ScoresChanged += h,
+            h => notifier.ScoresChanged -= h,
+            ct);
 
     [HttpGet("week-configs/{season:int}")]
     [Authorize(Roles = AppRoles.Administrator)]
