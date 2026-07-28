@@ -61,9 +61,6 @@ static string ConvertPostgresUrl(string url)
 }
 builder.Services.AddOptions();
 builder.Services.AddControllersWithViews();
-
-// API
-builder.Services.AddControllers(); // or Minimal APIs
 #region Email
 // Validate critical configuration early (fail fast)
 var emailUser = Environment.GetEnvironmentVariable("FOURPLAY_EMAIL_USER");
