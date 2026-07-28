@@ -1,5 +1,6 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PicksPage from '../pages/PicksPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCompetition, createPick, createScores, createSpreadResponse } from '../test/fixtures';
@@ -104,8 +105,15 @@ const setupDefaults = async (options?: {
   });
 };
 
+const renderWithClient = (ui: React.ReactElement) => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+  });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+};
+
 const renderPage = async () => {
-  render(<PicksPage adapter={createNflAdapter()} />);
+  renderWithClient(<PicksPage adapter={createNflAdapter()} />);
   await screen.findByText(/^Picks$/i);
   await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
 };
@@ -127,13 +135,13 @@ describe('PicksPage', () => {
   it('shows no league message when no league selected', async () => {
     sessionState.currentLeague = null;
     await setupDefaults();
-    render(<PicksPage adapter={createNflAdapter()} />);
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
     await screen.findByText(/Please select a league/i);
   });
 
   it('shows odds not posted when odds missing', async () => {
     await setupDefaults({ oddsExist: false });
-    render(<PicksPage adapter={createNflAdapter()} />);
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
     await screen.findByText(/Odds Not Posted/i);
   });
 
@@ -168,7 +176,7 @@ describe('PicksPage', () => {
     await setupDefaults();
     await renderPage();
 
-    const pickButtons = screen.getAllByRole('button', { name: /^Pick$/i });
+    const pickButtons = screen.getAllByRole('button', { name: /^Pick /i });
     await userEvent.click(pickButtons[0]);
 
     await waitFor(() => {
@@ -183,7 +191,7 @@ describe('PicksPage', () => {
     await setupDefaults();
     await renderPage();
 
-    const pickButton = screen.getAllByRole('button', { name: /^Pick$/i })[0];
+    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
     await userEvent.click(pickButton);
     await screen.findByRole('button', { name: /picked/i });
 
@@ -191,7 +199,7 @@ describe('PicksPage', () => {
     await userEvent.click(pickedButton);
 
     await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: /^Pick$/i }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('button', { name: /^Pick /i }).length).toBeGreaterThan(0);
     });
   });
 
@@ -208,12 +216,12 @@ describe('PicksPage', () => {
     await setupDefaults({ existingPicks: existing });
     await renderPage();
 
-    const pickButtons = screen.getAllByRole('button', { name: /^Pick$/i });
+    const pickButtons = screen.getAllByRole('button', { name: /^Pick /i });
     await userEvent.click(pickButtons[0]);
     await userEvent.click(pickButtons[1]);
 
     await waitFor(() => {
-      const remaining = screen.queryAllByRole('button', { name: /^Pick$/i });
+      const remaining = screen.queryAllByRole('button', { name: /^Pick /i });
       if (remaining.length === 0) {
         expect(remaining.length).toBe(0);
       } else {
@@ -230,20 +238,24 @@ describe('PicksPage', () => {
     await setupDefaults({ existingPicks: existing });
     await renderPage();
 
-    const initialPicked = screen.getAllByRole('button', { name: /picked/i }).length;
-    expect(initialPicked).toBe(2);
+    // Existing server picks show as "Locked in" (submitted state, disabled)
+    const initialLocked = screen.getAllByRole('button', { name: /locked in/i }).length;
+    expect(initialLocked).toBe(2);
 
-    const pickButton = screen.getAllByRole('button', { name: /^Pick$/i })[0];
+    // Add one new user (pending) pick — it shows as "Picked" (enabled)
+    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
     await userEvent.click(pickButton);
 
     await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: /picked/i }).length).toBe(3);
+      expect(screen.getAllByRole('button', { name: /picked/i }).length).toBe(1);
     });
 
     await userEvent.click(screen.getByRole('button', { name: /clear selected picks/i }));
 
+    // After clearing, user pick gone; existing locked picks remain
     await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: /picked/i }).length).toBe(2);
+      expect(screen.queryAllByRole('button', { name: /picked/i }).length).toBe(0);
+      expect(screen.getAllByRole('button', { name: /locked in/i }).length).toBe(2);
     });
   });
 
@@ -253,7 +265,7 @@ describe('PicksPage', () => {
     mockedGetUserPicks.mockResolvedValue([createPick({ team: 'BUF' })]);
 
     await renderPage();
-    const pickButton = screen.getAllByRole('button', { name: /^Pick$/i })[0];
+    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
     await userEvent.click(pickButton);
 
     await userEvent.click(screen.getByRole('button', { name: /submit pick/i }));
@@ -292,7 +304,7 @@ describe('PicksPage', () => {
     await setupDefaults({ gameDate: futureDate });
     await renderPage();
 
-    const pickButton = screen.getAllByRole('button', { name: /^Pick$/i })[0];
+    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
     expect(pickButton).not.toBeDisabled();
   });
 
@@ -301,7 +313,7 @@ describe('PicksPage', () => {
     await setupDefaults({ gameDate: pastDate, gameStarted: false });
     await renderPage();
 
-    screen.getAllByRole('button', { name: /^Pick$/i }).forEach((btn) => {
+    screen.getAllByRole('button', { name: /^Pick /i }).forEach((btn) => {
       expect(btn).toBeDisabled();
     });
   });
@@ -343,24 +355,24 @@ describe('PicksPage', () => {
 
     const overButton = screen.getAllByRole('button', { name: /^Over$/i })[0];
     await userEvent.click(overButton);
-    await screen.findByRole('button', { name: /^Overed$/i });
+    await screen.findByRole('button', { name: /^Over 47\.5 ✓$/i });
 
     const underButton = screen.getAllByRole('button', { name: /^Under$/i })[0];
     await userEvent.click(underButton);
-    await screen.findByRole('button', { name: /^Undered$/i });
+    await screen.findByRole('button', { name: /^Under 47\.5 ✓$/i });
   });
 
   it('postseason allows selecting spread and over picks together', async () => {
     await setupDefaults({ week: 1, postSeason: true });
     await renderPage();
 
-    const pickButton = screen.getAllByRole('button', { name: /^Pick$/i })[0];
+    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
     await userEvent.click(pickButton);
     await screen.findByRole('button', { name: /picked/i });
 
     const overButton = screen.getAllByRole('button', { name: /^Over$/i })[0];
     await userEvent.click(overButton);
-    await screen.findByRole('button', { name: /^Overed$/i });
+    await screen.findByRole('button', { name: /^Over 47\.5 ✓$/i });
   });
 
   it('renders a dedicated over/under control block per postseason matchup', async () => {
@@ -373,6 +385,97 @@ describe('PicksPage', () => {
     controls.forEach((control) => {
       expect(within(control).getByRole('button', { name: /^Over$/i })).toBeInTheDocument();
       expect(within(control).getByRole('button', { name: /^Under$/i })).toBeInTheDocument();
+    });
+  });
+
+  // ── Background refresh behavior (frizat-mon.5) ─────────────────────────────
+  // The poll refetch must be invisible: no spinner, and pending (unsubmitted)
+  // selections must survive. NFL poll interval is 300s (nflAdapter.pollIntervalMs).
+  describe('background poll refresh', () => {
+    const POLL_MS = 300_000;
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('preserves pending picks across a background poll refetch', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await setupDefaults();
+      await renderPage();
+
+      await user.click(screen.getAllByRole('button', { name: /^Pick /i })[0]);
+      await screen.findByRole('button', { name: /picked/i });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_MS);
+      });
+
+      expect(screen.getAllByRole('button', { name: /picked/i }).length).toBe(1);
+    });
+
+    it('does not show the full-page spinner during a background refetch', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      await setupDefaults();
+      await renderPage();
+
+      // Hold the next fetch in-flight forever so we can observe mid-refetch UI
+      mockedLoadScoresWithRetry.mockImplementation(() => new Promise(() => {}));
+      mockedGetScores.mockImplementation(() => new Promise(() => {}));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_MS);
+      });
+
+      // Grid stays mounted, no spinner replaces the page
+      expect(screen.queryByRole('progressbar')).toBeNull();
+      expect(screen.getAllByRole('button', { name: /^Pick /i }).length).toBeGreaterThan(0);
+    });
+
+    it('drops a pending pick with a toast when its game locks during refetch', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+      await setupDefaults({ gameDate: futureDate });
+      await renderPage();
+
+      await user.click(screen.getAllByRole('button', { name: /^Pick /i })[0]);
+      await screen.findByRole('button', { name: /picked/i });
+
+      // Next poll: same games but kickoff has passed
+      const pastDate = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const startedScores = createScores({
+        week: 2,
+        postSeason: false,
+        events: [
+          {
+            id: '1',
+            season: { year: 2024, type: 2 },
+            week: { number: 2 },
+            date: pastDate,
+            competitions: [createCompetition({ homeTeam: 'BUF', awayTeam: 'MIA', gameStarted: true, date: pastDate })],
+          },
+          {
+            id: '2',
+            season: { year: 2024, type: 2 },
+            week: { number: 2 },
+            date: pastDate,
+            competitions: [createCompetition({ homeTeam: 'DAL', awayTeam: 'NYG', gameStarted: true, date: pastDate })],
+          },
+        ],
+      });
+      mockedGetScores.mockResolvedValue(startedScores);
+      mockedLoadScoresWithRetry.mockResolvedValue(startedScores);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_MS);
+      });
+
+      expect(screen.queryByRole('button', { name: /picked/i })).toBeNull();
+      expect(toastState.push).toHaveBeenCalledWith(
+        expect.stringMatching(/game.*(started|kicked off)/i),
+        expect.anything(),
+      );
     });
   });
 });

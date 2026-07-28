@@ -4,6 +4,7 @@ import type { CfbSlateDto, CfbSpreadDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
 
 vi.mock('../api/cfb', () => ({
+  getCfbCurrentSlate: vi.fn(),
   getCfbSlates: vi.fn(),
   getCfbSpreads: vi.fn(),
   getCfbScores: vi.fn(),
@@ -18,7 +19,7 @@ vi.mock('../api/espn', () => ({
   getLiveGames: vi.fn(),
 }));
 
-import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
 import { getCfbLiveScores, getLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
@@ -55,6 +56,7 @@ const adapter = createCfbAdapter();
 describe('cfbAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getCfbCurrentSlate).mockResolvedValue(slate);
     vi.mocked(getLiveGames).mockResolvedValue([]);
     vi.mocked(getCfbScores).mockResolvedValue([]);
   });
@@ -143,11 +145,15 @@ describe('cfbAdapter', () => {
   });
 
   describe('config', () => {
-    it('pollIntervalMs is 0 (no polling)', () => {
-      expect(adapter.pollIntervalMs).toBe(0);
+    it('pollIntervalMs is 300s (SSE primary; poll is fallback)', () => {
+      expect(adapter.pollIntervalMs).toBe(300_000);
     });
     it('currentSeasonYear returns 2026', async () => {
       expect(await adapter.currentSeasonYear()).toBe(2026);
+    });
+    it('sseUrl points at CFB live-stream endpoint', () => {
+      expect(adapter.sseUrl).toBeDefined();
+      expect(adapter.sseUrl).toContain('/api/cfb/live-stream');
     });
     it('weekLabelFn returns CFP Championship for week 5 postseason', () => {
       const fn = adapter.weekSelectorConfig.weekLabelFn!;
