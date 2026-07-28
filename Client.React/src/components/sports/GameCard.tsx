@@ -85,11 +85,19 @@ export default function GameCard({
 
   const pickButtonSx = { minWidth: 80, height: 44, textTransform: 'none', fontSize: '0.85rem', flexShrink: 0 } as const;
 
+  const renderPickButton = (team: string, pickState: PickState, onPick?: () => void) => {
+    if (pickState === 'submitted')
+      return <Button color="success" variant="contained" disabled startIcon={<CheckIcon />} aria-label={`${team} locked in`} sx={pickButtonSx}>Locked in</Button>;
+    if (pickState !== 'none')
+      return <Button color="success" variant="contained" onClick={onPick} aria-label={`${team} picked`} sx={pickButtonSx}>Picked</Button>;
+    return <Button color="warning" variant="contained" disabled={locked} onClick={onPick} aria-label={`Pick ${team}`} sx={pickButtonSx}>Pick</Button>;
+  };
+
   const renderTeamLogo = (abbr: string, jerseyUrl: string | undefined, flipped = false) => (
     <Box textAlign="center">
       {jerseyUrl
         ? <img src={jerseyUrl} width={50} alt={abbr} />
-        : <TeamHelmet abbr={abbr} size={50} flipped={flipped} />}
+        : <TeamHelmet abbr={abbr} size={50} flipped={flipped} showLabel={false} />}
       <Typography variant="caption" display="block" sx={{ lineHeight: 1.2, opacity: 0.85 }}>
         {abbr}
       </Typography>
@@ -110,41 +118,7 @@ export default function GameCard({
               <Typography variant="h6" className="fixed-width">
                 {mode === 'score' && showScore ? awayScore : awaySpread != null ? spreadLabel(awaySpread) : ""}
               </Typography>
-              {mode === 'pick' ? (
-                awayPickState === 'submitted' ? (
-                  <Button
-                    color="success"
-                    variant="contained"
-                    disabled
-                    startIcon={<CheckIcon />}
-                    aria-label={`${awayTeam} locked in`}
-                    sx={pickButtonSx}
-                  >
-                    Locked in
-                  </Button>
-                ) : awayPickState !== 'none' ? (
-                  <Button
-                    color="success"
-                    variant="contained"
-                    onClick={onPickAway}
-                    aria-label={`${awayTeam} picked`}
-                    sx={pickButtonSx}
-                  >
-                    Picked
-                  </Button>
-                ) : (
-                  <Button
-                    color="warning"
-                    variant="contained"
-                    disabled={locked}
-                    onClick={onPickAway}
-                    aria-label={`Pick ${awayTeam}`}
-                    sx={pickButtonSx}
-                  >
-                    Pick
-                  </Button>
-                )
-              ) : (
+              {mode === 'pick' ? renderPickButton(awayTeam, awayPickState, onPickAway) : (
                 mode === 'score' && (
                   <Typography variant="caption" color="text.secondary">
                     {awaySpread != null ? spreadLabel(awaySpread) : ""}
@@ -188,41 +162,7 @@ export default function GameCard({
               <Typography variant="h6" className="fixed-width">
                 {mode === 'score' && showScore ? homeScore : homeSpread != null ? spreadLabel(homeSpread) : ""}
               </Typography>
-              {mode === 'pick' ? (
-                homePickState === 'submitted' ? (
-                  <Button
-                    color="success"
-                    variant="contained"
-                    disabled
-                    startIcon={<CheckIcon />}
-                    aria-label={`${homeTeam} locked in`}
-                    sx={pickButtonSx}
-                  >
-                    Locked in
-                  </Button>
-                ) : homePickState !== 'none' ? (
-                  <Button
-                    color="success"
-                    variant="contained"
-                    onClick={onPickHome}
-                    aria-label={`${homeTeam} picked`}
-                    sx={pickButtonSx}
-                  >
-                    Picked
-                  </Button>
-                ) : (
-                  <Button
-                    color="warning"
-                    variant="contained"
-                    disabled={locked}
-                    onClick={onPickHome}
-                    aria-label={`Pick ${homeTeam}`}
-                    sx={pickButtonSx}
-                  >
-                    Pick
-                  </Button>
-                )
-              ) : (
+              {mode === 'pick' ? renderPickButton(homeTeam, homePickState, onPickHome) : (
                 mode === 'score' && (
                   <Typography variant="caption" color="text.secondary">
                     {homeSpread != null ? spreadLabel(homeSpread) : ""}
