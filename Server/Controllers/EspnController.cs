@@ -1,4 +1,4 @@
-using System.Threading.Channels;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
@@ -56,35 +56,11 @@ public class EspnController(IEspnApiService espnApiService, IEspnCacheService es
         return Ok(games);
     }
     [HttpGet("live-stream")]
-    public async Task LiveStream(CancellationToken ct) {
-        Response.Headers["Content-Type"] = "text/event-stream";
-        Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["X-Accel-Buffering"] = "no";
-
-        var channel = Channel.CreateBounded<string>(new BoundedChannelOptions(10) {
-            FullMode = BoundedChannelFullMode.DropOldest,
-        });
-
-        void OnChanged() => channel.Writer.TryWrite("data: scores-updated\n\n");
-
-        espnCacheService.ScoresChanged += OnChanged;
-        try {
-            using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(28));
-            _ = Task.Run(async () => {
-                while (await heartbeat.WaitForNextTickAsync(ct))
-                    channel.Writer.TryWrite(": heartbeat\n\n");
-            }, ct);
-
-            await foreach (var msg in channel.Reader.ReadAllAsync(ct)) {
-                await Response.WriteAsync(msg, ct);
-                await Response.Body.FlushAsync(ct);
-            }
-        } catch (OperationCanceledException) {
-            // client disconnected — normal
-        } finally {
-            espnCacheService.ScoresChanged -= OnChanged;
-        }
-    }
+    public Task LiveStream(CancellationToken ct) =>
+        SseHelper.StreamAsync(Response,
+            h => espnCacheService.ScoresChanged += h,
+            h => espnCacheService.ScoresChanged -= h,
+            ct);
 
 /*
     [HttpGet("odds/events/{eventId:int}")]

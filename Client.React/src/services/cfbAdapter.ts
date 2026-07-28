@@ -192,7 +192,8 @@ export function createCfbAdapter(): SportAdapter {
 
   return {
     sport: 'cfb',
-    pollIntervalMs: 60_000,
+    pollIntervalMs: 300_000,
+    sseUrl: `${import.meta.env.VITE_API_TARGET ?? ''}/api/cfb/live-stream`,
     weekSelectorConfig: {
       regularWeekOptions: CFB_REGULAR_WEEKS,
       postSeasonWeekOptions: CFB_POST_WEEKS,

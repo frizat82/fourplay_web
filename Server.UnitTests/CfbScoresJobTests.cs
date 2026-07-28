@@ -14,16 +14,18 @@ public class CfbScoresJobTests
 {
     private readonly ICfbApiService _cfbApi;
     private readonly ICfbRepository _repo;
+    private readonly ICfbScoreChangeNotifier _notifier;
     private readonly IJobExecutionContext _context;
 
     public CfbScoresJobTests()
     {
         _cfbApi = Substitute.For<ICfbApiService>();
         _repo = Substitute.For<ICfbRepository>();
+        _notifier = Substitute.For<ICfbScoreChangeNotifier>();
         _context = Substitute.For<IJobExecutionContext>();
     }
 
-    private CfbScoresJob BuildJob() => new(_cfbApi, _repo);
+    private CfbScoresJob BuildJob() => new(_cfbApi, _repo, _notifier);
 
     private static CfbSlates BuildSlate() => new()
     {
@@ -262,5 +264,32 @@ public class CfbScoresJobTests
         await BuildJob().Execute(_context);
 
         await _repo.DidNotReceive().UpsertCfbScoresAsync(Arg.Any<IEnumerable<CfbScores>>());
+    }
+
+    // ── SSE notifier tests ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Execute_CallsNotifier_WhenScoresUpserted()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 19))
+            .Returns(BuildScoreboard(status: TypeName.StatusFinal));
+        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 20)).Returns((EspnScores?)null);
+
+        await BuildJob().Execute(_context);
+
+        _notifier.Received(1).NotifyIfChanged(Arg.Any<IEnumerable<CfbScores>>());
+    }
+
+    [Fact]
+    public async Task Execute_DoesNotCallNotifier_WhenNoScoresFinal()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _cfbApi.GetScoresByDateAsync(Arg.Any<DateOnly>())
+            .Returns(BuildScoreboard(status: TypeName.StatusScheduled));
+
+        await BuildJob().Execute(_context);
+
+        _notifier.DidNotReceive().NotifyIfChanged(Arg.Any<IEnumerable<CfbScores>>());
     }
 }
