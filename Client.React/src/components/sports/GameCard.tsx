@@ -1,4 +1,5 @@
 import { Box, Button, Card, CardContent, Chip, Stack, Typography } from '@mui/material';
+import CheckIcon from '@mui/icons-material/Check';
 import TeamHelmet from './TeamHelmet';
 import WeatherIcon from '../WeatherIcon';
 import { spreadLabel } from '../../utils/gameHelpers';
@@ -60,9 +61,6 @@ function statusChip(status: string | undefined, gameTime: string) {
   );
 }
 
-function pickButtonLabel(state: PickState, defaultLabel: string, pickedLabel = 'Picked'): string {
-  return state !== 'none' ? pickedLabel : defaultLabel;
-}
 
 export default function GameCard({
   homeTeam, awayTeam, homeSpread, awaySpread, gameTime,
@@ -87,10 +85,16 @@ export default function GameCard({
 
   const pickButtonSx = { minWidth: 80, height: 44, textTransform: 'none', fontSize: '0.85rem', flexShrink: 0 } as const;
 
-  const renderTeamLogo = (abbr: string, jerseyUrl: string | undefined, flipped = false) => {
-    if (jerseyUrl) return <img src={jerseyUrl} width={50} alt={abbr} />;
-    return <TeamHelmet abbr={abbr} size={50} flipped={flipped} />;
-  };
+  const renderTeamLogo = (abbr: string, jerseyUrl: string | undefined, flipped = false) => (
+    <Box textAlign="center">
+      {jerseyUrl
+        ? <img src={jerseyUrl} width={50} alt={abbr} />
+        : <TeamHelmet abbr={abbr} size={50} flipped={flipped} />}
+      <Typography variant="caption" display="block" sx={{ lineHeight: 1.2, opacity: 0.85 }}>
+        {abbr}
+      </Typography>
+    </Box>
+  );
 
   return (
     <Card elevation={2} sx={{ height: '100%' }}>
@@ -99,7 +103,7 @@ export default function GameCard({
         <Card variant="outlined" sx={{ mb: 1.5 }}>
           <CardContent sx={{ p: '12px !important' }}>
             <Stack direction="row" alignItems="center" justifyContent="space-between">
-              <Box textAlign="center">{renderTeamLogo(awayTeam, awayJerseyUrl)}</Box>
+              {renderTeamLogo(awayTeam, awayJerseyUrl)}
               {!isPostSeason && awayRecord && (
                 <Typography variant="subtitle2">{awayRecord}</Typography>
               )}
@@ -107,11 +111,23 @@ export default function GameCard({
                 {mode === 'score' && showScore ? awayScore : awaySpread != null ? spreadLabel(awaySpread) : ""}
               </Typography>
               {mode === 'pick' ? (
-                awayPickState !== 'none' ? (
+                awayPickState === 'submitted' ? (
+                  <Button
+                    color="success"
+                    variant="contained"
+                    disabled
+                    startIcon={<CheckIcon />}
+                    aria-label={`${awayTeam} locked in`}
+                    sx={pickButtonSx}
+                  >
+                    Locked in
+                  </Button>
+                ) : awayPickState !== 'none' ? (
                   <Button
                     color="success"
                     variant="contained"
                     onClick={onPickAway}
+                    aria-label={`${awayTeam} picked`}
                     sx={pickButtonSx}
                   >
                     Picked
@@ -122,6 +138,7 @@ export default function GameCard({
                     variant="contained"
                     disabled={locked}
                     onClick={onPickAway}
+                    aria-label={`Pick ${awayTeam}`}
                     sx={pickButtonSx}
                   >
                     Pick
@@ -164,7 +181,7 @@ export default function GameCard({
         <Card variant="outlined">
           <CardContent sx={{ p: '12px !important' }}>
             <Stack direction="row" alignItems="center" justifyContent="space-between">
-              <Box textAlign="center">{renderTeamLogo(homeTeam, homeJerseyUrl, true)}</Box>
+              {renderTeamLogo(homeTeam, homeJerseyUrl, true)}
               {!isPostSeason && homeRecord && (
                 <Typography variant="subtitle2">{homeRecord}</Typography>
               )}
@@ -172,11 +189,23 @@ export default function GameCard({
                 {mode === 'score' && showScore ? homeScore : homeSpread != null ? spreadLabel(homeSpread) : ""}
               </Typography>
               {mode === 'pick' ? (
-                homePickState !== 'none' ? (
+                homePickState === 'submitted' ? (
+                  <Button
+                    color="success"
+                    variant="contained"
+                    disabled
+                    startIcon={<CheckIcon />}
+                    aria-label={`${homeTeam} locked in`}
+                    sx={pickButtonSx}
+                  >
+                    Locked in
+                  </Button>
+                ) : homePickState !== 'none' ? (
                   <Button
                     color="success"
                     variant="contained"
                     onClick={onPickHome}
+                    aria-label={`${homeTeam} picked`}
                     sx={pickButtonSx}
                   >
                     Picked
@@ -187,6 +216,7 @@ export default function GameCard({
                     variant="contained"
                     disabled={locked}
                     onClick={onPickHome}
+                    aria-label={`Pick ${homeTeam}`}
                     sx={pickButtonSx}
                   >
                     Pick
@@ -220,7 +250,7 @@ export default function GameCard({
                   disabled={overUnderLocked && overPickState === 'none'}
                   onClick={onPickOver}
                 >
-                  {pickButtonLabel(overPickState, 'Over', 'Overed')}
+                  {overPickState !== 'none' ? `Over ${overValue} ✓` : 'Over'}
                 </Button>
                 <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center', flexShrink: 0 }}>
                   {overValue}
@@ -232,7 +262,7 @@ export default function GameCard({
                   disabled={overUnderLocked && underPickState === 'none'}
                   onClick={onPickUnder}
                 >
-                  {pickButtonLabel(underPickState, 'Under', 'Undered')}
+                  {underPickState !== 'none' ? `Under ${underValue} ✓` : 'Under'}
                 </Button>
               </Stack>
             </CardContent>
