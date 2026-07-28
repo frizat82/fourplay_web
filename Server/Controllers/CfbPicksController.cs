@@ -1,10 +1,12 @@
 using FourPlayWebApp.Server.Auth;
+using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using FourPlayWebApp.Server.Infrastructure;
 
 namespace FourPlayWebApp.Server.Controllers;
 
@@ -12,6 +14,12 @@ namespace FourPlayWebApp.Server.Controllers;
 [Route("api/cfb")]
 [Authorize]
 public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo) : ControllerBase {
+    [HttpGet("current-slate")]
+    public async Task<IActionResult> GetCurrentSlate([FromServices] ICfbCurrentSlateService svc) {
+        var slate = await svc.GetCurrentSlateAsync();
+        return slate is null ? NotFound() : Ok(slate);
+    }
+
     [HttpGet("slates/{season}")]
     public async Task<IActionResult> GetSlates(int season) =>
         Ok(await cfbRepo.GetSlatesForSeasonAsync(season));
@@ -83,6 +91,13 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         await repo.DeletePicksAsync(leagueId, cfbSlateId, CurrentUserId);
         return Ok();
     }
+
+    [HttpGet("live-stream")]
+    public Task LiveStream([FromServices] ICfbScoreChangeNotifier notifier, CancellationToken ct) =>
+        SseHelper.StreamAsync(Response,
+            h => notifier.ScoresChanged += h,
+            h => notifier.ScoresChanged -= h,
+            ct);
 
     [HttpGet("week-configs/{season:int}")]
     [Authorize(Roles = AppRoles.Administrator)]

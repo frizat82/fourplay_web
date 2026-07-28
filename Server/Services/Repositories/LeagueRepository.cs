@@ -66,6 +66,12 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             .FirstOrDefaultAsync(li => li.LeagueName == leagueName);
     }
 
+    // NFL Season Week Config
+    public async Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync() {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.NflSeasonWeekConfigs.OrderBy(c => c.Season).ThenBy(c => c.WeekId).ToListAsync();
+    }
+
     // NFL Weeks
     public async Task UpsertNflWeeksAsync(List<NflWeeks> weeks)
     {
