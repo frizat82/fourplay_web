@@ -186,17 +186,27 @@ public class LeagueController(
     }
     // ---------- NFL Scores ----------
     [HttpGet("scores/{season:int}/{week:int}")]
-    [ProducesResponseType(typeof(List<NflScores>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<NflScores>>> GetScores(int season, int week) {
+    [ProducesResponseType(typeof(List<NflScoreDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<NflScoreDto>>> GetScores(int season, int week) {
         var scores = await repo.GetNflScoresAsync(season, week);
-        return Ok(scores);
+        return Ok(scores.Select(s => new NflScoreDto {
+            Id = s.Id, Season = s.Season, NflWeek = s.NflWeek,
+            HomeTeam = s.HomeTeam, AwayTeam = s.AwayTeam,
+            HomeTeamScore = s.HomeTeamScore, AwayTeamScore = s.AwayTeamScore,
+            GameTime = s.GameTime,
+        }).ToList());
     }
 
     [HttpGet("scores/{season:int}")]
-    [ProducesResponseType(typeof(List<NflScores>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<NflScores>>> GetScoresForSeason(int season) {
+    [ProducesResponseType(typeof(List<NflScoreDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<NflScoreDto>>> GetScoresForSeason(int season) {
         var scores = await repo.GetAllNflScoresForSeasonAsync(season);
-        return Ok(scores);
+        return Ok(scores.Select(s => new NflScoreDto {
+            Id = s.Id, Season = s.Season, NflWeek = s.NflWeek,
+            HomeTeam = s.HomeTeam, AwayTeam = s.AwayTeam,
+            HomeTeamScore = s.HomeTeamScore, AwayTeamScore = s.AwayTeamScore,
+            GameTime = s.GameTime,
+        }).ToList());
     }
 
     // Upsert scores
@@ -229,19 +239,27 @@ public class LeagueController(
 
     // ---------- NFL Spreads ----------
     [HttpGet("spreads/{season:int}/{week:int}")]
-    [ProducesResponseType(typeof(List<NflSpreads>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<NflSpreads>?>> GetSpreads(int season, int week) {
+    [ProducesResponseType(typeof(List<NflSpreadDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<NflSpreadDto>>> GetSpreads(int season, int week) {
         var spreads = await repo.GetNflSpreadsAsync(season, week);
-        if (spreads == null) return Ok(new List<NflSpreads>());
-
-        return Ok(spreads);
+        return Ok((spreads ?? []).Select(s => new NflSpreadDto {
+            Id = s.Id, Season = s.Season, NflWeek = s.NflWeek,
+            HomeTeam = s.HomeTeam, AwayTeam = s.AwayTeam,
+            HomeTeamSpread = s.HomeTeamSpread, AwayTeamSpread = s.AwayTeamSpread,
+            OverUnder = s.OverUnder, GameTime = s.GameTime,
+        }).ToList());
     }
 
     [HttpGet("spreads/{season:int}")]
-    [ProducesResponseType(typeof(List<NflSpreads>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<NflSpreads>>> GetSpreadsForSeason(int season) {
+    [ProducesResponseType(typeof(List<NflSpreadDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<NflSpreadDto>>> GetSpreadsForSeason(int season) {
         var spreads = await repo.GetAllNflSpreadsForSeasonAsync(season);
-        return Ok(spreads);
+        return Ok(spreads.Select(s => new NflSpreadDto {
+            Id = s.Id, Season = s.Season, NflWeek = s.NflWeek,
+            HomeTeam = s.HomeTeam, AwayTeam = s.AwayTeam,
+            HomeTeamSpread = s.HomeTeamSpread, AwayTeamSpread = s.AwayTeamSpread,
+            OverUnder = s.OverUnder, GameTime = s.GameTime,
+        }).ToList());
     }
 
     // Only-add-new spreads (no duplicates)
@@ -397,7 +415,7 @@ public class LeagueController(
         {
             logger.LogWarning("AddPicks: ESPN cache is unavailable — kickoff guard skipped for user {UserId} league {LeagueId}", authenticatedUserId, first.LeagueId);
         }
-        else if (espnScores.Events is not null)
+        else
         {
             var allCompetitions = espnScores.Events.SelectMany(e => e.Competitions).ToList();
             var now = DateTimeOffset.UtcNow;
@@ -443,67 +461,6 @@ public class LeagueController(
     }
 
     // ---------- Odds Calculations ----------
-    [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/didUserWin")]
-    [ProducesResponseType(typeof(SpreadCalculationResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<SpreadCalculationResponse>> DidUserWin(
-        int leagueId, int season, int week,
-        [FromQuery] string team,
-        [FromQuery] int pickTeamScore,
-        [FromQuery] int otherTeamScore) {
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
-
-        if (!calculator.DoOddsExist())
-            return NotFound("No odds available");
-
-        return Ok(new SpreadCalculationResponse {
-            Team = team,
-            IsWinner = calculator.DidUserWinPick(team, pickTeamScore, otherTeamScore),
-            Spread = calculator.GetSpread(team),
-            Over = calculator.GetOverUnder(team, PickType.Over),
-            IsOverWinner = calculator.DidUserWinPick(team, pickTeamScore, otherTeamScore, PickType.Over),
-            Under = calculator.GetOverUnder(team, PickType.Under),
-            IsUnderWinner = calculator.DidUserWinPick(team, pickTeamScore, otherTeamScore, PickType.Under),
-        });
-    }
-
-    [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/team/{team}")]
-    [ProducesResponseType(typeof(double?), StatusCodes.Status200OK)]
-    public async Task<ActionResult<double?>> GetSpreadForTeam(int leagueId, int season, int week, string team) {
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
-
-        if (!calculator.DoOddsExist())
-            return NotFound("No odds available");
-
-        var spread = calculator.GetSpread(team);
-        return Ok(spread);
-    }
-    [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/team/{team}/overunder")]
-    [ProducesResponseType(typeof(double?), StatusCodes.Status200OK)]
-    public async Task<ActionResult<double?>> GetOverUnder(int leagueId, int season, int week, string team,
-        [FromQuery] string pickType = "Spread") {
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
-
-        if (!calculator.DoOddsExist())
-            return NotFound("No odds available");
-
-        var overUnder = calculator.GetOverUnder(team,
-            Enum.TryParse<PickType>(pickType, out var type) ? type : PickType.Spread);
-        return Ok(overUnder);
-    }
-
     [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/exists")]
     [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
     public async Task<ActionResult<bool>> DoOddsExist(int leagueId, int season, int week) {
@@ -514,18 +471,6 @@ public class LeagueController(
             .BuildAsync();
 
         return Ok(calculator.DoOddsExist());
-    }
-
-    [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/{teamAbbr}")]
-    [ProducesResponseType(typeof(double), StatusCodes.Status200OK)]
-    public async Task<ActionResult<double>> GetSpread(int leagueId, int season, int week, string teamAbbr) {
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
-
-        return Ok(calculator.GetSpread(teamAbbr));
     }
 
     [HttpPost("{leagueId:int}/odds/{season:int}/{week:int}")]
