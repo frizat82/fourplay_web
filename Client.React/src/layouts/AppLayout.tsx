@@ -4,6 +4,7 @@ import {
   AppBar,
   Box,
   Button,
+  Chip,
   Collapse,
   Divider,
   Drawer,
@@ -20,6 +21,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -28,7 +30,6 @@ import AddToPhotosIcon from '@mui/icons-material/AddToPhotos';
 import ScoreboardIcon from '@mui/icons-material/Scoreboard';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
-import SettingsIcon from '@mui/icons-material/Settings';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -124,12 +125,21 @@ export default function AppLayout() {
             IV League
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="body2" sx={{ opacity: 0.8 }}>
-              {leagueLabel}
-            </Typography>
-            <IconButton color="inherit" onClick={(e) => setMenuAnchor(e.currentTarget)}>
-              <SettingsIcon />
-            </IconButton>
+            <Chip
+              label={leagueLabel}
+              onClick={(e) => setMenuAnchor(e.currentTarget)}
+              onDelete={(e) => setMenuAnchor(e.currentTarget)}
+              deleteIcon={<ArrowDropDownIcon />}
+              variant="outlined"
+              size="small"
+              sx={{
+                color: 'inherit',
+                borderColor: 'rgba(255,255,255,0.4)',
+                maxWidth: 140,
+                '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+                '&:hover': { borderColor: 'rgba(255,255,255,0.8)', bgcolor: 'rgba(255,255,255,0.08)' },
+              }}
+            />
             <IconButton color="inherit" onClick={toggleTheme} aria-label="toggle dark mode">
               {mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
             </IconButton>
@@ -138,7 +148,7 @@ export default function AppLayout() {
             anchorEl={menuAnchor}
             open={Boolean(menuAnchor)}
             onClose={() => setMenuAnchor(null)}
-            PaperProps={{ sx: { minWidth: 220 } }}
+            slotProps={{ paper: { sx: { minWidth: 220 } } }}
           >
             <Typography variant="caption" sx={{ px: 2, py: 1, opacity: 0.7 }}>
               League Selection
