@@ -141,9 +141,19 @@ Every new user-facing feature MUST have:
    - Integration: add to `e2e/demo/` if it requires real backend data
    - Use typed factory functions from `src/test/fixtures.ts` — never raw JSON
 
-### Before Opening a PR
-1. `/simplify` — review changed code for reuse, quality, and efficiency
-2. `/feature-dev:code-review` — review for bugs, logic errors, and security issues
+### CRITICAL: Before Opening a PR (mandatory — no exceptions)
+Run ALL three steps in order. Skipping any step is a violation of this process.
+
+1. **Run the full test suite** — all tests must pass before a PR is opened:
+   ```bash
+   dotnet test                                            # backend xUnit
+   npm run test -- --run                                  # frontend Vitest
+   npm run test:e2e -- --project=chromium                 # mock-based Playwright
+   ```
+2. **`/simplify`** — review changed code for reuse, quality, and efficiency; apply any fixes
+3. **`/feature-dev:code-review`** — review for bugs, logic errors, and security issues; address findings
+
+Opening a PR before completing these steps wastes CI minutes and review cycles on avoidable failures.
 
 ### Definition of Done
 A bead is closeable ONLY when:
