@@ -10,8 +10,8 @@ public class CfbCurrentSlateService(ICfbRepository repo) : ICfbCurrentSlateServi
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var slates = (await repo.GetSlatesForSeasonAsync(ConfiguredSeason)).ToList();
 
-        // Pre-season: all slates haven't started yet — fall back to prior year
-        if (slates.Count > 0 && slates.All(s => s.StartDate > today))
+        // Empty or pre-season: no slates yet, or all are future — fall back to prior year
+        if (slates.All(s => s.StartDate > today))
             slates = (await repo.GetSlatesForSeasonAsync(ConfiguredSeason - 1)).ToList();
 
         if (slates.Count == 0) return null;
