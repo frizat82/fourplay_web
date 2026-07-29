@@ -81,12 +81,13 @@ vi.mock('../api/espn', () => ({
   loadScoresWithRetry: vi.fn(),
   getWeekScores: vi.fn(),
   getScores: vi.fn(),
-  getCfbLiveScores: vi.fn(),
+  loadCfbScoresWithRetry: vi.fn(),
+  getCfbScoresForSlate: vi.fn(),
   getLiveGames: vi.fn(),
 }));
 
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
-import { getCfbLiveScores, getLiveGames } from '../api/espn';
+import { loadCfbScoresWithRetry, getLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
 const spread: CfbSpreadDto = { id: 1, cfbSlateId: 1, espnEventId: 100, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5, gameTime: '2030-10-11T20:00:00Z' };
@@ -98,7 +99,7 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
     vi.mocked(getCfbSlates).mockResolvedValue([slate]);
     vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
     // ESPN returns scheduled game (future date → no score yet)
-    vi.mocked(getCfbLiveScores).mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
+    vi.mocked(loadCfbScoresWithRetry).mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
     vi.mocked(getLiveGames).mockResolvedValue([]);
     vi.mocked(getCfbScores).mockResolvedValue([]);
     vi.mocked(getCfbUserPicks).mockResolvedValue([]);

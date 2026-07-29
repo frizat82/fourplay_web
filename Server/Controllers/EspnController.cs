@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Shared.Models.Enum;
@@ -10,7 +11,12 @@ namespace FourPlayWebApp.Server.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class EspnController(IEspnApiService espnApiService, IEspnCacheService espnCacheService)
+public class EspnController(
+    IEspnApiService espnApiService,
+    IEspnCacheService espnCacheService,
+    ICfbCacheService cfbCacheService,
+    ICfbLiveScoreFetcher cfbFetcher,
+    ICfbRepository cfbRepo)
     : ControllerBase {
     [HttpGet("scores/week/{week:int}/{year:int}")]
     [ProducesResponseType(typeof(EspnScores), StatusCodes.Status200OK)]
@@ -29,14 +35,30 @@ public class EspnController(IEspnApiService espnApiService, IEspnCacheService es
     }
 
     /// <summary>
-    /// Returns live CFB game data from ESPN for a slate's date window.
-    /// Frontend passes start/end dates (YYYY-MM-DD) matching the slate's StartDate/EndDate.
+    /// Live CFB scores for the CURRENT slate — cached, same role as GetScores() for NFL. One poll
+    /// serves every concurrent viewer instead of each triggering its own ESPN call.
     /// </summary>
     [HttpGet("cfb/scores")]
     [ProducesResponseType(typeof(EspnScores), StatusCodes.Status200OK)]
-    public async Task<ActionResult<EspnScores?>> GetCfbScores([FromQuery] DateOnly startDate, [FromQuery] DateOnly endDate)
+    public async Task<ActionResult<EspnScores?>> GetCfbScores()
     {
-        var scores = await espnApiService.GetCfbScores(startDate, endDate);
+        var scores = await cfbCacheService.GetScoresAsync();
+        return Ok(scores ?? new EspnScores());
+    }
+
+    /// <summary>
+    /// Live CFB scores for a SPECIFIC (typically non-current) slate — direct/uncached, same role
+    /// as GetWeekScores() for NFL. Used when browsing a past or future slate, which isn't repeatedly
+    /// polled the way the current slate is.
+    /// </summary>
+    [HttpGet("cfb/scores/slate/{slateId:int}")]
+    [ProducesResponseType(typeof(EspnScores), StatusCodes.Status200OK)]
+    public async Task<ActionResult<EspnScores?>> GetCfbScoresForSlate(int slateId)
+    {
+        var slate = await cfbRepo.GetSlateByIdAsync(slateId);
+        if (slate is null) return Ok(new EspnScores());
+
+        var scores = await cfbFetcher.FetchForSlateAsync(slate);
         return Ok(scores ?? new EspnScores());
     }
 

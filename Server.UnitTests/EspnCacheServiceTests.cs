@@ -2,7 +2,6 @@ using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Enum;
-using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -11,10 +10,9 @@ namespace FourPlayWebApp.Server.UnitTests;
 /// Tests for EspnCacheService — verifies cache hit/miss behaviour and
 /// that the underlying API is called on a miss but not on a hit.
 /// </summary>
-public class EspnCacheServiceTests : IAsyncDisposable
+public class EspnCacheServiceTests
 {
     private readonly IEspnApiService _espnApi;
-    private readonly IMemoryCache _memoryCache;
     private readonly INflCurrentWeekService _nflCurrentWeekService;
 
     // Default week returned by the mock — tests that don't care about the specific week use this
@@ -23,7 +21,6 @@ public class EspnCacheServiceTests : IAsyncDisposable
     public EspnCacheServiceTests()
     {
         _espnApi = Substitute.For<IEspnApiService>();
-        _memoryCache = new MemoryCache(new MemoryCacheOptions());
         _nflCurrentWeekService = Substitute.For<INflCurrentWeekService>();
         _nflCurrentWeekService.GetCurrentWeekAsync().Returns(DefaultWeek);
     }
@@ -52,7 +49,7 @@ public class EspnCacheServiceTests : IAsyncDisposable
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
                 .Returns(Task.FromResult<EspnScores?>(null));
 
-        await using var svc = new EspnCacheService(_espnApi, _memoryCache, _nflCurrentWeekService);
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService);
 
         // API returns null → RefreshScoresAsync short-circuits before firing ScoresChanged, so
         // there's nothing to wait on deterministically; a null result is the correct outcome
@@ -79,7 +76,7 @@ public class EspnCacheServiceTests : IAsyncDisposable
         // without it, the mocked (near-instant) refresh can complete before ScoresChanged is
         // subscribed to below, and WaitForScoresChangedAsync would wait for an event that
         // already fired.
-        await using var svc = new EspnCacheService(_espnApi, _memoryCache, _nflCurrentWeekService, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, initialDelay: TimeSpan.FromMilliseconds(50));
         await WaitForScoresChangedAsync(svc);
 
         var result = await svc.GetScoresAsync();
@@ -104,7 +101,7 @@ public class EspnCacheServiceTests : IAsyncDisposable
 
         // initialDelay gives the test time to subscribe before the first refresh fires — see
         // GetScoresAsync_WhenCacheHit_ReturnsCachedValue for why this is needed.
-        await using var svc = new EspnCacheService(_espnApi, _memoryCache, _nflCurrentWeekService, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, initialDelay: TimeSpan.FromMilliseconds(50));
         await WaitForScoresChangedAsync(svc);
 
         // Even if a subsequent refresh throws, the previously cached value remains
@@ -129,7 +126,7 @@ public class EspnCacheServiceTests : IAsyncDisposable
 
         int fireCount = 0;
         // initialDelay gives us time to subscribe before the first refresh fires
-        await using var svc = new EspnCacheService(_espnApi, _memoryCache, _nflCurrentWeekService, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, initialDelay: TimeSpan.FromMilliseconds(50));
         svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
 
         await WaitForScoresChangedAsync(svc);
@@ -145,7 +142,7 @@ public class EspnCacheServiceTests : IAsyncDisposable
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>()).Returns(Task.FromResult<EspnScores?>(scores));
 
         int fireCount = 0;
-        await using var svc = new EspnCacheService(_espnApi, _memoryCache, _nflCurrentWeekService, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, initialDelay: TimeSpan.FromMilliseconds(50));
         svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
 
         await WaitForScoresChangedAsync(svc);
@@ -159,7 +156,7 @@ public class EspnCacheServiceTests : IAsyncDisposable
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>()).Returns(Task.FromResult<EspnScores?>(null));
 
         int fireCount = 0;
-        await using var svc = new EspnCacheService(_espnApi, _memoryCache, _nflCurrentWeekService, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, initialDelay: TimeSpan.FromMilliseconds(50));
         svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
 
         // API returns null → ScoresChanged can never fire (RefreshScoresAsync short-circuits first),
@@ -167,11 +164,5 @@ public class EspnCacheServiceTests : IAsyncDisposable
         await Task.Delay(500);
 
         Assert.Equal(0, fireCount);
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        _memoryCache.Dispose();
-        await Task.CompletedTask;
     }
 }
