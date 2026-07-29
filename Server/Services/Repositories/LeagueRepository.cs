@@ -4,13 +4,10 @@ using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FourPlayWebApp.Server.Services.Repositories;
 
-public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextFactory, ILogger<LeagueRepository>? logger = null) : ILeagueRepository {
-    private readonly ILogger<LeagueRepository> _logger = logger ?? NullLogger<LeagueRepository>.Instance;
+public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextFactory) : ILeagueRepository {
     // League and User related methods
     public async Task<List<LeagueUserMapping>> GetLeagueUserMappingsAsync(int leagueId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
