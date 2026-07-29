@@ -9,7 +9,7 @@ using Serilog;
 namespace FourPlayWebApp.Server.Jobs;
 
 [DisallowConcurrentExecution]
-public class CfbSpreadJob(ICfbApiService cfbApi, IEspnCoreOddsService oddsService, ICfbRepository repo) : IJob {
+public class CfbSpreadJob(ICfbLiveScoreFetcher fetcher, IEspnCoreOddsService oddsService, ICfbRepository repo) : IJob {
     private const int Season = 2026;
 
     public async Task Execute(IJobExecutionContext context) {
@@ -24,36 +24,9 @@ public class CfbSpreadJob(ICfbApiService cfbApi, IEspnCoreOddsService oddsServic
         var spreads = new List<CfbSpreads>();
 
         foreach (var slate in slates) {
-            if (slate.EspnWeekNumber.HasValue) {
-                if (CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat)) {
-                    // CFP: week=999 ESPN bucket returns all CFP games; filter to this round by date
-                    var scoreboard = await cfbApi.GetCfpGamesAsync();
-                    if (scoreboard?.Events is null) continue;
-                    var cfpEvents = scoreboard.Events.Where(e => {
-                        var comp = e.Competitions.FirstOrDefault();
-                        return comp is not null
-                            && comp.Date.Date >= slate.StartDate.ToDateTime(TimeOnly.MinValue).Date
-                            && comp.Date.Date <= slate.EndDate.ToDateTime(TimeOnly.MaxValue).Date;
-                    });
-                    await ProcessEventsForSpreads(spreads, slate, cfpEvents);
-                } else {
-                    // Regular season / conf-champs: filter to ranked teams only
-                    var scoreboard = await cfbApi.GetScoresByWeekAsync(slate.EspnWeekNumber.Value, isPostSeason: false);
-                    if (scoreboard?.Events is null) continue;
-                    var rankedEvents = scoreboard.Events.Where(e =>
-                        e.Competitions.Any(c => CfbSlateHelpers.HasRankedTeam(c.Competitors)));
-                    await ProcessEventsForSpreads(spreads, slate, rankedEvents);
-                }
-            } else {
-                // Legacy fallback: date-range iteration for slates missing EspnWeekNumber
-                for (var date = slate.StartDate; date <= slate.EndDate; date = date.AddDays(1)) {
-                    var daily = CfbSlateHelpers.IsTop25Slate(slate.SlateType)
-                        ? await cfbApi.GetTop25ByDateAsync(date)
-                        : await cfbApi.GetScoresByDateAsync(date);
-                    if (daily?.Events is null) continue;
-                    await ProcessEventsForSpreads(spreads, slate, daily.Events);
-                }
-            }
+            var scoreboard = await fetcher.FetchForSlateAsync(slate);
+            if (scoreboard?.Events is null) continue;
+            await ProcessEventsForSpreads(spreads, slate, scoreboard.Events);
         }
 
         if (spreads.Count > 0) {

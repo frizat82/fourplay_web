@@ -1,5 +1,5 @@
-import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
-import { getCfbLiveScores, getLiveGames } from '../api/espn';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
+import { loadCfbScoresWithRetry, getCfbScoresForSlate, getLiveGames } from '../api/espn';
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins, getCfbRequiredPicks } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
@@ -129,11 +129,9 @@ function cfbPickToPickView(pick: CfbPickDto): PickView {
   };
 }
 
-async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores | null; situations: Map<string, import('../types/liveGame').GameSituation | null> }> {
-  const startDate = slate.startDate;
-  const endDate = slate.endDate;
+async function fetchCfbEspnData(slate: CfbSlateDto, isCurrent: boolean): Promise<{ espn: EspnScores | null; situations: Map<string, import('../types/liveGame').GameSituation | null> }> {
   const [espn, liveGames] = await Promise.all([
-    getCfbLiveScores(startDate, endDate),
+    isCurrent ? loadCfbScoresWithRetry() : getCfbScoresForSlate(slate.id),
     getLiveGames().catch(() => []),
   ]);
   // Build situation map from live games
@@ -145,12 +143,12 @@ async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores 
   return { espn, situations };
 }
 
-async function loadSlate(leagueId: number, _userId: string, slateId: number, slate: CfbSlateDto): Promise<{ games: GameView[]; userPicks: PickView[] }> {
+async function loadSlate(leagueId: number, _userId: string, slateId: number, slate: CfbSlateDto, isCurrent: boolean): Promise<{ games: GameView[]; userPicks: PickView[] }> {
   const [spreads, picks, dbScores, { espn, situations }] = await Promise.all([
     getCfbSpreads(slateId),
     getCfbUserPicks(leagueId, slateId),
-    getCfbScores(slateId),
-    fetchCfbEspnData(slate),
+    getCfbDbScores(slateId),
+    fetchCfbEspnData(slate, isCurrent),
   ]);
   return {
     games: buildGamesFromEspn(spreads, espn, dbScores, situations),
@@ -177,12 +175,12 @@ export function createCfbAdapter(): SportAdapter {
     return cachedSlates;
   }
 
-  async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
+  async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto, isCurrent: boolean): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
     const [spreads, allPickDtos, dbScores, { espn, situations }] = await Promise.all([
       getCfbSpreads(slate.id),
       getCfbAllPicks(leagueId, slate.id),
-      getCfbScores(slate.id),
-      fetchCfbEspnData(slate),
+      getCfbDbScores(slate.id),
+      fetchCfbEspnData(slate, isCurrent),
     ]);
     const games = buildGamesFromEspn(spreads, espn, dbScores, situations);
     const allPicks = allPickDtos.map(cfbPickToPickView);
@@ -214,7 +212,7 @@ export function createCfbAdapter(): SportAdapter {
       }
       const [slates, { games, userPicks }] = await Promise.all([
         getSlates(),
-        loadSlate(leagueId, userId, active.id, active),
+        loadSlate(leagueId, userId, active.id, active, true),
       ]);
       const weekState = slateToWeekState(active);
       // maxWeek = max REGULAR season week with data (caps the regular season selector)
@@ -229,7 +227,7 @@ export function createCfbAdapter(): SportAdapter {
       const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
       const slate = slates.find(s => s.slateNumber === slateNum && s.season === season);
       if (!slate) return null;
-      const { games, userPicks } = await loadSlate(leagueId, userId, slate.id, slate);
+      const { games, userPicks } = await loadSlate(leagueId, userId, slate.id, slate, false);
       if (games.length === 0) return null;
       return { season, week, isPostSeason, games, userPicks, hasOdds: true, requiredPicks: getCfbRequiredPicks(slateNum), maxWeek: week, maxSeason: season };
     },
@@ -264,7 +262,7 @@ export function createCfbAdapter(): SportAdapter {
         return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_CONFIGURED_SEASON };
       }
       const weekState = slateToWeekState(active);
-      const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
+      const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active, true);
       const hasActiveGames = games.some(g => g.gameStatus === 'in_progress' || g.gameStatus === 'halftime');
       return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: weekState.week, maxSeason: active.season };
     },
@@ -274,7 +272,7 @@ export function createCfbAdapter(): SportAdapter {
       const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
       const slate = slates.find(s => s.slateNumber === slateNum && s.season === season);
       if (!slate) return null;
-      const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate);
+      const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate, false);
       if (games.length === 0) return null;
       return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: getCfbRequiredPicks(slateNum), maxWeek: week, maxSeason: season };
     },
