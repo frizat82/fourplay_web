@@ -13,6 +13,9 @@ public interface ILeagueRepository {
     Task<List<ApplicationUser>> GetUsersAsync();
     Task<LeagueInfo?> GetLeagueByNameAsync(string leagueName);
 
+    // NFL Season Week Config
+    Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync();
+
     // NFL Weeks
     Task UpsertNflWeeksAsync(List<NflWeeks> weeks);
     Task<List<NflWeeks>> GetNflWeeksAsync(int season);

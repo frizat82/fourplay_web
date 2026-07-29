@@ -9,7 +9,7 @@ using Serilog;
 namespace FourPlayWebApp.Server.Jobs;
 
 [DisallowConcurrentExecution]
-public class CfbScoresJob(ICfbApiService cfbApi, ICfbRepository repo) : IJob {
+public class CfbScoresJob(ICfbApiService cfbApi, ICfbRepository repo, ICfbScoreChangeNotifier notifier) : IJob {
     private const int Season = 2026;
 
     public async Task Execute(IJobExecutionContext context) {
@@ -58,6 +58,7 @@ public class CfbScoresJob(ICfbApiService cfbApi, ICfbRepository repo) : IJob {
 
         if (scores.Count > 0) {
             await repo.UpsertCfbScoresAsync(scores);
+            notifier.NotifyIfChanged(scores);
             Log.Information("CfbScoresJob: upserted {Count} CFB scores", scores.Count);
         }
         Log.Information("CfbScoresJob: complete at {Time}", DateTime.UtcNow);

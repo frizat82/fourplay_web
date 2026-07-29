@@ -116,7 +116,9 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
 
 export function createNflAdapter(): SportAdapter {
   return {
-    pollIntervalMs: 30_000,
+    sport: 'nfl',
+    pollIntervalMs: 300_000,
+    sseUrl: `${import.meta.env.VITE_API_TARGET ?? ''}/api/espn/live-stream`,
     weekSelectorConfig: {
       maxRegularSeasonWeek: 18,
       minSeason: 2020,
