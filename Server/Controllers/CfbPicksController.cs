@@ -93,10 +93,10 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     }
 
     [HttpGet("live-stream")]
-    public Task LiveStream([FromServices] ICfbScoreChangeNotifier notifier, CancellationToken ct) =>
+    public Task LiveStream([FromServices] ICfbCacheService cfbCacheService, CancellationToken ct) =>
         SseHelper.StreamAsync(Response,
-            h => notifier.ScoresChanged += h,
-            h => notifier.ScoresChanged -= h,
+            h => cfbCacheService.ScoresChanged += h,
+            h => cfbCacheService.ScoresChanged -= h,
             ct);
 
     [HttpGet("week-configs/{season:int}")]

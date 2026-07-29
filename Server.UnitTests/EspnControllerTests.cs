@@ -1,5 +1,7 @@
 using FourPlayWebApp.Server.Controllers;
+using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -17,14 +19,20 @@ public class EspnControllerTests
 {
     private readonly IEspnApiService _espnApiService;
     private readonly IEspnCacheService _espnCacheService;
+    private readonly ICfbCacheService _cfbCacheService;
+    private readonly ICfbLiveScoreFetcher _cfbFetcher;
+    private readonly ICfbRepository _cfbRepo;
     private readonly EspnController _sut;
 
     public EspnControllerTests()
     {
         _espnApiService  = Substitute.For<IEspnApiService>();
         _espnCacheService = Substitute.For<IEspnCacheService>();
+        _cfbCacheService = Substitute.For<ICfbCacheService>();
+        _cfbFetcher = Substitute.For<ICfbLiveScoreFetcher>();
+        _cfbRepo = Substitute.For<ICfbRepository>();
 
-        _sut = new EspnController(_espnApiService, _espnCacheService);
+        _sut = new EspnController(_espnApiService, _espnCacheService, _cfbCacheService, _cfbFetcher, _cfbRepo);
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -97,33 +105,57 @@ public class EspnControllerTests
         await _espnApiService.Received(1).GetWeekScores(1, 2025, true);
     }
 
-    // ── GetCfbScores ─────────────────────────────────────────────────────────
+    // ── GetCfbScores (cached, current slate — mirrors GetScores for NFL) ─────
 
     [Fact]
-    public async Task GetCfbScores_ReturnsOk_WithScores()
+    public async Task GetCfbScores_ReturnsOk_WithCachedScores()
     {
-        var start = new DateOnly(2025, 9, 1);
-        var end   = new DateOnly(2025, 9, 7);
         var scores = new EspnScores();
-        _espnApiService.GetCfbScores(start, end).Returns(scores);
+        _cfbCacheService.GetScoresAsync().Returns(scores);
 
-        var result = await _sut.GetCfbScores(start, end);
+        var result = await _sut.GetCfbScores();
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(scores, ok.Value);
     }
 
     [Fact]
-    public async Task GetCfbScores_ReturnsOk_WhenServiceReturnsNull()
+    public async Task GetCfbScores_ReturnsOk_WhenCacheIsNull()
     {
-        var start = new DateOnly(2025, 9, 1);
-        var end   = new DateOnly(2025, 9, 7);
-        _espnApiService.GetCfbScores(start, end).Returns((EspnScores?)null);
+        _cfbCacheService.GetScoresAsync().Returns((EspnScores?)null);
 
-        var result = await _sut.GetCfbScores(start, end);
+        var result = await _sut.GetCfbScores();
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.IsType<EspnScores>(ok.Value);
+    }
+
+    // ── GetCfbScoresForSlate (direct/uncached, specific slate — mirrors GetWeekScores) ─
+
+    [Fact]
+    public async Task GetCfbScoresForSlate_ReturnsOk_WithScores()
+    {
+        var slate = new CfbSlates { Id = 7, Season = 2026 };
+        _cfbRepo.GetSlateByIdAsync(7).Returns(slate);
+        var scores = new EspnScores();
+        _cfbFetcher.FetchForSlateAsync(slate).Returns(scores);
+
+        var result = await _sut.GetCfbScoresForSlate(7);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(scores, ok.Value);
+    }
+
+    [Fact]
+    public async Task GetCfbScoresForSlate_ReturnsOk_Empty_WhenSlateNotFound()
+    {
+        _cfbRepo.GetSlateByIdAsync(999).Returns((CfbSlates?)null);
+
+        var result = await _sut.GetCfbScoresForSlate(999);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsType<EspnScores>(ok.Value);
+        await _cfbFetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
     }
 
     // ── GetLiveGames ─────────────────────────────────────────────────────────
