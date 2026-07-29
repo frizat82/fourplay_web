@@ -11,9 +11,17 @@ Playwright e2e proves the code works against seeded data; this proves the **syst
 works against the real world: ESPN's actual feed, Google's actual SMTP, Railway's
 actual runtime, Quartz's actual clock.
 
-**When:** before every dev→main cutover, and once during a real game week (Thu–Tue)
-before season kickoff. Phases 1–3 can run any day; phases 4–8 need a live week
-(preseason works for NFL infrastructure testing; CFB week 1 is late August).
+**When — two-stage schedule, because most of this does NOT need live games:**
+
+- **Stage 1 (any day, off-season): Phases 0–3, 9, 10.** Infra, auth, league setup,
+  failure drills, and postseason spot-checks are date-independent. This stage is the
+  gate for the dev→main cutover and can run in early August.
+- **Stage 2 (first live week): Phases 4–8.** The app only models regular-season +
+  postseason weeks (no NFL preseason support), so the first real spread→pick→score
+  cycle can only run against real games. **CFB week 1 (~Aug 29) is the rehearsal**:
+  it exercises the full cycle on staging a week+ before NFL kickoff (~Sept 10),
+  leaving time to fix what it finds. NFL week 1 then gets a lighter watch-and-verify
+  pass on prod itself.
 
 **Where:** Railway staging (frizat-67l) running `DEMO_MODE=false` with real ESPN +
 odds APIs, real SMTP, and the Neon dev database. The UAT demo config
