@@ -70,23 +70,6 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
         }
     }
 
-    private const string _cfbScoreboardEndpoint = "/apis/site/v2/sports/football/college-football/scoreboard";
-
-    public async Task<EspnScores?> GetCfbScores(DateOnly startDate, DateOnly endDate) {
-        try {
-            // ESPN date format: YYYYMMDD
-            var dates = $"{startDate:yyyyMMdd}-{endDate:yyyyMMdd}";
-            var response = await httpClient.GetAsync($"{_cfbScoreboardEndpoint}?dates={dates}&limit=100&groups=80");
-            response.EnsureSuccessStatusCode();
-            var responseString = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<EspnScores>(responseString, EspnApiServiceJsonConverter.Settings);
-        }
-        catch (Exception e) {
-            Log.Warning("GetCfbScores failed for {Start}-{End}: {Msg}", startDate, endDate, e.Message);
-            return null;
-        }
-    }
-
     private EspnScores? FixEspnProbBowlWeek(EspnScores? scores) {
         if (scores == null || !scores.Events.Any())
             return scores;
