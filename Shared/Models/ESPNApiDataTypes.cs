@@ -314,7 +314,7 @@ public class Week
 }
 public enum TypeOfSeason { PostSeason = 3, RegularSeason = 2, PreSeason = 1 };
 // NFL wire values: "total"/"road"/"home". CFB additionally sends "homerecord"/"awayrecord"/"vsconf"
-// (see EspnContractTests, frizat-703.5) — kept as distinct members since CFB never sends "road"/"home".
+// (see EspnJsonConverterTests, frizat-703.5) — kept as distinct members since CFB never sends "road"/"home".
 public enum EspnRecordType { Total, Road, Home, HomeRecord, AwayRecord, VsConf }
 public enum HomeAway { Away, Home }
 public enum Description { Final, Halftime, InProgress, Scheduled, EndOfPeriod }
