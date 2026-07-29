@@ -32,5 +32,7 @@ public class DemoEspnCacheService : IEspnCacheService
             _scores?.Events?.Length ?? 0);
     }
 
+    public event Action? ScoresChanged; // never fired — demo data is static
+
     public Task<EspnScores?> GetScoresAsync() => Task.FromResult(_scores);
 }

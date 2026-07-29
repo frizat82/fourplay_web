@@ -3,8 +3,14 @@
  * If either adapter stops returning GameCard-renderable data, these tests fail.
  */
 import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import PicksPage from '../pages/PicksPage';
+
+const renderWithClient = (ui: React.ReactElement) => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+};
 import { createCfbAdapter } from '../services/cfbAdapter';
 import { createNflAdapter } from '../services/nflAdapter';
 import type { CfbSlateDto, CfbSpreadDto } from '../types/league';
@@ -55,19 +61,19 @@ describe('NFL PicksPage — GameCard layout regression', () => {
   });
 
   it('renders Pick buttons (GameCard pick mode)', async () => {
-    render(<PicksPage adapter={createNflAdapter()} />);
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /^pick$/i }).length).toBeGreaterThan(0));
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^Pick /i }).length).toBeGreaterThan(0));
   });
 
   it('renders spread label -3 (GameCard spread display)', async () => {
-    render(<PicksPage adapter={createNflAdapter()} />);
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
     await waitFor(() => expect(screen.getByText('-3')).toBeInTheDocument());
   });
 });
 
 // ─── CFB regression ──────────────────────────────────────────────────────────
 vi.mock('../api/cfb', () => ({
-  getCfbSlates: vi.fn(), getCfbSpreads: vi.fn(), getCfbScores: vi.fn(),
+  getCfbCurrentSlate: vi.fn(), getCfbSlates: vi.fn(), getCfbSpreads: vi.fn(), getCfbScores: vi.fn(),
   getCfbUserPicks: vi.fn(), addCfbPicks: vi.fn(), deleteCfbPicks: vi.fn(),
 }));
 // Single espn mock covering both NFL and CFB needs
@@ -79,7 +85,7 @@ vi.mock('../api/espn', () => ({
   getLiveGames: vi.fn(),
 }));
 
-import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
 import { getCfbLiveScores, getLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
@@ -88,6 +94,7 @@ const spread: CfbSpreadDto = { id: 1, cfbSlateId: 1, espnEventId: 100, homeTeam:
 describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getCfbCurrentSlate).mockResolvedValue(slate);
     vi.mocked(getCfbSlates).mockResolvedValue([slate]);
     vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
     // ESPN returns scheduled game (future date → no score yet)
@@ -98,12 +105,12 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
   });
 
   it('renders Pick buttons (GameCard pick mode)', async () => {
-    render(<PicksPage adapter={createCfbAdapter()} />);
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /^pick$/i }).length).toBeGreaterThan(0));
+    renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^Pick /i }).length).toBeGreaterThan(0));
   });
 
   it('renders spread labels -3.5 and +3.5 (GameCard spread display)', async () => {
-    render(<PicksPage adapter={createCfbAdapter()} />);
+    renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
     await waitFor(() => {
       expect(screen.getByText('-3.5')).toBeInTheDocument();
       expect(screen.getByText('+3.5')).toBeInTheDocument();
@@ -111,18 +118,18 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
   });
 
   it('renders TeamHelmet for both teams', async () => {
-    render(<PicksPage adapter={createCfbAdapter()} />);
+    renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
     await waitFor(() => {
       expect(screen.getByTestId('helmet-MICH')).toBeInTheDocument();
       expect(screen.getByTestId('helmet-PSU')).toBeInTheDocument();
     });
   });
 
-  it('shows Picked when pick already submitted', async () => {
+  it('shows Locked in when pick already submitted', async () => {
     vi.mocked(getCfbUserPicks).mockResolvedValue([
       { id: 1, userId: 'u1', userName: 'u1', leagueId: 1, cfbSlateId: 1, espnEventId: 100, team: 'MICH', pickType: 'Spread', season: 2025 }
     ]);
-    render(<PicksPage adapter={createCfbAdapter()} />);
-    await waitFor(() => expect(screen.getByRole('button', { name: /^picked$/i })).toBeInTheDocument());
+    renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /MICH locked in/i })).toBeInTheDocument());
   });
 });

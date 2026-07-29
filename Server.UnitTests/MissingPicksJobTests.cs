@@ -1,10 +1,8 @@
 using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
-using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
-using FourPlayWebApp.Shared.Models;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -23,14 +21,17 @@ public class MissingPicksJobTests : IDisposable
 {
     private const string AppUrl = "https://test.fourplay.app";
     private const int Season = 2024;
-    private const int RegularSeasonType = (int)TypeOfSeason.RegularSeason;
 
     private readonly ILeagueRepository _repo;
-    private readonly IEspnApiService _espnApi;
+    private readonly INflCurrentWeekService _nflCurrentWeekService;
     private readonly IEmailSender _emailSender;
     private readonly IJobObserverService _observer;
     private readonly IJobExecutionContext _context;
     private readonly string? _previousAppUrl;
+
+    // Default: regular-season week 5 (EspnWeek=5 is what the job passes to GetUserNflPicksAsync)
+    private static NflWeekInfo Week(int weekId, int espnWeek = 0, bool isPostSeason = false) =>
+        new(weekId, espnWeek == 0 ? weekId : espnWeek, Season, isPostSeason, $"Week {weekId}", "Standard");
 
     public MissingPicksJobTests()
     {
@@ -38,10 +39,13 @@ public class MissingPicksJobTests : IDisposable
         Environment.SetEnvironmentVariable("APP_URL", AppUrl);
 
         _repo = Substitute.For<ILeagueRepository>();
-        _espnApi = Substitute.For<IEspnApiService>();
+        _nflCurrentWeekService = Substitute.For<INflCurrentWeekService>();
         _emailSender = Substitute.For<IEmailSender>();
         _observer = Substitute.For<IJobObserverService>();
         _context = Substitute.For<IJobExecutionContext>();
+
+        // Default week for tests that don't care about the specific week
+        _nflCurrentWeekService.GetCurrentWeekAsync().Returns(Week(5));
     }
 
     public void Dispose()
@@ -50,14 +54,7 @@ public class MissingPicksJobTests : IDisposable
     }
 
     private MissingPicksJob BuildJob() =>
-        new(_repo, _espnApi, _emailSender, _observer);
-
-    private static EspnScores BuildScoreboard(int weekNumber, int seasonType = RegularSeasonType) =>
-        new()
-        {
-            Season = new Season { Year = Season, Type = seasonType },
-            Week = new Week { Number = weekNumber }
-        };
+        new(_repo, _nflCurrentWeekService, _emailSender, _observer);
 
     private static ApplicationUser BuildUser(string email = "user@example.com") =>
         new() { Id = Guid.NewGuid().ToString(), UserName = "testuser", Email = email };
@@ -69,34 +66,19 @@ public class MissingPicksJobTests : IDisposable
         new() { LeagueId = league.Id, League = league, UserId = user.Id, User = user };
 
     // -------------------------------------------------------------------------
-    // Scoreboard failures
+    // Current week service failure
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Execute_WhenScoreboardNull_RecordsFailure_SendsNoEmails()
+    public async Task Execute_WhenCurrentWeekServiceThrows_RecordsFailure_JobRethrows()
     {
-        _espnApi.GetScores().Returns((EspnScores?)null);
+        // NflCurrentWeekService throws when NflSeasonWeekConfig table is empty / misconfigured
+        _nflCurrentWeekService.GetCurrentWeekAsync()
+            .ThrowsAsync(new InvalidOperationException("No season config found"));
 
-        await BuildJob().Execute(_context);
+        var ex = await Record.ExceptionAsync(() => BuildJob().Execute(_context));
 
-        await _observer.Received(1).RecordJobFailureAsync(
-            nameof(MissingPicksJob),
-            Arg.Any<string>());
-        await _emailSender.DidNotReceive().SendEmailAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>());
-    }
-
-    [Fact]
-    public async Task Execute_WhenWeekNull_RecordsFailure_SendsNoEmails()
-    {
-        _espnApi.GetScores().Returns(new EspnScores
-        {
-            Season = new Season { Year = Season, Type = RegularSeasonType },
-            Week = null
-        });
-
-        await BuildJob().Execute(_context);
-
+        Assert.NotNull(ex); // job rethrows after recording
         await _observer.Received(1).RecordJobFailureAsync(
             nameof(MissingPicksJob),
             Arg.Any<string>());
@@ -111,7 +93,6 @@ public class MissingPicksJobTests : IDisposable
     [Fact]
     public async Task Execute_WhenNoUsers_RecordsSuccess_SendsNoEmails()
     {
-        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 5));
         _repo.GetUsersAsync().Returns(new List<ApplicationUser>());
 
         await BuildJob().Execute(_context);
@@ -134,7 +115,7 @@ public class MissingPicksJobTests : IDisposable
         var league = BuildLeague();
         var mapping = BuildMapping(user, league);
 
-        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 5));
+        // Default week is week 5 (EspnWeek=5) → GetUserNflPicksAsync uses EspnWeek=5
         _repo.GetUsersAsync().Returns(new List<ApplicationUser> { user });
         _repo.GetLeagueUserMappingsAsync(user).Returns(new List<LeagueUserMapping> { mapping });
 
@@ -163,7 +144,7 @@ public class MissingPicksJobTests : IDisposable
         var league = BuildLeague();
         var mapping = BuildMapping(user, league);
 
-        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 5));
+        // Default week 5, EspnWeek=5
         _repo.GetUsersAsync().Returns(new List<ApplicationUser> { user });
         _repo.GetLeagueUserMappingsAsync(user).Returns(new List<LeagueUserMapping> { mapping });
 
@@ -186,7 +167,7 @@ public class MissingPicksJobTests : IDisposable
         var league = BuildLeague();
         var mapping = BuildMapping(user, league);
 
-        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 3));
+        _nflCurrentWeekService.GetCurrentWeekAsync().Returns(Week(3));
         _repo.GetUsersAsync().Returns(new List<ApplicationUser> { user });
         _repo.GetLeagueUserMappingsAsync(user).Returns(new List<LeagueUserMapping> { mapping });
         _repo.GetUserNflPicksAsync(user.Id, league.Id, Season, 3)
@@ -212,7 +193,6 @@ public class MissingPicksJobTests : IDisposable
         var league = BuildLeague();
         var mapping = BuildMapping(user, league);
 
-        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 5));
         _repo.GetUsersAsync().Returns(new List<ApplicationUser> { user });
         _repo.GetLeagueUserMappingsAsync(user).Returns(new List<LeagueUserMapping> { mapping });
         _repo.GetUserNflPicksAsync(user.Id, league.Id, Season, 5)
@@ -237,7 +217,7 @@ public class MissingPicksJobTests : IDisposable
         var league = BuildLeague("My Test League");
         var mapping = BuildMapping(user, league);
 
-        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 7));
+        _nflCurrentWeekService.GetCurrentWeekAsync().Returns(Week(7));
         _repo.GetUsersAsync().Returns(new List<ApplicationUser> { user });
         _repo.GetLeagueUserMappingsAsync(user).Returns(new List<LeagueUserMapping> { mapping });
         _repo.GetUserNflPicksAsync(user.Id, league.Id, Season, 7)
@@ -263,7 +243,7 @@ public class MissingPicksJobTests : IDisposable
         var league = BuildLeague();
         var mapping = BuildMapping(user, league);
 
-        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 7));
+        _nflCurrentWeekService.GetCurrentWeekAsync().Returns(Week(7));
         _repo.GetUsersAsync().Returns(new List<ApplicationUser> { user });
         _repo.GetLeagueUserMappingsAsync(user).Returns(new List<LeagueUserMapping> { mapping });
         _repo.GetUserNflPicksAsync(user.Id, league.Id, Season, 7)
@@ -294,7 +274,6 @@ public class MissingPicksJobTests : IDisposable
         user2.Id = "user-2";
         var league = BuildLeague();
 
-        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 5));
         _repo.GetUsersAsync().Returns(new List<ApplicationUser> { user1, user2 });
 
         _repo.GetLeagueUserMappingsAsync(user1)
@@ -334,7 +313,7 @@ public class MissingPicksJobTests : IDisposable
         var mapping1 = BuildMapping(user, league1);
         var mapping2 = new LeagueUserMapping { LeagueId = league2.Id, League = league2, UserId = user.Id, User = user };
 
-        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 8));
+        _nflCurrentWeekService.GetCurrentWeekAsync().Returns(Week(8));
         _repo.GetUsersAsync().Returns(new List<ApplicationUser> { user });
         _repo.GetLeagueUserMappingsAsync(user)
              .Returns(new List<LeagueUserMapping> { mapping1, mapping2 });
@@ -372,12 +351,14 @@ public class MissingPicksJobTests : IDisposable
         var league = BuildLeague();
         var mapping = BuildMapping(user, league);
 
-        // Week 1 of postseason = Wild Card = 3 required picks
-        _espnApi.GetScores().Returns(BuildScoreboard(weekNumber: 1, seasonType: (int)TypeOfSeason.PostSeason));
+        // WeekId=19 = Wild Card; EspnWeek=1 (what GetUserNflPicksAsync receives); IsPostSeason=true
+        // GetEspnRequiredPicks(espnWeek=1, isPostSeason=true) = 3
+        _nflCurrentWeekService.GetCurrentWeekAsync()
+            .Returns(new NflWeekInfo(19, 1, Season, true, "Wild Card Weekend", "Standard"));
         _repo.GetUsersAsync().Returns(new List<ApplicationUser> { user });
         _repo.GetLeagueUserMappingsAsync(user).Returns(new List<LeagueUserMapping> { mapping });
 
-        // User has 3 picks for Wild Card — should NOT get an email
+        // User has 3 picks for Wild Card — meets the requirement → should NOT get an email
         _repo.GetUserNflPicksAsync(user.Id, league.Id, Season, 1)
              .Returns(new List<NflPicks>
              {

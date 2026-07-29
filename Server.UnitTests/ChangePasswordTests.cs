@@ -107,7 +107,7 @@ public class ChangePasswordTests
         await userManager.DidNotReceive().ChangePasswordAsync(victimUser, Arg.Any<string>(), Arg.Any<string>());
         await userManager.Received().ChangePasswordAsync(callerUser, Arg.Any<string>(), Arg.Any<string>());
 
-        Assert.IsType<OkResult>(result.Result); // caller's own password changed OK
+        Assert.IsType<OkObjectResult>(result.Result); // caller's own password changed OK (re-issues cookies)
     }
 
     [Fact]

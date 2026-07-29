@@ -224,9 +224,11 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddAuthorization();
 builder.Services.AddMemoryCache();
 
-// CORS — allow configured origins (comma-separated ALLOWED_ORIGINS env var)
-var allowedOrigins = (Environment.GetEnvironmentVariable("ALLOWED_ORIGINS") ?? "")
-    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+// CORS — allow configured origins (comma-separated ALLOWED_ORIGINS env var).
+// Fails fast in non-Development when ALLOWED_ORIGINS is unset to prevent wildcard CORS in prod.
+var allowedOrigins = FourPlayWebApp.Server.Infrastructure.StartupValidation.ParseAndValidateCorsOrigins(
+    Environment.GetEnvironmentVariable("ALLOWED_ORIGINS"),
+    builder.Environment.IsDevelopment());
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -234,7 +236,7 @@ builder.Services.AddCors(options =>
         if (allowedOrigins.Length > 0)
             policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
         else
-            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod(); // Dev only — validated above
     });
 });
 // Add Invitation Service
@@ -246,6 +248,9 @@ builder.Services.AddScoped<ICfbLeaderboardService, CfbLeaderboardService>();
 builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
 builder.Services.AddScoped<ICfbRepository, CfbRepository>();
 builder.Services.AddScoped<ICfbPicksRepository, CfbPicksRepository>();
+builder.Services.AddSingleton<INflCurrentWeekService, NflCurrentWeekService>();
+builder.Services.AddScoped<ICfbCurrentSlateService, CfbCurrentSlateService>();
+builder.Services.AddSingleton<ICfbScoreChangeNotifier, CfbScoreChangeNotifier>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 

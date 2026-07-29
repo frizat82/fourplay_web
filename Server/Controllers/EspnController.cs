@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
@@ -54,6 +55,13 @@ public class EspnController(IEspnApiService espnApiService, IEspnCacheService es
 
         return Ok(games);
     }
+    [HttpGet("live-stream")]
+    public Task LiveStream(CancellationToken ct) =>
+        SseHelper.StreamAsync(Response,
+            h => espnCacheService.ScoresChanged += h,
+            h => espnCacheService.ScoresChanged -= h,
+            ct);
+
 /*
     [HttpGet("odds/events/{eventId:int}")]
     [ProducesResponseType(typeof(ESPNCoreOddsApiResponse), StatusCodes.Status200OK)]
