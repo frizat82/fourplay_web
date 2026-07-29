@@ -171,6 +171,12 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    // ── CFB live-stream (SSE) — same role as espn/live-stream for NFL ───────
+    if (url.includes('/api/cfb/live-stream') && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
+      return;
+    }
+
     // ── ESPN scores/week — historical ──────────────────────────────────────
     if (url.includes('/api/espn/scores/week/') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(scoresData) });
@@ -179,6 +185,18 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
 
     // ── ESPN scores — current week ─────────────────────────────────────────
     if (url.includes('/api/espn/scores') && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(scoresData) });
+      return;
+    }
+
+    // ── CFB scores/slate/{id} — specific (typically non-current) slate ──────
+    if (url.includes('/api/espn/cfb/scores/slate/') && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(scoresData) });
+      return;
+    }
+
+    // ── CFB scores — cached current slate ────────────────────────────────────
+    if (url.includes('/api/espn/cfb/scores') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(scoresData) });
       return;
     }

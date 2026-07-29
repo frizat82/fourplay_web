@@ -3,10 +3,8 @@ using FourPlayWebApp.Shared.Models;
 namespace FourPlayWebApp.Server.Jobs;
 
 internal static class CfbSlateHelpers {
-    public static bool IsTop25Slate(string slateType) =>
-        slateType == "RegularSeason" || slateType == "ConferenceChampionship";
-
-    // Returns ESPN seasontype: 2 = regular/conf-champs, 3 = CFP postseason rounds
+    // True for CFP postseason rounds (ESPN seasontype=3), false for regular season/conf-champs
+    // (seasontype=2) — callers use this to pick which ICfbApiService method to call.
     public static bool IsCfpSlate(string? scoringFormat) =>
         scoringFormat is "NFLDivisional" or "NFLConference" or "NFLSuperBowl";
 
