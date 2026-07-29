@@ -6,8 +6,8 @@ namespace FourPlayWebApp.Server.Services;
 /// Generic periodic-refresh cache: polls a fetch delegate on an interval, exposes the latest
 /// value, and raises Changed exactly when a refresh produces a different fingerprint than the
 /// last one. Shared by NFL (EspnCacheService) and CFB (CfbCacheService, frizat-703.6) so both
-/// sports use identical caching/change-detection machinery — only the fetch delegate and
-/// fingerprint function differ per sport (frizat-703.6 unification).
+/// sports use identical caching/change-detection machinery — only the fetch delegate differs per
+/// sport; both currently pass the same EspnScoresFingerprint.Compute (frizat-703.6 unification).
 /// </summary>
 public sealed class PeriodicRefreshCache<T> : IAsyncDisposable where T : class
 {
