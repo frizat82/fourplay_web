@@ -266,142 +266,45 @@ builder.Services.AddScoped<IJob, CfbSlateSeederJob>();
 builder.Services.AddScoped<IJob, CfbSpreadJob>();
 builder.Services.AddScoped<IJob, CfbScoresJob>();
 builder.Services.AddQuartz(q => {
-    // Setup User at startup
- // User Manager
-// In DEMO_MODE fire in 5s so seeding completes before e2e tests start;
-// otherwise fire 2 min after startup to avoid slowing cold boot.
-var userManagerDelay = builder.Configuration["DEMO_MODE"] == "true" ? 5 : 120;
-q.ScheduleJob<UserManagerJob>(trigger => trigger
-    .WithIdentity("User Manager")
-    .WithDescription("Manages initial user admin (mark)")
-    .StartAt(DateBuilder.FutureDate(userManagerDelay, IntervalUnit.Second))
-);
+    // In DEMO_MODE fire in 5s so seeding completes before e2e tests start;
+    // otherwise fire 2 min after startup to avoid slowing cold boot.
+    var userManagerDelay = builder.Configuration["DEMO_MODE"] == "true" ? 5 : 120;
+    q.ScheduleJob<UserManagerJob>(trigger => trigger
+        .WithIdentity("User Manager")
+        .WithDescription("Manages initial user admin (mark)")
+        .StartAt(DateBuilder.FutureDate(userManagerDelay, IntervalUnit.Second))
+    );
 
-// Note: use IANA timezone id "America/Chicago" which works on Linux containers
-// NFL Spreads - special holiday
-q.ScheduleJob<NflSpreadJob>(trigger => trigger
-    .WithIdentity("NFL Spreads Christmas Eve")
-    .WithDescription("Loads NFL spreads for Christmas Eve games at 10am CST")
-    .WithCronSchedule("0 0 10 24 12 ?",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// NFL Spreads - weekly Thursday
-q.ScheduleJob<NflSpreadJob>(trigger => trigger
-    .WithIdentity("NFL Spreads Thursday 2pm")
-    .WithDescription("Loads NFL spreads every Thursday at 2pm CST")
-    .WithCronSchedule("0 0 14 ? * THU",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// NFL Scores - Thursday morning
-q.ScheduleJob<NflScoresJob>(trigger => trigger
-    .WithIdentity("NFL Scores Thu 10am")
-    .WithDescription("Fetches NFL scores Thursday morning at 10am CST")
-    .WithCronSchedule("0 0 10 ? * THU",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// NFL Scores - Friday overnight
-q.ScheduleJob<NflScoresJob>(trigger => trigger
-    .WithIdentity("NFL Scores Fri 1am")
-    .WithDescription("Fetches NFL scores early Friday at 1am CST")
-    .WithCronSchedule("0 0 1 ? * FRI",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// NFL Scores - Sunday pregame (Euro Games)
-q.ScheduleJob<NflScoresJob>(trigger => trigger
-    .WithIdentity("NFL Scores Sun 12:30pm")
-    .WithDescription("Fetches NFL scores just before Sunday early games at 12:30pm CST")
-    .WithCronSchedule("0 30 12 ? * SUN",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// NFL Scores - Sunday late afternoon
-q.ScheduleJob<NflScoresJob>(trigger => trigger
-    .WithIdentity("NFL Scores Sun 4:30pm")
-    .WithDescription("Fetches NFL scores during Sunday late games at 4:30pm CST")
-    .WithCronSchedule("0 30 16 ? * SUN",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// NFL Scores - Sunday evening afternoon
-q.ScheduleJob<NflScoresJob>(trigger => trigger
-    .WithIdentity("NFL Scores Sun 7:40pm")
-    .WithDescription("Fetches NFL scores during Sunday late games at 7:40pm CST")
-    .WithCronSchedule("0 40 19 ? * SUN",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-            .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// NFL Scores - Monday overnight
-q.ScheduleJob<NflScoresJob>(trigger => trigger
-    .WithIdentity("NFL Scores Mon 1am")
-    .WithDescription("Fetches NFL scores early Monday after SNF at 1am CST")
-    .WithCronSchedule("0 0 1 ? * MON",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// NFL Scores - Tues overnight
-q.ScheduleJob<NflScoresJob>(trigger => trigger
-    .WithIdentity("NFL Scores Tue 1am")
-    .WithDescription("Fetches NFL scores early Monday after SNF at 1am CST")
-    .WithCronSchedule("0 0 1 ? * TUE",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-            .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// Missing Picks Job - Sundays at 11:00 AM CST
-// MissingPicksJob trigger disabled — frizat-z5h deferred.
-// Plan: fire at 2:45pm CST Sat+Sun, gate send with HasGamesTodayAsync, replace hardcoded "noon CST" copy.
-// q.ScheduleJob<MissingPicksJob>(trigger => trigger
-//     .WithIdentity("Missing Picks Job")
-//     .WithDescription("Sends reminder emails to users missing required picks")
-//     .WithCronSchedule("0 0 11 ? * SUN",
-//         x => x.WithMisfireHandlingInstructionFireAndProceed()
-//               .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+    // NFL Spreads
+    q.ScheduleCstCronJob<NflSpreadJob>("NFL Spreads Christmas Eve", "Loads NFL spreads for Christmas Eve games at 10am CST", "0 0 10 24 12 ?");
+    q.ScheduleCstCronJob<NflSpreadJob>("NFL Spreads Thursday 2pm", "Loads NFL spreads every Thursday at 2pm CST", "0 0 14 ? * THU");
 
-// CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons
-q.ScheduleJob<CfbSlateSeederJob>(trigger => trigger
-    .WithIdentity("CFB Slate Seeder")
-    .WithDescription("Seeds CFB slate dates for the current season")
-    .WithCronSchedule("0 0 5 ? * MON",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// CFB Spreads — Saturday 9am CST (before first kickoffs) + Wednesday 10am CST (mid-week lines)
-q.ScheduleJob<CfbSpreadJob>(trigger => trigger
-    .WithIdentity("CFB Spread Job Sat")
-    .WithDescription("Fetches CFB spreads Saturday morning before kickoff")
-    .WithCronSchedule("0 0 9 ? * SAT",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-q.ScheduleJob<CfbSpreadJob>(trigger => trigger
-    .WithIdentity("CFB Spread Job Wed")
-    .WithDescription("Fetches CFB spreads Wednesday when mid-week lines open")
-    .WithCronSchedule("0 0 10 ? * WED",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-// CFB Scores — Saturday noon, 4pm, 8pm, midnight CST + Sunday 6am CST (covers all kickoff windows)
-q.ScheduleJob<CfbScoresJob>(trigger => trigger
-    .WithIdentity("CFB Scores Sat Noon")
-    .WithDescription("Fetches CFB scores at Saturday noon kickoff window")
-    .WithCronSchedule("0 0 12 ? * SAT",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-q.ScheduleJob<CfbScoresJob>(trigger => trigger
-    .WithIdentity("CFB Scores Sat 4pm")
-    .WithDescription("Fetches CFB scores at Saturday afternoon kickoff window")
-    .WithCronSchedule("0 0 16 ? * SAT",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-q.ScheduleJob<CfbScoresJob>(trigger => trigger
-    .WithIdentity("CFB Scores Sat 8pm")
-    .WithDescription("Fetches CFB scores at Saturday evening kickoff window")
-    .WithCronSchedule("0 0 20 ? * SAT",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-q.ScheduleJob<CfbScoresJob>(trigger => trigger
-    .WithIdentity("CFB Scores Sat Midnight")
-    .WithDescription("Fetches CFB final scores late Saturday night")
-    .WithCronSchedule("0 0 0 ? * SUN",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
-q.ScheduleJob<CfbScoresJob>(trigger => trigger
-    .WithIdentity("CFB Scores Sun 6am")
-    .WithDescription("Fetches CFB overnight final scores Sunday morning")
-    .WithCronSchedule("0 0 6 ? * SUN",
-        x => x.WithMisfireHandlingInstructionFireAndProceed()
-              .InTimeZone(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"))));
+    // NFL Scores
+    q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Thu 10am", "Fetches NFL scores Thursday morning at 10am CST", "0 0 10 ? * THU");
+    q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Fri 1am", "Fetches NFL scores early Friday at 1am CST", "0 0 1 ? * FRI");
+    q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Sun 12:30pm", "Fetches NFL scores just before Sunday early games at 12:30pm CST", "0 30 12 ? * SUN");
+    q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Sun 4:30pm", "Fetches NFL scores during Sunday late games at 4:30pm CST", "0 30 16 ? * SUN");
+    q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Sun 7:40pm", "Fetches NFL scores during Sunday evening games at 7:40pm CST", "0 40 19 ? * SUN");
+    q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Mon 1am", "Fetches NFL scores early Monday after SNF at 1am CST", "0 0 1 ? * MON");
+    q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Tue 1am", "Fetches NFL scores early Tuesday after MNF at 1am CST", "0 0 1 ? * TUE");
+
+    // MissingPicksJob trigger disabled — frizat-z5h deferred.
+    // Plan: fire at 2:45pm CST Sat+Sun, gate send with HasGamesTodayAsync, replace hardcoded "noon CST" copy.
+    // q.ScheduleCstCronJob<MissingPicksJob>("Missing Picks Job", "Sends reminder emails to users missing required picks", "0 0 11 ? * SUN");
+
+    // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons
+    q.ScheduleCstCronJob<CfbSlateSeederJob>("CFB Slate Seeder", "Seeds CFB slate dates for the current season", "0 0 5 ? * MON");
+
+    // CFB Spreads — Saturday 9am CST (before first kickoffs) + Wednesday 10am CST (mid-week lines)
+    q.ScheduleCstCronJob<CfbSpreadJob>("CFB Spread Job Sat", "Fetches CFB spreads Saturday morning before kickoff", "0 0 9 ? * SAT");
+    q.ScheduleCstCronJob<CfbSpreadJob>("CFB Spread Job Wed", "Fetches CFB spreads Wednesday when mid-week lines open", "0 0 10 ? * WED");
+
+    // CFB Scores — Saturday noon, 4pm, 8pm, midnight CST + Sunday 6am CST (covers all kickoff windows)
+    q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat Noon", "Fetches CFB scores at Saturday noon kickoff window", "0 0 12 ? * SAT");
+    q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat 4pm", "Fetches CFB scores at Saturday afternoon kickoff window", "0 0 16 ? * SAT");
+    q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat 8pm", "Fetches CFB scores at Saturday evening kickoff window", "0 0 20 ? * SAT");
+    q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat Midnight", "Fetches CFB final scores late Saturday night", "0 0 0 ? * SUN");
+    q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 6am", "Fetches CFB overnight final scores Sunday morning", "0 0 6 ? * SUN");
 });
 
 
