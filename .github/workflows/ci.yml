@@ -23,7 +23,9 @@ jobs:
         run: dotnet build --no-restore -c Release
 
       - name: Test
-        run: dotnet test --no-build -c Release --logger "console;verbosity=minimal"
+        # Category=Contract tests hit the real ESPN/odds APIs over the network — excluded here,
+        # run weekly + on-demand via espn-contract.yml instead (frizat-703.5).
+        run: dotnet test --no-build -c Release --filter "Category!=Contract" --logger "console;verbosity=minimal"
 
   frontend:
     name: Frontend build & test

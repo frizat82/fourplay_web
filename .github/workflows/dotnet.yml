@@ -58,9 +58,12 @@ jobs:
         path: ./coverage
 
     - name: Unit Tests
+      # Category=Contract tests hit the real ESPN/odds APIs over the network — excluded here,
+      # run weekly + on-demand via espn-contract.yml instead (frizat-703.5).
       run: >
         dotnet test
         --no-build
+        --filter "Category!=Contract"
         --settings Server.UnitTests/coverlet.runsettings
         --verbosity m
         --collect:"XPlat Code Coverage"

@@ -21,17 +21,13 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
             response.EnsureSuccessStatusCode();
             if (response.IsSuccessStatusCode) {
                 var responseString = await response.Content.ReadAsStringAsync();
-                var options = new JsonSerializerOptions {
-                    PropertyNameCaseInsensitive = true
-                };
-                EspnApiServiceJsonConverter.Settings.Converters.ToList().ForEach(x => options.Converters.Add(x));
                 // Fix some strange team abbreviations from ESPN that don't match standard ones
                 foreach (var map in NflTeamMappingHelpers.NflTeamAbbrMapping.Where(map =>
                              responseString.Contains($"\"{map.Key}\""))) {
                     responseString = responseString.Replace($"\"{map.Key}\"", $"\"{map.Value}\"");
                 }
 
-                var deserializedObject = JsonSerializer.Deserialize<EspnScores>(responseString, options);
+                var deserializedObject = JsonSerializer.Deserialize<EspnScores>(responseString, EspnApiServiceJsonConverter.Settings);
 
                 // Use the deserialized object as needed
                 return FixEspnProbBowlWeek(deserializedObject);
@@ -53,17 +49,13 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
             response.EnsureSuccessStatusCode();
             if (response.IsSuccessStatusCode) {
                 var responseString = await response.Content.ReadAsStringAsync();
-                var options = new JsonSerializerOptions {
-                    PropertyNameCaseInsensitive = true
-                };
-                EspnApiServiceJsonConverter.Settings.Converters.ToList().ForEach(x => options.Converters.Add(x));
                 // Fix some strange team abbreviations from ESPN that don't match standard ones
                 foreach (var map in NflTeamMappingHelpers.NflTeamAbbrMapping.Where(map =>
                              responseString.Contains($"\"{map.Key}\""))) {
                     responseString = responseString.Replace($"\"{map.Key}\"", $"\"{map.Value}\"");
                 }
 
-                var deserializedObject = JsonSerializer.Deserialize<EspnScores>(responseString, options);
+                var deserializedObject = JsonSerializer.Deserialize<EspnScores>(responseString, EspnApiServiceJsonConverter.Settings);
 
                 // Use the deserialized object as needed
                 return FixEspnProbBowlWeek(deserializedObject);
@@ -87,9 +79,7 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
             var response = await httpClient.GetAsync($"{_cfbScoreboardEndpoint}?dates={dates}&limit=100&groups=80");
             response.EnsureSuccessStatusCode();
             var responseString = await response.Content.ReadAsStringAsync();
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            EspnApiServiceJsonConverter.Settings.Converters.ToList().ForEach(x => options.Converters.Add(x));
-            return JsonSerializer.Deserialize<EspnScores>(responseString, options);
+            return JsonSerializer.Deserialize<EspnScores>(responseString, EspnApiServiceJsonConverter.Settings);
         }
         catch (Exception e) {
             Log.Warning("GetCfbScores failed for {Start}-{End}: {Msg}", startDate, endDate, e.Message);
