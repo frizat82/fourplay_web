@@ -5,7 +5,11 @@ using System.Text.Json;
 namespace FourPlayWebApp.Server.Services;
 
 public class CfbApiService(HttpClient httpClient) : ICfbApiService {
-    private static readonly JsonSerializerOptions _opts = new() { PropertyNameCaseInsensitive = true };
+    // Must deserialize with EspnApiServiceJsonConverter.Settings — its converters handle ESPN's
+    // wire values (e.g. "away" for HomeAway, "STATUS_IN_PROGRESS" for TypeName) that don't match
+    // PascalCase enum member names under default System.Text.Json enum parsing (see
+    // EspnContractTests + EspnJsonConverterTests, frizat-703.5).
+    private static readonly JsonSerializerOptions _opts = EspnApiServiceJsonConverter.Settings;
 
     public async Task<EspnScores?> GetScoresByDateAsync(DateOnly date) {
         var dateStr = date.ToString("yyyyMMdd");
