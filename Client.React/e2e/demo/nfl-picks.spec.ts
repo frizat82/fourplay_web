@@ -38,7 +38,7 @@ test.describe('NFL picks — demo backend', () => {
   });
 
   test('Alice sees her Super Bowl pick (SEA)', async ({ page }) => {
-    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole('button', { name: /locked in/i })).toBeVisible({ timeout: 8_000 });
   });
 
   // REGRESSION: Wild Card must show all 6 games with O/U (not just 5)
@@ -64,7 +64,7 @@ test.describe('NFL picks — demo backend', () => {
     await page.getByRole('option', { name: 'Wild Card' }).click();
     await waitForSpinner(page);
     // Wild Card requires 3 picks (GetRequiredPicks(19)=3); Alice picks LAR, CHI, BUF
-    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toHaveCount(3, { timeout: 8_000 });
+    await expect(page.getByRole('button', { name: /locked in/i })).toHaveCount(3, { timeout: 8_000 });
   });
 
   // REGRESSION: regular season must show ALL 18 weeks (not just Week 1)
@@ -93,7 +93,7 @@ test.describe('NFL picks — demo backend', () => {
     await page.getByRole('option', { name: 'Regular Season' }).click();
     await waitForSpinner(page);
 
-    await expect(page.getByRole('button', { name: 'Picked', exact: true })).toHaveCount(4, { timeout: 8_000 });
+    await expect(page.getByRole('button', { name: /locked in/i })).toHaveCount(4, { timeout: 8_000 });
   });
 
   test('"Current Week" button restores Super Bowl', async ({ page }) => {
