@@ -32,6 +32,11 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
             .ToListAsync();
     }
 
+    public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.CfbSlates.FirstOrDefaultAsync(s => s.Id == slateId);
+    }
+
     public async Task AddCfbSpreadsAsync(IEnumerable<CfbSpreads> spreads) {
         await using var db = await dbFactory.CreateDbContextAsync();
         db.CfbSpreads.AddRange(spreads);

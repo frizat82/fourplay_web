@@ -87,10 +87,13 @@ builder.Services.AddHttpClient<ICfbApiService, CfbApiService>(x => {
 if (builder.Configuration["DEMO_MODE"] == "true")
 {
     builder.Services.AddSingleton<IEspnCacheService, DemoEspnCacheService>();
+    builder.Services.AddSingleton<ICfbCacheService, DemoCfbCacheService>();
     builder.Services.AddScoped<DemoDataSeeder>();
 }
-else
+else {
     builder.Services.AddSingleton<IEspnCacheService, EspnCacheService>();
+    builder.Services.AddSingleton<ICfbCacheService, CfbCacheService>();
+}
 // Add HttpClient for Gridiron Uniforms and register Jersey cache service
 builder.Services.AddHttpClient<IJerseyCacheService, JerseyCacheService>(c => {
     c.BaseAddress = new Uri("https://www.gridiron-uniforms.com/GUD/");
@@ -250,7 +253,7 @@ builder.Services.AddScoped<ICfbRepository, CfbRepository>();
 builder.Services.AddScoped<ICfbPicksRepository, CfbPicksRepository>();
 builder.Services.AddSingleton<INflCurrentWeekService, NflCurrentWeekService>();
 builder.Services.AddScoped<ICfbCurrentSlateService, CfbCurrentSlateService>();
-builder.Services.AddSingleton<ICfbScoreChangeNotifier, CfbScoreChangeNotifier>();
+builder.Services.AddSingleton<ICfbLiveScoreFetcher, CfbLiveScoreFetcher>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 
