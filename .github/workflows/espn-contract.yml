@@ -1,0 +1,34 @@
+name: ESPN Contract Tests
+
+# Hits the real ESPN + odds APIs (not mocks) to catch wire-shape drift before users do.
+# Excluded from the default PR test run in ci.yml/dotnet.yml — see frizat-703.5.
+on:
+  schedule:
+    - cron: '0 13 * * 2' # Tuesday 8am CST — after the weekend's games post final data
+  workflow_dispatch: {}
+
+jobs:
+  contract:
+    name: Live ESPN/odds API contract check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Contract tests (real network)
+        run: dotnet test --no-build -c Release --filter "Category=Contract" --logger "console;verbosity=normal"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::ESPN/odds API contract test failed — the live wire shape has drifted from what our DTOs expect. See frizat-703.5 and the job run log above."

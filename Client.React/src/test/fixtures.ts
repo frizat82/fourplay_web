@@ -1,6 +1,12 @@
 import type { Competition, EspnScores, Event } from '../types/espn';
 import type { NflPickDto, PickType, SpreadCalculationResponse, SpreadResponse } from '../types/picks';
 
+interface LiveStatusOptions {
+  name: 'status_in_progress' | 'status_halftime';
+  period: number;
+  displayClock: string;
+}
+
 interface CompetitionOptions {
   homeTeam: string;
   awayTeam: string;
@@ -8,6 +14,8 @@ interface CompetitionOptions {
   awayScore?: number;
   gameStarted?: boolean;
   date?: string;
+  /** Overrides the final/scheduled binary with an in-progress or halftime snapshot. */
+  liveStatus?: LiveStatusOptions;
 }
 
 export function createCompetition({
@@ -17,6 +25,7 @@ export function createCompetition({
   awayScore = 14,
   gameStarted = true,
   date,
+  liveStatus,
 }: CompetitionOptions): Competition {
   // Default date: past for started games (any past time), 2h future for scheduled games
   // so isAfterKickoff() returns the expected value in tests without manual injection.
@@ -25,7 +34,7 @@ export function createCompetition({
       ? new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
       : new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
   }
-  const statusName = gameStarted ? 'status_final' : 'status_scheduled';
+  const statusName = liveStatus?.name ?? (gameStarted ? 'status_final' : 'status_scheduled');
 
   return {
     id: `${homeTeam}vs${awayTeam}`,
@@ -48,13 +57,13 @@ export function createCompetition({
     ],
     status: {
       clock: 0,
-      displayClock: '0:00',
-      period: gameStarted ? 4 : 0,
+      displayClock: liveStatus?.displayClock ?? '0:00',
+      period: liveStatus?.period ?? (gameStarted ? 4 : 0),
       type: {
         id: 1,
         name: statusName,
-        state: gameStarted ? 'post' : 'pre',
-        completed: gameStarted,
+        state: liveStatus ? 'in' : gameStarted ? 'post' : 'pre',
+        completed: liveStatus ? false : gameStarted,
         description: '',
         detail: '',
         shortDetail: '',
