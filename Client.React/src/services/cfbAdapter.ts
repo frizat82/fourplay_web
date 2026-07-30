@@ -3,7 +3,7 @@ import { loadCfbScoresWithRetry, getCfbScoresForSlate, getLiveGames } from '../a
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins, getCfbRequiredPicks } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
-import { getHomeTeamScore, getAwayTeamScore } from '../utils/gameHelpers';
+import { getHomeTeamScore, getAwayTeamScore, toGameStatus } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } from './sportAdapter';
 import { revealPicksForStartedGames } from './sportAdapter';
 
@@ -76,16 +76,11 @@ function buildGamesFromEspn(
     let as_: number | null;
 
     if (comp) {
-      // ESPN has live data — use it
-      const t = comp.status?.type;
-      if (t?.completed) status = 'final';
-      else {
-        const name = t?.name as string | undefined;
-        if (!name || name === 'STATUS_SCHEDULED') status = 'scheduled';
-        else if (name === 'STATUS_HALFTIME') status = 'halftime';
-        else if (name === 'STATUS_IN_PROGRESS' || name === 'STATUS_END_PERIOD') status = 'in_progress';
-        else status = 'scheduled';
-      }
+      // ESPN has live data — use it. Same status derivation as NFL's toGameStatus (nflAdapter.ts):
+      // isGameOver/isHalfTime/isGameStarted handle both the numeric and string forms of
+      // status.type.name (our backend re-serializes the ESPN enum as a number), unlike a bare
+      // string comparison against 'STATUS_HALFTIME' etc, which would never match.
+      status = toGameStatus(comp);
       hs = getHomeTeamScore(comp);
       as_ = getAwayTeamScore(comp);
     } else if (db) {
@@ -191,7 +186,9 @@ export function createCfbAdapter(): SportAdapter {
   return {
     sport: 'cfb',
     pollIntervalMs: 300_000,
-    sseUrl: `${import.meta.env.VITE_API_TARGET ?? ''}/api/cfb/live-stream`,
+    // Relative path — see nflAdapter.ts's sseUrl for why this must not be an absolute
+    // VITE_API_TARGET URL (breaks the same-origin proxy path and the SameSite=Lax auth cookie).
+    sseUrl: '/api/cfb/live-stream',
     weekSelectorConfig: {
       regularWeekOptions: CFB_REGULAR_WEEKS,
       postSeasonWeekOptions: CFB_POST_WEEKS,

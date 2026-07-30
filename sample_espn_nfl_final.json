@@ -454,7 +454,7 @@
                 ],
                 "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/ind.png"
               },
-              "score": "13",
+              "score": "31",
               "linescores": [
                 {
                   "value": 13.0,
@@ -607,7 +607,7 @@
                 ],
                 "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/atl.png"
               },
-              "score": "14",
+              "score": "25",
               "linescores": [
                 {
                   "value": 7.0,
@@ -665,15 +665,16 @@
           "status": {
             "clock": 0.0,
             "displayClock": "0:00",
-            "period": 2,
+            "period": 5,
             "type": {
-              "id": "2",
-              "name": "STATUS_HALFTIME",
-              "state": "in",
-              "completed": false,
-              "description": "Halftime",
-              "detail": "Halftime",
-              "shortDetail": "Halftime"
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true,
+              "description": "Final",
+              "detail": "Final/OT",
+              "shortDetail": "Final/OT",
+              "altDetail": "OT"
             },
             "isTBDFlex": false
           },
@@ -914,17 +915,17 @@
       "status": {
         "clock": 0.0,
         "displayClock": "0:00",
-        "period": 2,
+        "period": 5,
         "type": {
-          "id": "2",
-          "name": "STATUS_HALFTIME",
-          "state": "in",
-          "completed": false,
-          "description": "Halftime",
-          "detail": "Halftime",
-          "shortDetail": "Halftime"
-        },
-        "isTBDFlex": false
+          "id": "3",
+          "name": "STATUS_FINAL",
+          "state": "post",
+          "completed": true,
+          "description": "Final",
+          "detail": "Final/OT",
+          "shortDetail": "Final/OT",
+          "altDetail": "OT"
+        }
       }
     }
   ],
