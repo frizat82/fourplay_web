@@ -196,6 +196,13 @@ export function isHalfTime(competition: Competition) {
   return isStatus(competition.status.type.name, STATUS_HALFTIME, 'status_halftime');
 }
 
+/** Map ESPN TypeName (number or string) to canonical GameStatusValue — shared by both adapters. */
+export function toGameStatus(competition: Competition): GameStatusValue {
+  if (isGameOver(competition)) return 'final';
+  if (!isGameStarted(competition)) return 'scheduled';
+  return isHalfTime(competition) ? 'halftime' : 'in_progress';
+}
+
 export function hasPossession(competition: Competition, teamAbbr: string) {
   const possession = getPossessionTeamAbbr(competition);
   return possession === teamAbbr;
