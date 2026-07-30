@@ -33,7 +33,12 @@ const spread: CfbSpreadDto = {
   gameTime: '2025-10-11T20:00:00Z',
 };
 
-/** Minimal EspnScores with one final game matching espnEventId=999 */
+/**
+ * Minimal EspnScores with one final game matching espnEventId=999.
+ * status.type.name is the numeric wire form (0=final) — our backend re-serializes the ESPN
+ * status enum as a plain number (no JsonStringEnumConverter), never the raw "STATUS_FINAL"
+ * string a live ESPN response would use. See gameHelpers.ts's isStatus() / isGameOver().
+ */
 const espnFinalGame: EspnScores = {
   leagues: [], season: { year: 2026, type: 2 }, week: { number: 8 },
   events: [{
@@ -41,7 +46,7 @@ const espnFinalGame: EspnScores = {
     season: { year: 2026, type: 2 }, week: { number: 8 },
     competitions: [{
       id: '999', date: '2025-10-11T20:00:00Z',
-      status: { type: { id: 3, name: 'STATUS_FINAL', completed: true, description: 'Final', state: 'post', detail: 'Final', shortDetail: 'Final' }, clock: 0, period: 4, displayClock: '0:00' },
+      status: { type: { id: 3, name: 0, completed: true, description: 'Final', state: 'post', detail: 'Final', shortDetail: 'Final' }, clock: 0, period: 4, displayClock: '0:00' },
       competitors: [
         { id: 'mich', homeAway: 'home' as const, score: 27, team: { abbreviation: 'MICH', logo: '' }, records: [] },
         { id: 'psu', homeAway: 'away' as const, score: 13, team: { abbreviation: 'PSU', logo: '' }, records: [] },
