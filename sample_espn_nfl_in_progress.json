@@ -307,7 +307,7 @@
     }
   ],
   "week": {
-    "number": 10
+    "number": 5
   },
   "events": [
     {
@@ -317,12 +317,12 @@
       "name": "Atlanta Falcons at Indianapolis Colts",
       "shortName": "ATL VS IND",
       "season": {
-        "year": 2025,
-        "type": 2,
-        "slug": "regular-season"
+        "year": 2026,
+        "type": 3,
+        "slug": "post-season"
       },
       "week": {
-        "number": 10
+        "number": 5
       },
       "competitions": [
         {
@@ -947,5 +947,9 @@
         ]
       }
     ]
+  },
+  "season": {
+    "year": 2026,
+    "type": 3
   }
 }

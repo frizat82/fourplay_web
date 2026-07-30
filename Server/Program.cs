@@ -84,16 +84,32 @@ builder.Services.AddHttpClient<IEspnApiService, EspnApiService>(x => {
 builder.Services.AddHttpClient<ICfbApiService, CfbApiService>(x => {
     x.BaseAddress = new Uri("http://site.api.espn.com");
 });
-if (builder.Configuration["DEMO_MODE"] == "true")
+var isDemoMode = builder.Configuration["DEMO_MODE"] == "true";
+var isDemoReplayMode = builder.Configuration["DEMO_REPLAY_MODE"] == "true";
+var seedsDemoData = isDemoMode || isDemoReplayMode;
+
+if (isDemoReplayMode)
+{
+    // frizat-703.6: one ReplayCacheService instance backs BOTH sports' live-data endpoints and
+    // SSE streams, advancing on an explicit test-only trigger instead of a timer — see
+    // ReplayCacheService's own doc comment.
+    builder.Services.AddSingleton(sp => ReplayCacheService.LoadFromFixtureFiles(
+        Path.Combine(sp.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "..")));
+    builder.Services.AddSingleton<IEspnCacheService>(sp => sp.GetRequiredService<ReplayCacheService>());
+    builder.Services.AddSingleton<ICfbCacheService>(sp => sp.GetRequiredService<ReplayCacheService>());
+}
+else if (isDemoMode)
 {
     builder.Services.AddSingleton<IEspnCacheService, DemoEspnCacheService>();
     builder.Services.AddSingleton<ICfbCacheService, DemoCfbCacheService>();
-    builder.Services.AddScoped<DemoDataSeeder>();
 }
 else {
     builder.Services.AddSingleton<IEspnCacheService, EspnCacheService>();
     builder.Services.AddSingleton<ICfbCacheService, CfbCacheService>();
 }
+
+if (seedsDemoData)
+    builder.Services.AddScoped<DemoDataSeeder>();
 // Add HttpClient for Gridiron Uniforms and register Jersey cache service
 builder.Services.AddHttpClient<IJerseyCacheService, JerseyCacheService>(c => {
     c.BaseAddress = new Uri("https://www.gridiron-uniforms.com/GUD/");
@@ -269,9 +285,9 @@ builder.Services.AddScoped<IJob, CfbSlateSeederJob>();
 builder.Services.AddScoped<IJob, CfbSpreadJob>();
 builder.Services.AddScoped<IJob, CfbScoresJob>();
 builder.Services.AddQuartz(q => {
-    // In DEMO_MODE fire in 5s so seeding completes before e2e tests start;
+    // In DEMO_MODE/DEMO_REPLAY_MODE fire in 5s so seeding completes before e2e tests start;
     // otherwise fire 2 min after startup to avoid slowing cold boot.
-    var userManagerDelay = builder.Configuration["DEMO_MODE"] == "true" ? 5 : 120;
+    var userManagerDelay = seedsDemoData ? 5 : 120;
     q.ScheduleJob<UserManagerJob>(trigger => trigger
         .WithIdentity("User Manager")
         .WithDescription("Manages initial user admin (mark)")
@@ -337,7 +353,7 @@ catch (Exception ex)
     throw;
 }
 
-if (app.Configuration["DEMO_MODE"] == "true")
+if (seedsDemoData)
 {
     using var demoScope = app.Services.CreateScope();
     await demoScope.ServiceProvider.GetRequiredService<DemoDataSeeder>().SeedAsync();
