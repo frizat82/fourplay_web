@@ -114,6 +114,34 @@ public class ReplayCacheServiceTests {
         Assert.Equal(0, fireCount);
     }
 
+    // frizat-gm9: the in_progress snapshot must carry real situation data so both NFL and CFB
+    // replay (same shared sequence, see class summary) can render actual down/distance/field
+    // position instead of nothing.
+    [Fact]
+    public async Task LoadFromFixtureFiles_InProgressSnapshot_HasRealSituationData() {
+        var repoRoot = FindRepoRoot();
+        var svc = ReplayCacheService.LoadFromFixtureFiles(repoRoot);
+
+        svc.Advance(); // scheduled -> halftime
+        svc.Advance(); // halftime -> in_progress
+        var result = await svc.GetScoresAsync();
+
+        var situation = result!.Events![0].Competitions[0].Situation;
+        Assert.NotNull(situation);
+        Assert.Equal(2, situation.Down);
+        Assert.Equal(7, situation.Distance);
+        Assert.Equal(35, situation.YardLine);
+        Assert.Equal("2nd & 7 at IND 35", situation.DownDistanceText);
+    }
+
+    private static string FindRepoRoot() {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null && !File.Exists(Path.Combine(dir, "sample_espn_nfl_in_progress.json")))
+            dir = Path.GetDirectoryName(dir);
+        Assert.NotNull(dir);
+        return dir!;
+    }
+
     [Fact]
     public async Task ImplementsBothEspnAndCfbCacheServiceInterfaces() {
         var svc = BuildService(Snapshot("1"));
