@@ -42,14 +42,6 @@ test('CFB replay — pick, live SSE update, settle against real captured ESPN va
     // to the IND @ ATL card specifically so e.g. its "14" isn't ambiguous with IU's real "14".
     const indCard = page.locator('.MuiPaper-root').filter({ hasText: 'IND' });
 
-    // Note: unlike NFL, CFB doesn't assert on the "Q{period} {clock}" text — cfbAdapter's live
-    // down/distance/clock display (game.situation) comes from a separate getLiveGames() feed that
-    // has no entry for this replay game, so it falls back to a static placeholder
-    // (CFB_DEMO_SITUATION) regardless of the actual replay state. That's a pre-existing CFB data
-    // gap, not something this spec is proving — the score values and gameStatus-derived "Final"
-    // text below DO come straight from the real replay data via the shared toGameStatus
-    // (gameHelpers.ts), so those are what's asserted here.
-
     // ── Advance to halftime (real: IND 13, ATL 14, end of Q2) — first load reflects it directly ──
     expect((await admin.post('/api/replay/advance')).ok()).toBe(true);
     await page.goto('/scores');
@@ -61,6 +53,12 @@ test('CFB replay — pick, live SSE update, settle against real captured ESPN va
     // page on its own, not a fresh navigation re-fetching current state. ──
     expect((await admin.post('/api/replay/advance')).ok()).toBe(true);
     await expect(indCard.getByRole('heading', { name: '17', exact: true })).toBeVisible({ timeout: 15_000 });
+
+    // frizat-gm9: real down/distance/field-position, spliced into the shared in_progress
+    // fixture — proves GetCfbLiveGames (routed to cfbCacheService, not NFL's) surfaces real
+    // situation data for CFB via the same SSE push, not just score/status.
+    await expect(indCard.locator('[data-testid="field-position-bar"]')).toBeVisible({ timeout: 5_000 });
+    await expect(indCard.getByText('2nd & 7 at IND 35')).toBeVisible();
 
     // ── Advance to final (real OT result: IND 31, ATL 25) — again via SSE push, no reload ────
     expect((await admin.post('/api/replay/advance')).ok()).toBe(true);

@@ -1,5 +1,5 @@
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
-import { loadCfbScoresWithRetry, getCfbScoresForSlate, getLiveGames } from '../api/espn';
+import { loadCfbScoresWithRetry, getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins, getCfbRequiredPicks } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
@@ -20,21 +20,6 @@ function slateToWeekState(slate: CfbSlateDto): WeekState {
   const { week, isPostSeason } = cfbSlateNumberToWeek(slate.slateNumber);
   return { season: slate.season, week, isPostSeason };
 }
-
-// Demo situation for in-progress CFB games (shows field position bar in scores page)
-import type { GameSituation } from '../types/liveGame';
-
-const CFB_DEMO_SITUATION: GameSituation = {
-  downDistanceText: '3rd & 4 at MIA 22',
-  possessionTeam: 'IU',
-  isHomePossession: true,
-  yardLine: 22,
-  down: 3,
-  distance: 4,
-  isRedZone: true,
-  period: 3,
-  displayClock: '7:23',
-};
 
 /**
  * Merge our spread data (owned) with live ESPN competition data.
@@ -94,7 +79,6 @@ function buildGamesFromEspn(
       as_ = null;
     }
 
-    const isLive = status === 'in_progress' || status === 'halftime';
     const key = `${sp.homeTeam}-${sp.awayTeam}`;
     return {
       id: sp.espnEventId.toString(),
@@ -109,7 +93,10 @@ function buildGamesFromEspn(
       gameTime: sp.gameTime,
       homeCovers: computeHomeCovers(status, sp.homeTeamSpread, hs, as_),
       overWins: computeOverWins(status, sp.overUnder, hs, as_),
-      situation: situationMap.get(key) ?? (isLive ? CFB_DEMO_SITUATION : null),
+      // No hardcoded fallback — matches NFL exactly. Real situation data comes from
+      // situationMap (built from getCfbLiveGames(), see fetchCfbEspnData) when ESPN provides it;
+      // otherwise honestly null rather than showing a fabricated down/distance.
+      situation: situationMap.get(key) ?? null,
     };
   });
 }
@@ -127,7 +114,7 @@ function cfbPickToPickView(pick: CfbPickDto): PickView {
 async function fetchCfbEspnData(slate: CfbSlateDto, isCurrent: boolean): Promise<{ espn: EspnScores | null; situations: Map<string, import('../types/liveGame').GameSituation | null> }> {
   const [espn, liveGames] = await Promise.all([
     isCurrent ? loadCfbScoresWithRetry() : getCfbScoresForSlate(slate.id),
-    getLiveGames().catch(() => []),
+    getCfbLiveGames().catch(() => []),
   ]);
   // Build situation map from live games
   const situations = new Map<string, import('../types/liveGame').GameSituation | null>();

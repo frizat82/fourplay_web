@@ -67,7 +67,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   const [data, setData] = useState<LoadedScores | null>(null);
   const [isCurrentWeek, setIsCurrentWeek] = useState(true);
   const [maxWeek, setMaxWeek] = useState(adapter.weekSelectorConfig.maxRegularSeasonWeek);
-  const [maxSeason, setMaxSeason] = useState(adapter.weekSelectorConfig.minSeason);
+  const [maxSeason, setMaxSeason] = useState(new Date().getFullYear());
   const [isPageVisible, setIsPageVisible] = useState(true);
   const [showMatrixView, setShowMatrixView] = useState(false);
   const [showOnlyMyPicks, setShowOnlyMyPicks] = useState(false);

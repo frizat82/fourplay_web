@@ -24,11 +24,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import PageHeader from '../components/PageHeader';
 import { useSession } from '../services/session';
+import { useAuth } from '../services/auth';
 import { useToast } from '../services/toast';
+import { isAdmin } from '../utils/auth';
 import {
   getLeagueUserMappings,
   getLeagueJuice,
@@ -37,16 +40,41 @@ import {
   rollForwardJuice,
   removeLeagueMember,
   inviteToLeague,
+  getAllLeagues,
+  getUsers,
+  createLeague,
+  addLeagueUserMapping,
+  assignLeagueOwner,
 } from '../api/league';
-import type { LeagueInfoDto, LeagueJuiceMappingDto, LeagueCostDto } from '../types/admin';
+import type { LeagueInfoDto, LeagueJuiceMappingDto, LeagueCostDto, UserSummaryDto } from '../types/admin';
 import type { LeagueUserMappingDto } from '../types/league';
 import { computeLeagueCost } from '../utils/leagueHelpers';
 
 const CURRENT_SEASON = new Date().getFullYear();
 
+const userLabel = (u: UserSummaryDto) => u.email ?? u.userName ?? u.id;
+
+/** Shared <option> list for the three admin user-picker dialogs (Create League owner, Add User, Assign Owner). */
+function UserOptions({ users }: { users: UserSummaryDto[] }) {
+  return (
+    <>
+      {users.map((u) => (
+        <option key={u.id} value={u.id}>
+          {userLabel(u)}
+        </option>
+      ))}
+    </>
+  );
+}
+
 export default function LeaguePortalPage() {
   const { ownedLeagues, isLeagueOwner } = useSession();
+  const { user } = useAuth();
+  const admin = isAdmin(user);
   const toast = useToast();
+
+  const [allLeagues, setAllLeagues] = useState<LeagueInfoDto[]>([]);
+  const leagueOptions = admin ? allLeagues : ownedLeagues;
 
   const [selectedLeague, setSelectedLeague] = useState<LeagueInfoDto | null>(null);
   const [tab, setTab] = useState(0);
@@ -72,11 +100,44 @@ export default function LeaguePortalPage() {
   // Cost
   const [costDto, setCostDto] = useState<LeagueCostDto | null>(null);
 
+  // Admin: platform user list, backs Create League / Add User / Assign Owner (see effect below)
+  const [availableUsers, setAvailableUsers] = useState<UserSummaryDto[]>([]);
+
+  // Admin: Create League dialog
+  const [createLeagueOpen, setCreateLeagueOpen] = useState(false);
+  const [newLeagueForm, setNewLeagueForm] = useState({ leagueName: '', leagueType: 'Nfl', ownerUserId: '' });
+  const [creatingLeague, setCreatingLeague] = useState(false);
+
+  // Admin: Add User dialog (Members tab)
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const [addUserTarget, setAddUserTarget] = useState<UserSummaryDto | null>(null);
+  const [addingUser, setAddingUser] = useState(false);
+
+  // Admin: Assign Owner dialog (Info tab)
+  const [assignOwnerOpen, setAssignOwnerOpen] = useState(false);
+  const [newOwnerId, setNewOwnerId] = useState('');
+  const [assigningOwner, setAssigningOwner] = useState(false);
+
+  const loadAllLeagues = useCallback(async () => {
+    if (!admin) return;
+    const leagues = await getAllLeagues();
+    setAllLeagues(leagues);
+  }, [admin]);
+
+  useEffect(() => { void loadAllLeagues(); }, [loadAllLeagues]);
+
+  // Platform user list backs all three admin dialogs (Create League, Add User, Assign Owner) —
+  // fetched once per admin visit rather than on every dialog open.
   useEffect(() => {
-    if (ownedLeagues.length > 0 && !selectedLeague) {
-      setSelectedLeague(ownedLeagues[0]);
+    if (!admin) return;
+    void getUsers().then(setAvailableUsers);
+  }, [admin]);
+
+  useEffect(() => {
+    if (leagueOptions.length > 0 && !selectedLeague) {
+      setSelectedLeague(leagueOptions[0]);
     }
-  }, [ownedLeagues, selectedLeague]);
+  }, [leagueOptions, selectedLeague]);
 
   const loadMembers = useCallback(async (leagueId: number) => {
     setLoadingMembers(true);
@@ -172,11 +233,85 @@ export default function LeaguePortalPage() {
     }
   };
 
+  const openCreateLeague = () => {
+    setNewLeagueForm({ leagueName: '', leagueType: 'Nfl', ownerUserId: user?.userId ?? '' });
+    setCreateLeagueOpen(true);
+  };
+
+  const handleCreateLeague = async () => {
+    if (!newLeagueForm.leagueName.trim() || !newLeagueForm.ownerUserId) return;
+    setCreatingLeague(true);
+    try {
+      const created = await createLeague({
+        leagueName: newLeagueForm.leagueName.trim(),
+        leagueType: newLeagueForm.leagueType,
+        ownerUserId: newLeagueForm.ownerUserId,
+        season: CURRENT_SEASON,
+        juice: 0,
+        juiceDivisional: 0,
+        juiceConference: 0,
+        weeklyCost: 0,
+      });
+      toast.push(`League "${created.leagueName}" created`, 'success');
+      setCreateLeagueOpen(false);
+      await loadAllLeagues();
+      setSelectedLeague(created);
+    } catch {
+      toast.push('Failed to create league', 'error');
+    } finally {
+      setCreatingLeague(false);
+    }
+  };
+
+  const openAddUser = () => {
+    setAddUserTarget(null);
+    setAddUserOpen(true);
+  };
+
+  const handleAddUser = async () => {
+    if (!addUserTarget || !selectedLeague) return;
+    if (members.some((m) => m.userId === addUserTarget.id)) {
+      toast.push(`${addUserTarget.email ?? addUserTarget.userName} is already in this league`, 'warning');
+      return;
+    }
+    setAddingUser(true);
+    try {
+      await addLeagueUserMapping(selectedLeague.id, addUserTarget.id);
+      toast.push(`${addUserTarget.email ?? addUserTarget.userName} added to league`, 'success');
+      setAddUserOpen(false);
+      await loadMembers(selectedLeague.id);
+    } catch {
+      toast.push('Failed to add user', 'error');
+    } finally {
+      setAddingUser(false);
+    }
+  };
+
+  const openAssignOwner = () => {
+    setNewOwnerId('');
+    setAssignOwnerOpen(true);
+  };
+
+  const handleAssignOwner = async () => {
+    if (!selectedLeague || !newOwnerId) return;
+    setAssigningOwner(true);
+    try {
+      await assignLeagueOwner(selectedLeague.id, newOwnerId);
+      toast.push('Owner updated', 'success');
+      setAssignOwnerOpen(false);
+      await loadAllLeagues();
+    } catch {
+      toast.push('Failed to assign owner', 'error');
+    } finally {
+      setAssigningOwner(false);
+    }
+  };
+
   const currentJuiceMapping = juiceMappings.find((m) => m.season === selectedSeason);
   const availableSeasons = juiceMappings.map((m) => m.season).sort((a, b) => b - a);
   if (!availableSeasons.includes(CURRENT_SEASON)) availableSeasons.unshift(CURRENT_SEASON);
 
-  if (!isLeagueOwner) {
+  if (!admin && !isLeagueOwner) {
     return (
       <Box sx={{ p: 4, textAlign: 'center' }}>
         <Typography variant="h6" color="text.secondary">
@@ -188,22 +323,29 @@ export default function LeaguePortalPage() {
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
-      <PageHeader title="My Leagues" subtitle="Commissioner portal" />
+      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={2}>
+        <PageHeader title="My Leagues" subtitle="Commissioner portal" />
+        {admin && (
+          <Button startIcon={<AddCircleIcon />} variant="outlined" onClick={openCreateLeague}>
+            Create League
+          </Button>
+        )}
+      </Stack>
 
-      {ownedLeagues.length > 1 && (
+      {leagueOptions.length > 1 && (
         <FormControl sx={{ mb: 3, minWidth: 240 }} size="small">
           <InputLabel>League</InputLabel>
           <Select
             value={selectedLeague?.id ?? ''}
             label="League"
             onChange={(e) => {
-              const league = ownedLeagues.find((l) => l.id === Number(e.target.value));
+              const league = leagueOptions.find((l) => l.id === Number(e.target.value));
               if (league) setSelectedLeague(league);
             }}
           >
-            {ownedLeagues.map((l) => (
+            {leagueOptions.map((l) => (
               <MenuItem key={l.id} value={l.id}>
-                {l.leagueName}
+                {l.leagueName} {admin && `(${l.leagueType})`}
               </MenuItem>
             ))}
           </Select>
@@ -223,8 +365,10 @@ export default function LeaguePortalPage() {
               members={members}
               loading={loadingMembers}
               costDto={costDto}
+              isAdmin={admin}
               onRemove={setRemoveTarget}
               onInvite={() => setInviteOpen(true)}
+              onAddUser={openAddUser}
             />
           )}
           {tab === 1 && (
@@ -235,13 +379,16 @@ export default function LeaguePortalPage() {
               juiceForm={juiceForm}
               onJuiceFormChange={(field, value) => setJuiceForm((f) => ({ ...f, [field]: value }))}
               hasMappingForSeason={!!currentJuiceMapping}
+              locked={selectedSeason < CURRENT_SEASON}
               onSave={handleSaveJuice}
               onRollForward={handleRollForward}
               saving={savingJuice}
               rollingForward={rollingForward}
             />
           )}
-          {tab === 2 && <InfoTab league={selectedLeague} />}
+          {tab === 2 && (
+            <InfoTab league={selectedLeague} isAdmin={admin} onChangeOwner={openAssignOwner} />
+          )}
         </>
       )}
 
@@ -283,6 +430,101 @@ export default function LeaguePortalPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog open={createLeagueOpen} onClose={() => setCreateLeagueOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Create League</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              autoFocus
+              label="League Name"
+              value={newLeagueForm.leagueName}
+              onChange={(e) => setNewLeagueForm((f) => ({ ...f, leagueName: e.target.value }))}
+            />
+            <FormControl size="small">
+              <InputLabel>Sport</InputLabel>
+              <Select
+                value={newLeagueForm.leagueType}
+                label="Sport"
+                onChange={(e) => setNewLeagueForm((f) => ({ ...f, leagueType: e.target.value }))}
+              >
+                <MenuItem value="Nfl">NFL</MenuItem>
+                <MenuItem value="Cfb">CFB</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              select
+              label="Owner"
+              SelectProps={{ native: true }}
+              value={newLeagueForm.ownerUserId}
+              onChange={(e) => setNewLeagueForm((f) => ({ ...f, ownerUserId: e.target.value }))}
+            >
+              <UserOptions users={availableUsers} />
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateLeagueOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleCreateLeague()}
+            disabled={creatingLeague || !newLeagueForm.leagueName.trim() || !newLeagueForm.ownerUserId}
+          >
+            {creatingLeague ? <CircularProgress size={18} /> : 'Create League'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={addUserOpen} onClose={() => setAddUserOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Add User to {selectedLeague?.leagueName}</DialogTitle>
+        <DialogContent>
+          <TextField
+            select
+            label="User"
+            SelectProps={{ native: true }}
+            sx={{ mt: 1 }}
+            fullWidth
+            value={addUserTarget?.id ?? ''}
+            onChange={(e) => setAddUserTarget(availableUsers.find((u) => u.id === e.target.value) ?? null)}
+          >
+            <option value="" />
+            <UserOptions users={availableUsers} />
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddUserOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={() => void handleAddUser()} disabled={addingUser || !addUserTarget}>
+            {addingUser ? <CircularProgress size={18} /> : 'Add User'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={assignOwnerOpen} onClose={() => setAssignOwnerOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Change Owner — {selectedLeague?.leagueName}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Current owner: {selectedLeague?.ownerUserId || 'none'}
+            </Typography>
+            <TextField
+              select
+              label="New Owner"
+              SelectProps={{ native: true }}
+              value={newOwnerId}
+              onChange={(e) => setNewOwnerId(e.target.value)}
+            >
+              <option value="" />
+              <UserOptions users={availableUsers} />
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAssignOwnerOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={() => void handleAssignOwner()} disabled={assigningOwner || !newOwnerId}>
+            {assigningOwner ? <CircularProgress size={18} /> : 'Assign'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -291,21 +533,28 @@ interface MembersTabProps {
   members: LeagueUserMappingDto[];
   loading: boolean;
   costDto: LeagueCostDto | null;
+  isAdmin: boolean;
   onRemove: (m: LeagueUserMappingDto) => void;
   onInvite: () => void;
+  onAddUser: () => void;
 }
 
-function MembersTab({ members, loading, costDto, onRemove, onInvite }: MembersTabProps) {
+function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   const cost = computeLeagueCost(count);
 
   return (
     <Box>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap">
         <Chip label={`${count} member${count !== 1 ? 's' : ''} · $${cost}/season`} color="primary" variant="outlined" />
         <Button startIcon={<PersonAddIcon />} variant="outlined" size="small" onClick={onInvite}>
           Invite Player
         </Button>
+        {admin && (
+          <Button startIcon={<AddCircleIcon />} variant="outlined" size="small" onClick={onAddUser}>
+            Add User
+          </Button>
+        )}
       </Stack>
       {loading ? (
         <CircularProgress />
@@ -331,7 +580,7 @@ function MembersTab({ members, loading, costDto, onRemove, onInvite }: MembersTa
               {members.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell>{m.userName ?? m.userId}</TableCell>
-                  <TableCell>{m.userId}</TableCell>
+                  <TableCell>{m.email ?? m.userId}</TableCell>
                   <TableCell>{new Date(m.dateCreated).toLocaleDateString()}</TableCell>
                   <TableCell align="right">
                     <Button
@@ -360,6 +609,7 @@ interface JuiceTabProps {
   juiceForm: { juice: number; juiceDivisional: number; juiceConference: number; weeklyCost: number };
   onJuiceFormChange: (field: string, value: number) => void;
   hasMappingForSeason: boolean;
+  locked: boolean;
   onSave: () => void;
   onRollForward: () => void;
   saving: boolean;
@@ -368,7 +618,7 @@ interface JuiceTabProps {
 
 function JuiceTab({
   availableSeasons, selectedSeason, onSeasonChange, juiceForm, onJuiceFormChange,
-  hasMappingForSeason, onSave, onRollForward, saving, rollingForward,
+  hasMappingForSeason, locked, onSave, onRollForward, saving, rollingForward,
 }: JuiceTabProps) {
   return (
     <Box>
@@ -392,11 +642,18 @@ function JuiceTab({
         )}
       </Stack>
 
+      {locked && (
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+          {selectedSeason} has already been played — juice settings are locked to protect past results.
+        </Typography>
+      )}
+
       <Stack spacing={2} sx={{ maxWidth: 400 }}>
         <TextField
           label="Tease Pts (Regular Season)"
           type="number"
           size="small"
+          disabled={locked}
           value={juiceForm.juice}
           onChange={(e) => onJuiceFormChange('juice', Number(e.target.value))}
         />
@@ -404,6 +661,7 @@ function JuiceTab({
           label="Tease Pts (Divisional)"
           type="number"
           size="small"
+          disabled={locked}
           value={juiceForm.juiceDivisional}
           onChange={(e) => onJuiceFormChange('juiceDivisional', Number(e.target.value))}
         />
@@ -411,6 +669,7 @@ function JuiceTab({
           label="Tease Pts (Conference)"
           type="number"
           size="small"
+          disabled={locked}
           value={juiceForm.juiceConference}
           onChange={(e) => onJuiceFormChange('juiceConference', Number(e.target.value))}
         />
@@ -418,10 +677,11 @@ function JuiceTab({
           label="Weekly Cost ($)"
           type="number"
           size="small"
+          disabled={locked}
           value={juiceForm.weeklyCost}
           onChange={(e) => onJuiceFormChange('weeklyCost', Number(e.target.value))}
         />
-        <Button variant="contained" onClick={onSave} disabled={saving} sx={{ alignSelf: 'flex-start' }}>
+        <Button variant="contained" onClick={onSave} disabled={saving || locked} sx={{ alignSelf: 'flex-start' }}>
           {saving ? <CircularProgress size={18} /> : 'Save'}
         </Button>
       </Stack>
@@ -429,7 +689,7 @@ function JuiceTab({
   );
 }
 
-function InfoTab({ league }: { league: LeagueInfoDto }) {
+function InfoTab({ league, isAdmin: admin, onChangeOwner }: { league: LeagueInfoDto; isAdmin: boolean; onChangeOwner: () => void }) {
   return (
     <Box sx={{ maxWidth: 400 }}>
       <Stack spacing={1.5} divider={<Divider />}>
@@ -445,12 +705,13 @@ function InfoTab({ league }: { league: LeagueInfoDto }) {
           <Typography color="text.secondary">Created</Typography>
           <Typography fontWeight={600}>{new Date(league.dateCreated).toLocaleDateString()}</Typography>
         </Stack>
-        <Stack direction="row" justifyContent="space-between">
-          <Typography color="text.secondary">Owner ID</Typography>
-          <Typography fontWeight={600} sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-            {league.ownerUserId}
-          </Typography>
-        </Stack>
+        {admin && (
+          <Stack direction="row" justifyContent="flex-end">
+            <Button size="small" variant="outlined" onClick={onChangeOwner}>
+              Change Owner
+            </Button>
+          </Stack>
+        )}
       </Stack>
     </Box>
   );

@@ -64,19 +64,22 @@ public class EspnController(
 
     [HttpGet("livegames")]
     [ProducesResponseType(typeof(List<LiveGameDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<LiveGameDto>>> GetLiveGames()
-    {
-        var scores = await espnCacheService.GetScoresAsync();
-        if (scores?.Events is null)
-            return Ok(new List<LiveGameDto>());
+    public async Task<ActionResult<List<LiveGameDto>>> GetLiveGames() =>
+        Ok(BuildLiveGames(await espnCacheService.GetScoresAsync()));
 
-        var games = scores.Events
-            .SelectMany(e => e.Competitions)
-            .Select(LiveGameDto.FromCompetition)
-            .ToList();
+    // CFB's own live-games endpoint — a prior version of this reused the NFL one above, so CFB
+    // situation/field-position data was always read from the NFL cache and could never match a
+    // real CFB event (silently always empty).
+    [HttpGet("cfb/livegames")]
+    [ProducesResponseType(typeof(List<LiveGameDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<LiveGameDto>>> GetCfbLiveGames() =>
+        Ok(BuildLiveGames(await cfbCacheService.GetScoresAsync()));
 
-        return Ok(games);
-    }
+    private static List<LiveGameDto> BuildLiveGames(EspnScores? scores) =>
+        scores?.Events is null
+            ? []
+            : scores.Events.SelectMany(e => e.Competitions).Select(LiveGameDto.FromCompetition).ToList();
+
     [HttpGet("live-stream")]
     public Task LiveStream(CancellationToken ct) =>
         SseHelper.StreamAsync(Response,
