@@ -311,6 +311,22 @@ public class LeagueOwnershipTests
     }
 
     [Fact]
+    public async Task GetAllLeagues_ReturnsLeaguesAcrossAllOwnersAndSports()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetAllLeaguesAsync().Returns(
+        [
+            new LeagueInfo { Id = 1, LeagueName = "NFL League", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl },
+            new LeagueInfo { Id = 2, LeagueName = "CFB League", OwnerUserId = "some-other-owner", LeagueType = LeagueType.Cfb },
+        ]);
+
+        var result = await ctrl.GetAllLeagues() as OkObjectResult;
+
+        var leagues = Assert.IsAssignableFrom<IEnumerable<LeagueInfoDto>>(result!.Value);
+        Assert.Equal(2, leagues.Count());
+    }
+
+    [Fact]
     public async Task GetLeagueUserMappings_ReturnsForbid_WhenCallerIsNotOwnerOrAdmin()
     {
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
@@ -341,6 +357,29 @@ public class LeagueOwnershipTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         await repo.Received(1).GetLeagueUserMappingsAsync(1);
+    }
+
+    [Fact]
+    public async Task GetLeagueUserMappings_IncludesMemberEmail_NotJustUserId()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+        repo.GetLeagueUserMappingsAsync(1).Returns(
+        [
+            new LeagueUserMapping
+            {
+                LeagueId = 1,
+                UserId = OwnerId,
+                League = new LeagueInfo { Id = 1, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl },
+                User = new ApplicationUser { Id = OwnerId, UserName = "owner", Email = "owner@example.com" },
+            },
+        ]);
+
+        var result = await ctrl.GetLeagueUserMappings(1);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dtos = Assert.IsAssignableFrom<List<LeagueUserMappingDto>>(ok.Value);
+        Assert.Equal("owner@example.com", dtos[0].Email);
     }
 
     [Fact]
@@ -383,6 +422,37 @@ public class LeagueOwnershipTests
         var result = await ctrl.InviteToLeague(1, new LeagueInviteDto("target@example.com"));
 
         Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task InviteToLeague_PassesBaseUrlThrough_SoTheEmailCanBeSentServerSide()
+    {
+        var invSvc = Substitute.For<IInvitationService>();
+        invSvc.CreateInvitationAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<string?>())
+              .Returns(new Invitation { Id = 1, Email = "target@example.com", InvitationCode = "code-abc" });
+
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var userManager = Substitute.For<UserManager<ApplicationUser>>(
+            store, null, null, null, null, null, null, null, null);
+        var ctrl = new LeagueController(
+            new MemoryCache(new MemoryCacheOptions()),
+            repo,
+            NullLogger<LeagueController>.Instance,
+            userManager,
+            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<IEspnCacheService>(),
+            invSvc);
+        ctrl.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }
+        };
+
+        await ctrl.InviteToLeague(1, new LeagueInviteDto("target@example.com", "https://ivleague.com"));
+
+        await invSvc.Received(1).CreateInvitationAsync("target@example.com", OwnerId, 1, baseUrl: "https://ivleague.com");
     }
 
     [Fact]

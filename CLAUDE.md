@@ -60,6 +60,7 @@ When fixing a bug: grep existing tests for old wrong values before shipping. Whe
 ## CRITICAL: Branch Rules
 - **NEVER push or commit directly to `main`** — all changes go through a PR
 - Branch flow: `feature/*` → PR → `dev` → PR → `main`
+- Before a `dev`→`main` cutover (season launch or major release), run `/prod-live-test` — the full live E2E prod-readiness gate (real users, real ESPN data, real emails, real job schedule on staging)
 
 ## Task Tracking
 - Use `bd` (beads) — `LD_LIBRARY_PATH=~/.local/lib BEADS_DIR=~/.beads ~/.local/bin/bd`
@@ -119,6 +120,7 @@ Run `/demo-stack` for full startup instructions, users, seed data, and troublesh
 ```bash
 ./scripts/start-demo.sh               # easiest: postgres + backend + frontend (port 5174)
 npm run test:e2e:demo                 # integration tests (from Client.React/)
+npm run test:e2e:replay               # replay integration tests — backend needs DEMO_REPLAY_MODE=true too
 ```
 
 ---
@@ -137,9 +139,11 @@ npm run test:e2e:demo                 # integration tests (from Client.React/)
 Sport is determined by subdomain: `localhost:5173` / `ivleague.com` → NFL; `cfb.localhost:5173` / `cfb.ivleague.com` → CFB.
 `useSportContext()` detects sport via `window.location.hostname.startsWith('cfb.')`. The session layer filters leagues by `leagueType` (0=NFL, 1=CFB).
 
+**No diff between NFL and CFB except the API calls and Top 25 filtering — same flows, same pages, same shared helpers.** Backend and frontend logic (status derivation, security guards, leaderboard scoring, etc.) must live in one shared implementation both sports call, not two independently-maintained copies — duplicated logic between the NFL and CFB code paths has repeatedly drifted into real bugs (mismatched guards, status-parsing bugs that only manifested for one sport). When fixing something on one sport's path, check whether the other sport's equivalent needs the same fix.
+
 `PicksPage`, `ScoresPage`, and `LeaderboardPage` are sport-agnostic via an `adapter: SportAdapter` prop injected by `App.tsx`.
 - **NFL adapter** (`nflAdapter.ts`): polls ESPN `/api/espn/scores`, fetches spreads via `spreadBatch`
-- **CFB adapter** (`cfbAdapter.ts`): uses our own DB (`/api/cfb/*`), no ESPN live data
+- **CFB adapter** (`cfbAdapter.ts`): spreads/picks/slate metadata from our own DB (`/api/cfb/*`), live score/status/situation overlaid from ESPN via `ICfbCacheService` (`/api/espn/cfb/scores`, `/api/espn/cfb/livegames`, SSE at `/api/cfb/live-stream`) — same shape as NFL's `IEspnCacheService`, just a different cache instance. DB only ever persists a game once it's FINAL, matching NFL's `NflScoresJob`.
 
 CFB uses an 18-slate season. Slate/ESPN week mappings and pick counts → run `/pick-rules`.
 
@@ -159,9 +163,14 @@ CFB uses an 18-slate season. Slate/ESPN week mappings and pick counts → run `/
 ### Auth Flow
 JWT in HttpOnly cookie (`AuthToken`), read via custom `OnMessageReceived` hook in `Program.cs`. Refresh tokens rotate on each use. `auth.tsx` calls `GET /api/auth/me` on load.
 
+**All frontend API calls — including `EventSource`/SSE connections — must use relative paths (`/api/...`), never an absolute `VITE_API_TARGET` URL.** Every request goes through a same-origin proxy (Vite locally, Vercel's `/api/:path*` rewrite in prod — see `vercel.json`), which is required both for Safari ITP and because the auth cookie is `SameSite=Lax` when not `Secure` (only `SameSite=None` over HTTPS in prod). An absolute cross-origin URL bypasses the proxy and silently drops the cookie — this broke CFB's live SSE stream (`sseUrl` in `nflAdapter.ts`/`cfbAdapter.ts`) until fixed.
+
+The login endpoint is rate-limited to 5 requests/minute per IP (`Program.cs`). E2E specs that log in as admin to drive test-only endpoints should authenticate once and reuse the `APIRequestContext`, not log in per call.
+
 ### Testing Architecture
 - **Mock-based Playwright** (`e2e/` excl. `demo/`): `page.route()` intercepts all `/api/*`. `mockAuth()` + `setupRoutes()` from `e2e/helpers/`. Runs in CI against a Vite dev server.
 - **Integration Playwright** (`e2e/demo/`): live `DEMO_MODE=true` backend at `localhost:5174`. Alice's session saved to `e2e/demo/.auth/`. See `/demo-stack`.
+- **Replay Playwright** (`e2e/demo/replay-*.spec.ts`): live `DEMO_MODE=true DEMO_REPLAY_MODE=true` backend at `localhost:5175` (NFL) / `cfb.localhost:5175` (CFB) — `ReplayCacheService` drives one real captured ESPN game through actual state transitions (scheduled→halftime→in_progress→final) via test-only `POST /api/replay/{advance,reset}`, proving the full pick→live-update→settle flow against real wire data instead of a static fixture. `npm run test:e2e:replay`.
 
 ---
 

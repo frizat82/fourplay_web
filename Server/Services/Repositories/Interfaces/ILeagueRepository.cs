@@ -34,6 +34,7 @@ public interface ILeagueRepository {
 
     // Commissioner portal methods
     Task<List<LeagueInfo>> GetLeaguesByOwnerAsync(string ownerId);
+    Task<List<LeagueInfo>> GetAllLeaguesAsync();
     Task UpdateLeagueOwnerAsync(int leagueId, string newOwnerUserId);
     Task UpdateLeagueJuiceMappingAsync(LeagueJuiceMapping mapping);
     Task RemoveLeagueUserMappingAsync(int leagueId, string userId);

@@ -35,7 +35,6 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutIcon from '@mui/icons-material/Logout';
 import WorkIcon from '@mui/icons-material/Work';
-import GroupsIcon from '@mui/icons-material/Groups';
 import PersonIcon from '@mui/icons-material/Person';
 import MailIcon from '@mui/icons-material/Mail';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
@@ -137,6 +136,8 @@ export default function AppLayout() {
                 borderColor: 'rgba(255,255,255,0.4)',
                 maxWidth: 140,
                 '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+                '& .MuiChip-deleteIcon': { color: 'inherit', opacity: 0.7 },
+                '& .MuiChip-deleteIcon:hover': { color: 'inherit', opacity: 1 },
                 '&:hover': { borderColor: 'rgba(255,255,255,0.8)', bgcolor: 'rgba(255,255,255,0.08)' },
               }}
             />
@@ -169,9 +170,6 @@ export default function AppLayout() {
                 {league.leagueName}
               </MenuItem>
             ))}
-            <MenuItem component={NavLink} to="/leaguepicker" onClick={() => setMenuAnchor(null)}>
-              Open League Picker
-            </MenuItem>
             <Divider />
             <MenuItem component={NavLink} to="/account/manage" onClick={() => setMenuAnchor(null)}>
               {user?.name ?? 'Account'}
@@ -265,7 +263,7 @@ export default function AppLayout() {
               </ListItemIcon>
               <ListItemText primary="Rules" />
             </ListItemButton>
-            {isLeagueOwner && (
+            {(isLeagueOwner || showAdmin) && (
               <ListItemButton
                 component={NavLink}
                 to="/league/manage"
@@ -314,16 +312,6 @@ export default function AppLayout() {
                         <WorkIcon sx={{ fontSize: 20 }} />
                       </ListItemIcon>
                       <ListItemText primary="Job Manager" />
-                    </ListItemButton>
-                    <ListItemButton
-                      component={NavLink}
-                      to="/admin/leagueManagement"
-                      sx={adminNavItemSx}
-                    >
-                      <ListItemIcon sx={{ minWidth: 36 }}>
-                        <GroupsIcon sx={{ fontSize: 20 }} />
-                      </ListItemIcon>
-                      <ListItemText primary="League Management" />
                     </ListItemButton>
                     <ListItemButton
                       component={NavLink}
