@@ -27,7 +27,6 @@ const sessionState = {
   hasNflAccess: true,
   hasCfbAccess: false,
   leaguesLoaded: true,
-  isLeagueOwner: false,
   ownedLeagues: [] as { id: number; leagueName: string; leagueType: string; ownerUserId: string; dateCreated: string }[],
 };
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
