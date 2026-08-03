@@ -36,11 +36,10 @@ public class EmailProcessTests
     // -------------------------------------------------------------------------
 
     private static InvitationController BuildInvitationController(
-        IEmailSender emailSender,
         IEmailSender<ApplicationUser> emailSenderApp)
     {
         var invitationService = Substitute.For<IInvitationService>();
-        return new InvitationController(invitationService, emailSender, emailSenderApp);
+        return new InvitationController(invitationService, emailSenderApp);
     }
 
     private static AuthController BuildAuthController(
@@ -98,7 +97,7 @@ public class EmailProcessTests
     public async Task SendResetLink_CallsSendPasswordResetLinkAsync_NotCodeAsync()
     {
         var emailSenderApp = Substitute.For<IEmailSender<ApplicationUser>>();
-        var controller = BuildInvitationController(Substitute.For<IEmailSender>(), emailSenderApp);
+        var controller = BuildInvitationController(emailSenderApp);
 
         var request = new PasswordResetLinkRequest("testuser", "user@example.com", "https://app.example.com/reset?code=abc123");
 
@@ -119,7 +118,7 @@ public class EmailProcessTests
     public async Task SendResetLink_DoesNotCallSendPasswordResetCodeAsync()
     {
         var emailSenderApp = Substitute.For<IEmailSender<ApplicationUser>>();
-        var controller = BuildInvitationController(Substitute.For<IEmailSender>(), emailSenderApp);
+        var controller = BuildInvitationController(emailSenderApp);
 
         var request = new PasswordResetLinkRequest("testuser", "user@example.com", "https://app.example.com/reset?code=abc123");
 
@@ -140,7 +139,7 @@ public class EmailProcessTests
     public async Task SendResetCode_CallsSendPasswordResetCodeAsync()
     {
         var emailSenderApp = Substitute.For<IEmailSender<ApplicationUser>>();
-        var controller = BuildInvitationController(Substitute.For<IEmailSender>(), emailSenderApp);
+        var controller = BuildInvitationController(emailSenderApp);
 
         var request = new PasswordResetCodeRequest("testuser", "user@example.com", "123456");
 

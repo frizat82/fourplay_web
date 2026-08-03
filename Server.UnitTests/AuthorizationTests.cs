@@ -29,6 +29,8 @@ public class AuthorizationTests
         nameof(LeagueController.AddLeagueJuiceMapping),
         // security review: email addresses exposed to any authenticated user
         nameof(LeagueController.GetUsers),
+        // My Leagues consolidation: cross-league visibility is admin-only
+        nameof(LeagueController.GetAllLeagues),
     ];
 
     [Theory]

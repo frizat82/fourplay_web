@@ -1,4 +1,29 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, request, type APIRequestContext, type Page } from '@playwright/test';
+
+export function adminCreds(): { email: string; password: string } {
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email || !password) {
+    throw new Error('ADMIN_EMAIL/ADMIN_PASSWORD must be set to run this spec');
+  }
+  return { email, password };
+}
+
+/**
+ * Logged-in APIRequestContext for the admin user, reused for every call a test makes rather than
+ * logging in fresh each time — the login endpoint is rate-limited to 5/minute per IP
+ * (Server/Program.cs), and a fresh login per call burns that budget well before a test with
+ * several sequential admin-only requests (e.g. the replay reset/advance endpoints) finishes.
+ */
+export async function adminApiContext(baseURL: string): Promise<APIRequestContext> {
+  const { email, password } = adminCreds();
+  const ctx = await request.newContext({ baseURL });
+  const loginRes = await ctx.post('/api/auth/login', {
+    data: { username: email, password, rememberMe: false },
+  });
+  expect(loginRes.ok()).toBe(true);
+  return ctx;
+}
 
 export const DEMO_USERS = {
   alice:  { email: 'alice@demo.local',  password: 'DemoPass@123', name: 'alice'  },

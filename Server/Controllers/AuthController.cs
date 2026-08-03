@@ -56,7 +56,7 @@ public class AuthController(
                        ?? await userManager.FindByEmailAsync(req.Username);
 
             if (user is null)
-                return Unauthorized();
+                return Ok(new SignInResultDto { Succeeded = false, Message = "Invalid credentials" });
 
             var result = await signInManager.PasswordSignInAsync(
                 user,
@@ -291,13 +291,6 @@ public class AuthController(
                 UserId = newUser.Id,
             });
 
-            if (invitation.IsLeagueOwner)
-            {
-                var leagueInfo = await db.LeagueInfo.FindAsync(invitation.LeagueId.Value);
-                if (leagueInfo is not null)
-                    leagueInfo.OwnerUserId = newUser.Id;
-            }
-
             await db.SaveChangesAsync();
         }
 
@@ -341,6 +334,7 @@ public class AuthController(
     }
     [HttpPost("reset-password")]
     [AllowAnonymous] // User is not logged in
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("forgot")]
     public async Task<ActionResult<string>> ResetPassword([FromBody] ResetPasswordRequest model)
     {
         if (string.IsNullOrWhiteSpace(model.Email) ||
@@ -357,6 +351,8 @@ public class AuthController(
         var result = await userManager.ResetPasswordAsync(user, model.Token, model.Password);
         if (!result.Succeeded)
             return BadRequest("Invalid request.");
+
+        await refreshTokenService.RevokeAllUserTokensAsync(user.Id);
         return Ok();
     }
     [HttpPost("change-password")]
@@ -374,10 +370,21 @@ public class AuthController(
         var result = await userManager.ChangePasswordAsync(user, model.CurrentPassword, model.Password);
         if (!result.Succeeded)
             return BadRequest("Invalid request.");
-        return Ok();
+
+        // Revoke all outstanding refresh tokens (other devices logged out).
+        // Then re-issue a fresh pair so this caller stays logged in.
+        await refreshTokenService.RevokeAllUserTokensAsync(userId!);
+        var (jwt, jwtExpires) = await jwtTokenService.GenerateAccessTokenAsync(user, rememberMe: false);
+        Response.Cookies.Append("AuthToken", jwt ?? string.Empty, BuildCookieOptions(jwtExpires));
+        var newRefresh = await refreshTokenService.IssueTokenAsync(user, _refreshTokenLifetime);
+        if (newRefresh is not null)
+            Response.Cookies.Append("RefreshToken", newRefresh.Token, BuildCookieOptions(newRefresh.Expires));
+
+        return Ok(new { ok = true });
     }
     [HttpPost("request-email-confirmation")]
     [AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("forgot")]
     public async Task<ActionResult<string>> RequestEmailConfirmation([FromBody] RequestEmailConfirmation request)
     {
         var user = await userManager.FindByEmailAsync(request.Email);

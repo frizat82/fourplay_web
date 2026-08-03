@@ -4,13 +4,10 @@ using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FourPlayWebApp.Server.Services.Repositories;
 
-public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextFactory, ILogger<LeagueRepository>? logger = null) : ILeagueRepository {
-    private readonly ILogger<LeagueRepository> _logger = logger ?? NullLogger<LeagueRepository>.Instance;
+public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextFactory) : ILeagueRepository {
     // League and User related methods
     public async Task<List<LeagueUserMapping>> GetLeagueUserMappingsAsync(int leagueId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
@@ -22,46 +19,28 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     }
 
     public async Task<List<LeagueUserMapping>> GetLeagueUserMappingsAsync(ApplicationUser user) {
-        try {
-            await using var db = await dbContextFactory.CreateDbContextAsync();
-            return await db.LeagueUserMapping
-                .Where(lum => lum.UserId == user.Id)
-                .Include(lum => lum.User)
-                .Include(lum => lum.League)
-                .ToListAsync();
-        }
-        catch (Exception ex) {
-            _logger.LogError(ex, "Failed to get league user mappings for user {UserId}", user?.Id);
-            return new List<LeagueUserMapping>();
-        }
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.LeagueUserMapping
+            .Where(lum => lum.UserId == user.Id)
+            .Include(lum => lum.User)
+            .Include(lum => lum.League)
+            .ToListAsync();
     }
 
     public async Task<LeagueJuiceMapping?> GetLeagueJuiceMappingAsync(int leagueId, int season) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        try {
-            return await db.LeagueJuiceMapping
-                .Where(ljm => ljm.LeagueId == leagueId && ljm.Season == season)
-                .Include(ljm => ljm.League)
-                .FirstOrDefaultAsync();
-        }
-        catch (Exception ex) {
-            _logger.LogError(ex, "Failed to get league juice mapping for league {LeagueId}, season {Season}", leagueId, season);
-            return null;
-        }
+        return await db.LeagueJuiceMapping
+            .Where(ljm => ljm.LeagueId == leagueId && ljm.Season == season)
+            .Include(ljm => ljm.League)
+            .FirstOrDefaultAsync();
     }
 
     public async Task<List<LeagueJuiceMapping>> GetLeagueJuiceMappingAsync(int leagueId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        try {
-            return await db.LeagueJuiceMapping
-                .Where(ljm => ljm.LeagueId == leagueId)
-                .Include(ljm => ljm.League)
-                .ToListAsync();
-        }
-        catch (Exception ex) {
-            _logger.LogError(ex, "Failed to get league juice mappings for league {LeagueId}", leagueId);
-            return new List<LeagueJuiceMapping>();
-        }
+        return await db.LeagueJuiceMapping
+            .Where(ljm => ljm.LeagueId == leagueId)
+            .Include(ljm => ljm.League)
+            .ToListAsync();
     }
 
     public async Task<LeagueInfo> GetLeagueInfoAsync(int leagueId) {
@@ -82,6 +61,12 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         return await db.LeagueInfo
             .Include(li => li.LeagueJuiceMappings)
             .FirstOrDefaultAsync(li => li.LeagueName == leagueName);
+    }
+
+    // NFL Season Week Config
+    public async Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync() {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.NflSeasonWeekConfigs.OrderBy(c => c.Season).ThenBy(c => c.WeekId).ToListAsync();
     }
 
     // NFL Weeks
@@ -238,6 +223,13 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.LeagueInfo
             .Where(l => l.OwnerUserId == ownerId)
+            .Include(l => l.LeagueJuiceMappings)
+            .ToListAsync();
+    }
+
+    public async Task<List<LeagueInfo>> GetAllLeaguesAsync() {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.LeagueInfo
             .Include(l => l.LeagueJuiceMappings)
             .ToListAsync();
     }

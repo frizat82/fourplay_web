@@ -54,6 +54,28 @@ export default defineConfig({
       },
       testMatch: '**/demo/cfb-*.spec.ts',
     },
+
+    // ── Replay backend (frizat-703.6) — separate port, DEMO_REPLAY_MODE=true ───
+    // Does its own login (no storageState) since it also needs ADMIN_EMAIL/PASSWORD to drive
+    // the replay advance endpoint — see e2e/demo/replay-nfl.spec.ts.
+    {
+      name: 'demo-replay-nfl',
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5175' },
+      testMatch: '**/demo/replay-nfl.spec.ts',
+    },
+    // Same replay backend (port 5175), CFB subdomain — proves the SSE push path (cfbAdapter),
+    // distinct from NFL's poll path above. See e2e/demo/replay-cfb.spec.ts. Depends on
+    // demo-replay-nfl rather than running in its own parallel worker: both projects drive the
+    // SAME backend process's single ReplayCacheService sequence (one real game, one mutable
+    // snapshot index shared by design — see ReplayCacheService.cs), so if they ran concurrently
+    // one test's advance/reset could race the other mid-assertion. `dependencies` forces
+    // sequential execution regardless of `workers`, not just fullyParallel/CI settings.
+    {
+      name: 'demo-replay-cfb',
+      dependencies: ['demo-replay-nfl'],
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://cfb.localhost:5175' },
+      testMatch: '**/demo/replay-cfb.spec.ts',
+    },
   ],
   // In CI, auto-start the dev server on port 5173 (mock-based chromium tests only).
   // Demo tests (demo-nfl / demo-cfb) require a running DEMO_MODE=true backend — run locally.

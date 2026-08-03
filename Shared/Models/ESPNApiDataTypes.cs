@@ -313,7 +313,9 @@ public class Week
     public EspnTeam[] TeamsOnBye { get; set; }
 }
 public enum TypeOfSeason { PostSeason = 3, RegularSeason = 2, PreSeason = 1 };
-public enum EspnRecordType { Total, Road, Home }
+// NFL wire values: "total"/"road"/"home". CFB additionally sends "homerecord"/"awayrecord"/"vsconf"
+// (see EspnJsonConverterTests, frizat-703.5) — kept as distinct members since CFB never sends "road"/"home".
+public enum EspnRecordType { Total, Road, Home, HomeRecord, AwayRecord, VsConf }
 public enum HomeAway { Away, Home }
 public enum Description { Final, Halftime, InProgress, Scheduled, EndOfPeriod }
 public enum TypeName { StatusFinal, StatusHalftime, StatusInProgress, StatusScheduled, StatusEndPeriod }
@@ -323,6 +325,7 @@ public static class EspnApiServiceJsonConverter
 {
     public static readonly JsonSerializerOptions Settings = new(JsonSerializerDefaults.General)
     {
+        PropertyNameCaseInsensitive = true,
         Converters =
         {
             HomeAwayConverter.Singleton,
@@ -345,16 +348,22 @@ internal class EspnRecordTypeConverter : JsonConverter<EspnRecordType>
             "road" => EspnRecordType.Road,
             "home" => EspnRecordType.Home,
             "total" => EspnRecordType.Total,
+            "homerecord" => EspnRecordType.HomeRecord,
+            "awayrecord" => EspnRecordType.AwayRecord,
+            "vsconf" => EspnRecordType.VsConf,
             _ => throw new Exception("Cannot unmarshal type EspnRecordType")
         };
 
     public override void Write(Utf8JsonWriter writer, EspnRecordType value, JsonSerializerOptions options) {
-        if (value == EspnRecordType.Road)
-            writer.WriteStringValue("road");
-        if (value == EspnRecordType.Home)
-            writer.WriteStringValue("home");
-        if (value == EspnRecordType.Total)
-            writer.WriteStringValue("total");
+        writer.WriteStringValue(value switch {
+            EspnRecordType.Road => "road",
+            EspnRecordType.Home => "home",
+            EspnRecordType.Total => "total",
+            EspnRecordType.HomeRecord => "homerecord",
+            EspnRecordType.AwayRecord => "awayrecord",
+            EspnRecordType.VsConf => "vsconf",
+            _ => throw new Exception("Cannot unmarshal type EspnRecordType")
+        });
     }
 
     public static readonly EspnRecordTypeConverter Singleton = new();

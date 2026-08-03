@@ -15,6 +15,11 @@ function RootRedirect() {
   return user ? <Navigate to="/dashboard" replace /> : <HomePage />;
 }
 
+function DashboardRoute() {
+  const { isCfb } = useSportContext();
+  return <HomePage adapter={isCfb ? cfbAdapter : nflAdapter} />;
+}
+
 function PicksRoute() {
   const { isCfb } = useSportContext();
   return <PicksPage adapter={isCfb ? cfbAdapter : nflAdapter} />;
@@ -50,7 +55,6 @@ import ManageAccountPage from './pages/account/ManageAccountPage';
 import ChangePasswordPage from './pages/account/ChangePasswordPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { RequireAdmin, RequireAuth } from './services/auth';
-import AdminLeagueManagementPage from './pages/admin/LeagueManagementPage';
 import AdminJobManagerPage from './pages/admin/JobManagerPage';
 import AdminUserManagementPage from './pages/admin/UserManagementPage';
 import AdminInvitationsPage from './pages/admin/InvitationsPage';
@@ -86,7 +90,7 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route path="/dashboard" element={<HomePage />} />
+        <Route path="/dashboard" element={<DashboardRoute />} />
         <Route path="/leaguepicker" element={<LeaguePickerPage />} />
         <Route path="/picks" element={<PicksRoute />} />
         <Route path="/scores" element={<ScoresRoute />} />
@@ -99,14 +103,6 @@ export default function App() {
           element={
             <RequireAdmin>
               <Navigate to="/admin/jobManagement" replace />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/admin/leagueManagement"
-          element={
-            <RequireAdmin>
-              <AdminLeagueManagementPage />
             </RequireAdmin>
           }
         />

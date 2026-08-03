@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import { setupRoutes, TEST_USER, ADMIN_USER } from './routes';
+import { setupRoutes, TEST_USER, ADMIN_USER, NON_OWNER_USER } from './routes';
 import type { SetupRoutesOptions } from './routes';
 
 /**
@@ -56,4 +56,4 @@ export async function waitForSpinner(page: Page): Promise<void> {
   await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
 }
 
-export { TEST_USER, ADMIN_USER };
+export { TEST_USER, ADMIN_USER, NON_OWNER_USER };

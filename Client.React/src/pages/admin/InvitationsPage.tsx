@@ -7,14 +7,12 @@ import {
   Chip,
   CircularProgress,
   FormControl,
-  FormControlLabel,
   IconButton,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Stack,
-  Switch,
   Table,
   TableBody,
   TableCell,
@@ -29,10 +27,9 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../services/toast';
 import { useAuth } from '../../services/auth';
-import { createInvitation, deleteInvitation, getAllInvitations, sendEmail } from '../../api/invitations';
-import { getLeagueUserMappingsForUser } from '../../api/league';
-import type { InvitationDto } from '../../types/admin';
-import type { LeagueUserMappingDto } from '../../types/league';
+import { createInvitation, deleteInvitation, getAllInvitations, resendInvitation } from '../../api/invitations';
+import { getAllLeagues } from '../../api/league';
+import type { InvitationDto, LeagueInfoDto } from '../../types/admin';
 
 export default function AdminInvitationsPage() {
   const [invitations, setInvitations] = useState<InvitationDto[]>([]);
@@ -41,8 +38,7 @@ export default function AdminInvitationsPage() {
   const [showExpired, setShowExpired] = useState(true);
   const [email, setEmail] = useState('');
   const [selectedLeagueId, setSelectedLeagueId] = useState<number | ''>('');
-  const [isLeagueOwner, setIsLeagueOwner] = useState(false);
-  const [leagues, setLeagues] = useState<LeagueUserMappingDto[]>([]);
+  const [leagues, setLeagues] = useState<LeagueInfoDto[]>([]);
   const [creating, setCreating] = useState(false);
   const toast = useToast();
   const { user } = useAuth();
@@ -56,12 +52,8 @@ export default function AdminInvitationsPage() {
 
   useEffect(() => {
     void loadInvitations();
-    if (user?.userId) {
-      void getLeagueUserMappingsForUser(user.userId).then((mappings) => {
-        setLeagues(mappings ?? []);
-      });
-    }
-  }, [user?.userId]);
+    void getAllLeagues().then(setLeagues);
+  }, []);
 
   const filteredInvitations = useMemo(
     () =>
@@ -71,43 +63,13 @@ export default function AdminInvitationsPage() {
     [invitations, showUsed, showExpired]
   );
 
+  // Path must match InvitationService.SendInvitationEmailAsync's registrationUrl (the emailed
+  // link) — nothing enforces the two staying in sync, so update both if this route ever changes.
   const getInviteUrl = (invitation: InvitationDto) => {
     const url = new URL('/account/register', window.location.origin);
     url.searchParams.set('inviteCode', invitation.invitationCode);
     url.searchParams.set('returnUrl', '/');
     return url.toString();
-  };
-
-  const generateInvitationEmailHtml = (invitation: InvitationDto) => {
-    const registrationUrl = getInviteUrl(invitation);
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>You're Invited</title>
-  <style>
-    body { font-family: Arial, sans-serif; background-color: #f4f4f7; margin: 0; padding: 0; }
-    .container { max-width: 600px; margin: auto; background-color: #ffffff; padding: 40px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    h1 { color: #333333; }
-    p { color: #555555; line-height: 1.6; }
-    .button { display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #1976d2; color: #ffffff !important; text-decoration: none !important; border-radius: 4px; font-weight: bold; }
-    .footer { margin-top: 40px; font-size: 12px; color: #999999; text-align: center; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>You're Invited to Join!</h1>
-    <p>Hello,</p>
-    <p>
-      You've been invited to join IV League at <strong>${window.location.origin}</strong>.
-      Click the button below to create your account and get started.
-    </p>
-    <a href="${registrationUrl}" class="button">Create Your Account</a>
-    <p>If you didn’t request this invite, you can safely ignore this email.</p>
-    <div class="footer">&copy; 2025 YourWebsite. All rights reserved.</div>
-  </div>
-</body>
-</html>`;
   };
 
   const handleCreateInvitation = async () => {
@@ -119,16 +81,11 @@ export default function AdminInvitationsPage() {
     setCreating(true);
     try {
       const leagueId = selectedLeagueId !== '' ? selectedLeagueId : null;
-      const invitation = await createInvitation(email, user.userId, leagueId, leagueId != null ? isLeagueOwner : false);
-      toast.push(`Invitation created for ${email}`, 'success');
-      await sendEmail({
-        toEmail: invitation.email,
-        subject: 'IV League Invitation',
-        htmlBody: generateInvitationEmailHtml(invitation),
-      });
+      // Email is sent server-side as part of creating the invitation.
+      await createInvitation(email, user.userId, leagueId);
+      toast.push(`Invitation sent to ${email}`, 'success');
       await loadInvitations();
       setEmail('');
-      setIsLeagueOwner(false);
     } catch {
       toast.push('Error creating invitation', 'error');
     } finally {
@@ -149,11 +106,7 @@ export default function AdminInvitationsPage() {
   };
 
   const handleSendEmail = async (invitation: InvitationDto) => {
-    await sendEmail({
-      toEmail: invitation.email,
-      subject: 'IV League Invitation',
-      htmlBody: generateInvitationEmailHtml(invitation),
-    });
+    await resendInvitation(invitation.id);
     toast.push(`Invitation e-mail sent to ${invitation.email}`, 'success');
   };
 
@@ -212,23 +165,13 @@ export default function AdminInvitationsPage() {
                 onChange={(e) => setSelectedLeagueId(e.target.value as number | '')}
               >
                 <MenuItem value=""><em>No league</em></MenuItem>
-                {leagues.map((m) => (
-                  <MenuItem key={m.leagueId} value={m.leagueId}>
-                    {m.leagueName ?? `League ${m.leagueId}`}
+                {leagues.map((l) => (
+                  <MenuItem key={l.id} value={l.id}>
+                    {l.leagueName} ({l.leagueType})
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={isLeagueOwner}
-                  onChange={(e) => setIsLeagueOwner(e.target.checked)}
-                  disabled={selectedLeagueId === ''}
-                />
-              }
-              label="Make commissioner"
-            />
             <Button variant="contained" onClick={handleCreateInvitation} disabled={creating}>
               {creating ? 'Inviting...' : 'Invite'}
             </Button>
@@ -260,7 +203,6 @@ export default function AdminInvitationsPage() {
                 <TableCell>Date Created</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>League</TableCell>
-                <TableCell>Commissioner?</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Expires</TableCell>
                 <TableCell>Used By</TableCell>
@@ -273,7 +215,6 @@ export default function AdminInvitationsPage() {
                   <TableCell>{new Date(invitation.createdAt).toLocaleString()}</TableCell>
                   <TableCell>{invitation.email}</TableCell>
                   <TableCell>{invitation.leagueName ?? '-'}</TableCell>
-                  <TableCell>{invitation.isLeagueOwner ? <Chip size="small" label="Yes" color="warning" /> : '-'}</TableCell>
                   <TableCell>
                     {invitation.isUsed ? (
                       <Chip size="small" label="Used" color="success" />
@@ -290,10 +231,10 @@ export default function AdminInvitationsPage() {
                   <TableCell>
                     {!invitation.isUsed && !invitation.isExpired && (
                       <>
-                        <IconButton onClick={() => handleCopy(invitation)}>
+                        <IconButton aria-label={`Copy invite link for ${invitation.email}`} onClick={() => handleCopy(invitation)}>
                           <ContentCopyIcon />
                         </IconButton>
-                        <IconButton onClick={() => handleSendEmail(invitation)}>
+                        <IconButton aria-label={`Resend invitation to ${invitation.email}`} onClick={() => handleSendEmail(invitation)}>
                           <EmailIcon />
                         </IconButton>
                       </>

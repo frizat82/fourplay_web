@@ -12,7 +12,7 @@ namespace FourPlayWebApp.Server.Controllers;
 [Authorize(Roles = "Administrator")]
 [ApiController]
 [Route("api/invitations")]
-public class InvitationController(IInvitationService invitationService, IEmailSender emailSender, IEmailSender<ApplicationUser> emailSenderApplication) : ControllerBase {
+public class InvitationController(IInvitationService invitationService, IEmailSender<ApplicationUser> emailSenderApplication) : ControllerBase {
     [HttpGet("all")]
     public async Task<ActionResult<List<InvitationDto>>> GetAll()
     {
@@ -28,10 +28,17 @@ public class InvitationController(IInvitationService invitationService, IEmailSe
     }
 
     [HttpPost]
-    public async Task<ActionResult<InvitationDto>> Create([FromQuery] string email, [FromQuery] string invitedByUserId, [FromQuery] int? leagueId = null, [FromQuery] bool isLeagueOwner = false)
+    public async Task<ActionResult<InvitationDto>> Create([FromQuery] string email, [FromQuery] string invitedByUserId, [FromQuery] int? leagueId = null, [FromQuery] string? baseUrl = null)
     {
-        var invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId, leagueId, isLeagueOwner);
+        var invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId, leagueId, baseUrl);
         return CreatedAtAction(nameof(GetAll), new { id = invitation.Id }, invitation.ToDto());
+    }
+
+    [HttpPost("{id:int}/resend")]
+    public async Task<IActionResult> Resend(int id, [FromQuery] string baseUrl)
+    {
+        await invitationService.ResendInvitationEmailAsync(id, baseUrl);
+        return Ok();
     }
 
     [HttpDelete("{id:int}")]
@@ -61,13 +68,6 @@ public class InvitationController(IInvitationService invitationService, IEmailSe
     // -----------------------------
     // Email Endpoints
     // -----------------------------
-
-    [HttpPost("send")]
-    public async Task<IActionResult> SendEmail([FromBody] EmailRequest request)
-    {
-        await emailSender.SendEmailAsync(request.ToEmail, request.Subject, request.HtmlBody);
-        return Ok("Email sent.");
-    }
 
     [HttpPost("send-confirmation")]
     public async Task<IActionResult> SendConfirmation([FromBody] ConfirmationRequest request)
