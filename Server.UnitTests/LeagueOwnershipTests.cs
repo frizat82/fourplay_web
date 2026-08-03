@@ -6,12 +6,14 @@ using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Shared.Models.Enum;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using System.Reflection;
 using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -292,6 +294,38 @@ public class LeagueOwnershipTests
         await repo.Received(1).AddLeagueInfoAsync(Arg.Is<LeagueInfo>(l => l.LeagueName == "My League" && l.OwnerUserId == OwnerId));
         await repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.Season == 2025 && m.Juice == 13));
         await repo.Received(1).AddLeagueUserMappingAsync(Arg.Is<LeagueUserMapping>(m => m.UserId == OwnerId));
+    }
+
+    // frizat-d6l: self-serve league creation — any authenticated user may create a league now,
+    // but a non-admin's request must always make THEM the owner server-side, regardless of what
+    // ownerUserId they send, to close a privilege-escalation hole (assigning ownership to/of
+    // someone else's league without that person's involvement).
+    [Fact]
+    public async Task CreateLeague_NonAdmin_ForcesOwnerToCaller_IgnoringSpoofedOwnerUserId()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+        var createdLeague = new LeagueInfo { Id = 42, LeagueName = "My League", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl };
+        repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(createdLeague));
+
+        // AttackerId is spoofed as the owner in the request body — caller is OwnerId, not admin.
+        var dto = new LeagueCreateDto("My League", LeagueType.Nfl, AttackerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto) as OkObjectResult;
+
+        Assert.NotNull(result);
+        await repo.Received(1).AddLeagueInfoAsync(Arg.Is<LeagueInfo>(l => l.OwnerUserId == OwnerId));
+        await repo.Received(1).AddLeagueUserMappingAsync(Arg.Is<LeagueUserMapping>(m => m.UserId == OwnerId));
+    }
+
+    [Fact]
+    public void CreateLeague_IsNotRestrictedToAdministratorRole()
+    {
+        var method = typeof(LeagueController).GetMethod(nameof(LeagueController.CreateLeague));
+        Assert.NotNull(method);
+
+        var roleAttr = method!.GetCustomAttributes<AuthorizeAttribute>().FirstOrDefault(a => a.Roles is not null);
+
+        Assert.Null(roleAttr); // any authenticated user may call this now — class-level [Authorize] still applies
     }
 
     [Fact]
