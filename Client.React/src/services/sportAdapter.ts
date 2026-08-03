@@ -93,7 +93,11 @@ export interface SportAdapter {
   loadHistoricalScores(leagueId: number, userId: string, week: WeekState): Promise<LoadedScores | null>;
 
   // Shared config
+  /** Stable sport identifier — used as the React Query cache key prefix */
+  sport: 'nfl' | 'cfb';
   pollIntervalMs: number;
+  /** SSE endpoint URL for live score push. Undefined on adapters that don't support it (e.g. CFB). */
+  sseUrl?: string;
   // loadJerseys is optional — if defined, PicksPage shows jerseys when data is non-empty
   weekSelectorConfig: {
     regularWeekOptions?: number[];

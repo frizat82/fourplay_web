@@ -1,6 +1,7 @@
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
+using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Identity;
@@ -13,10 +14,37 @@ namespace FourPlayWebApp.Server.Services;
 /// Seeds demo data so the full UI is explorable locally without a live NFL season.
 /// Only runs when DEMO_MODE=true. Idempotent — safe to call on every startup.
 /// </summary>
-public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser> userManager, IConfiguration configuration)
+public class DemoDataSeeder(
+    ApplicationDbContext db,
+    UserManager<ApplicationUser> userManager,
+    IConfiguration configuration)
 {
     private const int DemoSeason = 2025;
     private const int DemoWeek = 18;
+
+    // frizat-703.6: the replayed game's own embedded season/week (see sample_espn_nfl_*.json).
+    // The frontend derives "which week to show" entirely from the replay data's own season/week
+    // fields, not from any separately-resolved "current week" — so the seeded spread must live
+    // in this same week. Overridden to postseason ESPN week 5 (Super Bowl, NflWeek 22) rather
+    // than the real game's original regular-season week: Super Bowl requires only 1 pick, so the
+    // E2E spec can pick a single team and submit without needing 4 games in one fixture. Season is
+    // bumped to 2026 (not the demo dataset's 2025) — NflWeek 22/2025 already has a full seeded
+    // Super Bowl slate (NE @ SEA with picks for every user), which would collide with this game.
+    private const int ReplaySeason = 2026;
+    private const int ReplayWeek = 22;
+
+    // CFB side of the same replay game (frizat-703.6): unlike NFL, there is no unused (season,
+    // slate) slot to isolate into — CfbCurrentSlateService only ever resolves season 2026 (all
+    // future, never picked as current before the real 2026 season starts) or its 2025 fallback,
+    // and 2025's SlateNumbers 1-18 are already fully seeded with real spreads/picks for every demo
+    // user. Worse, the WeekYearSelector clamps any (week, isPostSeason) pair outside its configured
+    // range back to the last valid option, so an invented out-of-range slate number (e.g. 19) gets
+    // silently redirected to the real Championship slate anyway. So: reuse the REAL Championship
+    // slate directly (SlateNumber 18) and add IND@ATL as a second game in it, using the admin user
+    // (frizat) for the replay test — admin has zero pre-existing CFB picks in any slate, unlike
+    // every demo user, so its "Pick" button isn't already exhausted by a real seeded pick.
+    private const int ReplayCfbSeason = 2025;
+    private const int ReplayCfbSlateNumber = 18;
 
     // Fake demo users: name → email
     private static readonly (string Username, string Email)[] DemoUsers =
@@ -62,6 +90,9 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         await SeedDemoUsersAsync(league);
         await SeedHistoricalWeeksAsync(league);
 
+        if (configuration["DEMO_REPLAY_MODE"] == "true")
+            await SeedReplayGameSpreadAsync();
+
         // CFB demo data
         var cfbLeague = await SeedCfbLeagueAsync();
         await SeedCfbLeagueMembersAsync(cfbLeague);
@@ -71,6 +102,9 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         await SeedCfbSpreadsAsync(slates);
         await SeedCfbScoresAsync(slates);
         await SeedCfbPicksAsync(cfbLeague, slates);
+
+        if (configuration["DEMO_REPLAY_MODE"] == "true")
+            await SeedReplayCfbSlateAsync();
 
         Log.Information("DemoDataSeeder: seed complete");
     }
@@ -147,6 +181,97 @@ public class DemoDataSeeder(ApplicationDbContext db, UserManager<ApplicationUser
         db.NflSpreads.AddRange(spreads);
         await db.SaveChangesAsync();
         Log.Information("DemoDataSeeder: seeded {Count} spreads", spreads.Count);
+    }
+
+    // frizat-703.6: seeds one spread for the exact real game ReplayCacheService replays
+    // (IND @ ATL, event 401772636 — see sample_espn_nfl_*.json), into the SAME week the replay
+    // fixtures embed (ReplaySeason/ReplayWeek). Only runs when DEMO_REPLAY_MODE=true so normal
+    // demo e2e's game-count/team assertions for the frozen Super Bowl week are unaffected.
+    private async Task SeedReplayGameSpreadAsync()
+    {
+        // AddPicks (LeagueController) rejects any pick whose (Season, NflWeek) has no NflWeeks row.
+        if (!await db.NflWeeks.AnyAsync(w => w.Season == ReplaySeason && w.NflWeek == ReplayWeek))
+        {
+            db.NflWeeks.Add(new NflWeeks {
+                Season = ReplaySeason,
+                NflWeek = ReplayWeek,
+                StartDate = DateTimeOffset.UtcNow,
+                EndDate = DateTimeOffset.UtcNow.AddDays(7),
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Self-healing, not skip-if-exists: a long-lived local backend process can outlive the
+        // "future" GameTime seeded on a previous startup, which would silently make the replay
+        // game un-pickable without ever touching the DB by hand. Re-seeding fresh on every
+        // restart (idempotent — same row, updated in place) is what CI does naturally anyway.
+        var existing = await db.NflSpreads.FirstOrDefaultAsync(s =>
+            s.Season == ReplaySeason && s.NflWeek == ReplayWeek &&
+            s.HomeTeam == "IND" && s.AwayTeam == "ATL");
+        if (existing is not null)
+        {
+            existing.GameTime = DateTimeOffset.UtcNow.AddHours(2);
+            await db.SaveChangesAsync();
+            Log.Information("DemoDataSeeder: refreshed replay game spread GameTime for {Season}/{Week}", ReplaySeason, ReplayWeek);
+            return;
+        }
+
+        db.NflSpreads.Add(new NflSpreads {
+            Season = ReplaySeason,
+            NflWeek = ReplayWeek,
+            HomeTeam = "IND",
+            AwayTeam = "ATL",
+            HomeTeamSpread = -3.5,
+            AwayTeamSpread = 3.5,
+            OverUnder = 47.5,
+            GameTime = DateTimeOffset.UtcNow.AddHours(2),
+        });
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: seeded replay game spread IND@ATL for {Season}/{Week}", ReplaySeason, ReplayWeek);
+    }
+
+    // frizat-703.6: CFB side of the replay game — same underlying ReplayCacheService snapshots
+    // (IND @ ATL), added as a second game in the REAL Championship slate so it's surfaced through
+    // CFB's normal slate-based picks/scores flow (proving the SSE push path — /api/cfb/live-stream
+    // — separately from NFL's poll path) without inventing a slate number the frontend doesn't
+    // recognize. CfbSpreads.GameTime (not the ESPN payload's date) drives CFB's pick-lock check,
+    // so it's set directly here. Requires SeedHistoricalWeeksAsync-equivalent CFB seeding (the
+    // Championship slate) to have already run.
+    private async Task SeedReplayCfbSlateAsync()
+    {
+        var slate = await db.CfbSlates.FirstOrDefaultAsync(s =>
+            s.Season == ReplayCfbSeason && s.SlateNumber == ReplayCfbSlateNumber);
+        if (slate is null)
+        {
+            Log.Warning("DemoDataSeeder: CFB Championship slate {Season}/{Slate} not found — skipping replay CFB seed", ReplayCfbSeason, ReplayCfbSlateNumber);
+            return;
+        }
+
+        // Self-healing (see SeedReplayGameSpreadAsync) — CFB's pick-lock check reads
+        // CfbSpreads.GameTime directly (not a re-derived value), so it's especially prone to
+        // going stale across a long-lived local backend process.
+        var existing = await db.CfbSpreads.FirstOrDefaultAsync(s =>
+            s.CfbSlateId == slate.Id && s.HomeTeam == "IND" && s.AwayTeam == "ATL");
+        if (existing is not null)
+        {
+            existing.GameTime = DateTimeOffset.UtcNow.AddMinutes(30);
+            await db.SaveChangesAsync();
+            Log.Information("DemoDataSeeder: refreshed replay CFB spread GameTime for slate {Slate}", ReplayCfbSlateNumber);
+            return;
+        }
+
+        db.CfbSpreads.Add(new CfbSpreads {
+            CfbSlateId = slate.Id,
+            EspnEventId = 401772636,
+            HomeTeam = "IND",
+            AwayTeam = "ATL",
+            HomeTeamSpread = -3.5,
+            AwayTeamSpread = 3.5,
+            OverUnder = 47.5,
+            GameTime = DateTimeOffset.UtcNow.AddMinutes(30),
+        });
+        await db.SaveChangesAsync();
+        Log.Information("DemoDataSeeder: seeded replay CFB slate {Slate} spread IND@ATL", ReplayCfbSlateNumber);
     }
 
     private async Task FixSpreadAbbreviationsAsync()

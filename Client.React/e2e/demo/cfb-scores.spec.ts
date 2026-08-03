@@ -27,11 +27,12 @@ test.describe('CFB scores — demo backend', () => {
 
   // Championship is in-progress (Q3: IU 14, MIA 7) so field position renders
   test('Championship shows game clock (Q3) indicator and partial scores', async ({ page }) => {
-    // Shows "Q3 7:23" from CFB_DEMO_SITUATION, or "Live" as fallback
+    // Shows "Q3 7:08" from sample_espn_cfb.json's real captured situation, or "Live" as fallback
     const clockText = page.getByText(/Q[1-4]|Live/);
     await expect(clockText.first()).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('heading', { name: '14' })).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole('heading', { name: '7' })).toBeVisible({ timeout: 5_000 });
+    // exact: true — non-exact match also hits the "47.5" over/under heading, which contains "7"
+    await expect(page.getByRole('heading', { name: '7', exact: true })).toBeVisible({ timeout: 5_000 });
   });
 
   test('Championship shows field position bar (in-progress)', async ({ page }) => {
@@ -40,7 +41,7 @@ test.describe('CFB scores — demo backend', () => {
   });
 
   test('Championship shows down and distance text', async ({ page }) => {
-    await expect(page.getByText('3rd & 4 at MIA 22')).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText('2nd & 7 at IU 35')).toBeVisible({ timeout: 8_000 });
   });
 
   test('league picks badge is visible for the Championship game', async ({ page }) => {

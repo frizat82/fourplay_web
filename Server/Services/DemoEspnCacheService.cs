@@ -1,8 +1,6 @@
-using System.Text.Json;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
-using Serilog;
 
 namespace FourPlayWebApp.Server.Services;
 
@@ -17,20 +15,15 @@ public class DemoEspnCacheService : IEspnCacheService
 
     public DemoEspnCacheService(IWebHostEnvironment env)
     {
-        var path = Path.Combine(env.ContentRootPath, "..", "sample_espn_nfl.json");
-        if (!File.Exists(path))
+        _scores = DemoFixtureLoader.Load(env, "sample_espn_nfl.json", json =>
         {
-            Log.Warning("DEMO_MODE: sample_espn_nfl.json not found at {Path}", path);
-            return;
-        }
-
-        var json = File.ReadAllText(path);
-        foreach (var map in NflTeamMappingHelpers.NflTeamAbbrMapping)
-            json = json.Replace($"\"{map.Key}\"", $"\"{map.Value}\"");
-        _scores = JsonSerializer.Deserialize<EspnScores>(json, EspnApiServiceJsonConverter.Settings);
-        Log.Information("DEMO_MODE: Loaded {Count} events from sample_espn_nfl.json",
-            _scores?.Events?.Length ?? 0);
+            foreach (var map in NflTeamMappingHelpers.NflTeamAbbrMapping)
+                json = json.Replace($"\"{map.Key}\"", $"\"{map.Value}\"");
+            return json;
+        });
     }
+
+    public event Action? ScoresChanged; // never fired — demo data is static
 
     public Task<EspnScores?> GetScoresAsync() => Task.FromResult(_scores);
 }

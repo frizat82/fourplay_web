@@ -24,6 +24,16 @@ export const ADMIN_USER: UserInfo = {
   ],
 };
 
+/** A regular (non-admin) authenticated user who does not own any leagues. */
+export const NON_OWNER_USER: UserInfo = {
+  userId: 'non-owner-user-id-001',
+  name: 'NonOwnerUser',
+  claims: [
+    { type: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier', value: 'non-owner-user-id-001' },
+    { type: 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name', value: 'NonOwnerUser' },
+  ],
+};
+
 const TEST_LEAGUE_ID = 1;
 const TEST_SEASON = 2024;
 const TEST_WEEK = 2;
@@ -165,6 +175,18 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    // ── ESPN live-stream (SSE) — return empty body so EventSource doesn't hang ─
+    if (url.includes('/api/espn/live-stream') && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
+      return;
+    }
+
+    // ── CFB live-stream (SSE) — same role as espn/live-stream for NFL ───────
+    if (url.includes('/api/cfb/live-stream') && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
+      return;
+    }
+
     // ── ESPN scores/week — historical ──────────────────────────────────────
     if (url.includes('/api/espn/scores/week/') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(scoresData) });
@@ -173,6 +195,18 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
 
     // ── ESPN scores — current week ─────────────────────────────────────────
     if (url.includes('/api/espn/scores') && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(scoresData) });
+      return;
+    }
+
+    // ── CFB scores/slate/{id} — specific (typically non-current) slate ──────
+    if (url.includes('/api/espn/cfb/scores/slate/') && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(scoresData) });
+      return;
+    }
+
+    // ── CFB scores — cached current slate ────────────────────────────────────
+    if (url.includes('/api/espn/cfb/scores') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(scoresData) });
       return;
     }
@@ -243,7 +277,6 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
             registeredUserName: null,
             isExpired: false,
             isValid: true,
-            isLeagueOwner: false,
           },
         ]),
       });
@@ -302,10 +335,21 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify(
-          authUser.claims.some(c => c.value === 'Administrator')
-            ? []
-            : [{ id: TEST_LEAGUE_ID, leagueName: 'Test League', leagueType: 'Nfl', ownerUserId: authUser.userId, dateCreated: new Date().toISOString() }]
+          authUser.userId === TEST_USER.userId
+            ? [{ id: TEST_LEAGUE_ID, leagueName: 'Test League', leagueType: 'Nfl', ownerUserId: authUser.userId, dateCreated: new Date().toISOString() }]
+            : []
         ),
+      });
+      return;
+    }
+
+    if (url.includes('/api/league/all-leagues') && method === 'GET') {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { id: TEST_LEAGUE_ID, leagueName: 'Test League', leagueType: 'Nfl', ownerUserId: authUser.userId, dateCreated: new Date().toISOString() },
+        ]),
       });
       return;
     }
@@ -337,6 +381,20 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
 
     if (url.match(/\/api\/league\/\d+\/owner\//) && method === 'PUT') {
       void route.fulfill({ status: 204 });
+      return;
+    }
+
+    if (url.includes('/api/league/create') && method === 'POST') {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 999, leagueName: 'New League', leagueType: 'Nfl', ownerUserId: authUser.userId, dateCreated: new Date().toISOString() }),
+      });
+      return;
+    }
+
+    if (url.includes('/api/league/league-user-mapping') && method === 'POST') {
+      void route.fulfill({ status: 200 });
       return;
     }
 
