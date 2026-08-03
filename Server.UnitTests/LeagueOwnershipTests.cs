@@ -462,7 +462,7 @@ public class LeagueOwnershipTests
     public async Task InviteToLeague_PassesBaseUrlThrough_SoTheEmailCanBeSentServerSide()
     {
         var invSvc = Substitute.For<IInvitationService>();
-        invSvc.CreateInvitationAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<string?>())
+        invSvc.CreateInvitationAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<string?>())
               .Returns(new Invitation { Id = 1, Email = "target@example.com", InvitationCode = "code-abc" });
 
         var repo = Substitute.For<ILeagueRepository>();

@@ -31,8 +31,6 @@ public class Invitation
 
     public DateTimeOffset? ExpiresAt { get; set; } = DateTimeOffset.UtcNow.AddDays(7);
 
-    public bool IsLeagueOwner { get; set; } = false;
-
     public bool IsUsed { get; set; } = false;
 
     public DateTimeOffset? UsedAt { get; set; }

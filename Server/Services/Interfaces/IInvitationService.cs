@@ -17,7 +17,7 @@ public interface IInvitationService
     /// <param name="invitedByUserId">User ID of the person sending the invite</param>
     /// <param name="baseUrl">Frontend origin (e.g. https://ivleague.com) used to build the registration link, if the email should be sent</param>
     /// <returns>The created invitation</returns>
-    Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null, bool isLeagueOwner = false, string? baseUrl = null);
+    Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null, string? baseUrl = null);
 
     /// <summary>
     /// Re-send the invitation email for an existing, still-valid invitation.

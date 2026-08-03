@@ -277,7 +277,6 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
             registeredUserName: null,
             isExpired: false,
             isValid: true,
-            isLeagueOwner: false,
           },
         ]),
       });

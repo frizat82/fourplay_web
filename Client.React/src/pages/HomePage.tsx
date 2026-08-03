@@ -12,6 +12,7 @@ import { useRef, useState } from 'react';
 import { useAuth } from '../services/auth';
 import { RulesContent } from './RulesPage';
 import DashboardStandings from '../components/DashboardStandings';
+import OwnerCostSummary from '../components/OwnerCostSummary';
 import type { SportAdapter } from '../services/sportAdapter';
 import './home.css';
 
@@ -158,6 +159,7 @@ export default function HomePage({ adapter }: HomePageProps) {
                   <img src="/Images/fourplayhome.jpg" alt="IV League" className="hero-image-img" />
                 </Paper>
                 {isAuthed && adapter && <DashboardStandings adapter={adapter} />}
+                {isAuthed && <OwnerCostSummary />}
               </Stack>
             </Grid>
           </Grid>
