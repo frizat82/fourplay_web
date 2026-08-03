@@ -51,7 +51,7 @@ When fixing a bug: grep existing tests for old wrong values before shipping. Whe
 
 ### Common Test Gaps to Watch For
 - **Controller ownership guard** — every `Forbid()` branch needs its own test
-- **Session-derived flags** (`isLeagueOwner`, `ownedLeagues`, sport filter) — test in `session.test.tsx`
+- **Session-derived flags** (`ownedLeagues`, sport filter) — test in `session.test.tsx`
 - **New page with no route in `routes.ts`** — will 404 silently in all existing e2e tests
 - **Frontend pick reveal** — `revealPicksForStartedGames` tested in `sportAdapter.test.ts`; update those tests first
 
