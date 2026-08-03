@@ -610,17 +610,23 @@ public class LeagueController(
 
     // ---------- Commissioner Portal ─────────────────────────────────────────
 
+    // Self-serve: any authenticated user may create a league (frizat-d6l — Yahoo/ESPN model).
+    // A non-admin always becomes the owner of what they create — dto.OwnerUserId is only honored
+    // for admins (their existing create-on-behalf-of-another-user capability), never trusted from
+    // a non-admin caller, which would otherwise let anyone assign league ownership to anyone else.
     [HttpPost("create")]
-    [Authorize(Roles = AppRoles.Administrator)]
     [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateLeague([FromBody] LeagueCreateDto dto) {
         if (await repo.LeagueExistsAsync(dto.LeagueName))
             return Conflict($"A league named '{dto.LeagueName}' already exists.");
+        var ownerUserId = User.IsInRole(AppRoles.Administrator)
+            ? dto.OwnerUserId
+            : User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var league = await repo.AddLeagueInfoAsync(new LeagueInfo {
             LeagueName = dto.LeagueName,
             LeagueType = dto.LeagueType,
-            OwnerUserId = dto.OwnerUserId,
+            OwnerUserId = ownerUserId,
             DateCreated = DateTimeOffset.UtcNow,
         });
         await repo.AddLeagueJuiceMappingAsync(new LeagueJuiceMapping {
@@ -634,7 +640,7 @@ public class LeagueController(
         });
         await repo.AddLeagueUserMappingAsync(new LeagueUserMapping {
             LeagueId = league.Id,
-            UserId = dto.OwnerUserId,
+            UserId = ownerUserId,
             DateCreated = DateTimeOffset.UtcNow,
         });
         return Ok(new LeagueInfoDto { Id = league.Id, LeagueName = league.LeagueName, LeagueType = league.LeagueType, OwnerUserId = league.OwnerUserId, DateCreated = league.DateCreated });

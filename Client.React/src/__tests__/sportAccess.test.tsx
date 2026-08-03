@@ -93,15 +93,17 @@ describe('Sport access control', () => {
     expect(screen.queryByRole('link', { name: /Go to/i })).not.toBeInTheDocument();
   });
 
-  it('isLeagueOwner nav link is visible when user owns a league', () => {
-    sessionState.isLeagueOwner = true;
+  // Self-serve league creation (frizat-d6l): any authenticated user can create their own
+  // league, so the nav link must stay visible whether or not they own one yet.
+  it('My Leagues nav link is visible even when the user owns no leagues', () => {
+    sessionState.isLeagueOwner = false;
     renderLayout();
     expect(screen.getByRole('link', { name: /my leagues/i })).toBeInTheDocument();
   });
 
-  it('isLeagueOwner nav link is hidden when user does not own a league', () => {
-    sessionState.isLeagueOwner = false;
+  it('My Leagues nav link is visible when the user owns a league', () => {
+    sessionState.isLeagueOwner = true;
     renderLayout();
-    expect(screen.queryByRole('link', { name: /my leagues/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /my leagues/i })).toBeInTheDocument();
   });
 });

@@ -14,14 +14,13 @@ export async function getInvitationsByUser(userId: string) {
 // The invitation email is sent server-side (same code path as league-scoped
 // invites) — baseUrl tells the backend which frontend origin to build the
 // registration link against.
-export async function createInvitation(email: string, invitedByUserId: string, leagueId?: number | null, isLeagueOwner?: boolean) {
+export async function createInvitation(email: string, invitedByUserId: string, leagueId?: number | null) {
   const { data } = await http.post<InvitationDto>('/api/invitations', undefined, {
     params: {
       email,
       invitedByUserId,
       baseUrl: window.location.origin,
       ...(leagueId != null ? { leagueId } : {}),
-      ...(isLeagueOwner ? { isLeagueOwner } : {}),
     },
   });
   return data;

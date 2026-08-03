@@ -63,7 +63,7 @@ export default function AppLayout() {
   const [open, setOpen] = useState(!isMobile);
   const [adminOpen, setAdminOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const { availableLeagues, currentLeague, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded, isLeagueOwner } = useSession();
+  const { availableLeagues, currentLeague, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded } = useSession();
   const { isCfb } = useSportContext();
   const { user } = useAuth();
   const { mode, toggleTheme } = useThemeMode();
@@ -263,19 +263,17 @@ export default function AppLayout() {
               </ListItemIcon>
               <ListItemText primary="Rules" />
             </ListItemButton>
-            {(isLeagueOwner || showAdmin) && (
-              <ListItemButton
-                component={NavLink}
-                to="/league/manage"
-                sx={navItemSx}
-                onClick={() => handleNavClick('/league/manage')}
-              >
-                <ListItemIcon>
-                  <EmojiEventsIcon />
-                </ListItemIcon>
-                <ListItemText primary="My Leagues" />
-              </ListItemButton>
-            )}
+            <ListItemButton
+              component={NavLink}
+              to="/league/manage"
+              sx={navItemSx}
+              onClick={() => handleNavClick('/league/manage')}
+            >
+              <ListItemIcon>
+                <EmojiEventsIcon />
+              </ListItemIcon>
+              <ListItemText primary="My Leagues" />
+            </ListItemButton>
           </List>
           {showAdmin && (
             <>

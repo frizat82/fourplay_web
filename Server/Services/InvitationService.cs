@@ -22,7 +22,7 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
         Log.Information("Invitation with ID {Id} deleted", id);
     }
 
-    public async Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null, bool isLeagueOwner = false, string? baseUrl = null)
+    public async Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null, string? baseUrl = null)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
@@ -31,7 +31,6 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
             Email = email,
             InvitedByUserId = invitedByUserId,
             LeagueId = leagueId,
-            IsLeagueOwner = isLeagueOwner,
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
         };
