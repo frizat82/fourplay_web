@@ -6,7 +6,8 @@ interface TeamHelmetProps {
 }
 
 export default function TeamHelmet({ abbr, size = 56, flipped = false, showLabel = true }: TeamHelmetProps) {
-  const src = `/Icons/Helmets/${abbr.toLowerCase()}.svg`;
+  const src = `/Icons/Helmets/${abbr.toLowerCase()}.png`;
+  const svgFallbackSrc = `/Icons/Helmets/${abbr.toLowerCase()}.svg`;
   const h = Math.round(size * 1.1);
 
   return (
@@ -19,7 +20,17 @@ export default function TeamHelmet({ abbr, size = 56, flipped = false, showLabel
         role="img"
         aria-label={abbr}
         style={{ transform: flipped ? 'scaleX(-1)' : undefined, display: 'block', objectFit: 'contain' }}
-        onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+        onError={(e) => {
+          const img = e.target as HTMLImageElement;
+          // New PNG set doesn't cover every team yet — retry once with the legacy .svg
+          // before giving up and hiding the image (matches prior hide-on-failure behavior).
+          if (!img.dataset.svgFallbackTried) {
+            img.dataset.svgFallbackTried = 'true';
+            img.src = svgFallbackSrc;
+            return;
+          }
+          img.style.visibility = 'hidden';
+        }}
       />
       {showLabel && (
         <span style={{
