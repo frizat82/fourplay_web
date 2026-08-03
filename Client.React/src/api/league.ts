@@ -38,8 +38,8 @@ export async function getUsers() {
   return data;
 }
 
-export async function addLeagueUserMapping(mapping: LeagueUserMappingDto) {
-  await http.post('/api/league/league-user-mapping', mapping);
+export async function addLeagueUserMapping(leagueId: number, userId: string) {
+  await http.post('/api/league/league-user-mapping', { leagueId, userId });
 }
 
 export async function addLeagueInfo(info: LeagueInfoDto) {
@@ -122,6 +122,11 @@ export async function getMyLeagues() {
   return data ?? [];
 }
 
+export async function getAllLeagues() {
+  const { data } = await http.get<LeagueInfoDto[]>('/api/league/all-leagues');
+  return data ?? [];
+}
+
 export async function getLeagueCost(leagueId: number) {
   const { data } = await http.get<LeagueCostDto>(`/api/league/${leagueId}/cost`);
   return data;
@@ -140,7 +145,7 @@ export async function removeLeagueMember(leagueId: number, userId: string) {
 }
 
 export async function inviteToLeague(leagueId: number, email: string) {
-  await http.post(`/api/league/${leagueId}/invite`, { email });
+  await http.post(`/api/league/${leagueId}/invite`, { email, baseUrl: window.location.origin });
 }
 
 export async function assignLeagueOwner(leagueId: number, newOwnerUserId: string) {

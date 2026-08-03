@@ -19,7 +19,8 @@ using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.Controllers;
 
-public record LeagueInviteDto(string Email);
+public record LeagueInviteDto(string Email, string? BaseUrl = null);
+public record AddLeagueUserMappingRequest(int LeagueId, string UserId);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -139,6 +140,7 @@ public class LeagueController(
             LeagueOwnerUserId = m.League.OwnerUserId,
             UserId = m.UserId,
             UserName = m.User.UserName,
+            Email = m.User.Email,
             DateCreated = m.DateCreated,
             LeagueType = m.League.LeagueType
         }).ToList();
@@ -566,11 +568,11 @@ public class LeagueController(
     [HttpPost("league-user-mapping")]
     [Authorize(Roles = AppRoles.Administrator)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> AddLeagueUserMapping([FromBody] LeagueUserMappingDto mappingDto) {
+    public async Task<IActionResult> AddLeagueUserMapping([FromBody] AddLeagueUserMappingRequest request) {
         var mapping = new LeagueUserMapping {
-            LeagueId = mappingDto.LeagueId,
-            UserId = mappingDto.UserId,
-            DateCreated = mappingDto.DateCreated,
+            LeagueId = request.LeagueId,
+            UserId = request.UserId,
+            DateCreated = DateTimeOffset.UtcNow,
         };
         await repo.AddLeagueUserMappingAsync(mapping);
         return NoContent();
@@ -657,6 +659,17 @@ public class LeagueController(
         }));
     }
 
+    [HttpGet("all-leagues")]
+    [Authorize(Roles = AppRoles.Administrator)]
+    [ProducesResponseType(typeof(List<LeagueInfoDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllLeagues() {
+        var leagues = await repo.GetAllLeaguesAsync();
+        return Ok(leagues.Select(l => new LeagueInfoDto {
+            Id = l.Id, LeagueName = l.LeagueName, LeagueType = l.LeagueType,
+            OwnerUserId = l.OwnerUserId, DateCreated = l.DateCreated,
+        }));
+    }
+
     [HttpGet("{leagueId:int}/cost")]
     [ProducesResponseType(typeof(LeagueCostDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLeagueCost(int leagueId) {
@@ -737,7 +750,7 @@ public class LeagueController(
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
             return Forbid();
-        var invitation = await invitationService.CreateInvitationAsync(dto.Email, callerId, leagueId);
+        var invitation = await invitationService.CreateInvitationAsync(dto.Email, callerId, leagueId, baseUrl: dto.BaseUrl);
         return Ok(new InvitationDto {
             Id = invitation.Id,
             InvitationCode = invitation.InvitationCode,

@@ -7,6 +7,11 @@ export async function getLiveGames(): Promise<LiveGame[]> {
   return data ?? [];
 }
 
+export async function getCfbLiveGames(): Promise<LiveGame[]> {
+  const { data } = await http.get<LiveGame[]>('/api/espn/cfb/livegames');
+  return data ?? [];
+}
+
 export async function getScores() {
   const { data } = await http.get<EspnScores>('/api/espn/scores');
   return data;

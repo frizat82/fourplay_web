@@ -45,6 +45,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const [userPicks, setUserPicks] = useState<Set<string>>(new Set());
   const [storingPicks, setStoringPicks] = useState(false);
   const [showJerseys, setShowJerseys] = useState(false);
+  // The real navigable ceiling, captured only from a current-week load — see the effect below.
+  const [currentBounds, setCurrentBounds] = useState<{ maxWeek: number; maxSeason: number } | null>(null);
 
   const isCurrentWeek = weekState === null;
   const enabled = leaguesLoaded && !!currentLeague && !!user?.userId;
@@ -59,14 +61,25 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     placeholderData: keepPreviousData,
   });
 
+  // Remember the real max week/season only from a current-week load. loadHistoricalGames
+  // returns maxWeek/maxSeason set to whatever week/season is being VIEWED (it has no other
+  // concept of "today"), so re-deriving the selector's ceiling from `data` on every render — as
+  // this used to do — collapsed the navigable range down to wherever the user last looked,
+  // making it impossible to get back to the current week/season.
+  useEffect(() => {
+    if (isCurrentWeek && data) {
+      setCurrentBounds({ maxWeek: data.maxWeek, maxSeason: data.maxSeason });
+    }
+  }, [isCurrentWeek, data]);
+
   const games = useMemo(() => data?.games ?? [], [data]);
   const hasOdds = data?.hasOdds ?? false;
   const requiredPicks = data?.requiredPicks ?? 4;
   const season = weekState?.season ?? data?.season ?? new Date().getFullYear();
   const week = weekState?.week ?? data?.week ?? 0;
   const isPostSeason = weekState?.isPostSeason ?? data?.isPostSeason ?? false;
-  const maxWeek = data?.maxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
-  const maxSeason = data?.maxSeason ?? adapter.weekSelectorConfig.minSeason;
+  const maxWeek = currentBounds?.maxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
+  const maxSeason = currentBounds?.maxSeason ?? new Date().getFullYear();
 
   const existingPicks = useMemo(
     () => new Set((data?.userPicks ?? []).map(p => pickKey(p.gameId, p.team, p.pickType))),
