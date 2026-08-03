@@ -1,45 +1,25 @@
-import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
-import { getCfbLiveScores, getLiveGames } from '../api/espn';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
+import { loadCfbScoresWithRetry, getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins, getCfbRequiredPicks } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
-import { getHomeTeamScore, getAwayTeamScore } from '../utils/gameHelpers';
+import { getHomeTeamScore, getAwayTeamScore, toGameStatus } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } from './sportAdapter';
 import { revealPicksForStartedGames } from './sportAdapter';
 
 /** Map CFB backend status strings to canonical GameStatusValue */
 
-// Production target season — adapter falls back to prior year if no slates exist yet.
+// Fallback season shown when no slates are available at all (empty DB / first-run edge case)
 const CFB_CONFIGURED_SEASON = 2026;
 // Earliest supported CFB season (controls the lower bound of the season dropdown).
 const CFB_FIRST_SEASON = 2025;
 const CFB_REGULAR_WEEKS = Array.from({ length: 13 }, (_, i) => i + 1); // weeks 1-13
 const CFB_POST_WEEKS = [1, 2, 3, 4, 5]; // Conf.Champs + CFP First Round/QF/SF/Championship
 
-function findActiveSlate(slates: CfbSlateDto[]): CfbSlateDto | null {
-  const now = new Date();
-  return slates.find(s => new Date(s.endDate) >= now) ?? slates[slates.length - 1] ?? null;
-}
-
 function slateToWeekState(slate: CfbSlateDto): WeekState {
   const { week, isPostSeason } = cfbSlateNumberToWeek(slate.slateNumber);
   return { season: slate.season, week, isPostSeason };
 }
-
-// Demo situation for in-progress CFB games (shows field position bar in scores page)
-import type { GameSituation } from '../types/liveGame';
-
-const CFB_DEMO_SITUATION: GameSituation = {
-  downDistanceText: '3rd & 4 at MIA 22',
-  possessionTeam: 'IU',
-  isHomePossession: true,
-  yardLine: 22,
-  down: 3,
-  distance: 4,
-  isRedZone: true,
-  period: 3,
-  displayClock: '7:23',
-};
 
 /**
  * Merge our spread data (owned) with live ESPN competition data.
@@ -81,16 +61,11 @@ function buildGamesFromEspn(
     let as_: number | null;
 
     if (comp) {
-      // ESPN has live data — use it
-      const t = comp.status?.type;
-      if (t?.completed) status = 'final';
-      else {
-        const name = t?.name as string | undefined;
-        if (!name || name === 'STATUS_SCHEDULED') status = 'scheduled';
-        else if (name === 'STATUS_HALFTIME') status = 'halftime';
-        else if (name === 'STATUS_IN_PROGRESS' || name === 'STATUS_END_PERIOD') status = 'in_progress';
-        else status = 'scheduled';
-      }
+      // ESPN has live data — use it. Same status derivation as NFL's toGameStatus (nflAdapter.ts):
+      // isGameOver/isHalfTime/isGameStarted handle both the numeric and string forms of
+      // status.type.name (our backend re-serializes the ESPN enum as a number), unlike a bare
+      // string comparison against 'STATUS_HALFTIME' etc, which would never match.
+      status = toGameStatus(comp);
       hs = getHomeTeamScore(comp);
       as_ = getAwayTeamScore(comp);
     } else if (db) {
@@ -104,7 +79,6 @@ function buildGamesFromEspn(
       as_ = null;
     }
 
-    const isLive = status === 'in_progress' || status === 'halftime';
     const key = `${sp.homeTeam}-${sp.awayTeam}`;
     return {
       id: sp.espnEventId.toString(),
@@ -119,7 +93,10 @@ function buildGamesFromEspn(
       gameTime: sp.gameTime,
       homeCovers: computeHomeCovers(status, sp.homeTeamSpread, hs, as_),
       overWins: computeOverWins(status, sp.overUnder, hs, as_),
-      situation: situationMap.get(key) ?? (isLive ? CFB_DEMO_SITUATION : null),
+      // No hardcoded fallback — matches NFL exactly. Real situation data comes from
+      // situationMap (built from getCfbLiveGames(), see fetchCfbEspnData) when ESPN provides it;
+      // otherwise honestly null rather than showing a fabricated down/distance.
+      situation: situationMap.get(key) ?? null,
     };
   });
 }
@@ -134,12 +111,10 @@ function cfbPickToPickView(pick: CfbPickDto): PickView {
   };
 }
 
-async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores | null; situations: Map<string, import('../types/liveGame').GameSituation | null> }> {
-  const startDate = slate.startDate;
-  const endDate = slate.endDate;
+async function fetchCfbEspnData(slate: CfbSlateDto, isCurrent: boolean): Promise<{ espn: EspnScores | null; situations: Map<string, import('../types/liveGame').GameSituation | null> }> {
   const [espn, liveGames] = await Promise.all([
-    getCfbLiveScores(startDate, endDate),
-    getLiveGames().catch(() => []),
+    isCurrent ? loadCfbScoresWithRetry() : getCfbScoresForSlate(slate.id),
+    getCfbLiveGames().catch(() => []),
   ]);
   // Build situation map from live games
   const situations = new Map<string, import('../types/liveGame').GameSituation | null>();
@@ -150,12 +125,12 @@ async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores 
   return { espn, situations };
 }
 
-async function loadSlate(leagueId: number, _userId: string, slateId: number, slate: CfbSlateDto): Promise<{ games: GameView[]; userPicks: PickView[] }> {
+async function loadSlate(leagueId: number, _userId: string, slateId: number, slate: CfbSlateDto, isCurrent: boolean): Promise<{ games: GameView[]; userPicks: PickView[] }> {
   const [spreads, picks, dbScores, { espn, situations }] = await Promise.all([
     getCfbSpreads(slateId),
     getCfbUserPicks(leagueId, slateId),
-    getCfbScores(slateId),
-    fetchCfbEspnData(slate),
+    getCfbDbScores(slateId),
+    fetchCfbEspnData(slate, isCurrent),
   ]);
   return {
     games: buildGamesFromEspn(spreads, espn, dbScores, situations),
@@ -164,29 +139,30 @@ async function loadSlate(leagueId: number, _userId: string, slateId: number, sla
 }
 
 export function createCfbAdapter(): SportAdapter {
-  // Cache slates and the resolved season (may differ from CFB_CONFIGURED_SEASON in demo/off-season)
   let cachedSlates: CfbSlateDto[] = [];
-  let resolvedSeason: number = CFB_CONFIGURED_SEASON;
+  // undefined = not yet fetched; null = backend returned no slate
+  let cachedCurrentSlate: CfbSlateDto | null | undefined = undefined;
+
+  async function getCurrentSlate(): Promise<CfbSlateDto | null> {
+    if (cachedCurrentSlate === undefined)
+      cachedCurrentSlate = await getCfbCurrentSlate();
+    return cachedCurrentSlate;
+  }
 
   async function getSlates(): Promise<CfbSlateDto[]> {
     if (cachedSlates.length === 0) {
-      let slates = await getCfbSlates(CFB_CONFIGURED_SEASON);
-      if (slates.length === 0) {
-        // No data for configured year yet — fall back to prior year (demo / off-season)
-        slates = await getCfbSlates(CFB_CONFIGURED_SEASON - 1);
-        if (slates.length > 0) resolvedSeason = CFB_CONFIGURED_SEASON - 1;
-      }
-      cachedSlates = slates;
+      const current = await getCurrentSlate();
+      if (current) cachedSlates = await getCfbSlates(current.season);
     }
     return cachedSlates;
   }
 
-  async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
+  async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto, isCurrent: boolean): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
     const [spreads, allPickDtos, dbScores, { espn, situations }] = await Promise.all([
       getCfbSpreads(slate.id),
       getCfbAllPicks(leagueId, slate.id),
-      getCfbScores(slate.id),
-      fetchCfbEspnData(slate),
+      getCfbDbScores(slate.id),
+      fetchCfbEspnData(slate, isCurrent),
     ]);
     const games = buildGamesFromEspn(spreads, espn, dbScores, situations);
     const allPicks = allPickDtos.map(cfbPickToPickView);
@@ -195,7 +171,11 @@ export function createCfbAdapter(): SportAdapter {
   }
 
   return {
-    pollIntervalMs: 0,
+    sport: 'cfb',
+    pollIntervalMs: 300_000,
+    // Relative path — see nflAdapter.ts's sseUrl for why this must not be an absolute
+    // VITE_API_TARGET URL (breaks the same-origin proxy path and the SameSite=Lax auth cookie).
+    sseUrl: '/api/cfb/live-stream',
     weekSelectorConfig: {
       regularWeekOptions: CFB_REGULAR_WEEKS,
       postSeasonWeekOptions: CFB_POST_WEEKS,
@@ -205,23 +185,25 @@ export function createCfbAdapter(): SportAdapter {
     },
 
     async currentSeasonYear() {
-      await getSlates(); // ensure resolvedSeason is set
-      return resolvedSeason;
+      const current = await getCurrentSlate();
+      return current?.season ?? CFB_CONFIGURED_SEASON;
     },
 
     async loadCurrentGames(leagueId, userId) {
-      const slates = await getSlates();
-      const active = findActiveSlate(slates);
+      const active = await getCurrentSlate();
       if (!active) {
-        return { season: resolvedSeason, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, maxWeek: 1, maxSeason: resolvedSeason };
+        return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_CONFIGURED_SEASON };
       }
+      const [slates, { games, userPicks }] = await Promise.all([
+        getSlates(),
+        loadSlate(leagueId, userId, active.id, active, true),
+      ]);
       const weekState = slateToWeekState(active);
-      const { games, userPicks } = await loadSlate(leagueId, userId, active.id, active);
       // maxWeek = max REGULAR season week with data (caps the regular season selector)
       const maxRegularSlate = slates
         .filter(s => s.slateType === 'RegularSeason')
         .reduce((max, s) => Math.max(max, s.slateNumber), 0);
-      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: maxRegularSlate || 13, maxSeason: resolvedSeason };
+      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: maxRegularSlate || 13, maxSeason: active.season };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
@@ -229,7 +211,7 @@ export function createCfbAdapter(): SportAdapter {
       const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
       const slate = slates.find(s => s.slateNumber === slateNum && s.season === season);
       if (!slate) return null;
-      const { games, userPicks } = await loadSlate(leagueId, userId, slate.id, slate);
+      const { games, userPicks } = await loadSlate(leagueId, userId, slate.id, slate, false);
       if (games.length === 0) return null;
       return { season, week, isPostSeason, games, userPicks, hasOdds: true, requiredPicks: getCfbRequiredPicks(slateNum), maxWeek: week, maxSeason: season };
     },
@@ -259,15 +241,14 @@ export function createCfbAdapter(): SportAdapter {
     // ─── Scores ─────────────────────────────────────────────────────────────
 
     async loadCurrentScores(leagueId, userId) {
-      const slates = await getSlates();
-      const active = findActiveSlate(slates);
+      const active = await getCurrentSlate();
       if (!active) {
-        return { season: resolvedSeason, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, maxWeek: 1, maxSeason: resolvedSeason };
+        return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_CONFIGURED_SEASON };
       }
       const weekState = slateToWeekState(active);
-      const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
+      const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active, true);
       const hasActiveGames = games.some(g => g.gameStatus === 'in_progress' || g.gameStatus === 'halftime');
-      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: weekState.week, maxSeason: resolvedSeason };
+      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: weekState.week, maxSeason: active.season };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
@@ -275,7 +256,7 @@ export function createCfbAdapter(): SportAdapter {
       const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
       const slate = slates.find(s => s.slateNumber === slateNum && s.season === season);
       if (!slate) return null;
-      const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate);
+      const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate, false);
       if (games.length === 0) return null;
       return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: getCfbRequiredPicks(slateNum), maxWeek: week, maxSeason: season };
     },

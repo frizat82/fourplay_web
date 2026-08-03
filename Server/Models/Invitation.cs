@@ -27,8 +27,6 @@ public class Invitation
     [ForeignKey("LeagueId")]
     public LeagueInfo? League { get; set; }
 
-    public string SportType { get; set; } = "NFL"; // "NFL" | "CFB"
-
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset? ExpiresAt { get; set; } = DateTimeOffset.UtcNow.AddDays(7);

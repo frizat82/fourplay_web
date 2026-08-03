@@ -8,6 +8,7 @@ public interface ICfbRepository {
     Task AddSlatesAsync(IEnumerable<CfbSlates> slates);
     Task DeleteSlatesAsync(IEnumerable<CfbSlates> slates);
     Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season);
+    Task<CfbSlates?> GetSlateByIdAsync(int slateId);
     Task AddCfbSpreadsAsync(IEnumerable<CfbSpreads> spreads);
     Task UpsertCfbScoresAsync(IEnumerable<CfbScores> scores);
     Task<IEnumerable<CfbSpreads>> GetSpreadsForSlateAsync(int cfbSlateId);

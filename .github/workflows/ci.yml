@@ -23,7 +23,9 @@ jobs:
         run: dotnet build --no-restore -c Release
 
       - name: Test
-        run: dotnet test --no-build -c Release --logger "console;verbosity=minimal"
+        # Category=Contract tests hit the real ESPN/odds APIs over the network — excluded here,
+        # run weekly + on-demand via espn-contract.yml instead (frizat-703.5).
+        run: dotnet test --no-build -c Release --filter "Category!=Contract" --logger "console;verbosity=minimal"
 
   frontend:
     name: Frontend build & test
@@ -189,5 +191,134 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-demo-report
+          path: Client.React/playwright-report/
+          retention-days: 7
+
+  demo-replay-e2e:
+    name: Demo replay e2e tests (frizat-703.6)
+    runs-on: ubuntu-latest
+
+    # Job-level so both the backend-startup step and the Playwright step (which logs in as admin
+    # via ADMIN_EMAIL/ADMIN_PASSWORD to drive /api/replay/advance and /api/replay/reset) see them.
+    env:
+      ADMIN_EMAIL: "admin@ci-demo.local"
+      ADMIN_USERNAME: "ci-admin"
+      ADMIN_PASSWORD: "CiAdmin@Test1!"
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fourplay
+          POSTGRES_PASSWORD: fourplay_local
+          POSTGRES_DB: fourplay_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: Client.React/package-lock.json
+
+      - name: Build backend
+        run: dotnet build -c Release
+
+      - name: Start backend (DEMO_MODE + DEMO_REPLAY_MODE)
+        # Same fast-start as demo-e2e's backend, plus DEMO_REPLAY_MODE so ReplayCacheService
+        # backs the live-data endpoints/SSE streams instead of the static demo fixture.
+        run: |
+          dotnet run --project Server --no-build -c Release --no-launch-profile \
+            --urls http://localhost:5000 > /tmp/backend-replay.log 2>&1 &
+          echo "BACKEND_PID=$!" >> "$GITHUB_ENV"
+        env:
+          ConnectionStrings__POSTGRES_CONNECTION_STRING: "Host=localhost;Port=5432;Username=fourplay;Password=fourplay_local;Database=fourplay_dev"
+          Jwt__Key: "ci-test-jwt-key-must-be-at-least-256-bits-long-for-hmacsha256"
+          Jwt__Issuer: FourPlayWebAppClientDev
+          Jwt__Audience: FourPlayWebAppClientDev
+          Jwt__ExpiresMinutes: "1000"
+          APP_URL: "http://localhost:5175"
+          DEMO_MODE: "true"
+          DEMO_REPLAY_MODE: "true"
+          ASPNETCORE_ENVIRONMENT: Development
+          FOURPLAY_EMAIL_USER: "ci-noreply@example.com"
+          FOURPLAY_EMAIL_PASS: "ci-dummy-not-used"
+
+      - name: Install frontend deps
+        working-directory: Client.React
+        run: npm ci
+
+      - name: Start frontend (replay — NFL localhost + CFB cfb.localhost, port 5175)
+        working-directory: Client.React
+        run: |
+          VITE_API_TARGET=http://localhost:5000 npm run dev -- --port 5175 &
+          echo "FRONTEND_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for replay stack to be ready
+        run: |
+          echo "Waiting for backend (seed) + Vite to be ready..."
+          BACKEND_READY=0
+          VITE_READY=0
+          for i in $(seq 1 60); do
+            if [ "$BACKEND_READY" -eq 0 ]; then
+              RESULT=$(curl -s -X POST http://localhost:5000/api/auth/login \
+                -H "Content-Type: application/json" \
+                -d '{"username":"alice@demo.local","password":"DemoPass@123","rememberMe":false}' \
+                2>/dev/null || echo '{}')
+              if echo "$RESULT" | grep -q '"succeeded":true'; then
+                echo "Backend ready after ~$((i * 3))s"
+                BACKEND_READY=1
+              fi
+            fi
+            if [ "$VITE_READY" -eq 0 ]; then
+              if curl -s -o /dev/null -w "%{http_code}" http://localhost:5175 | grep -qE "^[23]"; then
+                echo "Vite ready after ~$((i * 3))s"
+                VITE_READY=1
+              fi
+            fi
+            if [ "$BACKEND_READY" -eq 1 ] && [ "$VITE_READY" -eq 1 ]; then
+              echo "Full replay stack ready after ~$((i * 3))s"
+              exit 0
+            fi
+            echo "[$i/60] backend=$BACKEND_READY vite=$VITE_READY"
+            sleep 3
+          done
+          echo "=== BACKEND LOG ==="
+          cat /tmp/backend-replay.log || echo "(no log)"
+          exit 1
+
+      - name: Dump backend log on failure
+        if: failure()
+        run: |
+          echo "=== BACKEND LOG ==="
+          cat /tmp/backend-replay.log || echo "(no log)"
+
+      - name: Install Playwright browsers
+        working-directory: Client.React
+        run: npx playwright install chromium --with-deps
+
+      - name: Playwright (replay tests)
+        working-directory: Client.React
+        run: npm run test:e2e:replay
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-replay-report
           path: Client.React/playwright-report/
           retention-days: 7

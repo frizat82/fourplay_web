@@ -51,24 +51,34 @@ test.describe('Admin pages (administrator role)', () => {
   });
 
   // -----------------------------------------------------------------------
-  // League Management — dialogs
+  // My Leagues — admin-only actions (Create League / Add User / Change Owner)
   // -----------------------------------------------------------------------
-  test('League Management — Add League button opens Create League dialog', async ({ page }) => {
-    await adminAuth(page, '/admin/leagueManagement');
+  test('My Leagues — Create League button opens Create League dialog', async ({ page }) => {
+    await adminAuth(page, '/league/manage');
     await waitForSpinner(page);
 
-    await page.getByRole('button', { name: /add league/i }).click();
+    await page.getByRole('button', { name: /create league/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 3000 });
     await expect(page.getByRole('dialog').getByRole('heading', { name: /create league/i })).toBeVisible({ timeout: 3000 });
   });
 
-  test('League Management — Assign Owner button opens Assign Owner dialog', async ({ page }) => {
-    await adminAuth(page, '/admin/leagueManagement');
+  test('My Leagues — Add User button opens Add User dialog', async ({ page }) => {
+    await adminAuth(page, '/league/manage');
     await waitForSpinner(page);
 
-    await page.getByRole('button', { name: /assign owner/i }).first().click();
+    await page.getByRole('button', { name: /add user/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 3000 });
-    await expect(page.getByRole('dialog').getByRole('heading', { name: /assign owner/i })).toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole('dialog').getByRole('heading', { name: /add user to/i })).toBeVisible({ timeout: 3000 });
+  });
+
+  test('My Leagues — Change Owner button opens Change Owner dialog', async ({ page }) => {
+    await adminAuth(page, '/league/manage');
+    await waitForSpinner(page);
+
+    await page.getByRole('tab', { name: 'Info' }).click();
+    await page.getByRole('button', { name: /change owner/i }).click();
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole('dialog').getByRole('heading', { name: /change owner/i })).toBeVisible({ timeout: 3000 });
   });
 
   // -----------------------------------------------------------------------

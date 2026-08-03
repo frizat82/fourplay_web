@@ -10,21 +10,11 @@ import {
   getTeamRecord, getTeamLogo,
   getWeekFromEspnWeek, getEspnRequiredPicks,
   isPostSeason as isPostSeasonHelper,
-  isGameOver, isGameStarted,
+  isGameOver, isGameStarted, toGameStatus,
   computeHomeCovers, computeOverWins,
 } from '../utils/gameHelpers';
-import type { SportAdapter, GameView, GameStatusValue, PickView } from './sportAdapter';
+import type { SportAdapter, GameView, PickView } from './sportAdapter';
 import { revealPicksForStartedGames } from './sportAdapter';
-
-/** Map ESPN TypeName (number or string) to canonical GameStatusValue */
-function toGameStatus(competition: Competition): GameStatusValue {
-  if (isGameOver(competition)) return 'final';
-  if (!isGameStarted(competition)) return 'scheduled';
-  // isGameStarted=true and not final → in-progress or halftime
-  const name = competition.status?.type?.name;
-  if (name === 1 || name === 'status_halftime') return 'halftime';
-  return 'in_progress';
-}
 
 function competitionToGameView(
   competition: Competition,
@@ -116,7 +106,13 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
 
 export function createNflAdapter(): SportAdapter {
   return {
-    pollIntervalMs: 30_000,
+    sport: 'nfl',
+    pollIntervalMs: 300_000,
+    // Relative path, not an absolute VITE_API_TARGET URL — every other API call in this app goes
+    // through the same proxy (Vite locally, Vercel's /api/:path* rewrite in prod, see
+    // Client.React/vercel.json) and relies on same-origin cookies. An absolute cross-origin URL
+    // here would bypass that proxy and drop the SameSite=Lax auth cookie on non-HTTPS origins.
+    sseUrl: '/api/espn/live-stream',
     weekSelectorConfig: {
       maxRegularSeasonWeek: 18,
       minSeason: 2020,
