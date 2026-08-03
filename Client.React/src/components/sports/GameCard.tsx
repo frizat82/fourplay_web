@@ -96,11 +96,11 @@ export default function GameCard({
     return <Button color="warning" variant="contained" disabled={locked} onClick={onPick} aria-label={`Pick ${team}`} sx={pickButtonSx}>Pick</Button>;
   };
 
-  const renderTeamLogo = (abbr: string, jerseyUrl: string | undefined, flipped = false) => (
+  const renderTeamLogo = (abbr: string, jerseyUrl: string | undefined) => (
     <Box textAlign="center">
       {jerseyUrl
         ? <img src={jerseyUrl} width={50} alt={abbr} />
-        : <TeamHelmet abbr={abbr} size={50} flipped={flipped} showLabel={false} />}
+        : <TeamHelmet abbr={abbr} size={50} showLabel={false} />}
       <Typography variant="caption" display="block" sx={{ lineHeight: 1.2, opacity: 0.85 }}>
         {abbr}
       </Typography>
@@ -158,7 +158,7 @@ export default function GameCard({
         <Card variant="outlined">
           <CardContent sx={{ p: '12px !important' }}>
             <Stack direction="row" alignItems="center" justifyContent="space-between">
-              {renderTeamLogo(homeTeam, homeJerseyUrl, true)}
+              {renderTeamLogo(homeTeam, homeJerseyUrl)}
               {!isPostSeason && homeRecord && (
                 <Typography variant="subtitle2">{homeRecord}</Typography>
               )}

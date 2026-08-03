@@ -1,32 +1,38 @@
+import { useThemeMode } from '../../services/theme';
+
 interface TeamHelmetProps {
   abbr: string;
   size?: number;
-  flipped?: boolean;
   showLabel?: boolean;
 }
 
-export default function TeamHelmet({ abbr, size = 56, flipped = false, showLabel = true }: TeamHelmetProps) {
-  const src = `/Icons/Helmets/${abbr.toLowerCase()}.png`;
-  const svgFallbackSrc = `/Icons/Helmets/${abbr.toLowerCase()}.svg`;
+export default function TeamHelmet({ abbr, size = 56, showLabel = true }: TeamHelmetProps) {
+  const { mode } = useThemeMode();
+  const pngSrc = `/Icons/Helmets/${abbr.toLowerCase()}.png`;
+  const svgSrc = `/Icons/Helmets/${abbr.toLowerCase()}.svg`;
+  // The neon PNG set is designed to glow against a dark background and washes out on light
+  // ones; the flat-color legacy SVG shields read better in light mode. Try the theme-matched
+  // asset first and fall back to the other set for the handful of teams missing from either.
+  const primarySrc = mode === 'dark' ? pngSrc : svgSrc;
+  const fallbackSrc = mode === 'dark' ? svgSrc : pngSrc;
   const h = Math.round(size * 1.1);
 
   return (
     <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
       <img
-        src={src}
+        key={`${abbr}-${mode}`}
+        src={primarySrc}
         width={size}
         height={h}
         alt={abbr}
         role="img"
         aria-label={abbr}
-        style={{ transform: flipped ? 'scaleX(-1)' : undefined, display: 'block', objectFit: 'contain' }}
+        style={{ display: 'block', objectFit: 'contain' }}
         onError={(e) => {
           const img = e.target as HTMLImageElement;
-          // New PNG set doesn't cover every team yet — retry once with the legacy .svg
-          // before giving up and hiding the image (matches prior hide-on-failure behavior).
-          if (!img.dataset.svgFallbackTried) {
-            img.dataset.svgFallbackTried = 'true';
-            img.src = svgFallbackSrc;
+          if (!img.dataset.fallbackTried) {
+            img.dataset.fallbackTried = 'true';
+            img.src = fallbackSrc;
             return;
           }
           img.style.visibility = 'hidden';
