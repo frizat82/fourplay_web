@@ -14,7 +14,6 @@ interface SessionContextValue {
   hasNflAccess: boolean;
   hasCfbAccess: boolean;
   leaguesLoaded: boolean;
-  isLeagueOwner: boolean;
   ownedLeagues: LeagueInfoDto[];
 }
 
@@ -102,11 +101,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     });
   }, [reloadLeagues]);
 
-  const isLeagueOwner = ownedLeagues.length > 0;
-
   const value = useMemo(
-    () => ({ availableLeagues, currentLeague, selectLeague, reloadLeagues, clearSession, hasNflAccess, hasCfbAccess, leaguesLoaded, isLeagueOwner, ownedLeagues }),
-    [availableLeagues, clearSession, currentLeague, reloadLeagues, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded, isLeagueOwner, ownedLeagues]
+    () => ({ availableLeagues, currentLeague, selectLeague, reloadLeagues, clearSession, hasNflAccess, hasCfbAccess, leaguesLoaded, ownedLeagues }),
+    [availableLeagues, clearSession, currentLeague, reloadLeagues, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded, ownedLeagues]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
