@@ -371,3 +371,7 @@ $RECYCLE.BIN/
 Client.React/coverage/
 Client.React/playwright-report/
 Client.React/test-results/
+
+# Claude Code
+memory/
+.claude/worktrees/

@@ -10,12 +10,21 @@ public interface IInvitationService
     /// </summary>
     Task DeleteInvitationAsync(int id);
     /// <summary>
-    /// Create a new invitation for the specified email
+    /// Create a new invitation for the specified email. When <paramref name="baseUrl"/> is
+    /// provided, the invitation email is sent server-side immediately.
     /// </summary>
     /// <param name="email">Email to invite</param>
     /// <param name="invitedByUserId">User ID of the person sending the invite</param>
+    /// <param name="baseUrl">Frontend origin (e.g. https://ivleague.com) used to build the registration link, if the email should be sent</param>
     /// <returns>The created invitation</returns>
-    Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null, bool isLeagueOwner = false);
+    Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null, bool isLeagueOwner = false, string? baseUrl = null);
+
+    /// <summary>
+    /// Re-send the invitation email for an existing, still-valid invitation.
+    /// </summary>
+    /// <param name="invitationId">Invitation to re-send</param>
+    /// <param name="baseUrl">Frontend origin used to build the registration link</param>
+    Task ResendInvitationEmailAsync(int invitationId, string baseUrl);
 
     /// <summary>
     /// Validate if the invitation code is valid

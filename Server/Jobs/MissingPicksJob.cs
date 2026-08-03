@@ -10,7 +10,7 @@ using FourPlayWebApp.Shared.Helpers.Extensions; // for GoogleEmailSender cast
 namespace FourPlayWebApp.Server.Jobs;
 
 [DisallowConcurrentExecution]
-public class MissingPicksJob(ILeagueRepository leagueRepository, IEspnApiService espiApiService, IEmailSender emailSender, IJobObserverService observer)
+public class MissingPicksJob(ILeagueRepository leagueRepository, INflCurrentWeekService nflCurrentWeekService, IEmailSender emailSender, IJobObserverService observer)
     : IJob {
     private readonly string _baseUrl = Environment.GetEnvironmentVariable("APP_URL") ?? throw new MissingFieldException("APP_URL Required");
     public async Task Execute(IJobExecutionContext context)
@@ -21,26 +21,11 @@ public class MissingPicksJob(ILeagueRepository leagueRepository, IEspnApiService
         {
             Log.Information("MissingPicksJob started at {Time}", DateTimeOffset.UtcNow);
 
-            var nowUtc = DateTimeOffset.UtcNow;
-            // Attempt to find the current NFL week from the stored weeks
-            var scoreboard = await espiApiService.GetScores();
-            if (scoreboard is null) {
-                Log.Warning("MissingPicksJob: Unable to retrieve current NFL week from ESPN");
-                await observer.RecordJobFailureAsync(jobName, "Unable to retrieve current NFL week from ESPN");
-                return;
-            }
-            var season = scoreboard.Season.Year;
-            var currentWeek = scoreboard.Week;
-            if (currentWeek == null)
-            {
-                Log.Warning("MissingPicksJob: Unable to determine current or upcoming NFL week for season {Season}", season);
-                await observer.RecordJobFailureAsync(jobName, "Unable to determine current or upcoming NFL week");
-                return;
-            }
-
-            var weekNumber = currentWeek.Number;
-            var isPostSeason = scoreboard.IsPostSeason();
-            var actualWeek = GameHelpers.GetWeekFromEspnWeek(weekNumber, isPostSeason);
+            var currentWeek = await nflCurrentWeekService.GetCurrentWeekAsync();
+            var season = currentWeek.Season;
+            var weekNumber = currentWeek.EspnWeek;
+            var isPostSeason = currentWeek.IsPostSeason;
+            var actualWeek = currentWeek.WeekId;
             var requiredPicks = GameHelpers.GetEspnRequiredPicks(weekNumber, isPostSeason);
             Log.Information("MissingPicksJob: season={Season} week={Week} isPostSeason={IsPost} requiredPicks={Required}", season, weekNumber, isPostSeason, requiredPicks);
 

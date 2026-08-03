@@ -293,6 +293,49 @@ namespace FourPlayWebApp.Server.Migrations
                     b.ToTable("NflPicks");
                 });
 
+            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.NflSeasonWeekConfig", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("FirstGameOfWeekStartDatetime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ScoringFormat")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Season")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("WeekEndDatetime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("WeekId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("WeekLabel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("WeekNotes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("WeekStartDatetime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WeekType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("NflSeasonWeekConfigs");
+                });
+
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.NflWeeks", b =>
                 {
                     b.Property<int>("Id")
@@ -464,10 +507,6 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("RegisteredUserId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("SportType")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTimeOffset?>("UsedAt")

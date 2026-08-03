@@ -13,6 +13,9 @@ public interface ILeagueRepository {
     Task<List<ApplicationUser>> GetUsersAsync();
     Task<LeagueInfo?> GetLeagueByNameAsync(string leagueName);
 
+    // NFL Season Week Config
+    Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync();
+
     // NFL Weeks
     Task UpsertNflWeeksAsync(List<NflWeeks> weeks);
     Task<List<NflWeeks>> GetNflWeeksAsync(int season);
@@ -31,6 +34,7 @@ public interface ILeagueRepository {
 
     // Commissioner portal methods
     Task<List<LeagueInfo>> GetLeaguesByOwnerAsync(string ownerId);
+    Task<List<LeagueInfo>> GetAllLeaguesAsync();
     Task UpdateLeagueOwnerAsync(int leagueId, string newOwnerUserId);
     Task UpdateLeagueJuiceMappingAsync(LeagueJuiceMapping mapping);
     Task RemoveLeagueUserMappingAsync(int leagueId, string userId);

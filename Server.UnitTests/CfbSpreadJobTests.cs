@@ -10,29 +10,36 @@ using Quartz;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
+/// <summary>
+/// CFP week=999/date-filter and ranked-team-filter behavior is tested directly in
+/// CfbLiveScoreFetcherTests (frizat-703.6) — this file only tests what CfbSpreadJob does with
+/// whatever the fetcher returns: filter to scheduled-only, fetch odds, save.
+/// </summary>
 public class CfbSpreadJobTests
 {
-    private readonly ICfbApiService _cfbApi;
+    private readonly ICfbLiveScoreFetcher _fetcher;
     private readonly IEspnCoreOddsService _oddsService;
     private readonly ICfbRepository _repo;
     private readonly IJobExecutionContext _context;
 
     public CfbSpreadJobTests()
     {
-        _cfbApi = Substitute.For<ICfbApiService>();
+        _fetcher = Substitute.For<ICfbLiveScoreFetcher>();
         _oddsService = Substitute.For<IEspnCoreOddsService>();
         _repo = Substitute.For<ICfbRepository>();
         _context = Substitute.For<IJobExecutionContext>();
     }
 
-    private CfbSpreadJob BuildJob() => new(_cfbApi, _oddsService, _repo);
+    private CfbSpreadJob BuildJob() => new(_fetcher, _oddsService, _repo);
 
     private static CfbSlates BuildSlate(int slateId = 1) => new()
     {
         Id = slateId, Season = 2025, SlateNumber = 1,
-        Label = "CFP First Round", SlateType = "FirstRound",
+        Label = "Week 1", SlateType = "RegularSeason",
         StartDate = new DateOnly(2025, 12, 19),
         EndDate   = new DateOnly(2025, 12, 20),
+        EspnWeekNumber = 1,
+        ScoringFormat = "Spread",
     };
 
     private static EspnScores BuildScoreboard(
@@ -71,14 +78,14 @@ public class CfbSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _cfbApi.DidNotReceive().GetScoresByDateAsync(Arg.Any<DateOnly>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
     }
 
     [Fact]
-    public async Task Execute_WhenNoScheduledGames_SavesNoSpreads()
+    public async Task Execute_WhenFetcherReturnsNull_SavesNoSpreads()
     {
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
-        _cfbApi.GetScoresByDateAsync(Arg.Any<DateOnly>()).Returns((EspnScores?)null);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns((EspnScores?)null);
 
         await BuildJob().Execute(_context);
 
@@ -90,8 +97,7 @@ public class CfbSpreadJobTests
     {
         var slate = BuildSlate();
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([slate]);
-        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 19)).Returns(BuildScoreboard());
-        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 20)).Returns((EspnScores?)null);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         await BuildJob().Execute(_context);
@@ -105,8 +111,7 @@ public class CfbSpreadJobTests
     {
         var slate = BuildSlate();
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([slate]);
-        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 19)).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU"));
-        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 20)).Returns((EspnScores?)null);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU"));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds("-7.5", "+7.5", 52.5));
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -127,8 +132,7 @@ public class CfbSpreadJobTests
     public async Task Execute_WhenOddsUnavailable_SkipsGame()
     {
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
-        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 19)).Returns(BuildScoreboard());
-        _cfbApi.GetScoresByDateAsync(new DateOnly(2025, 12, 20)).Returns((EspnScores?)null);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>(), 100).Returns((EspnCoreOddsItem?)null);
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>()).Returns((EspnCoreOddsApiResponse?)null);
 
@@ -137,95 +141,11 @@ public class CfbSpreadJobTests
         await _repo.DidNotReceive().AddCfbSpreadsAsync(Arg.Any<IEnumerable<CfbSpreads>>());
     }
 
-    // ── Ranked filter tests (frizat-vaw) ─────────────────────────────────────
-
-    private static EspnScores BuildScoreboardWithRanking(int homeRank = 99, int awayRank = 99)
-    {
-        var competition = new Competition {
-            Date = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero),
-            Competitors = [
-                new Competitor { HomeAway = HomeAway.Home, Score = 0, Team = new EspnTeam { Abbreviation = "OSU" }, Records = [], CuratedRank = new CuratedRankInfo { Current = homeRank } },
-                new Competitor { HomeAway = HomeAway.Away, Score = 0, Team = new EspnTeam { Abbreviation = "NEB" }, Records = [], CuratedRank = new CuratedRankInfo { Current = awayRank } },
-            ],
-            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled } },
-            Odds = [],
-        };
-        return new EspnScores {
-            Season = new Season { Year = 2026, Type = 2 },
-            Week = new Week { Number = 5 },
-            Events = [new Event { Id = "401999001", Season = new Season { Year = 2026, Type = 2 }, Week = new Week { Number = 5 }, Competitions = [competition] }],
-        };
-    }
-
-    private static CfbSlates BuildRegularSeasonSlate() => new()
-    {
-        Id = 1, Season = 2026, SlateNumber = 5,
-        Label = "Week 5", SlateType = "RegularSeason",
-        StartDate = new DateOnly(2025, 9, 27),
-        EndDate = new DateOnly(2025, 9, 28),
-        EspnWeekNumber = 5,
-        ScoringFormat = "Spread",
-    };
-
     [Fact]
-    public async Task Execute_SkipsGame_WhenBothTeamsUnranked_RegularSeasonSlate()
+    public async Task Execute_SkipsGame_WhenNotScheduled()
     {
-        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildRegularSeasonSlate()]);
-        _cfbApi.GetScoresByWeekAsync(5, false).Returns(BuildScoreboardWithRanking(homeRank: 99, awayRank: 99));
-
-        await BuildJob().Execute(_context);
-
-        await _repo.DidNotReceive().AddCfbSpreadsAsync(Arg.Any<IEnumerable<CfbSpreads>>());
-    }
-
-    [Fact]
-    public async Task Execute_IncludesGame_WhenOneTeamIsRanked_RegularSeasonSlate()
-    {
-        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildRegularSeasonSlate()]);
-        _cfbApi.GetScoresByWeekAsync(5, false).Returns(BuildScoreboardWithRanking(homeRank: 5, awayRank: 99));
-        _oddsService.GetCfbEventsWithOddsAsync(401999001, 100).Returns(BuildOdds());
-
-        await BuildJob().Execute(_context);
-
-        await _repo.Received(1).AddCfbSpreadsAsync(
-            Arg.Is<IEnumerable<CfbSpreads>>(s => s.Count() == 1));
-    }
-
-    // ── CFP routing tests (frizat-vaw) ───────────────────────────────────────
-
-    private static CfbSlates BuildCfpSlate() => new()
-    {
-        Id = 2, Season = 2026, SlateNumber = 15,
-        Label = "CFP First Round", SlateType = "FirstRound",
-        StartDate = new DateOnly(2025, 12, 19),
-        EndDate   = new DateOnly(2025, 12, 20),
-        EspnWeekNumber = 16,
-        ScoringFormat  = "NFLDivisional",
-    };
-
-    [Fact]
-    public async Task Execute_UsesCfpGamesAsync_ForCfpSlate()
-    {
-        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildCfpSlate()]);
-        _cfbApi.GetCfpGamesAsync().Returns(BuildScoreboard()); // game date Dec 19, within slate
-        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
-
-        await BuildJob().Execute(_context);
-
-        await _cfbApi.Received(1).GetCfpGamesAsync();
-        await _cfbApi.DidNotReceive().GetScoresByWeekAsync(Arg.Any<int>(), Arg.Any<bool>());
-        await _repo.Received(1).AddCfbSpreadsAsync(Arg.Any<IEnumerable<CfbSpreads>>());
-    }
-
-    [Fact]
-    public async Task Execute_ExcludesCfpSpread_WhenOutsideSlateDateRange()
-    {
-        var scoreboard = BuildScoreboard();
-        scoreboard.Events[0].Competitions[0].Date =
-            new DateTimeOffset(2026, 1, 1, 18, 0, 0, TimeSpan.Zero);
-
-        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildCfpSlate()]);
-        _cfbApi.GetCfpGamesAsync().Returns(scoreboard);
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
 
         await BuildJob().Execute(_context);
 

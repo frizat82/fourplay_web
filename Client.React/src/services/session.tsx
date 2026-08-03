@@ -54,7 +54,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
 
     const [allLeagues, myLeagues] = await Promise.all([
-      getLeagueUserMappingsForUser(user.userId).then((d) => d ?? []),
+      getLeagueUserMappingsForUser(user.userId).then((d) => d ?? []).catch(() => [] as LeagueUserMappingDto[]),
       getMyLeagues().catch(() => [] as LeagueInfoDto[]),
     ]);
     setHasNflAccess(allLeagues.some((l) => l.leagueType === 0));
