@@ -19,6 +19,7 @@ function renderPage() {
 
 const sessionState = {
   ownedLeagues: [] as LeagueInfoDto[],
+  leaguesLoaded: true,
   reloadLeagues: vi.fn().mockResolvedValue(undefined),
 };
 
@@ -211,6 +212,21 @@ describe('LeaguePortalPage (site admin)', () => {
     await screen.findByText('Demo League', { exact: false });
     await userEvent.click(screen.getAllByRole('combobox')[0]);
     expect(await screen.findByRole('option', { name: /CFB Demo League/i })).toBeInTheDocument();
+  });
+
+  // frizat-d6l follow-up: leagueOptions starts as [] for admins too (allLeagues loads async), so
+  // the empty state must wait for that fetch — otherwise an admin with leagues platform-wide sees
+  // a false "no leagues yet" flash before the real list renders.
+  it('does not show the no-leagues empty state while the platform-wide league list is still loading', async () => {
+    let resolveAllLeagues!: (leagues: LeagueInfoDto[]) => void;
+    mockedGetAllLeagues.mockReturnValue(new Promise((resolve) => { resolveAllLeagues = resolve; }));
+
+    renderPage();
+    expect(screen.queryByText(/you don.t have any leagues yet/i)).not.toBeInTheDocument();
+
+    resolveAllLeagues([makeLeague({ id: 1, leagueName: 'Demo League', leagueType: 'Nfl' })]);
+    await screen.findByRole('tab', { name: 'Members' });
+    expect(screen.queryByText(/you don.t have any leagues yet/i)).not.toBeInTheDocument();
   });
 
   it('offers Create League, Add User, and Change Owner', async () => {
