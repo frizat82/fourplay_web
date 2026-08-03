@@ -40,13 +40,14 @@ vi.mock('../api/league', () => ({
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
 
-import { getScores, loadScoresWithRetry } from '../api/espn';
+import { getScores, loadScoresWithRetry, getWeekScores } from '../api/espn';
 import { addPicks, doOddsExist, getUserPicks, spreadBatch } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
 
 const mockedGetScores = vi.mocked(getScores);
 const mockedLoadScoresWithRetry = vi.mocked(loadScoresWithRetry);
+const mockedGetWeekScores = vi.mocked(getWeekScores);
 const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetUserPicks = vi.mocked(getUserPicks);
 const mockedSpreadBatch = vi.mocked(spreadBatch);
@@ -124,6 +125,7 @@ describe('PicksPage', () => {
     toastState.push.mockReset();
     mockedGetScores.mockReset();
     mockedLoadScoresWithRetry.mockReset();
+    mockedGetWeekScores.mockReset();
     mockedDoOddsExist.mockReset();
     mockedGetUserPicks.mockReset();
     mockedSpreadBatch.mockReset();
@@ -277,6 +279,29 @@ describe('PicksPage', () => {
       expect(submit).toBeDisabled();
       expect(clear).toBeDisabled();
     });
+  });
+
+  it('season selector keeps the current season navigable after viewing a historical season', async () => {
+    // Regression: navigating into a past season used to permanently shrink the selector's
+    // range to "minSeason..whatever season you're viewing", trapping the user in the past —
+    // loadHistoricalGames returns maxSeason: <the season being viewed>, and PicksPage was
+    // re-deriving maxSeason from that on every render instead of remembering the real ceiling
+    // from the last current-week load.
+    await setupDefaults({ week: 2 }); // current week resolves to season 2024 (fixture default)
+    mockedGetWeekScores.mockResolvedValue(
+      createScores({ week: 2, seasonYear: 2022, gameStarted: false }),
+    );
+
+    await renderPage();
+
+    // Open the season selector (1st of 3 comboboxes: season, week, type) and jump to 2022.
+    await userEvent.click(screen.getAllByRole('combobox')[0]);
+    await userEvent.click(screen.getByRole('option', { name: '2022 Season' }));
+    await waitFor(() => expect(screen.getByText('2022 Season')).toBeInTheDocument());
+
+    // The current season (2024) must still be a selectable option — not dropped from the range.
+    await userEvent.click(screen.getAllByRole('combobox')[0]);
+    expect(screen.getByRole('option', { name: '2024 Season' })).toBeInTheDocument();
   });
 
   it('locks picks when existing picks equal max allowed', async () => {

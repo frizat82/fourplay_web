@@ -1,0 +1,67 @@
+{
+  "season": { "type": 3, "year": 2025 },
+  "week": { "number": 18 },
+  "events": [
+    {
+      "id": "401800011",
+      "season": { "type": 3, "year": 2025 },
+      "week": { "number": 18 },
+      "date": "2026-01-19T23:30Z",
+      "competitions": [
+        {
+          "id": "401800011",
+          "date": "2026-01-19T23:30Z",
+          "competitors": [
+            {
+              "id": "1",
+              "homeAway": "home",
+              "team": {
+                "abbreviation": "IU",
+                "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/84.png"
+              },
+              "score": "14",
+              "records": [
+                { "name": "overall", "type": "total", "summary": "13-0" }
+              ]
+            },
+            {
+              "id": "2",
+              "homeAway": "away",
+              "team": {
+                "abbreviation": "MIA",
+                "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/2390.png"
+              },
+              "score": "7",
+              "records": [
+                { "name": "overall", "type": "total", "summary": "12-1" }
+              ]
+            }
+          ],
+          "status": {
+            "clock": 428.0,
+            "displayClock": "7:08",
+            "period": 3,
+            "type": {
+              "id": "2",
+              "name": "STATUS_IN_PROGRESS",
+              "state": "in",
+              "completed": false,
+              "description": "In Progress",
+              "detail": "In Progress - 3rd Quarter",
+              "shortDetail": "3rd Quarter"
+            }
+          },
+          "situation": {
+            "down": 2,
+            "yardLine": 35,
+            "distance": 7,
+            "isRedZone": false,
+            "downDistanceText": "2nd & 7 at IU 35",
+            "possessionText": "IU",
+            "possession": "1"
+          }
+        }
+      ]
+    }
+  ]
+}
