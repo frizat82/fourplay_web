@@ -95,7 +95,7 @@ describe('GameCard', () => {
     expect(screen.queryByRole('button', { name: /^under$/i })).not.toBeInTheDocument();
   });
 
-  it('shows Overed when overPickState=submitted', () => {
+  it('shows "Over 51.5 ✓" when overPickState=submitted', () => {
     render(
       <GameCard
         {...baseProps}
@@ -108,16 +108,84 @@ describe('GameCard', () => {
         onPickUnder={vi.fn()}
       />
     );
-    expect(screen.getByRole('button', { name: /overed/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /over 51\.5 ✓/i })).toBeInTheDocument();
   });
 
   it('calls onPickHome when Pick button clicked', async () => {
     const user = userEvent.setup();
     const onPickHome = vi.fn();
     render(<GameCard {...baseProps} homePickState="none" onPickHome={onPickHome} />);
-    const pickBtns = screen.getAllByRole('button', { name: /^pick$/i });
-    await user.click(pickBtns[1]); // home team is second pick button
+    await user.click(screen.getByRole('button', { name: /Pick KC/i }));
     expect(onPickHome).toHaveBeenCalledOnce();
+  });
+
+  // ── mon.8: submitted state, aria-labels, team abbr text, O/U copy ──────────
+
+  it('submitted away pick is disabled with "Locked in" label', () => {
+    render(<GameCard {...baseProps} awayPickState="submitted" />);
+    const btn = screen.getByRole('button', { name: /BUF locked in/i });
+    expect(btn).toBeDisabled();
+  });
+
+  it('submitted home pick is disabled with "Locked in" label', () => {
+    render(<GameCard {...baseProps} homePickState="submitted" />);
+    const btn = screen.getByRole('button', { name: /KC locked in/i });
+    expect(btn).toBeDisabled();
+  });
+
+  it('unpicked away team button has aria-label "Pick BUF"', () => {
+    render(<GameCard {...baseProps} awayPickState="none" />);
+    expect(screen.getByRole('button', { name: /^Pick BUF$/i })).toBeInTheDocument();
+  });
+
+  it('unpicked home team button has aria-label "Pick KC"', () => {
+    render(<GameCard {...baseProps} homePickState="none" />);
+    expect(screen.getByRole('button', { name: /^Pick KC$/i })).toBeInTheDocument();
+  });
+
+  it('team abbreviation rendered as visible text even when jerseyUrl is provided', () => {
+    render(
+      <GameCard
+        {...baseProps}
+        awayJerseyUrl="https://example.com/buf.png"
+        homeJerseyUrl="https://example.com/kc.png"
+      />
+    );
+    expect(screen.getAllByText('BUF').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('KC').length).toBeGreaterThan(0);
+  });
+
+  it('O/U unpicked still reads "Over" and "Under"', () => {
+    render(
+      <GameCard
+        {...baseProps}
+        isPostSeason={true}
+        overValue={47.5}
+        underValue={47.5}
+        overPickState="none"
+        underPickState="none"
+        onPickOver={vi.fn()}
+        onPickUnder={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('button', { name: /^Over$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Under$/i })).toBeInTheDocument();
+  });
+
+  it('O/U picked under shows "Under 47.5 ✓"', () => {
+    render(
+      <GameCard
+        {...baseProps}
+        isPostSeason={true}
+        overValue={47.5}
+        underValue={47.5}
+        overPickState="none"
+        underPickState="submitted"
+        onPickOver={vi.fn()}
+        onPickUnder={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('button', { name: /under 47\.5 ✓/i })).toBeInTheDocument();
   });
 
   it('shows gameDetail string when provided', () => {

@@ -2,6 +2,7 @@
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
+using FourPlayWebApp.Server.Models.Mappers;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
@@ -18,7 +19,8 @@ using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.Controllers;
 
-public record LeagueInviteDto(string Email);
+public record LeagueInviteDto(string Email, string? BaseUrl = null);
+public record AddLeagueUserMappingRequest(int LeagueId, string UserId);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -36,6 +38,9 @@ public class LeagueController(
     [HttpGet("{leagueId:int}")]
     [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<LeagueInfoDto>> GetLeagueInfo(int leagueId) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
+            return Forbid();
         var info = await repo.GetLeagueInfoAsync(leagueId);
         var dtoInfos = new LeagueInfoDto {
             LeagueName = info.LeagueName,
@@ -82,6 +87,9 @@ public class LeagueController(
     [HttpGet("{leagueId:int}/juice")]
     [ProducesResponseType(typeof(List<LeagueJuiceMappingDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<LeagueJuiceMappingDto>>> GetLeagueJuice(int leagueId) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
+            return Forbid();
         var mappings = await repo.GetLeagueJuiceMappingAsync(leagueId);
         var dtoMappings = mappings.Select(m => new LeagueJuiceMappingDto {
             LeagueId = m.LeagueId,
@@ -99,6 +107,9 @@ public class LeagueController(
     [HttpGet("{leagueId:int}/juice/{season:int}")]
     [ProducesResponseType(typeof(LeagueJuiceMappingDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<LeagueJuiceMappingDto?>> GetLeagueJuiceForSeason(int leagueId, int season) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
+            return Forbid();
         var mapping = await repo.GetLeagueJuiceMappingAsync(leagueId, season);
         if (mapping == null) return Ok(null);
 
@@ -129,6 +140,7 @@ public class LeagueController(
             LeagueOwnerUserId = m.League.OwnerUserId,
             UserId = m.UserId,
             UserName = m.User.UserName,
+            Email = m.User.Email,
             DateCreated = m.DateCreated,
             LeagueType = m.League.LeagueType
         }).ToList();
@@ -186,17 +198,17 @@ public class LeagueController(
     }
     // ---------- NFL Scores ----------
     [HttpGet("scores/{season:int}/{week:int}")]
-    [ProducesResponseType(typeof(List<NflScores>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<NflScores>>> GetScores(int season, int week) {
+    [ProducesResponseType(typeof(List<NflScoreDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<NflScoreDto>>> GetScores(int season, int week) {
         var scores = await repo.GetNflScoresAsync(season, week);
-        return Ok(scores);
+        return Ok(scores.Select(s => s.ToDto()).ToList());
     }
 
     [HttpGet("scores/{season:int}")]
-    [ProducesResponseType(typeof(List<NflScores>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<NflScores>>> GetScoresForSeason(int season) {
+    [ProducesResponseType(typeof(List<NflScoreDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<NflScoreDto>>> GetScoresForSeason(int season) {
         var scores = await repo.GetAllNflScoresForSeasonAsync(season);
-        return Ok(scores);
+        return Ok(scores.Select(s => s.ToDto()).ToList());
     }
 
     // Upsert scores
@@ -229,19 +241,17 @@ public class LeagueController(
 
     // ---------- NFL Spreads ----------
     [HttpGet("spreads/{season:int}/{week:int}")]
-    [ProducesResponseType(typeof(List<NflSpreads>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<NflSpreads>?>> GetSpreads(int season, int week) {
+    [ProducesResponseType(typeof(List<NflSpreadDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<NflSpreadDto>>> GetSpreads(int season, int week) {
         var spreads = await repo.GetNflSpreadsAsync(season, week);
-        if (spreads == null) return Ok(new List<NflSpreads>());
-
-        return Ok(spreads);
+        return Ok((spreads ?? []).Select(s => s.ToDto()).ToList());
     }
 
     [HttpGet("spreads/{season:int}")]
-    [ProducesResponseType(typeof(List<NflSpreads>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<NflSpreads>>> GetSpreadsForSeason(int season) {
+    [ProducesResponseType(typeof(List<NflSpreadDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<NflSpreadDto>>> GetSpreadsForSeason(int season) {
         var spreads = await repo.GetAllNflSpreadsForSeasonAsync(season);
-        return Ok(spreads);
+        return Ok(spreads.Select(s => s.ToDto()).ToList());
     }
 
     // Only-add-new spreads (no duplicates)
@@ -397,7 +407,7 @@ public class LeagueController(
         {
             logger.LogWarning("AddPicks: ESPN cache is unavailable — kickoff guard skipped for user {UserId} league {LeagueId}", authenticatedUserId, first.LeagueId);
         }
-        else if (espnScores.Events is not null)
+        else
         {
             var allCompetitions = espnScores.Events.SelectMany(e => e.Competitions).ToList();
             var now = DateTimeOffset.UtcNow;
@@ -443,67 +453,6 @@ public class LeagueController(
     }
 
     // ---------- Odds Calculations ----------
-    [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/didUserWin")]
-    [ProducesResponseType(typeof(SpreadCalculationResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<SpreadCalculationResponse>> DidUserWin(
-        int leagueId, int season, int week,
-        [FromQuery] string team,
-        [FromQuery] int pickTeamScore,
-        [FromQuery] int otherTeamScore) {
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
-
-        if (!calculator.DoOddsExist())
-            return NotFound("No odds available");
-
-        return Ok(new SpreadCalculationResponse {
-            Team = team,
-            IsWinner = calculator.DidUserWinPick(team, pickTeamScore, otherTeamScore),
-            Spread = calculator.GetSpread(team),
-            Over = calculator.GetOverUnder(team, PickType.Over),
-            IsOverWinner = calculator.DidUserWinPick(team, pickTeamScore, otherTeamScore, PickType.Over),
-            Under = calculator.GetOverUnder(team, PickType.Under),
-            IsUnderWinner = calculator.DidUserWinPick(team, pickTeamScore, otherTeamScore, PickType.Under),
-        });
-    }
-
-    [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/team/{team}")]
-    [ProducesResponseType(typeof(double?), StatusCodes.Status200OK)]
-    public async Task<ActionResult<double?>> GetSpreadForTeam(int leagueId, int season, int week, string team) {
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
-
-        if (!calculator.DoOddsExist())
-            return NotFound("No odds available");
-
-        var spread = calculator.GetSpread(team);
-        return Ok(spread);
-    }
-    [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/team/{team}/overunder")]
-    [ProducesResponseType(typeof(double?), StatusCodes.Status200OK)]
-    public async Task<ActionResult<double?>> GetOverUnder(int leagueId, int season, int week, string team,
-        [FromQuery] string pickType = "Spread") {
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
-
-        if (!calculator.DoOddsExist())
-            return NotFound("No odds available");
-
-        var overUnder = calculator.GetOverUnder(team,
-            Enum.TryParse<PickType>(pickType, out var type) ? type : PickType.Spread);
-        return Ok(overUnder);
-    }
-
     [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/exists")]
     [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
     public async Task<ActionResult<bool>> DoOddsExist(int leagueId, int season, int week) {
@@ -514,18 +463,6 @@ public class LeagueController(
             .BuildAsync();
 
         return Ok(calculator.DoOddsExist());
-    }
-
-    [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/{teamAbbr}")]
-    [ProducesResponseType(typeof(double), StatusCodes.Status200OK)]
-    public async Task<ActionResult<double>> GetSpread(int leagueId, int season, int week, string teamAbbr) {
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
-
-        return Ok(calculator.GetSpread(teamAbbr));
     }
 
     [HttpPost("{leagueId:int}/odds/{season:int}/{week:int}")]
@@ -609,7 +546,12 @@ public class LeagueController(
     [HttpGet("exists/user-in-league/{userId}/{leagueId:int}")]
     [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
     public async Task<ActionResult<bool>> UserExistsInLeague(string userId, int leagueId)
-        => Ok(await repo.UserExistsInLeagueAsync(userId, leagueId));
+    {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && !string.Equals(callerId, userId, StringComparison.Ordinal))
+            return Forbid();
+        return Ok(await repo.UserExistsInLeagueAsync(userId, leagueId));
+    }
 
     // ---------- Adds for core entities ----------
     [HttpPost("league-user")]
@@ -626,11 +568,11 @@ public class LeagueController(
     [HttpPost("league-user-mapping")]
     [Authorize(Roles = AppRoles.Administrator)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> AddLeagueUserMapping([FromBody] LeagueUserMappingDto mappingDto) {
+    public async Task<IActionResult> AddLeagueUserMapping([FromBody] AddLeagueUserMappingRequest request) {
         var mapping = new LeagueUserMapping {
-            LeagueId = mappingDto.LeagueId,
-            UserId = mappingDto.UserId,
-            DateCreated = mappingDto.DateCreated,
+            LeagueId = request.LeagueId,
+            UserId = request.UserId,
+            DateCreated = DateTimeOffset.UtcNow,
         };
         await repo.AddLeagueUserMappingAsync(mapping);
         return NoContent();
@@ -717,6 +659,17 @@ public class LeagueController(
         }));
     }
 
+    [HttpGet("all-leagues")]
+    [Authorize(Roles = AppRoles.Administrator)]
+    [ProducesResponseType(typeof(List<LeagueInfoDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllLeagues() {
+        var leagues = await repo.GetAllLeaguesAsync();
+        return Ok(leagues.Select(l => new LeagueInfoDto {
+            Id = l.Id, LeagueName = l.LeagueName, LeagueType = l.LeagueType,
+            OwnerUserId = l.OwnerUserId, DateCreated = l.DateCreated,
+        }));
+    }
+
     [HttpGet("{leagueId:int}/cost")]
     [ProducesResponseType(typeof(LeagueCostDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLeagueCost(int leagueId) {
@@ -797,7 +750,7 @@ public class LeagueController(
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
             return Forbid();
-        var invitation = await invitationService.CreateInvitationAsync(dto.Email, callerId, leagueId);
+        var invitation = await invitationService.CreateInvitationAsync(dto.Email, callerId, leagueId, baseUrl: dto.BaseUrl);
         return Ok(new InvitationDto {
             Id = invitation.Id,
             InvitationCode = invitation.InvitationCode,

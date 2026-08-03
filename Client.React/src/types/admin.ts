@@ -66,12 +66,6 @@ export interface InvitationDto {
   isLeagueOwner: boolean;
 }
 
-export interface EmailRequest {
-  toEmail: string;
-  subject: string;
-  htmlBody: string;
-}
-
 export interface LeagueCostDto {
   memberCount: number;
   cost: number;

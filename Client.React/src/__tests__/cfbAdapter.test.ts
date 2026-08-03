@@ -4,6 +4,7 @@ import type { CfbSlateDto, CfbSpreadDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
 
 vi.mock('../api/cfb', () => ({
+  getCfbCurrentSlate: vi.fn(),
   getCfbSlates: vi.fn(),
   getCfbSpreads: vi.fn(),
   getCfbScores: vi.fn(),
@@ -14,12 +15,13 @@ vi.mock('../api/cfb', () => ({
 }));
 
 vi.mock('../api/espn', () => ({
-  getCfbLiveScores: vi.fn(),
-  getLiveGames: vi.fn(),
+  loadCfbScoresWithRetry: vi.fn(),
+  getCfbScoresForSlate: vi.fn(),
+  getCfbLiveGames: vi.fn(),
 }));
 
-import { getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
-import { getCfbLiveScores, getLiveGames } from '../api/espn';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
+import { loadCfbScoresWithRetry, getCfbLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
   id: 10, season: 2026, slateNumber: 8, label: 'Week 8',
@@ -31,7 +33,12 @@ const spread: CfbSpreadDto = {
   gameTime: '2025-10-11T20:00:00Z',
 };
 
-/** Minimal EspnScores with one final game matching espnEventId=999 */
+/**
+ * Minimal EspnScores with one final game matching espnEventId=999.
+ * status.type.name is the numeric wire form (0=final) — our backend re-serializes the ESPN
+ * status enum as a plain number (no JsonStringEnumConverter), never the raw "STATUS_FINAL"
+ * string a live ESPN response would use. See gameHelpers.ts's isStatus() / isGameOver().
+ */
 const espnFinalGame: EspnScores = {
   leagues: [], season: { year: 2026, type: 2 }, week: { number: 8 },
   events: [{
@@ -39,7 +46,7 @@ const espnFinalGame: EspnScores = {
     season: { year: 2026, type: 2 }, week: { number: 8 },
     competitions: [{
       id: '999', date: '2025-10-11T20:00:00Z',
-      status: { type: { id: 3, name: 'STATUS_FINAL', completed: true, description: 'Final', state: 'post', detail: 'Final', shortDetail: 'Final' }, clock: 0, period: 4, displayClock: '0:00' },
+      status: { type: { id: 3, name: 0, completed: true, description: 'Final', state: 'post', detail: 'Final', shortDetail: 'Final' }, clock: 0, period: 4, displayClock: '0:00' },
       competitors: [
         { id: 'mich', homeAway: 'home' as const, score: 27, team: { abbreviation: 'MICH', logo: '' }, records: [] },
         { id: 'psu', homeAway: 'away' as const, score: 13, team: { abbreviation: 'PSU', logo: '' }, records: [] },
@@ -55,7 +62,8 @@ const adapter = createCfbAdapter();
 describe('cfbAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getLiveGames).mockResolvedValue([]);
+    vi.mocked(getCfbCurrentSlate).mockResolvedValue(slate);
+    vi.mocked(getCfbLiveGames).mockResolvedValue([]);
     vi.mocked(getCfbScores).mockResolvedValue([]);
   });
 
@@ -63,7 +71,7 @@ describe('cfbAdapter', () => {
     it('maps CfbSpreadDto + ESPN live data to GameView[]', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(getCfbLiveScores).mockResolvedValue(espnFinalGame);
+      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(espnFinalGame);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -84,7 +92,7 @@ describe('cfbAdapter', () => {
     it('always sets hasOdds=true when spreads exist', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(getCfbLiveScores).mockResolvedValue(null);
+      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(null);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -94,7 +102,7 @@ describe('cfbAdapter', () => {
     it('sets hasOdds=false when no spreads exist', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([]);
-      vi.mocked(getCfbLiveScores).mockResolvedValue(null);
+      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(null);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -108,7 +116,7 @@ describe('cfbAdapter', () => {
       };
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(getCfbLiveScores).mockResolvedValue(espnFinalGame);
+      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(espnFinalGame);
       vi.mocked(getCfbUserPicks).mockResolvedValue([pick]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -121,7 +129,7 @@ describe('cfbAdapter', () => {
     it('derives WeekState from slate slateNumber', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]); // slateNumber=8
       vi.mocked(getCfbSpreads).mockResolvedValue([]);
-      vi.mocked(getCfbLiveScores).mockResolvedValue(null);
+      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(null);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -133,7 +141,7 @@ describe('cfbAdapter', () => {
     it('game shows scheduled when ESPN has no matching event', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(getCfbLiveScores).mockResolvedValue({ leagues: [], season: { year: 2026, type: 2 }, week: { number: 8 }, events: [] });
+      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue({ leagues: [], season: { year: 2026, type: 2 }, week: { number: 8 }, events: [] });
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -143,11 +151,15 @@ describe('cfbAdapter', () => {
   });
 
   describe('config', () => {
-    it('pollIntervalMs is 0 (no polling)', () => {
-      expect(adapter.pollIntervalMs).toBe(0);
+    it('pollIntervalMs is 300s (SSE primary; poll is fallback)', () => {
+      expect(adapter.pollIntervalMs).toBe(300_000);
     });
     it('currentSeasonYear returns 2026', async () => {
       expect(await adapter.currentSeasonYear()).toBe(2026);
+    });
+    it('sseUrl points at CFB live-stream endpoint', () => {
+      expect(adapter.sseUrl).toBeDefined();
+      expect(adapter.sseUrl).toContain('/api/cfb/live-stream');
     });
     it('weekLabelFn returns CFP Championship for week 5 postseason', () => {
       const fn = adapter.weekSelectorConfig.weekLabelFn!;

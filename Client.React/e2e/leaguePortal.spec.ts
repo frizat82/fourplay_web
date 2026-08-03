@@ -1,12 +1,18 @@
 import { test, expect } from '@playwright/test';
-import { mockAuth, waitForSpinner, TEST_USER, ADMIN_USER } from './helpers/auth';
+import { mockAuth, waitForSpinner, TEST_USER, ADMIN_USER, NON_OWNER_USER } from './helpers/auth';
 
 // TEST_USER is wired in routes.ts to own "Test League" (NFL) via /api/league/my-leagues
 const ownerAuth = (page: Parameters<typeof mockAuth>[0]) =>
   mockAuth(page, { authUser: TEST_USER, navigateTo: '/league/manage' });
 
-// ADMIN_USER returns [] from /api/league/my-leagues — not an owner
+// NON_OWNER_USER is a regular (non-admin) user who owns no leagues.
 const nonOwnerAuth = (page: Parameters<typeof mockAuth>[0]) =>
+  mockAuth(page, { authUser: NON_OWNER_USER, navigateTo: '/league/manage' });
+
+// ADMIN_USER also owns no leagues via /api/league/my-leagues, but admins can
+// manage every league in the system (see /api/league/all-leagues), so My
+// Leagues stays visible/usable for them regardless of personal ownership.
+const adminAuth = (page: Parameters<typeof mockAuth>[0]) =>
   mockAuth(page, { authUser: ADMIN_USER, navigateTo: '/league/manage' });
 
 test.describe('Commissioner portal (/league/manage)', () => {
@@ -58,6 +64,14 @@ test.describe('Commissioner portal (/league/manage)', () => {
     await waitForSpinner(page);
 
     await expect(page.getByRole('link', { name: /my leagues/i })).not.toBeVisible();
+  });
+
+  test('My Leagues nav link stays visible for an admin who owns no leagues', async ({ page }) => {
+    await adminAuth(page);
+    await waitForSpinner(page);
+
+    await expect(page.getByRole('link', { name: /my leagues/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: /my leagues/i })).toBeVisible({ timeout: 5000 });
   });
 
   test('Invite dialog opens and accepts email input', async ({ page }) => {
