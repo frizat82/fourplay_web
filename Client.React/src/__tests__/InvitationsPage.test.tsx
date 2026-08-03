@@ -46,7 +46,6 @@ function makeInvitation(overrides: Partial<InvitationDto> = {}): InvitationDto {
     isUsed: false,
     isExpired: false,
     isValid: true,
-    isLeagueOwner: false,
     ...overrides,
   };
 }
@@ -77,7 +76,7 @@ describe('AdminInvitationsPage', () => {
     await userEvent.type(await screen.findByLabelText(/email address/i), 'newplayer@example.com');
     await userEvent.click(screen.getByRole('button', { name: /^invite$/i }));
 
-    expect(mockedCreateInvitation).toHaveBeenCalledWith('newplayer@example.com', 'admin-1', null, false);
+    expect(mockedCreateInvitation).toHaveBeenCalledWith('newplayer@example.com', 'admin-1', null);
     expect(mockedResendInvitation).not.toHaveBeenCalled();
   });
 

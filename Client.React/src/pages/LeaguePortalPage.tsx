@@ -28,6 +28,7 @@ import AddCircleIcon from '@mui/icons-material/AddCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import PageHeader from '../components/PageHeader';
+import OwnerCostSummary from '../components/OwnerCostSummary';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { useToast } from '../services/toast';
@@ -68,13 +69,17 @@ function UserOptions({ users }: { users: UserSummaryDto[] }) {
 }
 
 export default function LeaguePortalPage() {
-  const { ownedLeagues, isLeagueOwner } = useSession();
+  const { ownedLeagues, leaguesLoaded, reloadLeagues } = useSession();
   const { user } = useAuth();
   const admin = isAdmin(user);
   const toast = useToast();
 
   const [allLeagues, setAllLeagues] = useState<LeagueInfoDto[]>([]);
+  const [allLeaguesLoaded, setAllLeaguesLoaded] = useState(false);
   const leagueOptions = admin ? allLeagues : ownedLeagues;
+  // Guards the empty state against the pre-fetch window — without it, an admin with leagues
+  // platform-wide would see a false "no leagues yet" flash while allLeagues is still [].
+  const optionsLoaded = admin ? allLeaguesLoaded : leaguesLoaded;
 
   const [selectedLeague, setSelectedLeague] = useState<LeagueInfoDto | null>(null);
   const [tab, setTab] = useState(0);
@@ -122,6 +127,7 @@ export default function LeaguePortalPage() {
     if (!admin) return;
     const leagues = await getAllLeagues();
     setAllLeagues(leagues);
+    setAllLeaguesLoaded(true);
   }, [admin]);
 
   useEffect(() => { void loadAllLeagues(); }, [loadAllLeagues]);
@@ -254,7 +260,7 @@ export default function LeaguePortalPage() {
       });
       toast.push(`League "${created.leagueName}" created`, 'success');
       setCreateLeagueOpen(false);
-      await loadAllLeagues();
+      await Promise.all([loadAllLeagues(), reloadLeagues()]);
       setSelectedLeague(created);
     } catch {
       toast.push('Failed to create league', 'error');
@@ -311,26 +317,28 @@ export default function LeaguePortalPage() {
   const availableSeasons = juiceMappings.map((m) => m.season).sort((a, b) => b - a);
   if (!availableSeasons.includes(CURRENT_SEASON)) availableSeasons.unshift(CURRENT_SEASON);
 
-  if (!admin && !isLeagueOwner) {
-    return (
-      <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography variant="h6" color="text.secondary">
-          You don&apos;t own any leagues for this sport.
-        </Typography>
-      </Box>
-    );
-  }
-
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={2}>
         <PageHeader title="My Leagues" subtitle="Commissioner portal" />
-        {admin && (
+        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+          <OwnerCostSummary />
           <Button startIcon={<AddCircleIcon />} variant="outlined" onClick={openCreateLeague}>
             Create League
           </Button>
-        )}
+        </Stack>
       </Stack>
+
+      {optionsLoaded && leagueOptions.length === 0 && (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h6" color="text.secondary">
+            You don&apos;t have any leagues yet.
+          </Typography>
+          <Typography color="text.secondary">
+            Create one to start picking against your friends — you&apos;ll be its commissioner.
+          </Typography>
+        </Box>
+      )}
 
       {leagueOptions.length > 1 && (
         <FormControl sx={{ mb: 3, minWidth: 240 }} size="small">
@@ -452,15 +460,17 @@ export default function LeaguePortalPage() {
                 <MenuItem value="Cfb">CFB</MenuItem>
               </Select>
             </FormControl>
-            <TextField
-              select
-              label="Owner"
-              SelectProps={{ native: true }}
-              value={newLeagueForm.ownerUserId}
-              onChange={(e) => setNewLeagueForm((f) => ({ ...f, ownerUserId: e.target.value }))}
-            >
-              <UserOptions users={availableUsers} />
-            </TextField>
+            {admin && (
+              <TextField
+                select
+                label="Owner"
+                SelectProps={{ native: true }}
+                value={newLeagueForm.ownerUserId}
+                onChange={(e) => setNewLeagueForm((f) => ({ ...f, ownerUserId: e.target.value }))}
+              >
+                <UserOptions users={availableUsers} />
+              </TextField>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>

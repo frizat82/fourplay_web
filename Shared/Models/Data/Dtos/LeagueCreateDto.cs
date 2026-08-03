@@ -1,10 +1,11 @@
 using FourPlayWebApp.Shared.Models.Enum;
+using System.Text.Json.Serialization;
 
 namespace FourPlayWebApp.Shared.Models.Data.Dtos;
 
 public record LeagueCreateDto(
     string LeagueName,
-    LeagueType LeagueType,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] LeagueType LeagueType,
     string OwnerUserId,
     int Season,
     int Juice,
