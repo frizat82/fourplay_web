@@ -6,12 +6,14 @@ using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Shared.Models.Enum;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using System.Reflection;
 using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -294,6 +296,60 @@ public class LeagueOwnershipTests
         await repo.Received(1).AddLeagueUserMappingAsync(Arg.Is<LeagueUserMapping>(m => m.UserId == OwnerId));
     }
 
+    // frizat-d6l: self-serve league creation — any authenticated user may create a league now,
+    // but a non-admin's request must always make THEM the owner server-side, regardless of what
+    // ownerUserId they send, to close a privilege-escalation hole (assigning ownership to/of
+    // someone else's league without that person's involvement).
+    [Fact]
+    public async Task CreateLeague_NonAdmin_ForcesOwnerToCaller_IgnoringSpoofedOwnerUserId()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+        var createdLeague = new LeagueInfo { Id = 42, LeagueName = "My League", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl };
+        repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(createdLeague));
+
+        // AttackerId is spoofed as the owner in the request body — caller is OwnerId, not admin.
+        var dto = new LeagueCreateDto("My League", LeagueType.Nfl, AttackerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto) as OkObjectResult;
+
+        Assert.NotNull(result);
+        await repo.Received(1).AddLeagueInfoAsync(Arg.Is<LeagueInfo>(l => l.OwnerUserId == OwnerId));
+        await repo.Received(1).AddLeagueUserMappingAsync(Arg.Is<LeagueUserMapping>(m => m.UserId == OwnerId));
+    }
+
+    [Fact]
+    public void CreateLeague_IsNotRestrictedToAdministratorRole()
+    {
+        var method = typeof(LeagueController).GetMethod(nameof(LeagueController.CreateLeague));
+        Assert.NotNull(method);
+
+        var roleAttr = method!.GetCustomAttributes<AuthorizeAttribute>().FirstOrDefault(a => a.Roles is not null);
+
+        Assert.Null(roleAttr); // any authenticated user may call this now — class-level [Authorize] still applies
+    }
+
+    // frizat-d6l live-testing follow-up: the CreateLeague_* tests above construct LeagueCreateDto
+    // directly as a C# record, which never exercises JSON deserialization — so they all passed
+    // while the real [FromBody] endpoint 400'd on every request. The frontend sends leagueType as
+    // the string "Nfl"/"Cfb" (matching LeagueInfoDto's [JsonConverter(JsonStringEnumConverter)]
+    // convention), but LeagueCreateDto's LeagueType property had no such converter and only
+    // accepted a raw int — this deserializes exactly what LeaguePortalPage.tsx actually POSTs.
+    [Theory]
+    [InlineData("Nfl", LeagueType.Nfl)]
+    [InlineData("Cfb", LeagueType.Cfb)]
+    public void LeagueCreateDto_DeserializesStringLeagueType_MatchingFrontendWireFormat(string wireValue, LeagueType expected)
+    {
+        var json = $$"""
+            {"leagueName":"My League","leagueType":"{{wireValue}}","ownerUserId":"u1","season":2025,"juice":0,"juiceDivisional":0,"juiceConference":0,"weeklyCost":0}
+            """;
+        var options = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+
+        var dto = System.Text.Json.JsonSerializer.Deserialize<LeagueCreateDto>(json, options);
+
+        Assert.NotNull(dto);
+        Assert.Equal(expected, dto!.LeagueType);
+    }
+
     [Fact]
     public async Task GetMyLeagues_ReturnsOnlyLeaguesOwnedByCaller()
     {
@@ -305,6 +361,22 @@ public class LeagueOwnershipTests
         ]);
 
         var result = await ctrl.GetMyLeagues() as OkObjectResult;
+
+        var leagues = Assert.IsAssignableFrom<IEnumerable<LeagueInfoDto>>(result!.Value);
+        Assert.Equal(2, leagues.Count());
+    }
+
+    [Fact]
+    public async Task GetAllLeagues_ReturnsLeaguesAcrossAllOwnersAndSports()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetAllLeaguesAsync().Returns(
+        [
+            new LeagueInfo { Id = 1, LeagueName = "NFL League", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl },
+            new LeagueInfo { Id = 2, LeagueName = "CFB League", OwnerUserId = "some-other-owner", LeagueType = LeagueType.Cfb },
+        ]);
+
+        var result = await ctrl.GetAllLeagues() as OkObjectResult;
 
         var leagues = Assert.IsAssignableFrom<IEnumerable<LeagueInfoDto>>(result!.Value);
         Assert.Equal(2, leagues.Count());
@@ -341,6 +413,29 @@ public class LeagueOwnershipTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         await repo.Received(1).GetLeagueUserMappingsAsync(1);
+    }
+
+    [Fact]
+    public async Task GetLeagueUserMappings_IncludesMemberEmail_NotJustUserId()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+        repo.GetLeagueUserMappingsAsync(1).Returns(
+        [
+            new LeagueUserMapping
+            {
+                LeagueId = 1,
+                UserId = OwnerId,
+                League = new LeagueInfo { Id = 1, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl },
+                User = new ApplicationUser { Id = OwnerId, UserName = "owner", Email = "owner@example.com" },
+            },
+        ]);
+
+        var result = await ctrl.GetLeagueUserMappings(1);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dtos = Assert.IsAssignableFrom<List<LeagueUserMappingDto>>(ok.Value);
+        Assert.Equal("owner@example.com", dtos[0].Email);
     }
 
     [Fact]
@@ -386,6 +481,37 @@ public class LeagueOwnershipTests
     }
 
     [Fact]
+    public async Task InviteToLeague_PassesBaseUrlThrough_SoTheEmailCanBeSentServerSide()
+    {
+        var invSvc = Substitute.For<IInvitationService>();
+        invSvc.CreateInvitationAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<string?>())
+              .Returns(new Invitation { Id = 1, Email = "target@example.com", InvitationCode = "code-abc" });
+
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var userManager = Substitute.For<UserManager<ApplicationUser>>(
+            store, null, null, null, null, null, null, null, null);
+        var ctrl = new LeagueController(
+            new MemoryCache(new MemoryCacheOptions()),
+            repo,
+            NullLogger<LeagueController>.Instance,
+            userManager,
+            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<IEspnCacheService>(),
+            invSvc);
+        ctrl.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }
+        };
+
+        await ctrl.InviteToLeague(1, new LeagueInviteDto("target@example.com", "https://ivleague.com"));
+
+        await invSvc.Received(1).CreateInvitationAsync("target@example.com", OwnerId, 1, baseUrl: "https://ivleague.com");
+    }
+
+    [Fact]
     public async Task AssignLeagueOwner_CallsRepo_WhenCallerIsAdmin()
     {
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
@@ -406,5 +532,156 @@ public class LeagueOwnershipTests
         var result = await ctrl.CreateLeague(dto);
 
         Assert.IsType<ConflictObjectResult>(result);
+    }
+
+    // ─── mon.6: membership guards on info / juice / userExists ─────────────
+
+    private static LeagueInfo StubLeague(int id = 1) =>
+        new() { Id = id, LeagueName = "Test", OwnerUserId = OwnerId };
+
+    // GetLeagueInfo
+
+    [Fact]
+    public async Task GetLeagueInfo_ReturnsForbid_ForNonMember()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.GetLeagueInfoAsync(1).Returns(StubLeague());
+        repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
+
+        var result = await ctrl.GetLeagueInfo(1);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueInfo_ReturnsOk_ForMember()
+    {
+        const string memberId = "member-003";
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(memberId));
+        repo.GetLeagueInfoAsync(1).Returns(StubLeague());
+        repo.UserExistsInLeagueAsync(memberId, 1).Returns(true);
+
+        var result = await ctrl.GetLeagueInfo(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueInfo_ReturnsOk_ForAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetLeagueInfoAsync(1).Returns(StubLeague());
+
+        var result = await ctrl.GetLeagueInfo(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // GetLeagueJuice
+
+    [Fact]
+    public async Task GetLeagueJuice_ReturnsForbid_ForNonMember()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
+
+        var result = await ctrl.GetLeagueJuice(1);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueJuice_ReturnsOk_ForMember()
+    {
+        const string memberId = "member-003";
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(memberId));
+        repo.UserExistsInLeagueAsync(memberId, 1).Returns(true);
+        repo.GetLeagueJuiceMappingAsync(1).Returns([]);
+
+        var result = await ctrl.GetLeagueJuice(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueJuice_ReturnsOk_ForAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetLeagueJuiceMappingAsync(1).Returns([]);
+
+        var result = await ctrl.GetLeagueJuice(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // GetLeagueJuiceForSeason
+
+    [Fact]
+    public async Task GetLeagueJuiceForSeason_ReturnsForbid_ForNonMember()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
+
+        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueJuiceForSeason_ReturnsOk_ForMember()
+    {
+        const string memberId = "member-003";
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(memberId));
+        repo.UserExistsInLeagueAsync(memberId, 1).Returns(true);
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns((LeagueJuiceMapping?)null);
+
+        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueJuiceForSeason_ReturnsOk_ForAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns((LeagueJuiceMapping?)null);
+
+        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // UserExistsInLeague — self-lookup or admin only
+
+    [Fact]
+    public async Task UserExistsInLeague_ReturnsForbid_ForNonSelf()
+    {
+        var (ctrl, _) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+
+        var result = await ctrl.UserExistsInLeague(OwnerId, 1);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UserExistsInLeague_ReturnsOk_ForSelf()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.UserExistsInLeagueAsync(OwnerId, 1).Returns(true);
+
+        var result = await ctrl.UserExistsInLeague(OwnerId, 1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UserExistsInLeague_ReturnsOk_ForAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.UserExistsInLeagueAsync(OwnerId, 1).Returns(false);
+
+        var result = await ctrl.UserExistsInLeague(OwnerId, 1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
     }
 }
