@@ -19,7 +19,6 @@ function renderPage() {
 
 const sessionState = {
   ownedLeagues: [] as LeagueInfoDto[],
-  isLeagueOwner: true,
   reloadLeagues: vi.fn().mockResolvedValue(undefined),
 };
 
@@ -110,7 +109,6 @@ const cost: LeagueCostDto = { memberCount: 1, cost: 100 };
 beforeEach(() => {
   authState.user = OWNER_USER;
   sessionState.ownedLeagues = [makeLeague()];
-  sessionState.isLeagueOwner = true;
   mockedGetMappings.mockResolvedValue([makeMember()]);
   mockedGetCost.mockResolvedValue(cost);
   mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON - 1)]);
@@ -201,7 +199,6 @@ describe('LeaguePortalPage (no leagues yet)', () => {
 describe('LeaguePortalPage (site admin)', () => {
   beforeEach(() => {
     authState.user = ADMIN_USER;
-    sessionState.isLeagueOwner = false;
     sessionState.ownedLeagues = [];
     mockedGetAllLeagues.mockResolvedValue([
       makeLeague({ id: 1, leagueName: 'Demo League', leagueType: 'Nfl' }),
