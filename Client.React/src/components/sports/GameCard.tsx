@@ -87,7 +87,10 @@ export default function GameCard({
 
   const renderPickButton = (team: string, pickState: PickState, onPick?: () => void) => {
     if (pickState === 'submitted')
-      return <Button color="success" variant="contained" disabled startIcon={<CheckIcon />} aria-label={`${team} locked in`} sx={pickButtonSx}>Locked in</Button>;
+      // aria-label stays "locked in" for accessible-name test/query stability — only the visible
+      // label changed (matches the pending-state "Picked" text; disabled + checkmark still
+      // distinguish submitted from pending for sighted users).
+      return <Button color="success" variant="contained" disabled startIcon={<CheckIcon />} aria-label={`${team} locked in`} sx={pickButtonSx}>Picked</Button>;
     if (pickState !== 'none')
       return <Button color="success" variant="contained" onClick={onPick} aria-label={`${team} picked`} sx={pickButtonSx}>Picked</Button>;
     return <Button color="warning" variant="contained" disabled={locked} onClick={onPick} aria-label={`Pick ${team}`} sx={pickButtonSx}>Pick</Button>;

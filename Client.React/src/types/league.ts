@@ -6,6 +6,7 @@ export interface LeagueUserMappingDto {
   leagueOwnerUserId?: string | null;
   userId: string;
   userName?: string | null;
+  email?: string | null;
   leagueName?: string | null;
   leagueType: LeagueType;
   dateCreated: string;

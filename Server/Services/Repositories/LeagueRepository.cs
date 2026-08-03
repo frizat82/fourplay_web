@@ -227,6 +227,13 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             .ToListAsync();
     }
 
+    public async Task<List<LeagueInfo>> GetAllLeaguesAsync() {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.LeagueInfo
+            .Include(l => l.LeagueJuiceMappings)
+            .ToListAsync();
+    }
+
     public async Task UpdateLeagueOwnerAsync(int leagueId, string newOwnerUserId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         var league = await db.LeagueInfo.FirstAsync(l => l.Id == leagueId);

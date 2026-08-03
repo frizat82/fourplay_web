@@ -11,6 +11,8 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useRef, useState } from 'react';
 import { useAuth } from '../services/auth';
 import { RulesContent } from './RulesPage';
+import DashboardStandings from '../components/DashboardStandings';
+import type { SportAdapter } from '../services/sportAdapter';
 import './home.css';
 
 const fantasyPains = [
@@ -36,7 +38,13 @@ const heroBullets = [
   "You're competing against real friends, not a fake team",
 ];
 
-export default function HomePage() {
+interface HomePageProps {
+  // Only present when rendered at /dashboard (authenticated); the public "/" route has no
+  // sport-specific data to show, so DashboardStandings never renders there.
+  adapter?: SportAdapter;
+}
+
+export default function HomePage({ adapter }: HomePageProps) {
   const { user } = useAuth();
   const isAuthed = Boolean(user);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -115,40 +123,43 @@ export default function HomePage() {
                 </Stack>
               </Box>
             </Grid>
-            {!isAuthed && <Grid size={{ xs: 12, md: 6 }} className="hero-image-section">
+            <Grid size={{ xs: 12, md: 6 }} className="hero-image-section">
               <Stack spacing={2}>
-                <Paper elevation={8} sx={{ position: 'relative', overflow: 'hidden', borderRadius: 2 }}>
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    style={{ width: '100%', display: 'block' }}
-                    poster="/Images/fourplayhome.jpg"
-                  >
-                    <source src="/Videos/demo.mp4" type="video/mp4" />
-                  </video>
-                  <IconButton
-                    onClick={toggleMute}
-                    size="small"
-                    sx={{
-                      position: 'absolute',
-                      bottom: 8,
-                      right: 8,
-                      bgcolor: 'rgba(0,0,0,0.5)',
-                      color: 'white',
-                      '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
-                    }}
-                  >
-                    {muted ? <VolumeOffIcon fontSize="small" /> : <VolumeUpIcon fontSize="small" />}
-                  </IconButton>
-                </Paper>
+                {!isAuthed && (
+                  <Paper elevation={8} sx={{ position: 'relative', overflow: 'hidden', borderRadius: 2 }}>
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      style={{ width: '100%', display: 'block' }}
+                      poster="/Images/fourplayhome.jpg"
+                    >
+                      <source src="/Videos/demo.mp4" type="video/mp4" />
+                    </video>
+                    <IconButton
+                      onClick={toggleMute}
+                      size="small"
+                      sx={{
+                        position: 'absolute',
+                        bottom: 8,
+                        right: 8,
+                        bgcolor: 'rgba(0,0,0,0.5)',
+                        color: 'white',
+                        '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
+                      }}
+                    >
+                      {muted ? <VolumeOffIcon fontSize="small" /> : <VolumeUpIcon fontSize="small" />}
+                    </IconButton>
+                  </Paper>
+                )}
                 <Paper className="hero-image" elevation={8}>
                   <img src="/Images/fourplayhome.jpg" alt="IV League" className="hero-image-img" />
                 </Paper>
+                {isAuthed && adapter && <DashboardStandings adapter={adapter} />}
               </Stack>
-            </Grid>}
+            </Grid>
           </Grid>
         </Container>
       </Container>

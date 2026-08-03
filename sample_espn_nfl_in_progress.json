@@ -677,6 +677,15 @@
             },
             "isTBDFlex": false
           },
+          "situation": {
+            "down": 2,
+            "yardLine": 35,
+            "distance": 7,
+            "isRedZone": false,
+            "downDistanceText": "2nd & 7 at IND 35",
+            "possessionText": "IND",
+            "possession": "11"
+          },
           "broadcasts": [
             {
               "market": "national",

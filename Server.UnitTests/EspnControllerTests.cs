@@ -183,4 +183,38 @@ public class EspnControllerTests
         var list = Assert.IsType<System.Collections.Generic.List<FourPlayWebApp.Shared.Models.Data.Dtos.LiveGameDto>>(ok.Value);
         Assert.Empty(list);
     }
+
+    // ── GetCfbLiveGames ──────────────────────────────────────────────────────
+    // Regression: this used to reuse GetLiveGames' espnCacheService (NFL), so CFB situation
+    // data could never match a real CFB event — always silently empty regardless of CFB state.
+
+    [Fact]
+    public async Task GetCfbLiveGames_ReadsFromCfbCacheService_NotNflCacheService()
+    {
+        var cfbEvent = new Event { Competitions = [new Competition { Id = "1", Competitors = [
+            new Competitor { HomeAway = HomeAway.Home, Team = new EspnTeam { Abbreviation = "IU" } },
+            new Competitor { HomeAway = HomeAway.Away, Team = new EspnTeam { Abbreviation = "MIA" } },
+        ] }] };
+        _cfbCacheService.GetScoresAsync().Returns(new EspnScores { Events = [cfbEvent] });
+        _espnCacheService.GetScoresAsync().Returns(new EspnScores { Events = [] }); // NFL cache has nothing matching
+
+        var result = await _sut.GetCfbLiveGames();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var list = Assert.IsType<System.Collections.Generic.List<FourPlayWebApp.Shared.Models.Data.Dtos.LiveGameDto>>(ok.Value);
+        Assert.Single(list);
+        Assert.Equal("IU", list[0].HomeTeam);
+    }
+
+    [Fact]
+    public async Task GetCfbLiveGames_ReturnsOk_EmptyList_WhenCacheIsNull()
+    {
+        _cfbCacheService.GetScoresAsync().Returns((EspnScores?)null);
+
+        var result = await _sut.GetCfbLiveGames();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var list = Assert.IsType<System.Collections.Generic.List<FourPlayWebApp.Shared.Models.Data.Dtos.LiveGameDto>>(ok.Value);
+        Assert.Empty(list);
+    }
 }

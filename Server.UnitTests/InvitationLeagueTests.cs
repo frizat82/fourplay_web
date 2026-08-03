@@ -61,7 +61,7 @@ public class InvitationLeagueTests
     public async Task CreateInvitation_StoresLeagueId_WhenProvided()
     {
         var db = BuildDb(nameof(CreateInvitation_StoresLeagueId_WhenProvided));
-        var service = new InvitationService(BuildFactory(db));
+        var service = new InvitationService(BuildFactory(db), Substitute.For<IEmailSender>());
 
         var result = await service.CreateInvitationAsync("user@example.com", "admin-1", leagueId: 42);
 
@@ -72,7 +72,7 @@ public class InvitationLeagueTests
     public async Task CreateInvitation_NullLeagueId_WhenNotProvided()
     {
         var db = BuildDb(nameof(CreateInvitation_NullLeagueId_WhenNotProvided));
-        var service = new InvitationService(BuildFactory(db));
+        var service = new InvitationService(BuildFactory(db), Substitute.For<IEmailSender>());
 
         var result = await service.CreateInvitationAsync("user@example.com", "admin-1");
 
@@ -92,7 +92,7 @@ public class InvitationLeagueTests
         });
         await db.SaveChangesAsync();
 
-        var service = new InvitationService(BuildFactory(db));
+        var service = new InvitationService(BuildFactory(db), Substitute.For<IEmailSender>());
         var result = await service.ValidateInvitationAsync("test-code-123");
 
         Assert.NotNull(result);
@@ -196,7 +196,7 @@ public class InvitationLeagueTests
     public async Task CreateInvitation_StoresIsLeagueOwner_WhenTrue()
     {
         var db = BuildDb(nameof(CreateInvitation_StoresIsLeagueOwner_WhenTrue));
-        var service = new InvitationService(BuildFactory(db));
+        var service = new InvitationService(BuildFactory(db), Substitute.For<IEmailSender>());
 
         var result = await service.CreateInvitationAsync("owner@example.com", "admin-1", leagueId: 5, isLeagueOwner: true);
 

@@ -17,11 +17,11 @@ vi.mock('../api/cfb', () => ({
 vi.mock('../api/espn', () => ({
   loadCfbScoresWithRetry: vi.fn(),
   getCfbScoresForSlate: vi.fn(),
-  getLiveGames: vi.fn(),
+  getCfbLiveGames: vi.fn(),
 }));
 
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
-import { loadCfbScoresWithRetry, getLiveGames } from '../api/espn';
+import { loadCfbScoresWithRetry, getCfbLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
   id: 10, season: 2026, slateNumber: 8, label: 'Week 8',
@@ -63,7 +63,7 @@ describe('cfbAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getCfbCurrentSlate).mockResolvedValue(slate);
-    vi.mocked(getLiveGames).mockResolvedValue([]);
+    vi.mocked(getCfbLiveGames).mockResolvedValue([]);
     vi.mocked(getCfbScores).mockResolvedValue([]);
   });
 

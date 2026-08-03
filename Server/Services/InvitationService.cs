@@ -1,12 +1,13 @@
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Services.Interfaces;
+using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContextFactory) : IInvitationService {
+public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContextFactory, IEmailSender emailSender) : IInvitationService {
     public async Task DeleteInvitationAsync(int id) {
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
@@ -21,7 +22,7 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
         Log.Information("Invitation with ID {Id} deleted", id);
     }
 
-    public async Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null, bool isLeagueOwner = false)
+    public async Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null, bool isLeagueOwner = false, string? baseUrl = null)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
@@ -40,7 +41,45 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
 
         Log.Information("Invitation created for {Email} by {UserId}", email, invitedByUserId);
 
+        if (!string.IsNullOrWhiteSpace(baseUrl)) {
+            try {
+                await SendInvitationEmailAsync(invitation, baseUrl);
+            } catch (Exception ex) {
+                // Invitation was created successfully; a failed email send must not undo it.
+                Log.Error(ex, "Failed to send invitation email to {Email}", email);
+            }
+        }
+
         return invitation;
+    }
+
+    public async Task ResendInvitationEmailAsync(int invitationId, string baseUrl) {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        var invitation = await dbContext.Invitations.FindAsync(invitationId);
+        if (invitation == null) {
+            Log.Warning("Cannot resend invitation {Id} - not found", invitationId);
+            return;
+        }
+        await SendInvitationEmailAsync(invitation, baseUrl);
+    }
+
+    private Task SendInvitationEmailAsync(Invitation invitation, string baseUrl) {
+        // Path must match InvitationsPage.tsx's getInviteUrl (the "copy link" button) — nothing
+        // enforces the two staying in sync, so update both if this route ever changes.
+        var registrationUrl = $"{baseUrl.TrimEnd('/')}/account/register?inviteCode={Uri.EscapeDataString(invitation.InvitationCode)}&returnUrl=%2F";
+        var body = GoogleEmailSender.CreateTemplatedBody(
+            "You're Invited to Join!",
+            $"""
+             <p>Hello,</p>
+             <p>You've been invited to join IV League. Click the button below to create your account and get started.</p>
+             <div style="text-align:center;margin:24px 0;">
+               <a href="{registrationUrl}" style="display:inline-block;background-color:#4f46e5;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
+                 Create Your Account
+               </a>
+             </div>
+             <p>If you didn't request this invite, you can safely ignore this email.</p>
+             """);
+        return emailSender.SendEmailAsync(invitation.Email, "IV League Invitation", body);
     }
 
     public async Task<Invitation?> ValidateInvitationAsync(string code)
