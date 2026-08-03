@@ -328,6 +328,28 @@ public class LeagueOwnershipTests
         Assert.Null(roleAttr); // any authenticated user may call this now — class-level [Authorize] still applies
     }
 
+    // frizat-d6l live-testing follow-up: the CreateLeague_* tests above construct LeagueCreateDto
+    // directly as a C# record, which never exercises JSON deserialization — so they all passed
+    // while the real [FromBody] endpoint 400'd on every request. The frontend sends leagueType as
+    // the string "Nfl"/"Cfb" (matching LeagueInfoDto's [JsonConverter(JsonStringEnumConverter)]
+    // convention), but LeagueCreateDto's LeagueType property had no such converter and only
+    // accepted a raw int — this deserializes exactly what LeaguePortalPage.tsx actually POSTs.
+    [Theory]
+    [InlineData("Nfl", LeagueType.Nfl)]
+    [InlineData("Cfb", LeagueType.Cfb)]
+    public void LeagueCreateDto_DeserializesStringLeagueType_MatchingFrontendWireFormat(string wireValue, LeagueType expected)
+    {
+        var json = $$"""
+            {"leagueName":"My League","leagueType":"{{wireValue}}","ownerUserId":"u1","season":2025,"juice":0,"juiceDivisional":0,"juiceConference":0,"weeklyCost":0}
+            """;
+        var options = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+
+        var dto = System.Text.Json.JsonSerializer.Deserialize<LeagueCreateDto>(json, options);
+
+        Assert.NotNull(dto);
+        Assert.Equal(expected, dto!.LeagueType);
+    }
+
     [Fact]
     public async Task GetMyLeagues_ReturnsOnlyLeaguesOwnedByCaller()
     {
