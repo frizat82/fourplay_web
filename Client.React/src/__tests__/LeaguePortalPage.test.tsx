@@ -1,14 +1,26 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import LeaguePortalPage from '../pages/LeaguePortalPage';
 import type { LeagueInfoDto, LeagueJuiceMappingDto, LeagueCostDto, UserSummaryDto } from '../types/admin';
 import type { LeagueUserMappingDto } from '../types/league';
 import type { UserInfo } from '../types/auth';
 
+// OwnerCostSummary (rendered inside LeaguePortalPage) uses react-query.
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <LeaguePortalPage />
+    </QueryClientProvider>,
+  );
+}
+
 const sessionState = {
   ownedLeagues: [] as LeagueInfoDto[],
   isLeagueOwner: true,
+  reloadLeagues: vi.fn().mockResolvedValue(undefined),
 };
 
 const OWNER_USER: UserInfo = { userId: 'owner-1', name: 'frizat', claims: [] };
@@ -40,6 +52,7 @@ import {
   getLeagueCost,
   getAllLeagues,
   getUsers,
+  createLeague,
 } from '../api/league';
 
 const mockedGetMappings = vi.mocked(getLeagueUserMappings);
@@ -47,6 +60,7 @@ const mockedGetJuice = vi.mocked(getLeagueJuice);
 const mockedGetCost = vi.mocked(getLeagueCost);
 const mockedGetAllLeagues = vi.mocked(getAllLeagues);
 const mockedGetUsers = vi.mocked(getUsers);
+const mockedCreateLeague = vi.mocked(createLeague);
 
 const CURRENT_SEASON = new Date().getFullYear();
 
@@ -102,17 +116,19 @@ beforeEach(() => {
   mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON - 1)]);
   mockedGetAllLeagues.mockResolvedValue([]);
   mockedGetUsers.mockResolvedValue([makeUser()]);
+  mockedCreateLeague.mockResolvedValue(makeLeague({ id: 99, leagueName: 'New League' }));
+  sessionState.reloadLeagues.mockClear();
 });
 
 describe('LeaguePortalPage (owner, non-admin)', () => {
   it('shows the member email, not the raw user id', async () => {
-    render(<LeaguePortalPage />);
+    renderPage();
     await screen.findByText('frizat@example.com');
     expect(screen.queryByText('562e8450-7f22-4ab2-9cfa-5ded8c1091af')).not.toBeInTheDocument();
   });
 
   it('locks juice fields for a past season and keeps them editable for the current season', async () => {
-    render(<LeaguePortalPage />);
+    renderPage();
     await userEvent.click(await screen.findByRole('tab', { name: 'Juice Settings' }));
 
     const seasonSelect = screen.getAllByRole('combobox')[0];
@@ -131,25 +147,54 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
   });
 
   it('does not show a raw owner id on the Info tab', async () => {
-    render(<LeaguePortalPage />);
+    renderPage();
     await userEvent.click(await screen.findByRole('tab', { name: 'Info' }));
     expect(screen.queryByText(/owner id/i)).not.toBeInTheDocument();
   });
 
-  it('does not offer Create League, Add User, or Change Owner', async () => {
-    render(<LeaguePortalPage />);
+  // frizat-d6l: any authenticated user can self-serve create a league (and becomes its
+  // owner) — but Add User / Change Owner stay admin-only (they need the platform-wide user
+  // list, which is itself a privileged endpoint).
+  it('offers self-serve Create League but not Add User or Change Owner', async () => {
+    renderPage();
     await screen.findByText('frizat@example.com');
-    expect(screen.queryByRole('button', { name: /create league/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create league/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /add user/i })).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole('tab', { name: 'Info' }));
     expect(screen.queryByRole('button', { name: /change owner/i })).not.toBeInTheDocument();
   });
 
   it('does not fetch the admin-only all-leagues or all-users endpoints', async () => {
-    render(<LeaguePortalPage />);
+    renderPage();
     await screen.findByText('frizat@example.com');
     expect(mockedGetAllLeagues).not.toHaveBeenCalled();
     expect(mockedGetUsers).not.toHaveBeenCalled();
+  });
+
+  it('self-serve Create League has no Owner picker and makes the caller the owner', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /create league/i }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^owner$/i)).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText(/league name/i), 'New League');
+    await userEvent.click(screen.getByRole('button', { name: /^create league$/i }));
+
+    await waitFor(() => expect(mockedCreateLeague).toHaveBeenCalledWith(
+      expect.objectContaining({ leagueName: 'New League', ownerUserId: 'owner-1' })
+    ));
+    expect(sessionState.reloadLeagues).toHaveBeenCalled();
+  });
+});
+
+describe('LeaguePortalPage (no leagues yet)', () => {
+  it('shows an empty state with a Create League call to action instead of a dead end', async () => {
+    sessionState.ownedLeagues = [];
+    renderPage();
+
+    expect(await screen.findByText(/you don.t have any leagues yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create league/i })).toBeInTheDocument();
   });
 });
 
@@ -165,14 +210,14 @@ describe('LeaguePortalPage (site admin)', () => {
   });
 
   it('lists all leagues across sports, not just owned ones', async () => {
-    render(<LeaguePortalPage />);
+    renderPage();
     await screen.findByText('Demo League', { exact: false });
     await userEvent.click(screen.getAllByRole('combobox')[0]);
     expect(await screen.findByRole('option', { name: /CFB Demo League/i })).toBeInTheDocument();
   });
 
   it('offers Create League, Add User, and Change Owner', async () => {
-    render(<LeaguePortalPage />);
+    renderPage();
     expect(await screen.findByRole('button', { name: /create league/i })).toBeInTheDocument();
     await screen.findByText('frizat@example.com');
     expect(screen.getByRole('button', { name: /add user/i })).toBeInTheDocument();
