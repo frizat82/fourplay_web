@@ -69,13 +69,17 @@ function UserOptions({ users }: { users: UserSummaryDto[] }) {
 }
 
 export default function LeaguePortalPage() {
-  const { ownedLeagues, reloadLeagues } = useSession();
+  const { ownedLeagues, leaguesLoaded, reloadLeagues } = useSession();
   const { user } = useAuth();
   const admin = isAdmin(user);
   const toast = useToast();
 
   const [allLeagues, setAllLeagues] = useState<LeagueInfoDto[]>([]);
+  const [allLeaguesLoaded, setAllLeaguesLoaded] = useState(false);
   const leagueOptions = admin ? allLeagues : ownedLeagues;
+  // Guards the empty state against the pre-fetch window — without it, an admin with leagues
+  // platform-wide would see a false "no leagues yet" flash while allLeagues is still [].
+  const optionsLoaded = admin ? allLeaguesLoaded : leaguesLoaded;
 
   const [selectedLeague, setSelectedLeague] = useState<LeagueInfoDto | null>(null);
   const [tab, setTab] = useState(0);
@@ -123,6 +127,7 @@ export default function LeaguePortalPage() {
     if (!admin) return;
     const leagues = await getAllLeagues();
     setAllLeagues(leagues);
+    setAllLeaguesLoaded(true);
   }, [admin]);
 
   useEffect(() => { void loadAllLeagues(); }, [loadAllLeagues]);
@@ -324,7 +329,7 @@ export default function LeaguePortalPage() {
         </Stack>
       </Stack>
 
-      {leagueOptions.length === 0 && (
+      {optionsLoaded && leagueOptions.length === 0 && (
         <Box sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="h6" color="text.secondary">
             You don&apos;t have any leagues yet.
