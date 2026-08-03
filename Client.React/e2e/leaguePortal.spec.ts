@@ -23,12 +23,15 @@ test.describe('Commissioner portal (/league/manage)', () => {
     await expect(page.getByRole('heading', { name: /my leagues/i })).toBeVisible({ timeout: 5000 });
   });
 
-  test('non-owner sees empty-state message instead of portal', async ({ page }) => {
+  // Self-serve league creation (frizat-d6l): a user with no leagues yet still reaches the
+  // real page (not a dead end) and gets a Create League call to action.
+  test('user with no leagues sees the portal with a Create League empty state', async ({ page }) => {
     await nonOwnerAuth(page);
     await waitForSpinner(page);
 
-    await expect(page.getByText(/you don.t own any leagues/i)).toBeVisible({ timeout: 5000 });
-    await expect(page.getByRole('heading', { name: /my leagues/i })).not.toBeVisible();
+    await expect(page.getByRole('heading', { name: /my leagues/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/you don.t have any leagues yet/i)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: /create league/i })).toBeVisible();
   });
 
   test('Members tab loads and shows cost chip', async ({ page }) => {
@@ -37,8 +40,9 @@ test.describe('Commissioner portal (/league/manage)', () => {
 
     // Members tab is selected by default
     await expect(page.getByRole('tab', { name: /members/i })).toBeVisible();
-    // Cost chip — 5 members · $100/season from mocked /cost endpoint
-    await expect(page.getByText(/\$100/)).toBeVisible({ timeout: 5000 });
+    // Cost chip — 5 members · $100/season from mocked /cost endpoint. Scoped text — the header's
+    // OwnerCostSummary chip also shows "$100" (single owned league), so a bare /\$100/ is ambiguous.
+    await expect(page.getByText(/members.*\$100\/season/)).toBeVisible({ timeout: 5000 });
   });
 
   test('Juice Settings tab loads existing juice values', async ({ page }) => {
@@ -59,11 +63,11 @@ test.describe('Commissioner portal (/league/manage)', () => {
     await expect(page.getByRole('link', { name: /my leagues/i })).toBeVisible({ timeout: 5000 });
   });
 
-  test('My Leagues nav link is hidden for non-owner', async ({ page }) => {
+  test('My Leagues nav link is visible for a user who owns no leagues (self-serve creation)', async ({ page }) => {
     await nonOwnerAuth(page);
     await waitForSpinner(page);
 
-    await expect(page.getByRole('link', { name: /my leagues/i })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: /my leagues/i })).toBeVisible({ timeout: 5000 });
   });
 
   test('My Leagues nav link stays visible for an admin who owns no leagues', async ({ page }) => {
