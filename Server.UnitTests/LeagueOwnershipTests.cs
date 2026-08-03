@@ -6,12 +6,14 @@ using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Shared.Models.Enum;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using System.Reflection;
 using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -294,6 +296,60 @@ public class LeagueOwnershipTests
         await repo.Received(1).AddLeagueUserMappingAsync(Arg.Is<LeagueUserMapping>(m => m.UserId == OwnerId));
     }
 
+    // frizat-d6l: self-serve league creation — any authenticated user may create a league now,
+    // but a non-admin's request must always make THEM the owner server-side, regardless of what
+    // ownerUserId they send, to close a privilege-escalation hole (assigning ownership to/of
+    // someone else's league without that person's involvement).
+    [Fact]
+    public async Task CreateLeague_NonAdmin_ForcesOwnerToCaller_IgnoringSpoofedOwnerUserId()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+        var createdLeague = new LeagueInfo { Id = 42, LeagueName = "My League", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl };
+        repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(createdLeague));
+
+        // AttackerId is spoofed as the owner in the request body — caller is OwnerId, not admin.
+        var dto = new LeagueCreateDto("My League", LeagueType.Nfl, AttackerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto) as OkObjectResult;
+
+        Assert.NotNull(result);
+        await repo.Received(1).AddLeagueInfoAsync(Arg.Is<LeagueInfo>(l => l.OwnerUserId == OwnerId));
+        await repo.Received(1).AddLeagueUserMappingAsync(Arg.Is<LeagueUserMapping>(m => m.UserId == OwnerId));
+    }
+
+    [Fact]
+    public void CreateLeague_IsNotRestrictedToAdministratorRole()
+    {
+        var method = typeof(LeagueController).GetMethod(nameof(LeagueController.CreateLeague));
+        Assert.NotNull(method);
+
+        var roleAttr = method!.GetCustomAttributes<AuthorizeAttribute>().FirstOrDefault(a => a.Roles is not null);
+
+        Assert.Null(roleAttr); // any authenticated user may call this now — class-level [Authorize] still applies
+    }
+
+    // frizat-d6l live-testing follow-up: the CreateLeague_* tests above construct LeagueCreateDto
+    // directly as a C# record, which never exercises JSON deserialization — so they all passed
+    // while the real [FromBody] endpoint 400'd on every request. The frontend sends leagueType as
+    // the string "Nfl"/"Cfb" (matching LeagueInfoDto's [JsonConverter(JsonStringEnumConverter)]
+    // convention), but LeagueCreateDto's LeagueType property had no such converter and only
+    // accepted a raw int — this deserializes exactly what LeaguePortalPage.tsx actually POSTs.
+    [Theory]
+    [InlineData("Nfl", LeagueType.Nfl)]
+    [InlineData("Cfb", LeagueType.Cfb)]
+    public void LeagueCreateDto_DeserializesStringLeagueType_MatchingFrontendWireFormat(string wireValue, LeagueType expected)
+    {
+        var json = $$"""
+            {"leagueName":"My League","leagueType":"{{wireValue}}","ownerUserId":"u1","season":2025,"juice":0,"juiceDivisional":0,"juiceConference":0,"weeklyCost":0}
+            """;
+        var options = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+
+        var dto = System.Text.Json.JsonSerializer.Deserialize<LeagueCreateDto>(json, options);
+
+        Assert.NotNull(dto);
+        Assert.Equal(expected, dto!.LeagueType);
+    }
+
     [Fact]
     public async Task GetMyLeagues_ReturnsOnlyLeaguesOwnedByCaller()
     {
@@ -428,7 +484,7 @@ public class LeagueOwnershipTests
     public async Task InviteToLeague_PassesBaseUrlThrough_SoTheEmailCanBeSentServerSide()
     {
         var invSvc = Substitute.For<IInvitationService>();
-        invSvc.CreateInvitationAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<string?>())
+        invSvc.CreateInvitationAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<string?>())
               .Returns(new Invitation { Id = 1, Email = "target@example.com", InvitationCode = "code-abc" });
 
         var repo = Substitute.For<ILeagueRepository>();

@@ -497,9 +497,6 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<string>("InvitedByUserId")
                         .HasColumnType("text");
 
-                    b.Property<bool>("IsLeagueOwner")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("IsUsed")
                         .HasColumnType("boolean");
 

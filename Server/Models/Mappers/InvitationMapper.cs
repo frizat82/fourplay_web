@@ -23,7 +23,6 @@ public static class InvitationMapper
             IsValid = invitation.IsValid,
             LeagueId = invitation.LeagueId,
             LeagueName = invitation.League?.LeagueName,
-            IsLeagueOwner = invitation.IsLeagueOwner
         };
     }
 

@@ -25,7 +25,6 @@ const sessionState = {
   hasNflAccess: true,
   hasCfbAccess: true,
   leaguesLoaded: true,
-  isLeagueOwner: false,
   ownedLeagues: [] as { id: number; leagueName: string; leagueType: string; ownerUserId: string; dateCreated: string }[],
 };
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
@@ -48,7 +47,7 @@ describe('Sport access control', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset to defaults
-    Object.assign(sessionState, { currentLeague: 1, hasNflAccess: true, hasCfbAccess: true, leaguesLoaded: true, isLeagueOwner: false, ownedLeagues: [] });
+    Object.assign(sessionState, { currentLeague: 1, hasNflAccess: true, hasCfbAccess: true, leaguesLoaded: true, ownedLeagues: [] });
     Object.assign(sportContext, { sport: 'NFL', isCfb: false, isNfl: true });
   });
 
@@ -93,15 +92,17 @@ describe('Sport access control', () => {
     expect(screen.queryByRole('link', { name: /Go to/i })).not.toBeInTheDocument();
   });
 
-  it('isLeagueOwner nav link is visible when user owns a league', () => {
-    sessionState.isLeagueOwner = true;
+  // Self-serve league creation (frizat-d6l): any authenticated user can create their own
+  // league, so the nav link must stay visible whether or not they own one yet.
+  it('My Leagues nav link is visible even when the user owns no leagues', () => {
+    sessionState.ownedLeagues = [];
     renderLayout();
     expect(screen.getByRole('link', { name: /my leagues/i })).toBeInTheDocument();
   });
 
-  it('isLeagueOwner nav link is hidden when user does not own a league', () => {
-    sessionState.isLeagueOwner = false;
+  it('My Leagues nav link is visible when the user owns a league', () => {
+    sessionState.ownedLeagues = [{ id: 1, leagueName: 'Demo', leagueType: 'Nfl', ownerUserId: 'u1', dateCreated: '' }];
     renderLayout();
-    expect(screen.queryByRole('link', { name: /my leagues/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /my leagues/i })).toBeInTheDocument();
   });
 });

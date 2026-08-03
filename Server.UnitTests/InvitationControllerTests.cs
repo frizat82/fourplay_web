@@ -19,13 +19,13 @@ public class InvitationControllerTests
     {
         var invitationService = Substitute.For<IInvitationService>();
         invitationService
-            .CreateInvitationAsync("target@example.com", "admin-1", null, false, "https://ivleague.com")
+            .CreateInvitationAsync("target@example.com", "admin-1", null, "https://ivleague.com")
             .Returns(new Invitation { Id = 1, Email = "target@example.com", InvitationCode = "code-abc" });
         var controller = BuildController(invitationService);
 
         await controller.Create("target@example.com", "admin-1", baseUrl: "https://ivleague.com");
 
-        await invitationService.Received(1).CreateInvitationAsync("target@example.com", "admin-1", null, false, "https://ivleague.com");
+        await invitationService.Received(1).CreateInvitationAsync("target@example.com", "admin-1", null, "https://ivleague.com");
     }
 
     [Fact]

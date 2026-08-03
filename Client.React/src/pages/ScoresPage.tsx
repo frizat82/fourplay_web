@@ -296,7 +296,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         {isFinal ? 'Final' : isLive ? (game.situation?.period && game.situation?.displayClock ? `Q${game.situation.period} ${game.situation.displayClock}` : 'Live') : new Date(game.gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                       </Typography>
                       <Typography variant="h6">{isFinal || isLive ? game.homeScore : ''}</Typography>
-                      <TeamHelmet abbr={game.homeTeam} size={50} flipped />
+                      <TeamHelmet abbr={game.homeTeam} size={50} />
                     </Stack>
 
                     {/* Field position (NFL only — situation is a full GameSituation object) */}
