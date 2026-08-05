@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Shared.Helpers.Extensions;
 using FourPlayWebApp.Shared.Models;
 using Serilog;
 
@@ -70,6 +71,16 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
     }
 
     public Task<EspnScores?> GetScoresAsync() => Task.FromResult<EspnScores?>(_snapshots[_index]);
+
+    // Replay mode drives one fixed game through scheduled->final — it has no concept of "other
+    // weeks". Only serve a result when the request matches the current snapshot's own week;
+    // never fall through to a real ESPN call (that would defeat the point of replay/demo mode).
+    public Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false) {
+        var current = _snapshots[_index];
+        var matches = current.Season?.Year == year && current.Week?.Number == week &&
+                      current.IsPostSeason() == postSeason;
+        return Task.FromResult(matches ? current : null);
+    }
 
     /// <summary>Advances to the next captured snapshot. No-op once at the last one.</summary>
     public void Advance() {
