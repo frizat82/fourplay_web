@@ -176,6 +176,42 @@ public class PicksTests
     }
 
     [Fact]
+    public async Task AddPicks_TeamNameCollisionInDifferentWeekSeason_DoesNotFalselyReject()
+    {
+        // Regression: the kickoff guard used to match a pick's team against ANY cached ESPN
+        // competition by abbreviation alone, ignoring season/week — so a historical pick for
+        // "BUF" in Week 5/2023 got wrongly rejected just because the CURRENTLY cached event
+        // happens to also involve BUF (in an unrelated Week 2/2024 game that already kicked
+        // off). Real-world case: restoring historical picks whose team happened to also be
+        // playing in the live/most-recent cached game.
+        var pastKickoff = DateTimeOffset.UtcNow.AddHours(-2);
+        const int historicalSeason = 2023;
+        const int historicalWeek = 5;
+
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(historicalSeason).Returns([new NflWeeks { Id = 99, NflWeek = historicalWeek, Season = historicalSeason }]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, historicalSeason, historicalWeek).Returns([]);
+        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns(BuildScores(pastKickoff)); // cached: BUF vs MIA, Week 2/2024, already kicked off
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+        var picks = new[] { new NflPickDto {
+            LeagueId = LeagueId, UserId = UserId, Team = "BUF", Pick = PickType.Spread,
+            NflWeek = historicalWeek, Season = historicalSeason,
+        } };
+
+        // Act
+        var result = await controller.AddPicks(picks);
+
+        // Assert — BUF's Week 2/2024 kickoff is irrelevant to this Week 5/2023 pick
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(1, ok.Value);
+    }
+
+    [Fact]
     public async Task AddPicks_WhenEspnCacheIsEmpty_AllowsPicks()
     {
         // Arrange — ESPN cache cold / unavailable; should not block picks
