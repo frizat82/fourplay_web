@@ -73,19 +73,24 @@ public class PeriodicRefreshCacheTests
     [Fact]
     public async Task RefreshLoop_SurvivesFetchException_AndKeepsPriorValue()
     {
+        // No Changed event fires here (fetch always throws), so there's nothing to hook the way
+        // WaitForChangedAsync does above — signal directly from inside the fetch delegate instead
+        // of gambling on a fixed Task.Delay window (the previous version raced the background
+        // loop's actual scheduling under CI load and could fail even with correct behavior).
+        var fetchRan = new TaskCompletionSource();
         int callCount = 0;
         await using var cache = new PeriodicRefreshCache<string>(
             fetch: () => {
                 Interlocked.Increment(ref callCount);
+                fetchRan.TrySetResult();
                 throw new InvalidOperationException("simulated fetch failure");
             },
             fingerprint: v => v,
             interval: TimeSpan.FromMinutes(5),
             initialDelay: TimeSpan.FromMilliseconds(50));
 
-        // No Changed subscriber to wait on (fetch always throws) — give the background loop a
-        // generous window to run and confirm it didn't crash or corrupt state.
-        await Task.Delay(500);
+        var completed = await Task.WhenAny(fetchRan.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        Assert.True(completed == fetchRan.Task, "Timed out waiting for the fetch to be called.");
 
         Assert.True(callCount >= 1);
         Assert.Null(cache.Current);
