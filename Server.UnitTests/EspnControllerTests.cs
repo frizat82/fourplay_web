@@ -17,7 +17,6 @@ namespace FourPlayWebApp.Server.UnitTests;
 /// </summary>
 public class EspnControllerTests
 {
-    private readonly IEspnApiService _espnApiService;
     private readonly IEspnCacheService _espnCacheService;
     private readonly ICfbCacheService _cfbCacheService;
     private readonly ICfbLiveScoreFetcher _cfbFetcher;
@@ -26,13 +25,12 @@ public class EspnControllerTests
 
     public EspnControllerTests()
     {
-        _espnApiService  = Substitute.For<IEspnApiService>();
         _espnCacheService = Substitute.For<IEspnCacheService>();
         _cfbCacheService = Substitute.For<ICfbCacheService>();
         _cfbFetcher = Substitute.For<ICfbLiveScoreFetcher>();
         _cfbRepo = Substitute.For<ICfbRepository>();
 
-        _sut = new EspnController(_espnApiService, _espnCacheService, _cfbCacheService, _cfbFetcher, _cfbRepo);
+        _sut = new EspnController(_espnCacheService, _cfbCacheService, _cfbFetcher, _cfbRepo);
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -69,13 +67,14 @@ public class EspnControllerTests
         Assert.IsType<EspnScores>(ok.Value);
     }
 
-    // ── GetWeekScores (proxied from IEspnApiService) ─────────────────────────
+    // ── GetWeekScores (proxied from IEspnCacheService — demo-aware, frizat fix for ESPN calls
+    //    bypassing the demo cache abstraction on non-current weeks) ──────────
 
     [Fact]
     public async Task GetWeekScores_ReturnsOk_WithScores()
     {
         var scores = new EspnScores { Season = new Season { Year = 2025 } };
-        _espnApiService.GetWeekScores(10, 2025, false).Returns(scores);
+        _espnCacheService.GetWeekScoresAsync(10, 2025, false).Returns(scores);
 
         var result = await _sut.GetWeekScores(10, 2025);
 
@@ -86,7 +85,7 @@ public class EspnControllerTests
     [Fact]
     public async Task GetWeekScores_ReturnsOk_WhenServiceReturnsNull()
     {
-        _espnApiService.GetWeekScores(1, 2025, false).Returns((EspnScores?)null);
+        _espnCacheService.GetWeekScoresAsync(1, 2025, false).Returns((EspnScores?)null);
 
         var result = await _sut.GetWeekScores(1, 2025);
 
@@ -98,11 +97,11 @@ public class EspnControllerTests
     [Fact]
     public async Task GetWeekScores_PassesPostSeasonFlag_ToService()
     {
-        _espnApiService.GetWeekScores(1, 2025, true).Returns(new EspnScores());
+        _espnCacheService.GetWeekScoresAsync(1, 2025, true).Returns(new EspnScores());
 
         await _sut.GetWeekScores(1, 2025, postSeason: true);
 
-        await _espnApiService.Received(1).GetWeekScores(1, 2025, true);
+        await _espnCacheService.Received(1).GetWeekScoresAsync(1, 2025, true);
     }
 
     // ── GetCfbScores (cached, current slate — mirrors GetScores for NFL) ─────

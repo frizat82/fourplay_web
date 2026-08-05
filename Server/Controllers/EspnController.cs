@@ -12,7 +12,6 @@ namespace FourPlayWebApp.Server.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 public class EspnController(
-    IEspnApiService espnApiService,
     IEspnCacheService espnCacheService,
     ICfbCacheService cfbCacheService,
     ICfbLiveScoreFetcher cfbFetcher,
@@ -22,7 +21,7 @@ public class EspnController(
     [ProducesResponseType(typeof(EspnScores), StatusCodes.Status200OK)]
     public async Task<ActionResult<EspnScores?>> GetWeekScores(int week, int year, [FromQuery] bool postSeason = false)
     {
-        var scores = await espnApiService.GetWeekScores(week, year, postSeason);
+        var scores = await espnCacheService.GetWeekScoresAsync(week, year, postSeason);
         return Ok(scores ?? new EspnScores());
     }
 
