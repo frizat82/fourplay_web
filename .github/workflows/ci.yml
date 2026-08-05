@@ -186,6 +186,12 @@ jobs:
         working-directory: Client.React
         run: npm run test:e2e:demo
 
+      - name: Dump backend log on test failure
+        if: failure()
+        run: |
+          echo "=== BACKEND LOG ==="
+          cat /tmp/backend.log || echo "(no log)"
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -314,6 +320,12 @@ jobs:
       - name: Playwright (replay tests)
         working-directory: Client.React
         run: npm run test:e2e:replay
+
+      - name: Dump backend log on test failure
+        if: failure()
+        run: |
+          echo "=== BACKEND LOG ==="
+          cat /tmp/backend-replay.log || echo "(no log)"
 
       - name: Upload Playwright report on failure
         if: failure()

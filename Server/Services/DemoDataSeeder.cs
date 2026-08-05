@@ -329,13 +329,31 @@ public class DemoDataSeeder(
         if (await db.NflScores.AnyAsync(s => s.Season == DemoSeason && s.NflWeek == DemoWeek))
             return;
 
-        // 4 final games from frozen sample_espn_nfl.json for 2025 week 18
+        // All 16 final games for 2025 week 18, matching every game in DemoGames/SeedSpreadsAsync —
+        // GetWeekScoresAsync (DemoEspnCacheService) now synthesizes the Scores-page response from
+        // this table, so every team referenced in DemoPicksMap (e.g. Alice's BUF pick) needs a
+        // matching final game here, not just a hand-picked subset. Originally only 4 games (the
+        // ones frozen in sample_espn_nfl.json) were seeded here, back when GetWeekScores still
+        // fell through to live ESPN for the rest — that gap was invisible until the DB became the
+        // sole source of truth for this week.
         var scores = new List<NflScores>
         {
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "BUF", AwayTeam = "TB",  HomeTeamScore = 27, AwayTeamScore = 20, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
             new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "DAL", AwayTeam = "LAR", HomeTeamScore = 28, AwayTeamScore = 20, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
             new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "GB",  AwayTeam = "MIN", HomeTeamScore = 17, AwayTeamScore = 24, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "TEN", AwayTeam = "ATL", HomeTeamScore = 20, AwayTeamScore = 24, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "IND", AwayTeam = "NO",  HomeTeamScore = 27, AwayTeamScore = 17, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
             new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "MIA", AwayTeam = "NE",  HomeTeamScore = 31, AwayTeamScore = 17, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "NYG", AwayTeam = "NYJ", HomeTeamScore = 16, AwayTeamScore = 20, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "PIT", AwayTeam = "JAC", HomeTeamScore = 23, AwayTeamScore = 20, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
             new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "WAS", AwayTeam = "PHI", HomeTeamScore = 7,  AwayTeamScore = 38, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "CAR", AwayTeam = "HOU", HomeTeamScore = 24, AwayTeamScore = 27, GameTime = new DateTimeOffset(2026, 1, 4, 18, 0, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "SEA", AwayTeam = "CLE", HomeTeamScore = 27, AwayTeamScore = 13, GameTime = new DateTimeOffset(2026, 1, 4, 21, 25, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "DEN", AwayTeam = "KC",  HomeTeamScore = 24, AwayTeamScore = 27, GameTime = new DateTimeOffset(2026, 1, 4, 21, 25, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "ARI", AwayTeam = "BAL", HomeTeamScore = 17, AwayTeamScore = 31, GameTime = new DateTimeOffset(2026, 1, 4, 21, 25, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "SF",  AwayTeam = "CIN", HomeTeamScore = 24, AwayTeamScore = 20, GameTime = new DateTimeOffset(2026, 1, 4, 21, 25, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "LAC", AwayTeam = "CHI", HomeTeamScore = 21, AwayTeamScore = 27, GameTime = new DateTimeOffset(2026, 1, 5, 1, 20, 0, TimeSpan.Zero) },
+            new() { Season = DemoSeason, NflWeek = DemoWeek, HomeTeam = "DET", AwayTeam = "LV",  HomeTeamScore = 31, AwayTeamScore = 17, GameTime = new DateTimeOffset(2026, 1, 5, 1, 15, 0, TimeSpan.Zero) },
         };
         db.NflScores.AddRange(scores);
         await db.SaveChangesAsync();
