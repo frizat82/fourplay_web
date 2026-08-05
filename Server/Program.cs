@@ -75,14 +75,26 @@ builder.Services.AddTransient<IEmailSender, GoogleEmailSender>();
 builder.Services.AddTransient<IEmailSender<ApplicationUser>, GoogleEmailSender>();
 #endregion
 #region Odds and Scores
+// site.api.espn.com is an undocumented, unofficial endpoint (ESPN's own frontend API, not a
+// supported developer product) that started rejecting our honest identity with 403s (verified
+// 2026-08-05 — see PR discussion). The default HttpClient sends no User-Agent at all, and
+// neither an empty one nor a normal branded one ("IVLeagueApp/1.0...") gets through; only the
+// unmodified default signature of a handful of common HTTP libraries does. This is a stopgap,
+// not a stable integration — it can stop working without notice at any time, since it's
+// leaning on an access-control gap rather than a sanctioned API contract. Tracked as a real
+// follow-up: move off this endpoint onto a licensed sports-data provider.
+const string espnUserAgent = "curl/8.14.1";
 builder.Services.AddHttpClient<IEspnCoreOddsService, EspnCoreOddsService>(x => {
     x.BaseAddress = new Uri("https://sports.core.api.espn.com");
+    x.DefaultRequestHeaders.UserAgent.ParseAdd(espnUserAgent);
 });
 builder.Services.AddHttpClient<IEspnApiService, EspnApiService>(x => {
     x.BaseAddress = new Uri("http://site.api.espn.com");
+    x.DefaultRequestHeaders.UserAgent.ParseAdd(espnUserAgent);
 });
 builder.Services.AddHttpClient<ICfbApiService, CfbApiService>(x => {
     x.BaseAddress = new Uri("http://site.api.espn.com");
+    x.DefaultRequestHeaders.UserAgent.ParseAdd(espnUserAgent);
 });
 var isDemoMode = builder.Configuration["DEMO_MODE"] == "true";
 var isDemoReplayMode = builder.Configuration["DEMO_REPLAY_MODE"] == "true";
