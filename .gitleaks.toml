@@ -1,0 +1,31 @@
+# Extends gitleaks' default ruleset. Added after a real incident (2026-08-05): a plaintext
+# admin password and a Gmail App Password sat in Server/Properties/launchSettings.json since
+# the repo's initial commit, undetected by gitleaks' default rules — those only catch
+# key-shaped/high-entropy secrets (JWTs, API keys), not human-typed passwords in a
+# `"SOME_KEY": "value"` pair.
+#
+# Scoped tightly to config/env-style files with UPPER_SNAKE_CASE keys (how the real leak
+# looked: ADMIN_PASSWORD, FOURPLAY_EMAIL_PASS, Jwt__Key) — NOT arbitrary C# source, where
+# lowercase test fixtures like `password = "wrong-password"` are normal and would otherwise
+# flood this with false positives on every test file.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-password-assignment"
+description = "UPPER_SNAKE_CASE password/secret key assigned a value in a config/env-style file"
+regex = '''\b[A-Z][A-Z0-9]*(_PASS(WORD)?|_SECRET)\b["']?\s*[:=]\s*["']?([^"'\s,}]{6,})["']?'''
+secretGroup = 3
+path = '''(launchSettings\.json|appsettings.*\.json|\.env.*|docker-compose.*\.ya?ml)$'''
+# .example/template files intentionally hold placeholder values (e.g. "Change-Me-..."), and
+# docker-compose.yml's local-only Postgres password ("fourplay_local") is a published,
+# non-sensitive default only ever reachable on localhost — not real leaked secrets.
+allowlist.paths = ['''\.example$''']
+allowlist.regexes = ['''fourplay_local''']
+
+[[rules]]
+id = "gmail-app-password"
+description = "Gmail App Password (16 lowercase letters in 4 space-separated groups of 4) in a config/env-style file"
+regex = '''\b[a-z]{4} [a-z]{4} [a-z]{4} [a-z]{4}\b'''
+path = '''(launchSettings\.json|appsettings.*\.json|\.env.*|docker-compose.*\.ya?ml)$'''
+allowlist.paths = ['''\.example$''']

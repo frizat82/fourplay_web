@@ -17,6 +17,16 @@ repos:
       - id: no-commit-to-branch
         args: ['--branch', 'main', '--branch', 'dev']
 
+  # detect-private-key above only catches PEM-format keys — gitleaks catches generic secrets
+  # (passwords, JWT keys, API tokens, connection strings) that don't match a known key format.
+  # Added after a real incident: launchSettings.json had a plaintext admin password, DB
+  # connection string, Gmail App Password, and JWT signing key committed since the repo's
+  # initial commit, undetected by every hook above.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
   - repo: local
     hooks:
       - id: eslint
