@@ -16,18 +16,18 @@
         "applicationUrl": "https://localhost:7209;http://localhost:5142",
         "environmentVariables": {
           "ASPNETCORE_ENVIRONMENT": "Development",
-          "ADMIN_PASSWORD": "***REMOVED-SECRET***",
-          "POSTGRES_CONNECTION_STRING": "Server=10.0.1.5;Port=5432;User Id=root;Password=password;Database=fourplay;Include Error Detail=true",
-          "ConnectionStrings__POSTGRES_CONNECTION_STRING": "Server=10.0.1.5;Port=5432;User Id=root;Password=password;Database=fourplay;Include Error Detail=true",
-          "ADMIN_EMAIL": "fourplaywebbetty@gmail.com",
-          "ADMIN_USERNAME": "fourplaywebbetty",
-          "FOURPLAY_EMAIL_PASS": "***REMOVED-SECRET***",
-          "FOURPLAY_EMAIL_USER": "fourplaywebbetty@gmail.com",
+          "ADMIN_PASSWORD": "",
+          "POSTGRES_CONNECTION_STRING": "",
+          "ConnectionStrings__POSTGRES_CONNECTION_STRING": "",
+          "ADMIN_EMAIL": "",
+          "ADMIN_USERNAME": "",
+          "FOURPLAY_EMAIL_PASS": "",
+          "FOURPLAY_EMAIL_USER": "",
           "Jwt__Audience": "FourPlayWebAppClient",
           "Jwt__ExpiresMinutes": "1000",
           "Jwt__Issuer": "FourPlayWebApp",
-          "Jwt__Key": "***REMOVED-SECRET***",
-          "APP_URL": "https://fourplaywebapp.azurewebsites.net"
+          "Jwt__Key": "",
+          "APP_URL": ""
         }
       },
       "IIS Express": {
