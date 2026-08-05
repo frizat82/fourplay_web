@@ -75,14 +75,20 @@ builder.Services.AddTransient<IEmailSender, GoogleEmailSender>();
 builder.Services.AddTransient<IEmailSender<ApplicationUser>, GoogleEmailSender>();
 #endregion
 #region Odds and Scores
+// ESPN's public API expects a normal, identifying User-Agent — the default HttpClient sends
+// none, which some of its endpoints reject outright.
+const string espnUserAgent = "IVLeagueApp/1.0 (+https://ivleague.com)";
 builder.Services.AddHttpClient<IEspnCoreOddsService, EspnCoreOddsService>(x => {
     x.BaseAddress = new Uri("https://sports.core.api.espn.com");
+    x.DefaultRequestHeaders.UserAgent.ParseAdd(espnUserAgent);
 });
 builder.Services.AddHttpClient<IEspnApiService, EspnApiService>(x => {
     x.BaseAddress = new Uri("http://site.api.espn.com");
+    x.DefaultRequestHeaders.UserAgent.ParseAdd(espnUserAgent);
 });
 builder.Services.AddHttpClient<ICfbApiService, CfbApiService>(x => {
     x.BaseAddress = new Uri("http://site.api.espn.com");
+    x.DefaultRequestHeaders.UserAgent.ParseAdd(espnUserAgent);
 });
 var isDemoMode = builder.Configuration["DEMO_MODE"] == "true";
 var isDemoReplayMode = builder.Configuration["DEMO_REPLAY_MODE"] == "true";
