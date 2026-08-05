@@ -9,6 +9,7 @@ namespace FourPlayWebApp.Server.Services;
 // engine for CFB, differing only in what/how it fetches.
 public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 {
+    private readonly IEspnApiService _espnApiService;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
 
     public event Action? ScoresChanged
@@ -19,6 +20,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 
     public EspnCacheService(IEspnApiService espnApiService, INflCurrentWeekService nflCurrentWeekService, TimeSpan? initialDelay = null)
     {
+        _espnApiService = espnApiService;
         _cache = new PeriodicRefreshCache<EspnScores>(
             fetch: async () => {
                 var week = await nflCurrentWeekService.GetCurrentWeekAsync();
@@ -30,6 +32,9 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     }
 
     public Task<EspnScores?> GetScoresAsync() => Task.FromResult(_cache.Current);
+
+    public Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false) =>
+        _espnApiService.GetWeekScores(week, year, postSeason);
 
     public ValueTask DisposeAsync() => _cache.DisposeAsync();
 }
