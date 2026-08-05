@@ -6,6 +6,7 @@ using FourPlayWebApp.Server.Models.Mappers;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
+using FourPlayWebApp.Shared.Helpers.Extensions;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
@@ -409,12 +410,18 @@ public class LeagueController(
         }
         else
         {
-            var allCompetitions = espnScores.Events.SelectMany(e => e.Competitions).ToList();
             var now = DateTimeOffset.UtcNow;
             foreach (var pick in picksList)
             {
-                var competition = allCompetitions.FirstOrDefault(c =>
-                    c.Competitors.Any(comp => string.Equals(comp.Team?.Abbreviation, pick.Team, StringComparison.OrdinalIgnoreCase)));
+                // Scope the match to the SAME season/week as the pick — matching by team
+                // abbreviation alone let a historical pick get falsely rejected whenever that
+                // team also happened to appear in the currently-cached (unrelated) event.
+                var competition = espnScores.Events
+                    .Where(e => e.Season.Year == pick.Season &&
+                                GameHelpers.GetWeekFromEspnWeek(e.Week.Number, e.IsPostSeason()) == pick.NflWeek)
+                    .SelectMany(e => e.Competitions)
+                    .FirstOrDefault(c =>
+                        c.Competitors.Any(comp => string.Equals(comp.Team?.Abbreviation, pick.Team, StringComparison.OrdinalIgnoreCase)));
                 if (competition is not null && competition.Date <= now)
                     return BadRequest($"Pick rejected: {pick.Team}'s game has already kicked off.");
             }
