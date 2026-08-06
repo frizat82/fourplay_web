@@ -17,9 +17,8 @@ import {
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import PeopleIcon from '@mui/icons-material/People';
 import ScoreboardIcon from '@mui/icons-material/Scoreboard';
-import ChecklistIcon from '@mui/icons-material/Checklist';
 import PageHeader from '../../components/PageHeader';
-import { getAllJobsStatus, runMissing, runScores, runSpreads, runUserManager } from '../../api/jobManager';
+import { getAllJobsStatus, runScores, runSpreads, runUserManager } from '../../api/jobManager';
 import type { JobStatusResponse } from '../../types/admin';
 import { useToast } from '../../services/toast';
 
@@ -98,17 +97,6 @@ export default function AdminJobManagerPage() {
               onClick={() => runJob(runScores, 'Scores Job')}
             >
               {jobRunning ? 'Running...' : 'Run Scores Job'}
-            </Button>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Button
-              variant="contained"
-              fullWidth
-              startIcon={<ChecklistIcon />}
-              disabled={jobRunning || loading}
-              onClick={() => runJob(runMissing, 'Missing Picks Job')}
-            >
-              {jobRunning ? 'Running...' : 'Run Missing Picks Job'}
             </Button>
           </Grid>
         </Grid>
