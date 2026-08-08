@@ -6,7 +6,7 @@ using Serilog;
 namespace FourPlayWebApp.Server.Jobs;
 
 [DisallowConcurrentExecution]
-public class CfbSlateSeederJob(ICfbRepository repo) : IJob {
+public class CfbSlateSeederJob(ICfbRepository repo, ISchedulerFactory schedulerFactory) : IJob {
     private const int Season = 2026;
 
     // IvLeagueWeekNumber is the canonical source for SlateType within FBS Playoff weeks
@@ -35,6 +35,14 @@ public class CfbSlateSeederJob(ICfbRepository repo) : IJob {
             return;
         }
 
+        await SeedSlatesAsync(configs);
+
+        // Runs regardless of whether slate seeding itself was a no-op — a week's spread-lock
+        // trigger still needs (re-)registering even once its slate already exists.
+        await ScheduleSpreadTriggersAsync(configs, context);
+    }
+
+    private async Task SeedSlatesAsync(List<CfbSeasonWeekConfig> configs) {
         var existing = (await repo.GetSlatesForSeasonAsync(Season)).ToList();
         if (existing.Count >= configs.Count) {
             Log.Information("CfbSlateSeederJob: {Count} slates already seeded for {Season}, skipping", existing.Count, Season);
@@ -59,6 +67,39 @@ public class CfbSlateSeederJob(ICfbRepository repo) : IJob {
 
         await repo.AddSlatesAsync(slates);
         Log.Information("CfbSlateSeederJob: seeded {Count} slates for {Season}", slates.Length, Season);
+    }
+
+    // Resolves frizat-pxy for CFB: reads each in-scope week's SpreadLockDatetime and dynamically
+    // registers a one-time trigger for CfbSpreadJob at that exact instant, replacing the fixed
+    // Saturday/Wednesday crons (the Wednesday run existed to catch mid-week MAC lines — no longer
+    // needed once MAC Tue/Wed games are excluded from the pool, see frizat-9m0).
+    private async Task ScheduleSpreadTriggersAsync(List<CfbSeasonWeekConfig> configs, IJobExecutionContext context) {
+        var now = DateTime.UtcNow;
+        var scheduler = await schedulerFactory.GetScheduler(context.CancellationToken);
+
+        foreach (var cfg in configs.Where(c => c.SpreadLockDatetime is { } lockTime && lockTime > now)) {
+            var lockTime = cfg.SpreadLockDatetime!.Value;
+            var identity = $"CFB Spreads {cfg.Season} Wk{cfg.IvLeagueWeekNumber}";
+            var jobKey = new JobKey(identity);
+
+            if (await scheduler.GetJobDetail(jobKey, context.CancellationToken) is not null) {
+                continue; // idempotent — already scheduled by a previous run
+            }
+
+            var jobDetail = JobBuilder.Create<CfbSpreadJob>()
+                .WithIdentity(jobKey)
+                .WithDescription($"CFB spreads for {LabelFromConfig(cfg)} — scheduled lock time")
+                .Build();
+
+            var trigger = TriggerBuilder.Create()
+                .WithIdentity(identity)
+                .ForJob(jobKey)
+                .StartAt(new DateTimeOffset(lockTime, TimeSpan.Zero))
+                .Build();
+
+            await scheduler.ScheduleJob(jobDetail, trigger, context.CancellationToken);
+            Log.Information("CfbSlateSeederJob: scheduled {Identity} to fire at {LockTime}", identity, lockTime);
+        }
     }
 
     private static string LabelFromConfig(CfbSeasonWeekConfig cfg) => cfg.WeekType switch {

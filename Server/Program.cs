@@ -289,6 +289,7 @@ builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 // Quartz
 builder.Services.AddScoped<IJob, NflScoresJob>();
 builder.Services.AddScoped<IJob, NflSpreadJob>();
+builder.Services.AddScoped<IJob, NflSpreadSchedulerJob>();
 builder.Services.AddScoped<IJob, StartupJob>();
 builder.Services.AddScoped<IJob, UserManagerJob>();
 // Register MissingPicksJob
@@ -306,9 +307,16 @@ builder.Services.AddQuartz(q => {
         .StartAt(DateBuilder.FutureDate(userManagerDelay, IntervalUnit.Second))
     );
 
-    // NFL Spreads
-    q.ScheduleCstCronJob<NflSpreadJob>("NFL Spreads Christmas Eve", "Loads NFL spreads for Christmas Eve games at 10am CST", "0 0 10 24 12 ?");
-    q.ScheduleCstCronJob<NflSpreadJob>("NFL Spreads Thursday 2pm", "Loads NFL spreads every Thursday at 2pm CST", "0 0 14 ? * THU");
+    // NFL Spreads — frizat-pxy: NflSpreadJob has no fixed trigger of its own anymore.
+    // NflSpreadSchedulerJob reads NflSeasonWeekConfig.SpreadLockDatetime and registers a precise
+    // one-time trigger per upcoming week, replacing the old Thursday-2pm/Christmas-Eve crons
+    // (superseded docs/plans/SPREAD_GRAB_PLAN.md heuristic).
+    q.ScheduleJob<NflSpreadSchedulerJob>(trigger => trigger
+        .WithIdentity("NFL Spread Scheduler Startup")
+        .WithDescription("Registers per-week NFL spread-lock triggers from NflSeasonWeekConfig")
+        .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+    );
+    q.ScheduleCstCronJob<NflSpreadSchedulerJob>("NFL Spread Scheduler Daily", "Daily catch-up pass for NFL spread-lock triggers", "0 0 6 * * ?");
 
     // NFL Scores
     q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Thu 10am", "Fetches NFL scores Thursday morning at 10am CST", "0 0 10 ? * THU");
@@ -323,12 +331,10 @@ builder.Services.AddQuartz(q => {
     // Plan: fire at 2:45pm CST Sat+Sun, gate send with HasGamesTodayAsync, replace hardcoded "noon CST" copy.
     // q.ScheduleCstCronJob<MissingPicksJob>("Missing Picks Job", "Sends reminder emails to users missing required picks", "0 0 11 ? * SUN");
 
-    // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons
-    q.ScheduleCstCronJob<CfbSlateSeederJob>("CFB Slate Seeder", "Seeds CFB slate dates for the current season", "0 0 5 ? * MON");
-
-    // CFB Spreads — Saturday 9am CST (before first kickoffs) + Wednesday 10am CST (mid-week lines)
-    q.ScheduleCstCronJob<CfbSpreadJob>("CFB Spread Job Sat", "Fetches CFB spreads Saturday morning before kickoff", "0 0 9 ? * SAT");
-    q.ScheduleCstCronJob<CfbSpreadJob>("CFB Spread Job Wed", "Fetches CFB spreads Wednesday when mid-week lines open", "0 0 10 ? * WED");
+    // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons. Also now registers
+    // each in-scope week's CfbSpreadJob spread-lock trigger from CfbSeasonWeekConfig.SpreadLockDatetime
+    // (frizat-pxy) — replaces the old fixed Saturday/Wednesday CfbSpreadJob crons below.
+    q.ScheduleCstCronJob<CfbSlateSeederJob>("CFB Slate Seeder", "Seeds CFB slate dates and registers CFB spread-lock triggers for the current season", "0 0 5 ? * MON");
 
     // CFB Scores — Saturday noon, 4pm, 8pm, midnight CST + Sunday 6am CST (covers all kickoff windows)
     q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat Noon", "Fetches CFB scores at Saturday noon kickoff window", "0 0 12 ? * SAT");

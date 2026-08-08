@@ -12,14 +12,19 @@ public class CfbSlateSeederJobTests
 
     private readonly ICfbRepository _repo;
     private readonly IJobExecutionContext _context;
+    private readonly ISchedulerFactory _schedulerFactory;
+    private readonly IScheduler _scheduler;
 
     public CfbSlateSeederJobTests()
     {
         _repo = Substitute.For<ICfbRepository>();
         _context = Substitute.For<IJobExecutionContext>();
+        _scheduler = Substitute.For<IScheduler>();
+        _schedulerFactory = Substitute.For<ISchedulerFactory>();
+        _schedulerFactory.GetScheduler(Arg.Any<CancellationToken>()).Returns(_scheduler);
     }
 
-    private CfbSlateSeederJob BuildJob() => new(_repo);
+    private CfbSlateSeederJob BuildJob() => new(_repo, _schedulerFactory);
 
     // 18 in-scope configs (22 ESPN weeks minus 4 excluded)
     private static List<CfbSeasonWeekConfig> Make2026Configs() =>
@@ -170,5 +175,93 @@ public class CfbSlateSeederJobTests
         await BuildJob().Execute(_context);
 
         Assert.All(saved!, s => Assert.Equal(Season, s.Season));
+    }
+
+    // ── Spread-lock trigger scheduling (frizat-pxy) ────────────────────────────
+
+    private static List<CfbSeasonWeekConfig> MakeConfigsWithLockTimes(params DateTime?[] lockTimes) =>
+        lockTimes.Select((lockTime, i) => new CfbSeasonWeekConfig {
+            Season = Season, EspnWeekNumber = i + 1, IvLeagueWeekNumber = i + 1,
+            WeekType = "Regular Season", ScoringFormat = "Standard", InScopeIvLeague = true,
+            WeekStartDate = new DateOnly(2026, 9, 1), WeekEndDate = new DateOnly(2026, 9, 7),
+            SpreadLockDatetime = lockTime,
+        }).ToList();
+
+    [Fact]
+    public async Task Execute_FutureLockTime_SchedulesCfbSpreadTrigger()
+    {
+        var lockTime = DateTime.UtcNow.AddDays(3);
+        _repo.GetWeekConfigsForSeasonAsync(Season).Returns(MakeConfigsWithLockTimes(lockTime));
+        _repo.GetSlatesForSeasonAsync(Season).Returns(MakeSlates(1));
+        _scheduler.GetJobDetail(Arg.Any<JobKey>()).Returns((IJobDetail?)null);
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.Received(1).ScheduleJob(
+            Arg.Is<IJobDetail>(j => j.JobType == typeof(CfbSpreadJob)),
+            Arg.Is<ITrigger>(t => t.StartTimeUtc == new DateTimeOffset(lockTime, TimeSpan.Zero)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_PastLockTime_NoTriggerScheduled()
+    {
+        _repo.GetWeekConfigsForSeasonAsync(Season).Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(-1)));
+        _repo.GetSlatesForSeasonAsync(Season).Returns(MakeSlates(1));
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_NullLockTime_NoTriggerScheduled()
+    {
+        _repo.GetWeekConfigsForSeasonAsync(Season).Returns(MakeConfigsWithLockTimes((DateTime?)null));
+        _repo.GetSlatesForSeasonAsync(Season).Returns(MakeSlates(1));
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_WhenTriggerAlreadyScheduled_IsIdempotent()
+    {
+        _repo.GetWeekConfigsForSeasonAsync(Season).Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(3)));
+        _repo.GetSlatesForSeasonAsync(Season).Returns(MakeSlates(1));
+        _scheduler.GetJobDetail(Arg.Any<JobKey>()).Returns(Substitute.For<IJobDetail>());
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_MultipleFutureWeeks_SchedulesTriggerForEach()
+    {
+        _repo.GetWeekConfigsForSeasonAsync(Season).Returns(
+            MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(3), DateTime.UtcNow.AddDays(10)));
+        _repo.GetSlatesForSeasonAsync(Season).Returns(MakeSlates(2));
+        _scheduler.GetJobDetail(Arg.Any<JobKey>()).Returns((IJobDetail?)null);
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.Received(2).ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_SpreadTriggerScheduling_RunsEvenWhenSlatesAlreadySeeded()
+    {
+        // Trigger scheduling must not be skipped just because slate seeding itself was a no-op.
+        var lockTime = DateTime.UtcNow.AddDays(3);
+        _repo.GetWeekConfigsForSeasonAsync(Season).Returns(MakeConfigsWithLockTimes(lockTime));
+        _repo.GetSlatesForSeasonAsync(Season).Returns(MakeSlates(1)); // already fully seeded (1 config, 1 slate)
+        _scheduler.GetJobDetail(Arg.Any<JobKey>()).Returns((IJobDetail?)null);
+
+        await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().AddSlatesAsync(Arg.Any<IEnumerable<CfbSlates>>());
+        await _scheduler.Received(1).ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
     }
 }
