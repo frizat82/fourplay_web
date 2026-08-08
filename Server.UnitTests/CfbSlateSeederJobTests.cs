@@ -289,9 +289,6 @@ public class CfbSlateSeederJobTests
             WeekStartDate = new DateOnly(2027, 9, 1), WeekEndDate = new DateOnly(2027, 9, 7),
             SpreadLockDatetime = futureSeasonLockTime,
         };
-        // Current season has one (already-seeded, no-lock-time) config, just enough to avoid
-        // Execute's early-return — next season's trigger should still register via GetAllWeekConfigsAsync.
-        _repo.GetWeekConfigsForSeasonAsync(Season).Returns(MakeConfigsWithLockTimes((DateTime?)null));
         _repo.GetAllWeekConfigsAsync().Returns([nextSeasonConfig]);
         _repo.GetSlatesForSeasonAsync(Season).Returns(MakeSlates(1));
 
@@ -300,6 +297,28 @@ public class CfbSlateSeederJobTests
         await _scheduler.Received(1).ScheduleJob(
             Arg.Is<IJobDetail>(j => j.JobType == typeof(CfbSpreadJob)),
             Arg.Is<ITrigger>(t => t.StartTimeUtc == new DateTimeOffset(futureSeasonLockTime, TimeSpan.Zero)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_ScheduleSpreadTriggers_RunsEvenWhenCurrentSeasonHasNoConfigsAtAll()
+    {
+        // Regression (frizat-9m0 code review): the original fix for the above scenario left
+        // Execute's outer early-return keyed to the current season's config count — which still
+        // skipped trigger scheduling entirely whenever GetWeekConfigsForSeasonAsync(Season) (used
+        // only for slate seeding) returned zero rows, e.g. between seasons before that year's
+        // control table is seeded. Trigger scheduling must run unconditionally.
+        var lockTime = DateTime.UtcNow.AddDays(3);
+        _repo.GetWeekConfigsForSeasonAsync(Season).Returns([]); // current season not seeded at all
+        _repo.GetAllWeekConfigsAsync().Returns(MakeConfigsWithLockTimes(lockTime));
+        _repo.GetSlatesForSeasonAsync(Season).Returns([]);
+
+        await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().AddSlatesAsync(Arg.Any<IEnumerable<CfbSlates>>());
+        await _scheduler.Received(1).ScheduleJob(
+            Arg.Is<IJobDetail>(j => j.JobType == typeof(CfbSpreadJob)),
+            Arg.Is<ITrigger>(t => t.StartTimeUtc == new DateTimeOffset(lockTime, TimeSpan.Zero)),
             Arg.Any<CancellationToken>());
     }
 }

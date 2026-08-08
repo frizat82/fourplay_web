@@ -34,12 +34,17 @@ namespace FourPlayWebApp.Server.Controllers {
             try {
                 var scheduler = await schedulerFactory.GetScheduler();
                 var allJobs = await GetAllJobsStatusAsync();
-                var jobName = allJobs.FirstOrDefault(job =>
-                    job.JobName.Contains("Spreads", StringComparison.OrdinalIgnoreCase));
+                // Each in-scope week now registers its own one-time "NFL Spreads {season} Wk{n}"
+                // job (frizat-pxy) — pick the SOONEST one, not an arbitrary match; a plain
+                // Contains("Spreads") FirstOrDefault would grab whichever week sorts first
+                // alphabetically ("Wk1" before "Wk10"), not the one actually coming up next.
+                var jobName = allJobs
+                    .Where(job => job.JobName.StartsWith("NFL Spreads ", StringComparison.OrdinalIgnoreCase) && job.NextRun is not null)
+                    .MinBy(job => job.NextRun);
                 if (jobName is null)
                     return NotFound();
                 await scheduler.TriggerJob(new JobKey(jobName.JobName));
-                Log.Information("Started Spread Job");
+                Log.Information("Started Spread Job {JobName}", jobName.JobName);
                 return Ok(new {message = "Started Spread Job"});
             }
             catch (Exception e) {
@@ -95,8 +100,17 @@ namespace FourPlayWebApp.Server.Controllers {
         public async Task<IActionResult> RunCfbSpreads() {
             try {
                 var scheduler = await schedulerFactory.GetScheduler();
-                await scheduler.TriggerJob(new JobKey("CFB Spread Job"));
-                Log.Information("Started CFB Spread Job");
+                var allJobs = await GetAllJobsStatusAsync();
+                // The fixed "CFB Spread Job" JobKey this used to trigger no longer exists — CFB
+                // spreads now run via per-week "CFB Spreads {season} Wk{n}" triggers (frizat-9m0),
+                // same reasoning as RunSpreads above: pick the soonest one, not an arbitrary match.
+                var jobName = allJobs
+                    .Where(job => job.JobName.StartsWith("CFB Spreads ", StringComparison.OrdinalIgnoreCase) && job.NextRun is not null)
+                    .MinBy(job => job.NextRun);
+                if (jobName is null)
+                    return NotFound();
+                await scheduler.TriggerJob(new JobKey(jobName.JobName));
+                Log.Information("Started CFB Spread Job {JobName}", jobName.JobName);
                 return Ok(new { message = "Started CFB Spread Job" });
             }
             catch (Exception e) {

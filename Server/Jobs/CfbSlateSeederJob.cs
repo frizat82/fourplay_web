@@ -25,6 +25,17 @@ public class CfbSlateSeederJob(ICfbRepository repo, ISchedulerFactory schedulerF
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("CfbSlateSeederJob: checking season {Season}", Season);
 
+        // Independent: slate seeding writes CfbSlates rows for the current season only; trigger
+        // scheduling reads config rows across ALL seasons (not season-scoped, unlike slate seeding,
+        // so it keeps working across a season rollover with no code change) and talks to the Quartz
+        // scheduler. Deliberately NOT gated behind a "current season has configs" check — that would
+        // silently defeat trigger scheduling's whole reason for being season-agnostic. Runs
+        // regardless of whether slate seeding itself was a no-op — a week's spread-lock trigger
+        // still needs (re-)registering even once its slate already exists.
+        await Task.WhenAll(SeedSlatesAsync(), ScheduleSpreadTriggersAsync(context));
+    }
+
+    private async Task SeedSlatesAsync() {
         var configs = (await repo.GetWeekConfigsForSeasonAsync(Season))
             .Where(c => c.InScopeIvLeague && c.IvLeagueWeekNumber != 99)
             .OrderBy(c => c.IvLeagueWeekNumber)
@@ -35,15 +46,6 @@ public class CfbSlateSeederJob(ICfbRepository repo, ISchedulerFactory schedulerF
             return;
         }
 
-        // Independent: slate seeding writes CfbSlates rows for the current season; trigger
-        // scheduling only reads config rows (across ALL seasons — not season-scoped, unlike slate
-        // seeding, so it keeps working across a season rollover with no code change) and talks to
-        // the Quartz scheduler. Runs regardless of whether slate seeding itself was a no-op — a
-        // week's spread-lock trigger still needs (re-)registering even once its slate already exists.
-        await Task.WhenAll(SeedSlatesAsync(configs), ScheduleSpreadTriggersAsync(context));
-    }
-
-    private async Task SeedSlatesAsync(List<CfbSeasonWeekConfig> configs) {
         var existing = (await repo.GetSlatesForSeasonAsync(Season)).ToList();
         if (existing.Count >= configs.Count) {
             Log.Information("CfbSlateSeederJob: {Count} slates already seeded for {Season}, skipping", existing.Count, Season);

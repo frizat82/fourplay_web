@@ -113,16 +113,43 @@ public class JobManagerControllerTests
     }
 
     // ── Functional: RunCfbSpreads happy path ──────────────────────────────────
+    // frizat-9m0: the old fixed "CFB Spread Job" JobKey no longer exists — CFB spreads now run
+    // via per-week "CFB Spreads {season} Wk{n}" triggers, so this must find one via the same
+    // soonest-job lookup as RunSpreads, not a hardcoded key.
 
     [Fact]
     public async Task RunCfbSpreads_ReturnsOk_WhenSchedulerSucceeds()
     {
         var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        scheduler.TriggerJob(new JobKey("CFB Spread Job")).Returns(Task.CompletedTask);
+        SetupSchedulerWithJobs(scheduler, ("CFB Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(3)));
+        scheduler.TriggerJob(new JobKey("CFB Spreads 2026 Wk6")).Returns(Task.CompletedTask);
 
         var result = await controller.RunCfbSpreads();
 
         Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("CFB Spreads 2026 Wk6"));
+    }
+
+    [Fact]
+    public async Task RunCfbSpreads_ReturnsNotFound_WhenNoCfbSpreadsJobExists()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        scheduler.GetJobGroupNames().Returns(new List<string>());
+
+        var result = await controller.RunCfbSpreads();
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task RunCfbSpreads_IgnoresNflJobs()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("NFL Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(1)));
+
+        var result = await controller.RunCfbSpreads();
+
+        Assert.IsType<NotFoundResult>(result);
     }
 
     // ── Functional: RunCfbScores happy path ───────────────────────────────────
@@ -200,6 +227,49 @@ public class JobManagerControllerTests
     {
         var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
         scheduler.GetJobGroupNames().Returns(new List<string>());
+
+        var result = await controller.RunSpreads();
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task RunSpreads_ReturnsOk_WhenSchedulerSucceeds()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("NFL Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(3)));
+        scheduler.TriggerJob(new JobKey("NFL Spreads 2026 Wk6")).Returns(Task.CompletedTask);
+
+        var result = await controller.RunSpreads();
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("NFL Spreads 2026 Wk6"));
+    }
+
+    [Fact]
+    public async Task RunSpreads_PicksSoonestJob_NotArbitraryMatch()
+    {
+        // Regression: FirstOrDefault() over multiple simultaneously-registered per-week jobs
+        // (frizat-pxy) would pick whichever week's name sorts first alphabetically — "Wk10" sorts
+        // before "Wk6" — not the one actually coming up next.
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler,
+            ("NFL Spreads 2026 Wk10", DateTimeOffset.UtcNow.AddDays(10)),
+            ("NFL Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(1)));
+        scheduler.TriggerJob(new JobKey("NFL Spreads 2026 Wk6")).Returns(Task.CompletedTask);
+
+        var result = await controller.RunSpreads();
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("NFL Spreads 2026 Wk6"));
+        await scheduler.DidNotReceive().TriggerJob(new JobKey("NFL Spreads 2026 Wk10"));
+    }
+
+    [Fact]
+    public async Task RunSpreads_IgnoresCfbJobs()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("CFB Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(1)));
 
         var result = await controller.RunSpreads();
 

@@ -344,7 +344,7 @@ public class CfbPicksControllerTests
     };
 
     [Fact]
-    public async Task GetScores_ReturnsOnlyScoresForLeagueEligibleEvents()
+    public async Task GetScores_ExcludesScoresForKnownIneligibleEvents()
     {
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
             MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(-2), "ORE", "OSU", isLeagueEligible: true),
@@ -354,6 +354,24 @@ public class CfbPicksControllerTests
             MakeScore(401800001, "ORE", "OSU"),
             MakeScore(401800002, "TOL", "BALLST"),
         ]);
+
+        var result = await BuildController().GetScores(1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbScoreDto>>(ok.Value).ToList();
+        Assert.Single(returned);
+        Assert.Equal(401800001, returned[0].EspnEventId);
+    }
+
+    [Fact]
+    public async Task GetScores_IsFailOpen_ForScoreWithNoMatchingSpreadAtAll()
+    {
+        // Same fail-open philosophy as AddPicks_WhenNoMatchingSpread_AllowsPick: a completed game
+        // we have no spread data for at all (e.g. CfbSpreadJob's once-a-week fetch missed a late
+        // schedule change) should still show, not silently vanish — only games we POSITIVELY know
+        // are ineligible get excluded.
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([]);
+        _cfbRepo.GetScoresForSlateAsync(1).Returns([MakeScore(401800001, "ORE", "OSU")]);
 
         var result = await BuildController().GetScores(1);
 

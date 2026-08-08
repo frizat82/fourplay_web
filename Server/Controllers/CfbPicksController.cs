@@ -40,8 +40,12 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         var scoresTask = cfbRepo.GetScoresForSlateAsync(cfbSlateId);
         await Task.WhenAll(spreadsTask, scoresTask);
 
-        var eligibleEventIds = spreadsTask.Result.WhereLeagueEligible().Select(s => s.EspnEventId).ToHashSet();
-        var scores = scoresTask.Result.Where(s => eligibleEventIds.Contains(s.EspnEventId));
+        // Fail-open, same philosophy as AddPicks's ineligibility guard: exclude only events we
+        // KNOW are ineligible (a matching CfbSpreads row exists and says so). A completed game
+        // with no matching spread row at all (e.g. CfbSpreadJob's one-shot-per-week fetch missed
+        // a late schedule change) still shows rather than silently vanishing from the scores page.
+        var ineligibleEventIds = spreadsTask.Result.WhereLeagueIneligible().Select(s => s.EspnEventId).ToHashSet();
+        var scores = scoresTask.Result.Where(s => !ineligibleEventIds.Contains(s.EspnEventId));
         var dtos = scores.Select(s => new CfbScoreDto {
             Id                  = s.Id,
             CfbSlateId          = s.CfbSlateId,
