@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   Box,
   Card,
@@ -11,6 +12,7 @@ import {
 } from '@mui/material';
 import { getEspnRequiredPicks, getCfbRequiredPicks } from '../utils/gameHelpers';
 import { useSportContext } from '../services/sport';
+import { getNextSpreadJob } from '../services/spreadRelease';
 import PageHeader from '../components/PageHeader';
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -281,7 +283,59 @@ function InfoCallout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function formatLockTime(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function SpreadLockInfo({ sport }: { sport: 'NFL' | 'CFB' }) {
+  const [nextLock, setNextLock] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void getNextSpreadJob(sport).then((result) => {
+      if (cancelled) return;
+      setNextLock(result);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sport]);
+
+  return (
+    <Box>
+      <SectionLabel>When spreads lock</SectionLabel>
+      <Paper variant="outlined" sx={{ borderRadius: 2, p: 1.5 }}>
+        <RuleRow color="secondary">
+          The teased line for each week freezes once, at a set time before that week&apos;s first
+          game — it won&apos;t move again after that.
+          {!loading && nextLock && (
+            <>
+              {' '}
+              Next lock: <strong>{formatLockTime(nextLock)}</strong>.
+            </>
+          )}
+        </RuleRow>
+        <RuleRow color="info">
+          This is different from when your <strong>picks</strong> lock, below. The spread freezes
+          once for the whole week — each individual pick still locks separately, when that specific
+          game kicks off.
+        </RuleRow>
+      </Paper>
+    </Box>
+  );
+}
+
 export function RulesContent() {
+  const { isCfb } = useSportContext();
   const regularPicks = getEspnRequiredPicks(1, false);
 
   return (
@@ -360,6 +414,11 @@ export function RulesContent() {
           </RuleRow>
         </Paper>
       </Box>
+
+      <Divider />
+
+      {/* When Spreads Lock */}
+      <SpreadLockInfo sport={isCfb ? 'CFB' : 'NFL'} />
 
       <Divider />
 

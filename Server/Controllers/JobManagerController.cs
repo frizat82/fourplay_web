@@ -160,11 +160,25 @@ namespace FourPlayWebApp.Server.Controllers {
         }
         [Authorize]
         [HttpGet("get-next-spread-job")]
-        public async Task<DateTimeOffset?> GetNextSpreadJobAsync() {
+        public async Task<DateTimeOffset?> GetNextSpreadJobAsync([FromQuery] string? sport = null) {
             var allJobs = await GetAllJobsStatusAsync();
-            var spreadJob = allJobs.Where(job =>
-                job.JobName.Contains("Spread", StringComparison.OrdinalIgnoreCase) && job.NextRun is not null).MinBy(job => job.NextRun);
-            return spreadJob?.NextRun;
+
+            // "Spreads " (plural, trailing space) matches only the per-week triggers registered by
+            // NflSpreadSchedulerJob/CfbSlateSeederJob ("NFL Spreads {season} Wk{n}" / "CFB Spreads
+            // {season} Wk{n}") — NOT the scheduler jobs' own triggers ("NFL Spread Scheduler ..."),
+            // whose next-run time is when the scheduler next checks in, not when spreads get fetched.
+            var candidates = allJobs.Where(job =>
+                job.JobName.Contains("Spreads ", StringComparison.OrdinalIgnoreCase) && job.NextRun is not null);
+
+            var prefix = sport?.Trim().ToLowerInvariant() switch {
+                "nfl" => "NFL Spreads ",
+                "cfb" => "CFB Spreads ",
+                _ => null,
+            };
+            if (prefix is not null)
+                candidates = candidates.Where(job => job.JobName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+            return candidates.MinBy(job => job.NextRun)?.NextRun;
         }
         [Authorize]
         [HttpGet("get-job/{jobName}")]
