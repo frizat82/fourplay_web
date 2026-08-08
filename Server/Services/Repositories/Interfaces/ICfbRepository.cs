@@ -14,6 +14,7 @@ public interface ICfbRepository {
     Task<IEnumerable<CfbSpreads>> GetSpreadsForSlateAsync(int cfbSlateId);
     Task<IEnumerable<CfbScores>> GetScoresForSlateAsync(int cfbSlateId);
     Task<IEnumerable<CfbSeasonWeekConfig>> GetWeekConfigsForSeasonAsync(int season);
+    Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync();
     Task AddWeekConfigsAsync(IEnumerable<CfbSeasonWeekConfig> configs);
     Task AddRankingsAsync(IEnumerable<CfbRanking> rankings);
 }

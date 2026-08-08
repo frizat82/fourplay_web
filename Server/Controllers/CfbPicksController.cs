@@ -31,7 +31,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     [HttpGet("spreads/{cfbSlateId}")]
     public async Task<IActionResult> GetSpreads(int cfbSlateId) {
         var spreads = await cfbRepo.GetSpreadsForSlateAsync(cfbSlateId);
-        return Ok(spreads.Where(s => s.IsLeagueEligible));
+        return Ok(spreads.WhereLeagueEligible());
     }
 
     [HttpGet("scores/{cfbSlateId}")]
@@ -40,7 +40,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         var scoresTask = cfbRepo.GetScoresForSlateAsync(cfbSlateId);
         await Task.WhenAll(spreadsTask, scoresTask);
 
-        var eligibleEventIds = spreadsTask.Result.Where(s => s.IsLeagueEligible).Select(s => s.EspnEventId).ToHashSet();
+        var eligibleEventIds = spreadsTask.Result.WhereLeagueEligible().Select(s => s.EspnEventId).ToHashSet();
         var scores = scoresTask.Result.Where(s => eligibleEventIds.Contains(s.EspnEventId));
         var dtos = scores.Select(s => new CfbScoreDto {
             Id                  = s.Id,
@@ -121,7 +121,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         // unranked, etc. — frizat-9m0). Distinct from "no matching spread at all", which stays
         // fail-open below (e.g. an ESPN cache gap) — this only rejects positive knowledge of
         // ineligibility, not absence of data.
-        var ineligibleEventIds = spreadsTask.Result.Where(s => !s.IsLeagueEligible).Select(s => s.EspnEventId).ToHashSet();
+        var ineligibleEventIds = spreadsTask.Result.WhereLeagueIneligible().Select(s => s.EspnEventId).ToHashSet();
 
         foreach (var pick in request.Picks) {
             if (startedEventIds.Contains(pick.EspnEventId))

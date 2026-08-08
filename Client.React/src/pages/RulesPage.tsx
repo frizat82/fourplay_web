@@ -294,16 +294,14 @@ function formatLockTime(iso: string) {
 }
 
 function SpreadLockInfo({ sport }: { sport: 'NFL' | 'CFB' }) {
-  const [nextLock, setNextLock] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  // undefined = not loaded yet; null = loaded, no upcoming lock; string = ISO timestamp.
+  const [nextLock, setNextLock] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    setNextLock(undefined);
     void getNextSpreadJob(sport).then((result) => {
-      if (cancelled) return;
-      setNextLock(result);
-      setLoading(false);
+      if (!cancelled) setNextLock(result);
     });
     return () => {
       cancelled = true;
@@ -317,7 +315,7 @@ function SpreadLockInfo({ sport }: { sport: 'NFL' | 'CFB' }) {
         <RuleRow color="secondary">
           The teased line for each week freezes once, at a set time before that week&apos;s first
           game — it won&apos;t move again after that.
-          {!loading && nextLock && (
+          {nextLock != null && (
             <>
               {' '}
               Next lock: <strong>{formatLockTime(nextLock)}</strong>.

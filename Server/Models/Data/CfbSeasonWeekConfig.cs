@@ -10,7 +10,6 @@ public class CfbSeasonWeekConfig {
     public string WeekType { get; set; } = string.Empty;
     public string ScoringFormat { get; set; } = string.Empty;
     public bool InScopeIvLeague { get; set; }
-    public DateTime? FirstEligibleGameDate { get; set; }   // UTC
     public DateTime? SpreadLockDatetime { get; set; }        // UTC — when CfbSlateSeederJob fires CfbSpreadJob for this week
     public string? Notes { get; set; }
 }

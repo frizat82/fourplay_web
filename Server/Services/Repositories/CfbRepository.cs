@@ -67,6 +67,13 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync() {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.CfbSeasonWeekConfigs
+            .OrderBy(c => c.Season).ThenBy(c => c.EspnWeekNumber)
+            .ToListAsync();
+    }
+
     public async Task AddWeekConfigsAsync(IEnumerable<CfbSeasonWeekConfig> configs) {
         await using var db = await dbFactory.CreateDbContextAsync();
         db.CfbSeasonWeekConfigs.AddRange(configs);

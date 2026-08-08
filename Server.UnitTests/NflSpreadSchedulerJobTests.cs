@@ -3,6 +3,7 @@ using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using NSubstitute;
 using Quartz;
+using Quartz.Impl.Matchers;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
@@ -19,6 +20,7 @@ public class NflSpreadSchedulerJobTests
         _scheduler = Substitute.For<IScheduler>();
         _schedulerFactory = Substitute.For<ISchedulerFactory>();
         _schedulerFactory.GetScheduler(Arg.Any<CancellationToken>()).Returns(_scheduler);
+        _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>()).Returns(new HashSet<JobKey>());
         _context = Substitute.For<IJobExecutionContext>();
     }
 
@@ -32,7 +34,6 @@ public class NflSpreadSchedulerJobTests
     {
         var lockTime = DateTime.UtcNow.AddDays(3);
         _repo.GetNflSeasonWeekConfigsAsync().Returns([MakeConfig(2026, 6, lockTime)]);
-        _scheduler.GetJobDetail(Arg.Any<JobKey>()).Returns((IJobDetail?)null);
 
         await BuildJob().Execute(_context);
 
@@ -68,7 +69,8 @@ public class NflSpreadSchedulerJobTests
     {
         var lockTime = DateTime.UtcNow.AddDays(3);
         _repo.GetNflSeasonWeekConfigsAsync().Returns([MakeConfig(2026, 6, lockTime)]);
-        _scheduler.GetJobDetail(Arg.Any<JobKey>()).Returns(Substitute.For<IJobDetail>());
+        _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<JobKey> { new("NFL Spreads 2026 Wk6") });
 
         await BuildJob().Execute(_context);
 
@@ -82,7 +84,6 @@ public class NflSpreadSchedulerJobTests
             MakeConfig(2026, 6, DateTime.UtcNow.AddDays(3)),
             MakeConfig(2026, 7, DateTime.UtcNow.AddDays(10)),
         ]);
-        _scheduler.GetJobDetail(Arg.Any<JobKey>()).Returns((IJobDetail?)null);
 
         var scheduledKeys = new List<JobKey>();
         await _scheduler.ScheduleJob(
@@ -102,7 +103,6 @@ public class NflSpreadSchedulerJobTests
             MakeConfig(2026, 5, DateTime.UtcNow.AddDays(-3)),
             MakeConfig(2026, 6, DateTime.UtcNow.AddDays(3)),
         ]);
-        _scheduler.GetJobDetail(Arg.Any<JobKey>()).Returns((IJobDetail?)null);
 
         await BuildJob().Execute(_context);
 

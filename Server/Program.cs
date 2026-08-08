@@ -333,7 +333,14 @@ builder.Services.AddQuartz(q => {
 
     // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons. Also now registers
     // each in-scope week's CfbSpreadJob spread-lock trigger from CfbSeasonWeekConfig.SpreadLockDatetime
-    // (frizat-pxy) — replaces the old fixed Saturday/Wednesday CfbSpreadJob crons below.
+    // (frizat-pxy) — replaces the old fixed Saturday/Wednesday CfbSpreadJob crons below. Also runs
+    // once shortly after startup — mirrors NflSpreadSchedulerJob's cadence — so a fresh deploy mid-
+    // week doesn't leave CFB spread triggers unregistered until the next Monday run.
+    q.ScheduleJob<CfbSlateSeederJob>(trigger => trigger
+        .WithIdentity("CFB Slate Seeder Startup")
+        .WithDescription("Seeds CFB slate dates and registers CFB spread-lock triggers on startup")
+        .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+    );
     q.ScheduleCstCronJob<CfbSlateSeederJob>("CFB Slate Seeder", "Seeds CFB slate dates and registers CFB spread-lock triggers for the current season", "0 0 5 ? * MON");
 
     // CFB Scores — Saturday noon, 4pm, 8pm, midnight CST + Sunday 6am CST (covers all kickoff windows)
