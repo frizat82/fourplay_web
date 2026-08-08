@@ -63,13 +63,17 @@ public class CfbLiveScoreFetcherTests {
         EspnWeekNumber = 5, ScoringFormat = "Spread",
     };
 
+    // frizat-9m0: the fetcher no longer filters by rank — every FBS game for the week is returned
+    // so the full slate can be persisted for audit. Rank-based visibility now happens downstream,
+    // in CfbSpreadJob's IsLeagueEligible computation, not here.
     [Fact]
-    public async Task FetchForSlateAsync_RegularSeason_ReturnsNull_WhenBothTeamsUnranked() {
+    public async Task FetchForSlateAsync_RegularSeason_IncludesGame_WhenBothTeamsUnranked() {
         _cfbApi.GetScoresByWeekAsync(5, false).Returns(BuildScoreboardWithRanking(homeRank: 99, awayRank: 99));
 
         var result = await BuildFetcher().FetchForSlateAsync(BuildRegularSeasonSlate());
 
-        Assert.Null(result);
+        Assert.NotNull(result);
+        Assert.Single(result!.Events!);
     }
 
     [Fact]

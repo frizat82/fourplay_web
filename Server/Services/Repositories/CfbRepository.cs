@@ -48,6 +48,12 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         return await db.CfbSpreads.Where(s => s.CfbSlateId == cfbSlateId).ToListAsync();
     }
 
+    public async Task AddRankingsAsync(IEnumerable<CfbRanking> rankings) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        db.CfbRankings.AddRange(rankings);
+        await db.SaveChangesAsync();
+    }
+
     public async Task<IEnumerable<CfbScores>> GetScoresForSlateAsync(int cfbSlateId) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbScores.Where(s => s.CfbSlateId == cfbSlateId).ToListAsync();

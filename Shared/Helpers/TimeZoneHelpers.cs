@@ -19,4 +19,11 @@ public static class TimeZoneHelpers {
         // Return the DateTime in CST.
         return zonedDateTime.ToDateTimeUnspecified();
     }
+
+    public static DateTime ConvertTimeToEt(DateTimeOffset utcDateTime) {
+        var etZone = DateTimeZoneProviders.Tzdb["America/New_York"];
+        var instant = Instant.FromDateTimeUtc(utcDateTime.UtcDateTime);
+        var zonedDateTime = instant.InZone(etZone);
+        return zonedDateTime.ToDateTimeUnspecified();
+    }
 }

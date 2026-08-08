@@ -269,6 +269,7 @@ public class DemoDataSeeder(
             AwayTeamSpread = 3.5,
             OverUnder = 47.5,
             GameTime = DateTimeOffset.UtcNow.AddMinutes(30),
+            IsLeagueEligible = true,
         });
         await db.SaveChangesAsync();
         Log.Information("DemoDataSeeder: seeded replay CFB slate {Slate} spread IND@ATL", ReplayCfbSlateNumber);
@@ -1037,6 +1038,7 @@ public class DemoDataSeeder(
             AwayTeamSpread = g.AwaySpread,
             OverUnder      = g.OU,
             GameTime       = g.GameTime,
+            IsLeagueEligible = true,
         }).ToList();
 
         db.CfbSpreads.AddRange(spreads);

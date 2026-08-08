@@ -45,13 +45,17 @@ public class CfbSpreadJobTests
     private static EspnScores BuildScoreboard(
         string eventId = "401677183",
         string homeAbbr = "ORE", string awayAbbr = "OSU",
-        TypeName status = TypeName.StatusScheduled)
+        TypeName status = TypeName.StatusScheduled,
+        DateTimeOffset? date = null,
+        int? homeRank = null, int? awayRank = null)
     {
         var competition = new Competition {
-            Date = new DateTimeOffset(2025, 12, 19, 18, 0, 0, TimeSpan.Zero),
+            Date = date ?? new DateTimeOffset(2025, 12, 19, 18, 0, 0, TimeSpan.Zero), // Friday
             Competitors = [
-                new Competitor { HomeAway = HomeAway.Home, Score = 0, Team = new EspnTeam { Abbreviation = homeAbbr }, Records = [] },
-                new Competitor { HomeAway = HomeAway.Away,  Score = 0, Team = new EspnTeam { Abbreviation = awayAbbr }, Records = [] },
+                new Competitor { HomeAway = HomeAway.Home, Score = 0, Team = new EspnTeam { Abbreviation = homeAbbr }, Records = [],
+                    CuratedRank = homeRank is { } hr ? new CuratedRankInfo { Current = hr } : null },
+                new Competitor { HomeAway = HomeAway.Away,  Score = 0, Team = new EspnTeam { Abbreviation = awayAbbr }, Records = [],
+                    CuratedRank = awayRank is { } ar ? new CuratedRankInfo { Current = ar } : null },
             ],
             Status = new EspnStatus { Type = new StatusType { Name = status } },
             Odds = [],
@@ -150,5 +154,108 @@ public class CfbSpreadJobTests
         await BuildJob().Execute(_context);
 
         await _repo.DidNotReceive().AddCfbSpreadsAsync(Arg.Any<IEnumerable<CfbSpreads>>());
+    }
+
+    // ── IsLeagueEligible + CfbRanking persistence (frizat-9m0) ─────────────────
+
+    private static CfbSlates BuildCfpSlate(int slateId = 2) => new()
+    {
+        Id = slateId, Season = 2025, SlateNumber = 15,
+        Label = "CFP First Round", SlateType = "FirstRound",
+        StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20),
+        EspnWeekNumber = 16, ScoringFormat = "NFLDivisional",
+    };
+
+    [Fact]
+    public async Task Execute_RegularSeason_RankedAndNotMidweek_SavesEligibleTrue()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99)); // Friday
+        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
+
+        IEnumerable<CfbSpreads>? saved = null;
+        await _repo.AddCfbSpreadsAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
+
+        await BuildJob().Execute(_context);
+
+        Assert.True(saved!.Single().IsLeagueEligible);
+    }
+
+    [Fact]
+    public async Task Execute_RegularSeason_BothUnranked_SavesEligibleFalse()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
+        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
+
+        IEnumerable<CfbSpreads>? saved = null;
+        await _repo.AddCfbSpreadsAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
+
+        await BuildJob().Execute(_context);
+
+        Assert.False(saved!.Single().IsLeagueEligible);
+    }
+
+    [Fact]
+    public async Task Execute_RegularSeason_RankedButMidweek_SavesEligibleFalse()
+    {
+        var tuesdayEt = new DateTimeOffset(2025, 9, 30, 23, 0, 0, TimeSpan.Zero); // Tue 7pm ET
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99, date: tuesdayEt));
+        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
+
+        IEnumerable<CfbSpreads>? saved = null;
+        await _repo.AddCfbSpreadsAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
+
+        await BuildJob().Execute(_context);
+
+        Assert.False(saved!.Single().IsLeagueEligible);
+    }
+
+    [Fact]
+    public async Task Execute_CfpSlate_BothUnranked_SavesEligibleTrueRegardless()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildCfpSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
+        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
+
+        IEnumerable<CfbSpreads>? saved = null;
+        await _repo.AddCfbSpreadsAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
+
+        await BuildJob().Execute(_context);
+
+        Assert.True(saved!.Single().IsLeagueEligible);
+    }
+
+    [Fact]
+    public async Task Execute_PersistsRankingForBothCompetitors()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU", homeRank: 3, awayRank: 99));
+        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
+
+        IEnumerable<CfbRanking>? saved = null;
+        await _repo.AddRankingsAsync(Arg.Do<IEnumerable<CfbRanking>>(r => saved = r));
+
+        await BuildJob().Execute(_context);
+
+        var rankings = saved!.ToList();
+        Assert.Equal(2, rankings.Count);
+        Assert.Contains(rankings, r => r.TeamAbbreviation == "ORE" && r.CuratedRank == 3);
+        Assert.Contains(rankings, r => r.TeamAbbreviation == "OSU" && r.CuratedRank == 99);
+        Assert.All(rankings, r => Assert.Equal(401677183, r.EspnEventId));
+    }
+
+    [Fact]
+    public async Task Execute_PersistsRanking_EvenWhenOddsUnavailable()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 3, awayRank: 99));
+        _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>(), 100).Returns((EspnCoreOddsItem?)null);
+        _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>()).Returns((EspnCoreOddsApiResponse?)null);
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).AddRankingsAsync(Arg.Is<IEnumerable<CfbRanking>>(r => r.Count() == 2));
     }
 }
