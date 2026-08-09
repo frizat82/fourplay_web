@@ -72,7 +72,7 @@ public class NflSpreadJob(IEspnCoreOddsService sportsOdds, IEspnApiService espn,
 
         if (spreads.Count != 0) {
             Log.Information("Load NFL Spreads at {Time}", DateTime.UtcNow);
-            await leagueRepository.AddNewNflSpreadsAsync(spreads);
+            await leagueRepository.UpsertAsync(spreads);
         }
         Log.Information("NFL Spreads Complete at {Time}",DateTime.UtcNow);
     }

@@ -137,7 +137,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
         await _oddsService.DidNotReceive()
                           .GetEventsWithOddsAsync(Arg.Any<int>(), Arg.Any<int>());
     }
@@ -155,7 +155,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     // -----------------------------------------------------------------------
@@ -172,7 +172,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+        await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
     }
 
     [Fact]
@@ -184,7 +184,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem(homeSpread: "-7", awaySpread: "+7"));
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
@@ -203,7 +203,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem(homeSpread: "-3.5", awaySpread: "+3.5"));
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
@@ -221,7 +221,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem(overUnder: 48.5));
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
@@ -238,7 +238,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem());
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
@@ -261,7 +261,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem(homeSpread: "+3", awaySpread: "-3"));
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
@@ -285,7 +285,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     [Fact]
@@ -298,7 +298,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     // -----------------------------------------------------------------------
@@ -327,7 +327,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+        await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
     }
 
     [Fact]
@@ -343,7 +343,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     [Fact]
@@ -359,7 +359,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     // -----------------------------------------------------------------------
@@ -451,7 +451,7 @@ public class NflSpreadJobTests
         await BuildJob().Execute(_context);
 
         // Second game's spread should be persisted
-        await _repo.Received(1).AddNewNflSpreadsAsync(
+        await _repo.Received(1).UpsertAsync(
             Arg.Is<List<NflSpreads>>(l => l.Count == 1 && l[0].HomeTeam == "SF"));
     }
 
@@ -467,7 +467,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
         await _oddsService.DidNotReceive().GetEventsWithOddsAsync(Arg.Any<int>(), Arg.Any<int>());
     }
 
@@ -492,7 +492,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+        await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
     }
 
     [Fact]
@@ -507,7 +507,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+        await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
     }
 
     // -----------------------------------------------------------------------
@@ -526,7 +526,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem());
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 

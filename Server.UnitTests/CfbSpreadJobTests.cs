@@ -93,7 +93,7 @@ public class CfbSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddCfbSpreadsAsync(Arg.Any<IEnumerable<CfbSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<IEnumerable<CfbSpreads>>());
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public class CfbSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.Received(1).AddCfbSpreadsAsync(
+        await _repo.Received(1).UpsertAsync(
             Arg.Is<IEnumerable<CfbSpreads>>(s => s.Count() == 1));
     }
 
@@ -119,7 +119,7 @@ public class CfbSpreadJobTests
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds("-7.5", "+7.5", 52.5));
 
         IEnumerable<CfbSpreads>? saved = null;
-        await _repo.AddCfbSpreadsAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
+        await _repo.UpsertAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
 
         await BuildJob().Execute(_context);
 
@@ -142,7 +142,7 @@ public class CfbSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddCfbSpreadsAsync(Arg.Any<IEnumerable<CfbSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<IEnumerable<CfbSpreads>>());
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public class CfbSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddCfbSpreadsAsync(Arg.Any<IEnumerable<CfbSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<IEnumerable<CfbSpreads>>());
     }
 
     // ── IsLeagueEligible + CfbRanking persistence (frizat-9m0) ─────────────────
@@ -174,7 +174,7 @@ public class CfbSpreadJobTests
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
-        await _repo.AddCfbSpreadsAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
+        await _repo.UpsertAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
 
         await BuildJob().Execute(_context);
 
@@ -189,7 +189,7 @@ public class CfbSpreadJobTests
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
-        await _repo.AddCfbSpreadsAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
+        await _repo.UpsertAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
 
         await BuildJob().Execute(_context);
 
@@ -205,7 +205,7 @@ public class CfbSpreadJobTests
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
-        await _repo.AddCfbSpreadsAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
+        await _repo.UpsertAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
 
         await BuildJob().Execute(_context);
 
@@ -220,7 +220,7 @@ public class CfbSpreadJobTests
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
-        await _repo.AddCfbSpreadsAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
+        await _repo.UpsertAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
 
         await BuildJob().Execute(_context);
 

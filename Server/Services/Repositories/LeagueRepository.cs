@@ -118,7 +118,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
 
 
     // NFL Scores and Spreads methods
-    public async Task AddNewNflSpreadsAsync(List<NflSpreads> spreads) {
+    public async Task UpsertAsync(IEnumerable<NflSpreads> spreads) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
 
         foreach (var spread in spreads) {
@@ -143,6 +143,15 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         }
 
         await db.SaveChangesAsync();
+    }
+
+    public async Task<HashSet<(int Season, int Week)>> GetWeeksWithSpreadDataAsync() {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        var pairs = await db.NflSpreads
+            .Select(s => new { s.Season, s.NflWeek })
+            .Distinct()
+            .ToListAsync();
+        return pairs.Select(p => (p.Season, p.NflWeek)).ToHashSet();
     }
 
 

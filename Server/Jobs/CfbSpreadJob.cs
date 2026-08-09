@@ -31,7 +31,7 @@ public class CfbSpreadJob(ICfbLiveScoreFetcher fetcher, IEspnCoreOddsService odd
         }
 
         if (spreads.Count > 0) {
-            await repo.AddCfbSpreadsAsync(spreads);
+            await repo.UpsertAsync(spreads);
             Log.Information("CfbSpreadJob: saved {Count} CFB spreads", spreads.Count);
         }
         if (rankings.Count > 0) {
