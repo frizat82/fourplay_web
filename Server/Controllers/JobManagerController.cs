@@ -11,24 +11,6 @@ namespace FourPlayWebApp.Server.Controllers {
     [Route("api/[controller]")]
     public class JobManagerController(ISchedulerFactory schedulerFactory, IJobObserverService observer) : ControllerBase {
         [Authorize(Roles = "Administrator")]
-        [HttpPost("run-missing")]
-        public async Task<IActionResult> RunMissingPicks() {
-            try {
-                var scheduler = await schedulerFactory.GetScheduler();
-                var allJobs = await GetAllJobsStatusAsync();
-                var jobName = allJobs.FirstOrDefault(job =>
-                    job.JobName.Contains("Missing Picks", StringComparison.OrdinalIgnoreCase));
-                if (jobName is null)
-                    return NotFound();
-                await scheduler.TriggerJob(new JobKey(jobName.JobName));
-                Log.Information("Started MissingPicksJob Job");
-                return Ok(new {message = "Started MissingPicksJob Job"});
-            }
-            catch (Exception e) {
-                return BadRequest(e.Message);
-            }
-        }
-        [Authorize(Roles = "Administrator")]
         [HttpPost("run-spreads")]
         public async Task<IActionResult> RunSpreads() {
             try {

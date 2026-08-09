@@ -26,7 +26,6 @@ public class JobManagerControllerTests
 
     public static TheoryData<string> AdminOnlyEndpoints =>
     [
-        nameof(JobManagerController.RunMissingPicks),
         nameof(JobManagerController.RunSpreads),
         nameof(JobManagerController.RunScores),
         nameof(JobManagerController.RunUserJob),
@@ -162,35 +161,6 @@ public class JobManagerControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(false, ok.Value);
-    }
-
-    // ── Functional: RunMissingPicks — job found ────────────────────────────────
-
-    [Fact]
-    public async Task RunMissingPicks_ReturnsOk_WhenJobFoundAndTriggered()
-    {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-
-        // Arrange: GetAllJobsStatusAsync -> GetJobGroupNames -> GetJobKeys -> GetJobDetail, etc.
-        var jobKey = new JobKey("Missing Picks Job");
-        SetupSchedulerWithJob(scheduler, jobKey);
-
-        var result = await controller.RunMissingPicks();
-
-        Assert.IsType<OkObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task RunMissingPicks_ReturnsNotFound_WhenNoMissingPicksJobExists()
-    {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-
-        // No jobs at all → GetAllJobsStatusAsync returns empty list → FirstOrDefault = null
-        scheduler.GetJobGroupNames().Returns(new List<string>());
-
-        var result = await controller.RunMissingPicks();
-
-        Assert.IsType<NotFoundResult>(result);
     }
 
     // ── Functional: RunSpreads — no spread job ────────────────────────────────

@@ -18,10 +18,6 @@ export async function runScores() {
   await http.post('/api/jobmanager/run-scores');
 }
 
-export async function runMissing() {
-  await http.post('/api/jobmanager/run-missing');
-}
-
 export async function deleteJob(jobName: string) {
   const { data } = await http.delete<boolean>(`/api/jobmanager/delete-job/${encodeURIComponent(jobName)}`);
   return data;
