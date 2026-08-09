@@ -297,6 +297,7 @@ builder.Services.AddScoped<IJob, UserManagerJob>();
 builder.Services.AddScoped<IJob, MissingPicksJob>();
 builder.Services.AddScoped<IJob, CfbSlateSeederJob>();
 builder.Services.AddScoped<IJob, CfbSpreadSchedulerJob>();
+builder.Services.AddScoped<IJob, CfbRankingCaptureJob>();
 builder.Services.AddScoped<IJob, CfbSpreadJob>();
 builder.Services.AddScoped<IJob, CfbScoresJob>();
 builder.Services.AddQuartz(q => {
@@ -342,6 +343,16 @@ builder.Services.AddQuartz(q => {
         .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
     );
     q.ScheduleCstCronJob<CfbSlateSeederJob>("CFB Slate Seeder", "Seeds CFB slate dates for the current season", "0 0 5 ? * MON");
+
+    // CFB Rankings — CFB-only, no NFL equivalent (rank/eligibility is a CFB-specific concept).
+    // Same cadence as the slate seeder: capture rankings as soon as a week's schedule is known,
+    // not gated on that week's spread lock like CfbSpreadJob's own (later) ranking capture is.
+    q.ScheduleJob<CfbRankingCaptureJob>(trigger => trigger
+        .WithIdentity("CFB Ranking Capture Startup")
+        .WithDescription("Captures CFB AP rankings as soon as each week's schedule is known")
+        .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+    );
+    q.ScheduleCstCronJob<CfbRankingCaptureJob>("CFB Ranking Capture", "Captures CFB AP rankings as soon as each week's schedule is known", "0 0 5 ? * MON");
 
     // CFB Spreads — mirrors NflSpreadSchedulerJob above exactly: CfbSpreadJob has no fixed trigger
     // of its own; CfbSpreadSchedulerJob reads CfbSeasonWeekConfig.SpreadLockDatetime and registers
