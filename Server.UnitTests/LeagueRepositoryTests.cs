@@ -1,8 +1,6 @@
-using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Services.Repositories;
 using FourPlayWebApp.Shared.Models.Data;
 using Microsoft.EntityFrameworkCore;
-using NSubstitute;
 using Xunit;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -14,46 +12,29 @@ namespace FourPlayWebApp.Server.UnitTests;
 // scheduler (Phase 2/3).
 public class LeagueRepositoryTests
 {
-    private static ApplicationDbContext BuildDb(string name) =>
-        new(new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(name)
-            .Options);
-
-    // LeagueRepository disposes its DbContext (`await using`) after every call, so the factory
-    // must hand out a fresh context per call — all backed by the same named in-memory database —
-    // rather than one shared instance the repo would dispose out from under a second call.
-    private static IDbContextFactory<ApplicationDbContext> BuildFactory(string dbName)
-    {
-        var factory = Substitute.For<IDbContextFactory<ApplicationDbContext>>();
-        factory.CreateDbContextAsync().Returns(_ => Task.FromResult(BuildDb(dbName)));
-        return factory;
-    }
-
     [Fact]
     public async Task UpsertAsync_NewWeek_Inserts()
     {
-        var dbName = nameof(UpsertAsync_NewWeek_Inserts);
-        var repo = new LeagueRepository(BuildFactory(dbName));
+        var factory = new DbContextFactoryStub(nameof(UpsertAsync_NewWeek_Inserts));
+        var repo = new LeagueRepository(factory);
 
         await repo.UpsertAsync([
             new NflSpreads { Season = 2026, NflWeek = 3, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -3.5, AwayTeamSpread = 3.5 },
         ]);
 
-        await using var verifyDb = BuildDb(dbName);
-        var saved = await verifyDb.NflSpreads.SingleAsync(s => s.Season == 2026 && s.NflWeek == 3);
+        var saved = await factory.CreateDbContext().NflSpreads.SingleAsync(s => s.Season == 2026 && s.NflWeek == 3);
         Assert.Equal(-3.5, saved.HomeTeamSpread);
     }
 
     [Fact]
     public async Task GetWeeksWithSpreadDataAsync_ReturnsSeasonWeekPairsWithSpreads()
     {
-        var dbName = nameof(GetWeeksWithSpreadDataAsync_ReturnsSeasonWeekPairsWithSpreads);
-        await using (var seedDb = BuildDb(dbName)) {
-            seedDb.NflSpreads.Add(new NflSpreads { Season = 2026, NflWeek = 3, HomeTeam = "A", AwayTeam = "B" });
-            await seedDb.SaveChangesAsync();
-        }
+        var factory = new DbContextFactoryStub(nameof(GetWeeksWithSpreadDataAsync_ReturnsSeasonWeekPairsWithSpreads));
+        var seedDb = factory.CreateDbContext();
+        seedDb.NflSpreads.Add(new NflSpreads { Season = 2026, NflWeek = 3, HomeTeam = "A", AwayTeam = "B" });
+        await seedDb.SaveChangesAsync();
 
-        var repo = new LeagueRepository(BuildFactory(dbName));
+        var repo = new LeagueRepository(factory);
         var weeksWithData = await repo.GetWeeksWithSpreadDataAsync();
 
         Assert.Contains((2026, 3), weeksWithData);

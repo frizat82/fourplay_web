@@ -30,9 +30,13 @@ public class CfbRankingCaptureJob(ICfbLiveScoreFetcher fetcher, ICfbRepository r
             return;
         }
 
+        // Each slate's scoreboard fetch is an independent ESPN call — no data dependency between
+        // them, so fetch all slates concurrently rather than serializing ~18 round-trips.
+        var scoreboards = await Task.WhenAll(slates.Select(async slate =>
+            (slate, scoreboard: await fetcher.FetchForSlateAsync(slate))));
+
         var rankings = new List<CfbRanking>();
-        foreach (var slate in slates) {
-            var scoreboard = await fetcher.FetchForSlateAsync(slate);
+        foreach (var (slate, scoreboard) in scoreboards) {
             if (scoreboard?.Events is null) continue;
             rankings.AddRange(CfbRankingExtractor.ExtractFrom(scoreboard.Events, slate));
         }

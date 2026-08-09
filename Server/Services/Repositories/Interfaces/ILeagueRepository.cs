@@ -26,7 +26,6 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     Task<List<NflScores>> GetAllNflScoresForSeasonAsync(int season);
     Task<List<NflSpreads>?> GetNflSpreadsAsync(int season, int week);
     Task<List<NflSpreads>> GetAllNflSpreadsForSeasonAsync(int season);
-    Task<HashSet<(int Season, int Week)>> GetWeeksWithSpreadDataAsync();
 
     // NFL Picks
     Task<List<NflPicks>> GetNflPicksAsync(int leagueId, int season, int week);

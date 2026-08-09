@@ -50,8 +50,8 @@ export interface GameCardProps {
   spreadPostedAt?: string | null;
 }
 
-function formatPostedAt(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
+function formatShortDateTime(iso: string) {
+  return new Date(iso).toLocaleString([], {
     weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
   });
 }
@@ -64,7 +64,7 @@ function statusChip(status: string | undefined, gameTime: string) {
   if (isLive) return <Chip label="Live" size="small" color="success" />;
   return (
     <Typography variant="caption" color="text.secondary">
-      {new Date(gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+      {formatShortDateTime(gameTime)}
     </Typography>
   );
 }
@@ -188,7 +188,7 @@ export default function GameCard({
 
         {spreadPostedAt && (
           <Typography variant="caption" color="text.secondary" display="block" sx={{ textAlign: 'center', mt: 0.75 }}>
-            Line posted {formatPostedAt(spreadPostedAt)}
+            Line posted {formatShortDateTime(spreadPostedAt)}
           </Typography>
         )}
 

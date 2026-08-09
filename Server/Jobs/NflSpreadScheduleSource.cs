@@ -4,8 +4,11 @@ namespace FourPlayWebApp.Server.Jobs;
 
 public class NflSpreadScheduleSource(ILeagueRepository repo) : ISpreadScheduleSource {
     public async Task<IEnumerable<SpreadTriggerCandidate>> GetCandidatesAsync() {
-        var configs = await repo.GetNflSeasonWeekConfigsAsync();
-        var weeksWithData = await repo.GetWeeksWithSpreadDataAsync();
+        var configsTask = repo.GetNflSeasonWeekConfigsAsync();
+        var weeksWithDataTask = repo.GetWeeksWithSpreadDataAsync();
+        await Task.WhenAll(configsTask, weeksWithDataTask);
+        var configs = configsTask.Result;
+        var weeksWithData = weeksWithDataTask.Result;
 
         return configs.Select(cfg => new SpreadTriggerCandidate(
             cfg.SpreadLockDatetime,

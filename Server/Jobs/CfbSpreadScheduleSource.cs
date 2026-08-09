@@ -4,9 +4,11 @@ namespace FourPlayWebApp.Server.Jobs;
 
 public class CfbSpreadScheduleSource(ICfbRepository repo) : ISpreadScheduleSource {
     public async Task<IEnumerable<SpreadTriggerCandidate>> GetCandidatesAsync() {
-        var configs = (await repo.GetAllWeekConfigsAsync())
-            .Where(c => c.InScopeIvLeague && c.IvLeagueWeekNumber != 99);
-        var weeksWithData = await repo.GetWeeksWithSpreadDataAsync();
+        var allConfigsTask = repo.GetAllWeekConfigsAsync();
+        var weeksWithDataTask = repo.GetWeeksWithSpreadDataAsync();
+        await Task.WhenAll(allConfigsTask, weeksWithDataTask);
+        var configs = allConfigsTask.Result.Where(c => c.InScopeIvLeague && c.IvLeagueWeekNumber != 99);
+        var weeksWithData = weeksWithDataTask.Result;
 
         return configs.Select(cfg => new SpreadTriggerCandidate(
             cfg.SpreadLockDatetime,
