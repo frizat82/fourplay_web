@@ -192,4 +192,14 @@ describe('GameCard', () => {
     render(<GameCard {...baseProps} gameDetail="Q3 4:32" />);
     expect(screen.getByText('Q3 4:32')).toBeInTheDocument();
   });
+
+  it('shows "Line posted" timestamp when spreadPostedAt is provided', () => {
+    render(<GameCard {...baseProps} spreadPostedAt="2023-10-19T14:00:00Z" />);
+    expect(screen.getByText(/Line posted/)).toBeInTheDocument();
+  });
+
+  it('does not show "Line posted" when spreadPostedAt is absent', () => {
+    render(<GameCard {...baseProps} />);
+    expect(screen.queryByText(/Line posted/)).not.toBeInTheDocument();
+  });
 });

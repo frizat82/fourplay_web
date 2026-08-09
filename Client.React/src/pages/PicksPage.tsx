@@ -257,6 +257,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
                 awaySpread={game.awaySpread ?? 0}
                 gameTime={game.gameTime}
                 gameStatus={game.gameStatus ?? undefined}
+                spreadPostedAt={game.spreadPostedAt}
                 homeRecord={!isPostSeasonSlate ? game.homeRecord : undefined}
                 awayRecord={!isPostSeasonSlate ? game.awayRecord : undefined}
                 homeJerseyUrl={showJerseys ? jerseyCache[game.homeTeam] : undefined}
