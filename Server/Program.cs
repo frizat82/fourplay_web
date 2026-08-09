@@ -291,8 +291,6 @@ builder.Services.AddScoped<IJob, NflScoresJob>();
 builder.Services.AddScoped<IJob, NflSpreadJob>();
 builder.Services.AddScoped<IJob, StartupJob>();
 builder.Services.AddScoped<IJob, UserManagerJob>();
-// Register MissingPicksJob
-builder.Services.AddScoped<IJob, MissingPicksJob>();
 builder.Services.AddScoped<IJob, CfbSlateSeederJob>();
 builder.Services.AddScoped<IJob, CfbSpreadJob>();
 builder.Services.AddScoped<IJob, CfbScoresJob>();
@@ -318,10 +316,6 @@ builder.Services.AddQuartz(q => {
     q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Sun 7:40pm", "Fetches NFL scores during Sunday evening games at 7:40pm CST", "0 40 19 ? * SUN");
     q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Mon 1am", "Fetches NFL scores early Monday after SNF at 1am CST", "0 0 1 ? * MON");
     q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Tue 1am", "Fetches NFL scores early Tuesday after MNF at 1am CST", "0 0 1 ? * TUE");
-
-    // MissingPicksJob trigger disabled — frizat-z5h deferred.
-    // Plan: fire at 2:45pm CST Sat+Sun, gate send with HasGamesTodayAsync, replace hardcoded "noon CST" copy.
-    // q.ScheduleCstCronJob<MissingPicksJob>("Missing Picks Job", "Sends reminder emails to users missing required picks", "0 0 11 ? * SUN");
 
     // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons
     q.ScheduleCstCronJob<CfbSlateSeederJob>("CFB Slate Seeder", "Seeds CFB slate dates for the current season", "0 0 5 ? * MON");
