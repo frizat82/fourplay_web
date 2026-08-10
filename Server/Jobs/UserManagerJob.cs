@@ -1,9 +1,6 @@
-using FourPlayWebApp.Server.Data;
-using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Quartz;
 using Serilog;
 
@@ -13,7 +10,6 @@ public class UserManagerJob(
     RoleManager<IdentityRole> roleManager,
     UserManager<ApplicationUser> userManager,
     IConfiguration configuration,
-    ApplicationDbContext db,
     IServiceProvider services)
     : IJob {
     public async Task Execute(IJobExecutionContext context) {
@@ -39,26 +35,8 @@ public class UserManagerJob(
         var adminUserEmail = configuration["ADMIN_EMAIL"] ?? throw new InvalidOperationException("ADMIN_EMAIL configuration is required");
         await CreateUser(adminUserEmail);
         await SyncAdminPassword(adminUserEmail);
-        await CreateBaseLeagueUser(adminUserEmail);
         await AddUserToRole(adminUserEmail, adminRoleName);
         Log.Information("UserManagerJob completed successfully");
-    }
-    /// <summary>
-    /// Create base user
-    /// </summary>
-    internal async Task CreateBaseLeagueUser(string userEmail) {
-        try {
-            if (await db.LeagueUsers.AnyAsync(x => x.Email == userEmail)) {
-                return;
-            }
-            var user = new LeagueUsers() { Email = userEmail };
-            await db.LeagueUsers.AddAsync(user);
-            await db.SaveChangesAsync();
-            Log.Information("Base user created {@Identity}", user);
-        }
-        catch (Exception ex) {
-            Log.Error(ex, "Unable to create base user {UserName}", userEmail);
-        }
     }
 
     /// <summary>

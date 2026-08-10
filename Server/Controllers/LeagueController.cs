@@ -561,17 +561,6 @@ public class LeagueController(
     }
 
     // ---------- Adds for core entities ----------
-    [HttpPost("league-user")]
-    [Authorize(Roles = AppRoles.Administrator)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> AddLeagueUser([FromBody] LeagueUsersDto leagueUserDto) {
-        var leagueUser = new LeagueUsers {
-            Email = leagueUserDto.Email
-        };
-        await repo.AddLeagueUserAsync(leagueUser);
-        return NoContent();
-    }
-
     [HttpPost("league-user-mapping")]
     [Authorize(Roles = AppRoles.Administrator)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
