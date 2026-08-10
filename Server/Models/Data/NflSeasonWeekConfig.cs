@@ -10,5 +10,6 @@ public class NflSeasonWeekConfig {
     public DateTime WeekStartDatetime { get; set; }
     public DateTime WeekEndDatetime { get; set; }
     public DateTime? FirstGameOfWeekStartDatetime { get; set; }
+    public DateTime SpreadLockDatetime { get; set; }    // UTC — when NflSpreadSchedulerJob fires NflSpreadJob for this week; required, never null
     public string? WeekNotes { get; set; }
 }

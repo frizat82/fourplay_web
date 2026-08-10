@@ -198,7 +198,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     </Box>
   );
   if (!currentLeague) return <NoLeague />;
-  if (!data?.hasOdds && isCurrentWeek) return <SpreadRelease />;
+  if (!data?.hasOdds && isCurrentWeek) return <SpreadRelease sport={adapter.sport} />;
   if (!data) return null;
 
   const games = showOnlyMyPicks

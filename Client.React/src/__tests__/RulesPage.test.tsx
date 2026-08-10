@@ -1,11 +1,16 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { useSportContext } from '../services/sport';
+import { getNextSpreadJob } from '../services/spreadRelease';
 import RulesPage from '../pages/RulesPage';
 
 vi.mock('../services/sport', () => ({
   useSportContext: vi.fn(() => ({ sport: 'NFL', isCfb: false, isNfl: true })),
+}));
+
+vi.mock('../services/spreadRelease', () => ({
+  getNextSpreadJob: vi.fn().mockResolvedValue(null),
 }));
 
 function renderPage() {
@@ -143,5 +148,55 @@ describe('RulesPage — CFB playoff grid', () => {
     // NFL-specific rounds should not appear
     expect(screen.queryByText(/wild card/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/super bowl/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('RulesPage — spread lock section', () => {
+  beforeEach(() => {
+    vi.mocked(getNextSpreadJob).mockReset();
+  });
+
+  it('shows the "When spreads lock" section', () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
+    vi.mocked(getNextSpreadJob).mockResolvedValue(null);
+    renderPage();
+    expect(screen.getByText(/when spreads lock/i)).toBeInTheDocument();
+  });
+
+  it('explains the distinction between spread lock and pick lock', () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
+    vi.mocked(getNextSpreadJob).mockResolvedValue(null);
+    renderPage();
+    expect(screen.getByText(/freezes once for the whole week/i)).toBeInTheDocument();
+  });
+
+  it('calls getNextSpreadJob with NFL for the NFL site', () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
+    vi.mocked(getNextSpreadJob).mockResolvedValue(null);
+    renderPage();
+    expect(getNextSpreadJob).toHaveBeenCalledWith('NFL');
+  });
+
+  it('calls getNextSpreadJob with CFB for the CFB site', () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'CFB', isCfb: true, isNfl: false });
+    vi.mocked(getNextSpreadJob).mockResolvedValue(null);
+    renderPage();
+    expect(getNextSpreadJob).toHaveBeenCalledWith('CFB');
+  });
+
+  it('shows the next lock time once loaded', async () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
+    vi.mocked(getNextSpreadJob).mockResolvedValue('2026-09-09T14:20:00Z');
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText(/next lock:/i)).toBeInTheDocument();
+    });
+  });
+
+  it('does not show "Next lock" text before the fetch resolves', () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
+    vi.mocked(getNextSpreadJob).mockReturnValue(new Promise(() => {})); // never resolves
+    renderPage();
+    expect(screen.queryByText(/next lock:/i)).not.toBeInTheDocument();
   });
 });

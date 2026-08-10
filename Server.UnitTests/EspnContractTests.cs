@@ -26,15 +26,27 @@ public class EspnContractTests
         "NYJ", "PHI", "PIT", "SEA", "SF", "TB", "TEN", "WAS",
     };
 
+    // site.api.espn.com started 403-ing requests with no User-Agent (or a normal branded one) as
+    // of 2026-08-05 — see the identical comment/fix in Program.cs's AddHttpClient registrations.
+    // These tests build their own HttpClient rather than going through DI, so they need the same
+    // header or they get 403'd while production (which does have it) doesn't.
+    private const string EspnUserAgent = "curl/8.14.1";
+
+    private static HttpClient BuildEspnHttpClient(string baseAddress) {
+        var client = new HttpClient { BaseAddress = new Uri(baseAddress) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(EspnUserAgent);
+        return client;
+    }
+
     private static EspnApiService BuildEspnApiService() =>
-        new(new HttpClient { BaseAddress = new Uri("http://site.api.espn.com") },
+        new(BuildEspnHttpClient("http://site.api.espn.com"),
             new LoggerFactory().CreateLogger<EspnApiService>());
 
     private static CfbApiService BuildCfbApiService() =>
-        new(new HttpClient { BaseAddress = new Uri("http://site.api.espn.com") });
+        new(BuildEspnHttpClient("http://site.api.espn.com"));
 
     private static EspnCoreOddsService BuildOddsService() =>
-        new(new HttpClient { BaseAddress = new Uri("https://sports.core.api.espn.com") });
+        new(BuildEspnHttpClient("https://sports.core.api.espn.com"));
 
     [Fact]
     public async Task NflScoreboard_RecentRegularSeasonWeek_DeserializesRealWireShape()

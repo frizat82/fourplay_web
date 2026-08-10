@@ -21,9 +21,22 @@ public class NflSpreadJobTests
     private readonly ILeagueRepository _repo;
     private readonly INflCurrentWeekService _nflCurrentWeekService;
     private readonly IJobExecutionContext _context;
+    private readonly TimeProvider _timeProvider;
 
-    // Default regular-season week used by most tests
-    private static readonly NflWeekInfo DefaultWeek = new(5, 5, 2024, false, "Week 5", "Standard");
+    // Fixed, controlled "now" — not tied to the real wall clock, so lock-time boundary tests are
+    // deterministic regardless of when the suite actually runs.
+    private static readonly DateTimeOffset FakeNow = new(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
+
+    private sealed class FakeTimeProvider(DateTimeOffset now) : TimeProvider {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    // Default regular-season week used by most tests — lock time in the past (relative to
+    // FakeNow) so the lock-time write-guard (frizat-pxy follow-on) doesn't gate the existing
+    // happy-path tests.
+    private static readonly DateTime PastLockTime = FakeNow.UtcDateTime.AddDays(-1);
+    private static readonly DateTime FutureLockTime = FakeNow.UtcDateTime.AddDays(1);
+    private static readonly NflWeekInfo DefaultWeek = new(5, 5, 2024, false, "Week 5", "Standard", PastLockTime);
 
     public NflSpreadJobTests()
     {
@@ -32,11 +45,13 @@ public class NflSpreadJobTests
         _repo = Substitute.For<ILeagueRepository>();
         _nflCurrentWeekService = Substitute.For<INflCurrentWeekService>();
         _context = Substitute.For<IJobExecutionContext>();
+        _timeProvider = new FakeTimeProvider(FakeNow);
 
         _nflCurrentWeekService.GetCurrentWeekAsync().Returns(DefaultWeek);
+        _context.MergedJobDataMap.Returns(new JobDataMap());
     }
 
-    private NflSpreadJob BuildJob() => new(_oddsService, _espnApi, _repo, _nflCurrentWeekService);
+    private NflSpreadJob BuildJob() => new(_oddsService, _espnApi, _repo, _nflCurrentWeekService, _timeProvider);
 
     // -----------------------------------------------------------------------
     // Helper builders
@@ -137,7 +152,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
         await _oddsService.DidNotReceive()
                           .GetEventsWithOddsAsync(Arg.Any<int>(), Arg.Any<int>());
     }
@@ -155,7 +170,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     // -----------------------------------------------------------------------
@@ -172,7 +187,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+        await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
     }
 
     [Fact]
@@ -184,7 +199,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem(homeSpread: "-7", awaySpread: "+7"));
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
@@ -203,7 +218,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem(homeSpread: "-3.5", awaySpread: "+3.5"));
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
@@ -221,7 +236,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem(overUnder: 48.5));
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
@@ -238,7 +253,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem());
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
@@ -261,7 +276,7 @@ public class NflSpreadJobTests
                     .Returns(BuildOddsItem(homeSpread: "+3", awaySpread: "-3"));
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
@@ -285,7 +300,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     [Fact]
@@ -298,7 +313,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     // -----------------------------------------------------------------------
@@ -327,7 +342,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+        await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
     }
 
     [Fact]
@@ -343,7 +358,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     [Fact]
@@ -359,7 +374,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     // -----------------------------------------------------------------------
@@ -451,7 +466,7 @@ public class NflSpreadJobTests
         await BuildJob().Execute(_context);
 
         // Second game's spread should be persisted
-        await _repo.Received(1).AddNewNflSpreadsAsync(
+        await _repo.Received(1).UpsertAsync(
             Arg.Is<List<NflSpreads>>(l => l.Count == 1 && l[0].HomeTeam == "SF"));
     }
 
@@ -467,7 +482,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.DidNotReceive().AddNewNflSpreadsAsync(Arg.Any<List<NflSpreads>>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
         await _oddsService.DidNotReceive().GetEventsWithOddsAsync(Arg.Any<int>(), Arg.Any<int>());
     }
 
@@ -492,14 +507,14 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+        await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
     }
 
     [Fact]
     public async Task Execute_PostSeasonConferenceChampionshipWeek_IsNotTreatedAsByeWeek()
     {
         _nflCurrentWeekService.GetCurrentWeekAsync()
-            .Returns(new NflWeekInfo(21, 3, 2024, true, "Conference Championship", "Standard"));
+            .Returns(new NflWeekInfo(21, 3, 2024, true, "Conference Championship", "Standard", PastLockTime));
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
                 .Returns(BuildScoreboard(weekNumber: 3, seasonType: (int)TypeOfSeason.PostSeason));
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
@@ -507,7 +522,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.Received(1).AddNewNflSpreadsAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+        await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
     }
 
     // -----------------------------------------------------------------------
@@ -519,19 +534,68 @@ public class NflSpreadJobTests
     {
         // Wild Card: NflCurrentWeekService returns WeekId=19, EspnWeek=1, IsPostSeason=true
         _nflCurrentWeekService.GetCurrentWeekAsync()
-            .Returns(new NflWeekInfo(19, 1, 2024, true, "Wild Card Weekend", "Standard"));
+            .Returns(new NflWeekInfo(19, 1, 2024, true, "Wild Card Weekend", "Standard", PastLockTime));
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
                 .Returns(BuildScoreboard(weekNumber: 1, seasonType: (int)TypeOfSeason.PostSeason));
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem());
 
         List<NflSpreads>? captured = null;
-        await _repo.AddNewNflSpreadsAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
+        await _repo.UpsertAsync(Arg.Do<List<NflSpreads>>(l => captured = l));
 
         await BuildJob().Execute(_context);
 
         Assert.NotNull(captured);
         Assert.Single(captured);
         Assert.Equal(19, captured[0].NflWeek);
+    }
+
+    // -----------------------------------------------------------------------
+    // Lock-time write guard (frizat-pxy follow-on): no automated or manual write
+    // before a week's SpreadLockDatetime, unless explicitly forced via JobDataMap.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Execute_LockTimeInFuture_NoForce_SkipsWithoutFetching()
+    {
+        _nflCurrentWeekService.GetCurrentWeekAsync()
+            .Returns(new NflWeekInfo(5, 5, 2024, false, "Week 5", "Standard", FutureLockTime));
+
+        await BuildJob().Execute(_context);
+
+        await _espnApi.DidNotReceive().GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>());
+        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
+    }
+
+    [Fact]
+    public async Task Execute_LockTimeInFuture_Forced_WritesAnyway()
+    {
+        _nflCurrentWeekService.GetCurrentWeekAsync()
+            .Returns(new NflWeekInfo(5, 5, 2024, false, "Week 5", "Standard", FutureLockTime));
+        var forceMap = new JobDataMap();
+        forceMap.Put("force", true);
+        _context.MergedJobDataMap.Returns(forceMap);
+        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+                .Returns(BuildScoreboard());
+        _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
+                    .Returns(BuildOddsItem());
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+    }
+
+    [Fact]
+    public async Task Execute_LockTimeInPast_NoForce_WritesNormally()
+    {
+        // DefaultWeek's lock time is already in the past — the common/happy-path case
+        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+                .Returns(BuildScoreboard());
+        _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
+                    .Returns(BuildOddsItem());
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
     }
 }

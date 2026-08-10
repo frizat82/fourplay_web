@@ -46,6 +46,14 @@ export interface GameCardProps {
   // Score mode: who picked
   homePickers?: number;
   awayPickers?: number;
+  // When the spread was first posted — undefined/null hides the line entirely
+  spreadPostedAt?: string | null;
+}
+
+function formatShortDateTime(iso: string) {
+  return new Date(iso).toLocaleString([], {
+    weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
 }
 
 function statusChip(status: string | undefined, gameTime: string) {
@@ -56,7 +64,7 @@ function statusChip(status: string | undefined, gameTime: string) {
   if (isLive) return <Chip label="Live" size="small" color="success" />;
   return (
     <Typography variant="caption" color="text.secondary">
-      {new Date(gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+      {formatShortDateTime(gameTime)}
     </Typography>
   );
 }
@@ -78,6 +86,7 @@ export default function GameCard({
   overUnderLocked = false,
   onPickOver, onPickUnder,
   homePickers, awayPickers,
+  spreadPostedAt,
 }: GameCardProps) {
   const isFinal = gameStatus === 'StatusFinal' || gameStatus === 'status_final';
   const isLive = gameStatus === 'StatusInProgress' || gameStatus === 'status_in_progress';
@@ -176,6 +185,12 @@ export default function GameCard({
             </Stack>
           </CardContent>
         </Card>
+
+        {spreadPostedAt && (
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ textAlign: 'center', mt: 0.75 }}>
+            Line posted {formatShortDateTime(spreadPostedAt)}
+          </Typography>
+        )}
 
         {/* Postseason O/U picks */}
         {isPostSeason && mode === 'pick' && overValue != null && underValue != null && (

@@ -269,6 +269,7 @@ public class DemoDataSeeder(
             AwayTeamSpread = 3.5,
             OverUnder = 47.5,
             GameTime = DateTimeOffset.UtcNow.AddMinutes(30),
+            IsLeagueEligible = true,
         });
         await db.SaveChangesAsync();
         Log.Information("DemoDataSeeder: seeded replay CFB slate {Slate} spread IND@ATL", ReplayCfbSlateNumber);
@@ -1037,6 +1038,7 @@ public class DemoDataSeeder(
             AwayTeamSpread = g.AwaySpread,
             OverUnder      = g.OU,
             GameTime       = g.GameTime,
+            IsLeagueEligible = true,
         }).ToList();
 
         db.CfbSpreads.AddRange(spreads);
@@ -1324,6 +1326,11 @@ public class DemoDataSeeder(
             // ESPN week 21: CFP Championship → IV slate 18
             new() { Season = CfbDemoSeason, EspnWeekNumber = 21, IvLeagueWeekNumber = 18, WeekType = "FBS Playoff",              ScoringFormat = "NFLSuperBowl",  InScopeIvLeague = true,  WeekStartDate = new DateOnly(2026,  1, 19), WeekEndDate = new DateOnly(2026,  1, 19) },
         };
+
+        // SpreadLockDatetime is required (NOT NULL) — demo rows don't need real-world accuracy,
+        // just a deterministic, non-default value; midnight UTC on the week's own start date.
+        foreach (var config in configs)
+            config.SpreadLockDatetime = DateTime.SpecifyKind(config.WeekStartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
 
         db.CfbSeasonWeekConfigs.AddRange(configs);
         await db.SaveChangesAsync();

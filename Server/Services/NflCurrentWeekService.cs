@@ -33,6 +33,6 @@ public class NflCurrentWeekService(ILeagueRepository repo) : INflCurrentWeekServ
             22    => 5,  // Super Bowl (ESPN skips week 4 = Pro Bowl)
             _     => cfg.WeekId
         };
-        return new NflWeekInfo(cfg.WeekId, espnWeek, cfg.Season, isPostSeason, cfg.WeekLabel, cfg.ScoringFormat);
+        return new NflWeekInfo(cfg.WeekId, espnWeek, cfg.Season, isPostSeason, cfg.WeekLabel, cfg.ScoringFormat, cfg.SpreadLockDatetime);
     }
 }
