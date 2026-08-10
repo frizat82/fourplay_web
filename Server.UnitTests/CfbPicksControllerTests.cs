@@ -47,9 +47,10 @@ public class CfbPicksControllerTests
         Id = id, Season = 2025, SlateNumber = slateNumber, Label = "Week 1", SlateType = "RegularSeason",
     };
 
-    private static CfbSpreads MakeSpread(int espnEventId, DateTimeOffset gameTime, string home = "ORE", string away = "OSU") => new()
+    private static CfbSpreads MakeSpread(int espnEventId, DateTimeOffset gameTime, string home = "ORE", string away = "OSU", bool isLeagueEligible = true) => new()
     {
         CfbSlateId = 1, EspnEventId = espnEventId, HomeTeam = home, AwayTeam = away, GameTime = gameTime,
+        IsLeagueEligible = isLeagueEligible,
     };
 
     [Fact]
@@ -314,5 +315,95 @@ public class CfbPicksControllerTests
 
         Assert.NotNull(attr);
         Assert.Equal("Administrator", attr!.Roles);
+    }
+
+    // ── GetSpreads — serving-layer eligibility filter (frizat-9m0) ──────────
+
+    [Fact]
+    public async Task GetSpreads_ReturnsOnlyLeagueEligibleSpreads()
+    {
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
+            MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU", isLeagueEligible: true),
+            MakeSpread(401800002, DateTimeOffset.UtcNow.AddHours(2), "TOL", "BALLST", isLeagueEligible: false),
+        ]);
+
+        var result = await BuildController().GetSpreads(1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbSpreads>>(ok.Value).ToList();
+        Assert.Single(returned);
+        Assert.Equal(401800001, returned[0].EspnEventId);
+    }
+
+    // ── GetScores — serving-layer eligibility filter (frizat-9m0) ───────────
+
+    private static CfbScores MakeScore(int espnEventId, string home = "ORE", string away = "OSU") => new()
+    {
+        CfbSlateId = 1, EspnEventId = espnEventId, HomeTeam = home, AwayTeam = away,
+        HomeTeamScore = 24, AwayTeamScore = 17, GameStatus = "STATUS_FINAL",
+    };
+
+    [Fact]
+    public async Task GetScores_ExcludesScoresForKnownIneligibleEvents()
+    {
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
+            MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(-2), "ORE", "OSU", isLeagueEligible: true),
+            MakeSpread(401800002, DateTimeOffset.UtcNow.AddHours(-2), "TOL", "BALLST", isLeagueEligible: false),
+        ]);
+        _cfbRepo.GetScoresForSlateAsync(1).Returns([
+            MakeScore(401800001, "ORE", "OSU"),
+            MakeScore(401800002, "TOL", "BALLST"),
+        ]);
+
+        var result = await BuildController().GetScores(1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbScoreDto>>(ok.Value).ToList();
+        Assert.Single(returned);
+        Assert.Equal(401800001, returned[0].EspnEventId);
+    }
+
+    [Fact]
+    public async Task GetScores_IsFailOpen_ForScoreWithNoMatchingSpreadAtAll()
+    {
+        // Same fail-open philosophy as AddPicks_WhenNoMatchingSpread_AllowsPick: a completed game
+        // we have no spread data for at all (e.g. CfbSpreadJob's once-a-week fetch missed a late
+        // schedule change) should still show, not silently vanish — only games we POSITIVELY know
+        // are ineligible get excluded.
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([]);
+        _cfbRepo.GetScoresForSlateAsync(1).Returns([MakeScore(401800001, "ORE", "OSU")]);
+
+        var result = await BuildController().GetScores(1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbScoreDto>>(ok.Value).ToList();
+        Assert.Single(returned);
+        Assert.Equal(401800001, returned[0].EspnEventId);
+    }
+
+    // ── AddPicks — ineligible-event guard (frizat-9m0) ───────────────────────
+    // Rejects a pick for an event we KNOW is excluded (MAC Tue/Wed, unranked, etc.) — distinct
+    // from AddPicks_WhenNoMatchingSpread_AllowsPick above, which fails open when we have NO data
+    // for the event at all (e.g. ESPN cache gap). Positive knowledge of ineligibility rejects;
+    // absence of knowledge does not.
+
+    [Fact]
+    public async Task AddPicks_WhenEventIsKnownIneligible_ReturnsBadRequest()
+    {
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
+            MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2), isLeagueEligible: false),
+        ]);
+        _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
+        var request = new AddCfbPicksRequest
+        {
+            LeagueId = 1, CfbSlateId = 1, Season = 2025,
+            Picks = [new CfbPickItem { Team = "ORE", EspnEventId = 401800001, PickType = "Spread" }]
+        };
+
+        var result = await BuildController().AddPicks(request);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
     }
 }

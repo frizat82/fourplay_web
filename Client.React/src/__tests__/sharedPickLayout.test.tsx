@@ -90,7 +90,7 @@ import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUs
 import { loadCfbScoresWithRetry, getCfbLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
-const spread: CfbSpreadDto = { id: 1, cfbSlateId: 1, espnEventId: 100, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5, gameTime: '2030-10-11T20:00:00Z' };
+const spread: CfbSpreadDto = { id: 1, cfbSlateId: 1, espnEventId: 100, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5, gameTime: '2030-10-11T20:00:00Z', dateCreated: '2030-10-09T14:00:00Z' };
 
 describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
   beforeEach(() => {

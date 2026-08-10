@@ -2,21 +2,16 @@ using NodaTime;
 
 namespace FourPlayWebApp.Shared.Helpers;
 
-
 public static class TimeZoneHelpers {
-    public static DateTime ConvertTimeToCst(DateTime utcDateTime) {
-        // Create an instance of the BclDateTimeZone representing the Central Standard Time (CST) zone.
-        var cstZone = DateTimeZoneProviders.Tzdb["America/Chicago"];
+    public static DateTime ConvertTimeToCst(DateTime utcDateTime) =>
+        ConvertTime(DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc), "America/Chicago");
 
-        // Change the Kind to Local.
-        var utc = DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc);
-        // Create an Instant from the UTC DateTime.
-        var instant = Instant.FromDateTimeUtc(utc);
+    public static DateTime ConvertTimeToEt(DateTimeOffset utcDateTime) =>
+        ConvertTime(utcDateTime.UtcDateTime, "America/New_York");
 
-        // Convert the instant to the Central Standard Time.
-        var zonedDateTime = instant.InZone(cstZone);
-
-        // Return the DateTime in CST.
-        return zonedDateTime.ToDateTimeUnspecified();
+    private static DateTime ConvertTime(DateTime utcDateTime, string tzdbZoneId) {
+        var zone = DateTimeZoneProviders.Tzdb[tzdbZoneId];
+        var instant = Instant.FromDateTimeUtc(utcDateTime);
+        return instant.InZone(zone).ToDateTimeUnspecified();
     }
 }

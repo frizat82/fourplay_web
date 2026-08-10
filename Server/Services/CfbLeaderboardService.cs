@@ -37,7 +37,9 @@ public class CfbLeaderboardService(
 
                 for (int i = 0; i < slates.Count; i++) {
                     var slate = slates[i];
-                    var spreads = (await cfbRepository.GetSpreadsForSlateAsync(slate.Id)).ToList();
+                    // GetSpreadsForSlateAsync now returns the full FBS slate, not just league-eligible
+                    // games (frizat-9m0) — scoring/MissingPicks must only ever consider eligible ones.
+                    var spreads = (await cfbRepository.GetSpreadsForSlateAsync(slate.Id)).WhereLeagueEligible().ToList();
                     var scores = (await cfbRepository.GetScoresForSlateAsync(slate.Id)).ToList();
                     var picks = (await cfbPicksRepository.GetUserPicksAsync(leagueId, slate.Id, user.UserId)).ToList();
                     var juice = JuiceForSlate(slate.SlateNumber, juiceMapping);

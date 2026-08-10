@@ -14,7 +14,7 @@ function formatCountdown(diffMs: number) {
   return days > 0 ? `${days}d ${timePart}` : timePart;
 }
 
-export default function SpreadRelease() {
+export default function SpreadRelease({ sport }: { sport: 'nfl' | 'cfb' }) {
   const [loading, setLoading] = useState(true);
   const [nextSpreadJob, setNextSpreadJob] = useState<string | null>(null);
   const [timeRemaining, setTimeRemaining] = useState('Loading...');
@@ -22,12 +22,12 @@ export default function SpreadRelease() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const result = await getNextSpreadJob();
+      const result = await getNextSpreadJob(sport === 'cfb' ? 'CFB' : 'NFL');
       setNextSpreadJob(result ?? null);
       setLoading(false);
     };
     void load();
-  }, []);
+  }, [sport]);
 
   const targetDate = useMemo(() => (nextSpreadJob ? new Date(nextSpreadJob) : null), [nextSpreadJob]);
 

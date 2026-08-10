@@ -260,7 +260,7 @@ public class LeagueController(
     [Authorize(Roles = "Administrator")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> AddNewSpreads([FromBody] List<NflSpreads> spreads) {
-        await repo.AddNewNflSpreadsAsync(spreads);
+        await repo.UpsertAsync(spreads);
         return NoContent();
     }
 

@@ -3,7 +3,7 @@ using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Shared.Models.Data;
 
 namespace FourPlayWebApp.Server.Services.Repositories.Interfaces;
-public interface ILeagueRepository {
+public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     // League and User related methods
     Task<List<LeagueUserMapping>> GetLeagueUserMappingsAsync(int leagueId);
     Task<List<LeagueUserMapping>> GetLeagueUserMappingsAsync(ApplicationUser user);
@@ -21,7 +21,6 @@ public interface ILeagueRepository {
     Task<List<NflWeeks>> GetNflWeeksAsync(int season);
 
     // NFL Scores and Spreads
-    Task AddNewNflSpreadsAsync(List<NflSpreads> spreads);
     Task UpsertNflScoresAsync(List<NflScores> scores);
     Task<List<NflScores>> GetNflScoresAsync(int season, int week);
     Task<List<NflScores>> GetAllNflScoresForSeasonAsync(int season);
