@@ -615,4 +615,44 @@ public class AuthControllerTests
         Assert.Equal(dtoNotFound.Succeeded, dtoBadPass.Succeeded);
         Assert.Equal(dtoNotFound.Message, dtoBadPass.Message);
     }
+
+    // ── DeleteUser: predictable outcome on every dependent-data shape (frizat-5rp) ─────────
+    //
+    // frizat-896's schema audit found Invitations' 3 FKs off AspNetUsers/LeagueInfo were the only
+    // ones set to NO ACTION while every other table (LeagueInfo, NflPicks, CfbPicks,
+    // LeagueUserMapping, RefreshTokens) already CASCADEs — deleting a user with invitation history
+    // threw an unhandled DbUpdateException instead of completing. Resolved by making Invitations
+    // CASCADE too (consistent with everywhere else, and with CLAUDE.md's own description of
+    // delete-user as an already-accepted cascade-then-confirm operation). This test covers the
+    // other half of the bead's ask: DeleteUser must never let ANY DbUpdateException — from this
+    // now-fixed cause or a future one — bubble up as an unhandled 500.
+
+    [Fact]
+    public async Task DeleteUser_UserManagerThrowsDbUpdateException_ReturnsControlledError()
+    {
+        var userManager = BuildUserManager();
+        var user = BuildUser();
+        userManager.FindByIdAsync(user.Id).Returns(user);
+        userManager.DeleteAsync(user)
+            .Returns<Task<IdentityResult>>(_ => throw new DbUpdateException("FK violation", new Exception("inner")));
+
+        var result = await BuildController(userManager: userManager).DeleteUser(user.Id);
+
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.InRange(objectResult.StatusCode ?? 0, 400, 599);
+        Assert.IsType<string>(objectResult.Value);
+    }
+
+    [Fact]
+    public async Task DeleteUser_UserManagerSucceeds_ReturnsOk()
+    {
+        var userManager = BuildUserManager();
+        var user = BuildUser();
+        userManager.FindByIdAsync(user.Id).Returns(user);
+        userManager.DeleteAsync(user).Returns(IdentityResult.Success);
+
+        var result = await BuildController(userManager: userManager).DeleteUser(user.Id);
+
+        Assert.IsType<OkResult>(result.Result);
+    }
 }

@@ -18,16 +18,24 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         await db.SaveChangesAsync();
     }
 
-    // frizat-2lc: unlike DemoDataSeeder.SeedCfbSlatesAsync's equivalent re-seed path, this does not
-    // clean up dependent CfbSpreads/CfbScores/CfbPicks before deleting. CfbSlateSeederJob is the
-    // only caller and only invokes this when existing < configured slate count. As of frizat-896,
-    // CfbSlateId now carries a Restrict FK from those three tables, so a slate with real dependent
-    // data will now throw here (loud failure) instead of silently orphaning rows — but the
-    // underlying gap (no guard against deleting a slate that already has real data) is unfixed.
-    public async Task DeleteSlatesAsync(IEnumerable<CfbSlates> slates) {
+    public async Task<bool> DeleteSlatesAsync(IEnumerable<CfbSlates> slates) {
         await using var db = await dbFactory.CreateDbContextAsync();
-        db.CfbSlates.RemoveRange(slates);
+        var slateList = slates.ToList();
+        var ids = slateList.Select(s => s.Id).ToHashSet();
+
+        // frizat-2lc: never bulk-delete slates that already carry real dependent data — guard
+        // lives here, not just in the one caller that exists today, so any future caller of
+        // DeleteSlatesAsync gets the same protection against real data loss / an unhandled FK
+        // violation (CfbSpreads/CfbScores/CfbPicks.CfbSlateId is Restrict, not Cascade).
+        var hasDependentData = ids.Count > 0 &&
+            (await db.CfbSpreads.AnyAsync(s => ids.Contains(s.CfbSlateId))
+             || await db.CfbScores.AnyAsync(s => ids.Contains(s.CfbSlateId))
+             || await db.CfbPicks.AnyAsync(p => ids.Contains(p.CfbSlateId)));
+        if (hasDependentData) return false;
+
+        db.CfbSlates.RemoveRange(slateList);
         await db.SaveChangesAsync();
+        return true;
     }
 
     public async Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season) {

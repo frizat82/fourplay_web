@@ -95,11 +95,33 @@ public class CfbSlateSeederJobTests
         var stale = MakeSlates(4).ToList();
         _repo.GetWeekConfigsForSeasonAsync(Season).Returns(Make2026Configs());
         _repo.GetSlatesForSeasonAsync(Season).Returns(stale);
+        _repo.DeleteSlatesAsync(Arg.Any<IEnumerable<CfbSlates>>()).Returns(true);
 
         await BuildJob().Execute(_context);
 
         await _repo.Received(1).DeleteSlatesAsync(Arg.Is<IEnumerable<CfbSlates>>(s => s.Count() == 4));
         await _repo.Received(1).AddSlatesAsync(Arg.Is<IEnumerable<CfbSlates>>(s => s.Count() == 18));
+    }
+
+    // frizat-2lc: CfbSlateSeederJob's reseed-delete path had no guard against wiping out slates
+    // that already carry real CfbSpreads/CfbScores/CfbPicks data (e.g. a corrective mid-season edit
+    // to CfbSeasonWeekConfigs bumping configs.Count past existing.Count). The fail-closed guard
+    // lives inside CfbRepository.DeleteSlatesAsync itself (see CfbRepositoryTests) so it protects
+    // every caller, not just this job — DeleteSlatesAsync returns false instead of deleting when
+    // dependent CfbSpreads/CfbScores/CfbPicks rows exist, and the job must skip the reseed entirely
+    // when that happens rather than risk real data loss or an unhandled FK violation.
+    [Fact]
+    public async Task Execute_WhenDeleteSlatesSkipsDueToDependentData_SkipsReseed()
+    {
+        var stale = MakeSlates(4).ToList();
+        _repo.GetWeekConfigsForSeasonAsync(Season).Returns(Make2026Configs());
+        _repo.GetSlatesForSeasonAsync(Season).Returns(stale);
+        _repo.DeleteSlatesAsync(Arg.Any<IEnumerable<CfbSlates>>()).Returns(false);
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).DeleteSlatesAsync(Arg.Any<IEnumerable<CfbSlates>>());
+        await _repo.DidNotReceive().AddSlatesAsync(Arg.Any<IEnumerable<CfbSlates>>());
     }
 
     [Fact]

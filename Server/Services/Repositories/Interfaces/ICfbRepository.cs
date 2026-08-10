@@ -6,7 +6,9 @@ namespace FourPlayWebApp.Server.Services.Repositories.Interfaces;
 public interface ICfbRepository : ISpreadRepository<CfbSpreads> {
     Task<bool> SlatesExistForSeasonAsync(int season);
     Task AddSlatesAsync(IEnumerable<CfbSlates> slates);
-    Task DeleteSlatesAsync(IEnumerable<CfbSlates> slates);
+    // Returns false (and skips the delete) if any of the slates already carry dependent
+    // CfbSpreads/CfbScores/CfbPicks data — see CfbRepositoryTests for the guard behavior.
+    Task<bool> DeleteSlatesAsync(IEnumerable<CfbSlates> slates);
     Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season);
     Task<CfbSlates?> GetSlateByIdAsync(int slateId);
     Task UpsertCfbScoresAsync(IEnumerable<CfbScores> scores);
