@@ -33,6 +33,7 @@ export interface CfbSpreadDto {
   awayTeamSpread: number;
   overUnder: number;
   gameTime: string;
+  dateCreated: string;
 }
 
 export interface CfbScoreDto {

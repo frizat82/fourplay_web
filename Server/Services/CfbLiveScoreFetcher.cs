@@ -40,15 +40,13 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi) : ICfbLiveScoreFetcher {
     }
 
     private async Task<EspnScores?> FetchRankedWeekAsync(CfbSlates slate) {
-        // Regular season / conf-champs: filter to ranked teams only
+        // Regular season / conf-champs: full FBS week, no rank filter (frizat-9m0) — every game is
+        // persisted for the audit trail; CfbSpreadJob computes IsLeagueEligible from rank + day of
+        // week separately, gating what's *served* to users without dropping data at ingestion.
         var scoreboard = await cfbApi.GetScoresByWeekAsync(slate.EspnWeekNumber!.Value, isPostSeason: false);
         if (scoreboard?.Events is null) return null;
 
-        var events = scoreboard.Events
-            .Where(e => e.Competitions.Any(c => CfbSlateHelpers.HasRankedTeam(c.Competitors)))
-            .ToArray();
-
-        return events.Length == 0 ? null : WithEvents(scoreboard, events);
+        return scoreboard.Events.Length == 0 ? null : WithEvents(scoreboard, scoreboard.Events);
     }
 
     private static EspnScores WithEvents(EspnScores source, Event[] events) => new() {

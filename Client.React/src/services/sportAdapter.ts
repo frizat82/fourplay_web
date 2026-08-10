@@ -43,6 +43,10 @@ export interface GameView {
   situation?: import('../types/liveGame').GameSituation | null;
   homeCovers?: boolean | null;  // null = not final / no odds
   overWins?: boolean | null;
+  /** When the spread was first posted (DateCreated). Undefined where the adapter's spread source
+   *  doesn't carry it — NFL's spreadBatch endpoint returns computed, juice-adjusted odds rather
+   *  than the raw NflSpreads entity, so it isn't available there today. */
+  spreadPostedAt?: string | null;
 }
 
 export interface PickView {

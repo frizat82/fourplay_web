@@ -33,6 +33,11 @@ public class JobManagerControllerTests
         nameof(JobManagerController.RunCfbSpreads),
         nameof(JobManagerController.RunCfbScores),
         nameof(JobManagerController.DeleteJob),
+        // The full job registry (every job's status/next-run/last error message) is internal
+        // operational detail — only GetNextSpreadJobAsync (a single timestamp, backs the public
+        // Rules page) is meant for any logged-in user.
+        nameof(JobManagerController.GetAllJobsStatusAsync),
+        nameof(JobManagerController.GetJobStatusAsync),
     ];
 
     [Theory]
@@ -53,7 +58,6 @@ public class JobManagerControllerTests
 
     public static TheoryData<string> AuthenticatedOnlyEndpoints =>
     [
-        nameof(JobManagerController.GetAllJobsStatusAsync),
         nameof(JobManagerController.GetNextSpreadJobAsync),
     ];
 
@@ -112,16 +116,58 @@ public class JobManagerControllerTests
     }
 
     // ── Functional: RunCfbSpreads happy path ──────────────────────────────────
+    // frizat-9m0: the old fixed "CFB Spread Job" JobKey no longer exists — CFB spreads now run
+    // via per-week "CFB Spreads {season} Wk{n}" triggers, so this must find one via the same
+    // soonest-job lookup as RunSpreads, not a hardcoded key.
 
     [Fact]
     public async Task RunCfbSpreads_ReturnsOk_WhenSchedulerSucceeds()
     {
         var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        scheduler.TriggerJob(new JobKey("CFB Spread Job")).Returns(Task.CompletedTask);
+        SetupSchedulerWithJobs(scheduler, ("CFB Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(3)));
+        scheduler.TriggerJob(new JobKey("CFB Spreads 2026 Wk6")).Returns(Task.CompletedTask);
 
         var result = await controller.RunCfbSpreads();
 
         Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("CFB Spreads 2026 Wk6"));
+    }
+
+    [Fact]
+    public async Task RunCfbSpreads_Forced_PassesForceFlagInJobDataMap()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("CFB Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(3)));
+        scheduler.TriggerJob(new JobKey("CFB Spreads 2026 Wk6"), Arg.Any<JobDataMap>()).Returns(Task.CompletedTask);
+
+        var result = await controller.RunCfbSpreads(force: true);
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(
+            new JobKey("CFB Spreads 2026 Wk6"),
+            Arg.Is<JobDataMap>(d => d.GetBoolean("force")));
+    }
+
+    [Fact]
+    public async Task RunCfbSpreads_ReturnsNotFound_WhenNoCfbSpreadsJobExists()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        scheduler.GetJobGroupNames().Returns(new List<string>());
+
+        var result = await controller.RunCfbSpreads();
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task RunCfbSpreads_IgnoresNflJobs()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("NFL Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(1)));
+
+        var result = await controller.RunCfbSpreads();
+
+        Assert.IsType<NotFoundResult>(result);
     }
 
     // ── Functional: RunCfbScores happy path ───────────────────────────────────
@@ -176,6 +222,80 @@ public class JobManagerControllerTests
         Assert.IsType<NotFoundResult>(result);
     }
 
+    [Fact]
+    public async Task RunSpreads_ReturnsOk_WhenSchedulerSucceeds()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("NFL Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(3)));
+        scheduler.TriggerJob(new JobKey("NFL Spreads 2026 Wk6")).Returns(Task.CompletedTask);
+
+        var result = await controller.RunSpreads();
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("NFL Spreads 2026 Wk6"));
+    }
+
+    [Fact]
+    public async Task RunSpreads_DefaultNoForce_TriggersWithoutJobDataMap()
+    {
+        // The default (unforced) call must not pass a "force" flag through — NflSpreadJob's
+        // lock-time guard treats an absent key as "not forced."
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("NFL Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(3)));
+        scheduler.TriggerJob(new JobKey("NFL Spreads 2026 Wk6")).Returns(Task.CompletedTask);
+
+        var result = await controller.RunSpreads();
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("NFL Spreads 2026 Wk6"));
+        await scheduler.DidNotReceive().TriggerJob(Arg.Any<JobKey>(), Arg.Any<JobDataMap>());
+    }
+
+    [Fact]
+    public async Task RunSpreads_Forced_PassesForceFlagInJobDataMap()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("NFL Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(3)));
+        scheduler.TriggerJob(new JobKey("NFL Spreads 2026 Wk6"), Arg.Any<JobDataMap>()).Returns(Task.CompletedTask);
+
+        var result = await controller.RunSpreads(force: true);
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(
+            new JobKey("NFL Spreads 2026 Wk6"),
+            Arg.Is<JobDataMap>(d => d.GetBoolean("force")));
+    }
+
+    [Fact]
+    public async Task RunSpreads_PicksSoonestJob_NotArbitraryMatch()
+    {
+        // Regression: FirstOrDefault() over multiple simultaneously-registered per-week jobs
+        // (frizat-pxy) would pick whichever week's name sorts first alphabetically — "Wk10" sorts
+        // before "Wk6" — not the one actually coming up next.
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler,
+            ("NFL Spreads 2026 Wk10", DateTimeOffset.UtcNow.AddDays(10)),
+            ("NFL Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(1)));
+        scheduler.TriggerJob(new JobKey("NFL Spreads 2026 Wk6")).Returns(Task.CompletedTask);
+
+        var result = await controller.RunSpreads();
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("NFL Spreads 2026 Wk6"));
+        await scheduler.DidNotReceive().TriggerJob(new JobKey("NFL Spreads 2026 Wk10"));
+    }
+
+    [Fact]
+    public async Task RunSpreads_IgnoresCfbJobs()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("CFB Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(1)));
+
+        var result = await controller.RunSpreads();
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
     // ── Functional: RunScores — no scores job ────────────────────────────────
 
     [Fact]
@@ -222,9 +342,107 @@ public class JobManagerControllerTests
     }
 
     /// <summary>
-    /// Sets up the scheduler mock so that GetAllJobsStatusAsync returns one job
-    /// whose name contains the given JobKey name.
+    /// Sets up the scheduler mock so that GetAllJobsStatusAsync returns several jobs, each with
+    /// its own next-fire time, keyed by name.
     /// </summary>
+    private static void SetupSchedulerWithJobs(IScheduler scheduler, params (string name, DateTimeOffset? nextRun)[] jobs)
+    {
+        var groupName = "DEFAULT";
+        var jobKeys = jobs.Select(j => new JobKey(j.name)).ToHashSet();
+        scheduler.GetJobGroupNames().Returns(new List<string> { groupName });
+        scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>()).Returns(jobKeys);
+        scheduler.GetCurrentlyExecutingJobs().Returns(new List<IJobExecutionContext>());
+        scheduler.GetTriggerState(Arg.Any<TriggerKey>()).Returns(TriggerState.Normal);
+
+        foreach (var (name, nextRun) in jobs) {
+            var jobKey = new JobKey(name);
+            var jobDetail = Substitute.For<IJobDetail>();
+            jobDetail.Key.Returns(jobKey);
+            jobDetail.Description.Returns((string?)null);
+            scheduler.GetJobDetail(jobKey).Returns(jobDetail);
+
+            var trigger = Substitute.For<ITrigger>();
+            trigger.GetNextFireTimeUtc().Returns(nextRun);
+            scheduler.GetTriggersOfJob(jobKey).Returns(new List<ITrigger> { trigger });
+        }
+    }
+
+    // ── GetNextSpreadJobAsync — sport scoping (frizat-9e7) ──────────────────
+
+    [Fact]
+    public async Task GetNextSpreadJobAsync_NoSport_ReturnsSoonestAcrossBothSports()
+    {
+        var (_, scheduler, _, controller) = BuildSut(isAdmin: true);
+        var nflRun = DateTimeOffset.UtcNow.AddDays(3);
+        var cfbRun = DateTimeOffset.UtcNow.AddDays(1);
+        SetupSchedulerWithJobs(scheduler,
+            ("NFL Spreads 2026 Wk6", nflRun),
+            ("CFB Spreads 2026 Wk6", cfbRun));
+
+        var result = await controller.GetNextSpreadJobAsync();
+
+        Assert.Equal(cfbRun, result);
+    }
+
+    [Fact]
+    public async Task GetNextSpreadJobAsync_SportNfl_IgnoresSoonerCfbJob()
+    {
+        var (_, scheduler, _, controller) = BuildSut(isAdmin: true);
+        var nflRun = DateTimeOffset.UtcNow.AddDays(3);
+        var cfbRun = DateTimeOffset.UtcNow.AddDays(1);
+        SetupSchedulerWithJobs(scheduler,
+            ("NFL Spreads 2026 Wk6", nflRun),
+            ("CFB Spreads 2026 Wk6", cfbRun));
+
+        var result = await controller.GetNextSpreadJobAsync("nfl");
+
+        Assert.Equal(nflRun, result);
+    }
+
+    [Fact]
+    public async Task GetNextSpreadJobAsync_SportCfb_IgnoresSoonerNflJob()
+    {
+        var (_, scheduler, _, controller) = BuildSut(isAdmin: true);
+        var nflRun = DateTimeOffset.UtcNow.AddDays(1);
+        var cfbRun = DateTimeOffset.UtcNow.AddDays(3);
+        SetupSchedulerWithJobs(scheduler,
+            ("NFL Spreads 2026 Wk6", nflRun),
+            ("CFB Spreads 2026 Wk6", cfbRun));
+
+        var result = await controller.GetNextSpreadJobAsync("cfb");
+
+        Assert.Equal(cfbRun, result);
+    }
+
+    [Fact]
+    public async Task GetNextSpreadJobAsync_IgnoresSchedulerJobs_EvenWhenSooner()
+    {
+        // NflSpreadSchedulerJob's own triggers ("NFL Spread Scheduler ...") must never be mistaken
+        // for an actual per-week NflSpreadJob trigger ("NFL Spreads ...") just because both contain
+        // "Spread" — the scheduler job's own next-run time is not a spread-fetch time.
+        var (_, scheduler, _, controller) = BuildSut(isAdmin: true);
+        var schedulerRun = DateTimeOffset.UtcNow.AddHours(1);
+        var realSpreadRun = DateTimeOffset.UtcNow.AddDays(3);
+        SetupSchedulerWithJobs(scheduler,
+            ("NFL Spread Scheduler Daily", schedulerRun),
+            ("NFL Spreads 2026 Wk6", realSpreadRun));
+
+        var result = await controller.GetNextSpreadJobAsync("nfl");
+
+        Assert.Equal(realSpreadRun, result);
+    }
+
+    [Fact]
+    public async Task GetNextSpreadJobAsync_NoMatchingJobs_ReturnsNull()
+    {
+        var (_, scheduler, _, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("CFB Slate Seeder", DateTimeOffset.UtcNow.AddDays(1)));
+
+        var result = await controller.GetNextSpreadJobAsync("nfl");
+
+        Assert.Null(result);
+    }
+
     private static void SetupSchedulerWithJob(IScheduler scheduler, JobKey jobKey)
     {
         var groupName = "DEFAULT";

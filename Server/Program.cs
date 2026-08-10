@@ -280,8 +280,13 @@ builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
 builder.Services.AddScoped<ICfbRepository, CfbRepository>();
 builder.Services.AddScoped<ICfbPicksRepository, CfbPicksRepository>();
 builder.Services.AddSingleton<INflCurrentWeekService, NflCurrentWeekService>();
+// Injectable clock for NflSpreadJob/CfbSpreadJob's lock-time write guard (SpreadLockGuard) — lets
+// tests control "now" exactly instead of depending on the real wall clock.
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ICfbCurrentSlateService, CfbCurrentSlateService>();
 builder.Services.AddSingleton<ICfbLiveScoreFetcher, CfbLiveScoreFetcher>();
+builder.Services.AddScoped<NflSpreadScheduleSource>();
+builder.Services.AddScoped<CfbSpreadScheduleSource>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 
@@ -289,9 +294,11 @@ builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 // Quartz
 builder.Services.AddScoped<IJob, NflScoresJob>();
 builder.Services.AddScoped<IJob, NflSpreadJob>();
-builder.Services.AddScoped<IJob, StartupJob>();
+builder.Services.AddScoped<IJob, NflSpreadSchedulerJob>();
 builder.Services.AddScoped<IJob, UserManagerJob>();
 builder.Services.AddScoped<IJob, CfbSlateSeederJob>();
+builder.Services.AddScoped<IJob, CfbSpreadSchedulerJob>();
+builder.Services.AddScoped<IJob, CfbRankingCaptureJob>();
 builder.Services.AddScoped<IJob, CfbSpreadJob>();
 builder.Services.AddScoped<IJob, CfbScoresJob>();
 builder.Services.AddQuartz(q => {
@@ -304,9 +311,16 @@ builder.Services.AddQuartz(q => {
         .StartAt(DateBuilder.FutureDate(userManagerDelay, IntervalUnit.Second))
     );
 
-    // NFL Spreads
-    q.ScheduleCstCronJob<NflSpreadJob>("NFL Spreads Christmas Eve", "Loads NFL spreads for Christmas Eve games at 10am CST", "0 0 10 24 12 ?");
-    q.ScheduleCstCronJob<NflSpreadJob>("NFL Spreads Thursday 2pm", "Loads NFL spreads every Thursday at 2pm CST", "0 0 14 ? * THU");
+    // NFL Spreads — frizat-pxy: NflSpreadJob has no fixed trigger of its own anymore.
+    // NflSpreadSchedulerJob reads NflSeasonWeekConfig.SpreadLockDatetime and registers a precise
+    // one-time trigger per upcoming week, replacing the old Thursday-2pm/Christmas-Eve crons
+    // (superseded docs/plans/SPREAD_GRAB_PLAN.md heuristic).
+    q.ScheduleJob<NflSpreadSchedulerJob>(trigger => trigger
+        .WithIdentity("NFL Spread Scheduler Startup")
+        .WithDescription("Registers per-week NFL spread-lock triggers from NflSeasonWeekConfig")
+        .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+    );
+    q.ScheduleCstCronJob<NflSpreadSchedulerJob>("NFL Spread Scheduler Daily", "Daily catch-up pass for NFL spread-lock triggers", "0 0 6 * * ?");
 
     // NFL Scores
     q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Thu 10am", "Fetches NFL scores Thursday morning at 10am CST", "0 0 10 ? * THU");
@@ -317,12 +331,37 @@ builder.Services.AddQuartz(q => {
     q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Mon 1am", "Fetches NFL scores early Monday after SNF at 1am CST", "0 0 1 ? * MON");
     q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Tue 1am", "Fetches NFL scores early Tuesday after MNF at 1am CST", "0 0 1 ? * TUE");
 
-    // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons
+    // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons. Slate-seeding only
+    // — spread-lock trigger scheduling is CfbSpreadSchedulerJob below (frizat-pxy follow-on:
+    // structurally identical to NflSpreadSchedulerJob, its own cadence, not fused into this job).
+    q.ScheduleJob<CfbSlateSeederJob>(trigger => trigger
+        .WithIdentity("CFB Slate Seeder Startup")
+        .WithDescription("Seeds CFB slate dates for the current season")
+        .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+    );
     q.ScheduleCstCronJob<CfbSlateSeederJob>("CFB Slate Seeder", "Seeds CFB slate dates for the current season", "0 0 5 ? * MON");
 
-    // CFB Spreads — Saturday 9am CST (before first kickoffs) + Wednesday 10am CST (mid-week lines)
-    q.ScheduleCstCronJob<CfbSpreadJob>("CFB Spread Job Sat", "Fetches CFB spreads Saturday morning before kickoff", "0 0 9 ? * SAT");
-    q.ScheduleCstCronJob<CfbSpreadJob>("CFB Spread Job Wed", "Fetches CFB spreads Wednesday when mid-week lines open", "0 0 10 ? * WED");
+    // CFB Rankings — CFB-only, no NFL equivalent (rank/eligibility is a CFB-specific concept).
+    // Same cadence as the slate seeder: capture rankings as soon as a week's schedule is known,
+    // not gated on that week's spread lock like CfbSpreadJob's own (later) ranking capture is.
+    q.ScheduleJob<CfbRankingCaptureJob>(trigger => trigger
+        .WithIdentity("CFB Ranking Capture Startup")
+        .WithDescription("Captures CFB AP rankings as soon as each week's schedule is known")
+        .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+    );
+    q.ScheduleCstCronJob<CfbRankingCaptureJob>("CFB Ranking Capture", "Captures CFB AP rankings as soon as each week's schedule is known", "0 0 5 ? * MON");
+
+    // CFB Spreads — mirrors NflSpreadSchedulerJob above exactly: CfbSpreadJob has no fixed trigger
+    // of its own; CfbSpreadSchedulerJob reads CfbSeasonWeekConfig.SpreadLockDatetime and registers
+    // a precise one-time trigger per upcoming week, with data-driven catch-up for past-due weeks.
+    // Same daily cadence as NFL — previously CFB's catch-up only ran weekly (piggybacked on the
+    // slate seeder), 7x less often than NFL for no sport-specific reason.
+    q.ScheduleJob<CfbSpreadSchedulerJob>(trigger => trigger
+        .WithIdentity("CFB Spread Scheduler Startup")
+        .WithDescription("Registers per-week CFB spread-lock triggers from CfbSeasonWeekConfig")
+        .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+    );
+    q.ScheduleCstCronJob<CfbSpreadSchedulerJob>("CFB Spread Scheduler Daily", "Daily catch-up pass for CFB spread-lock triggers", "0 0 6 * * ?");
 
     // CFB Scores — Saturday noon, 4pm, 8pm, midnight CST + Sunday 6am CST (covers all kickoff windows)
     q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat Noon", "Fetches CFB scores at Saturday noon kickoff window", "0 0 12 ? * SAT");

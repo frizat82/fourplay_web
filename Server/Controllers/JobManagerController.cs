@@ -12,16 +12,31 @@ namespace FourPlayWebApp.Server.Controllers {
     public class JobManagerController(ISchedulerFactory schedulerFactory, IJobObserverService observer) : ControllerBase {
         [Authorize(Roles = "Administrator")]
         [HttpPost("run-spreads")]
-        public async Task<IActionResult> RunSpreads() {
+        public async Task<IActionResult> RunSpreads([FromQuery] bool force = false) {
             try {
                 var scheduler = await schedulerFactory.GetScheduler();
                 var allJobs = await GetAllJobsStatusAsync();
-                var jobName = allJobs.FirstOrDefault(job =>
-                    job.JobName.Contains("Spreads", StringComparison.OrdinalIgnoreCase));
+                // Each in-scope week now registers its own one-time "NFL Spreads {season} Wk{n}"
+                // job (frizat-pxy) — pick the SOONEST one, not an arbitrary match; a plain
+                // Contains("Spreads") FirstOrDefault would grab whichever week sorts first
+                // alphabetically ("Wk1" before "Wk10"), not the one actually coming up next.
+                var jobName = allJobs
+                    .Where(job => job.JobName.StartsWith("NFL Spreads ", StringComparison.OrdinalIgnoreCase) && job.NextRun is not null)
+                    .MinBy(job => job.NextRun);
                 if (jobName is null)
                     return NotFound();
-                await scheduler.TriggerJob(new JobKey(jobName.JobName));
-                Log.Information("Started Spread Job");
+                // force=true bypasses NflSpreadJob's lock-time write guard (SpreadLockGuard) —
+                // deliberately not the default; this endpoint is normally held to the same
+                // no-write-before-lock-time rule as the scheduler. Logged distinctly so an
+                // early write via this path is always auditable after the fact.
+                if (force) {
+                    var data = new JobDataMap { { "force", true } };
+                    await scheduler.TriggerJob(new JobKey(jobName.JobName), data);
+                    Log.Warning("Admin FORCED Spread Job {JobName} — bypassing lock-time guard", jobName.JobName);
+                } else {
+                    await scheduler.TriggerJob(new JobKey(jobName.JobName));
+                    Log.Information("Started Spread Job {JobName}", jobName.JobName);
+                }
                 return Ok(new {message = "Started Spread Job"});
             }
             catch (Exception e) {
@@ -74,11 +89,28 @@ namespace FourPlayWebApp.Server.Controllers {
         }
         [Authorize(Roles = "Administrator")]
         [HttpPost("run-cfb-spreads")]
-        public async Task<IActionResult> RunCfbSpreads() {
+        public async Task<IActionResult> RunCfbSpreads([FromQuery] bool force = false) {
             try {
                 var scheduler = await schedulerFactory.GetScheduler();
-                await scheduler.TriggerJob(new JobKey("CFB Spread Job"));
-                Log.Information("Started CFB Spread Job");
+                var allJobs = await GetAllJobsStatusAsync();
+                // The fixed "CFB Spread Job" JobKey this used to trigger no longer exists — CFB
+                // spreads now run via per-week "CFB Spreads {season} Wk{n}" triggers (frizat-9m0),
+                // same reasoning as RunSpreads above: pick the soonest one, not an arbitrary match.
+                var jobName = allJobs
+                    .Where(job => job.JobName.StartsWith("CFB Spreads ", StringComparison.OrdinalIgnoreCase) && job.NextRun is not null)
+                    .MinBy(job => job.NextRun);
+                if (jobName is null)
+                    return NotFound();
+                // See RunSpreads above — force=true bypasses CfbSpreadJob's lock-time write guard,
+                // same symmetric design as NFL.
+                if (force) {
+                    var data = new JobDataMap { { "force", true } };
+                    await scheduler.TriggerJob(new JobKey(jobName.JobName), data);
+                    Log.Warning("Admin FORCED CFB Spread Job {JobName} — bypassing lock-time guard", jobName.JobName);
+                } else {
+                    await scheduler.TriggerJob(new JobKey(jobName.JobName));
+                    Log.Information("Started CFB Spread Job {JobName}", jobName.JobName);
+                }
                 return Ok(new { message = "Started CFB Spread Job" });
             }
             catch (Exception e) {
@@ -99,7 +131,7 @@ namespace FourPlayWebApp.Server.Controllers {
             }
         }
 
-        [Authorize]
+        [Authorize(Roles = "Administrator")]
         [HttpGet("get-jobs")]
         public async Task<IEnumerable<JobStatusResponse>> GetAllJobsStatusAsync() {
             var scheduler = await schedulerFactory.GetScheduler();
@@ -142,13 +174,27 @@ namespace FourPlayWebApp.Server.Controllers {
         }
         [Authorize]
         [HttpGet("get-next-spread-job")]
-        public async Task<DateTimeOffset?> GetNextSpreadJobAsync() {
+        public async Task<DateTimeOffset?> GetNextSpreadJobAsync([FromQuery] string? sport = null) {
             var allJobs = await GetAllJobsStatusAsync();
-            var spreadJob = allJobs.Where(job =>
-                job.JobName.Contains("Spread", StringComparison.OrdinalIgnoreCase) && job.NextRun is not null).MinBy(job => job.NextRun);
-            return spreadJob?.NextRun;
+
+            // "Spreads " (plural, trailing space) matches only the per-week triggers registered by
+            // NflSpreadSchedulerJob/CfbSlateSeederJob ("NFL Spreads {season} Wk{n}" / "CFB Spreads
+            // {season} Wk{n}") — NOT the scheduler jobs' own triggers ("NFL Spread Scheduler ..."),
+            // whose next-run time is when the scheduler next checks in, not when spreads get fetched.
+            var candidates = allJobs.Where(job =>
+                job.JobName.Contains("Spreads ", StringComparison.OrdinalIgnoreCase) && job.NextRun is not null);
+
+            var prefix = sport?.Trim().ToLowerInvariant() switch {
+                "nfl" => "NFL Spreads ",
+                "cfb" => "CFB Spreads ",
+                _ => null,
+            };
+            if (prefix is not null)
+                candidates = candidates.Where(job => job.JobName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+            return candidates.MinBy(job => job.NextRun)?.NextRun;
         }
-        [Authorize]
+        [Authorize(Roles = "Administrator")]
         [HttpGet("get-job/{jobName}")]
         public async Task<JobStatusResponse?> GetJobStatusAsync(string jobName) {
             var allJobs = await GetAllJobsStatusAsync();

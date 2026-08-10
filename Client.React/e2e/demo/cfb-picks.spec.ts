@@ -42,6 +42,12 @@ test.describe('CFB picks — demo backend', () => {
     await expect(page.getByText('MIA').first()).toBeVisible({ timeout: 5_000 });
   });
 
+  test('game card shows a real "Line posted" spread timestamp', async ({ page }) => {
+    // Confirms CfbSpreads.DateCreated flows end-to-end: DB -> GetSpreads -> cfbAdapter ->
+    // GameCard, against a real demo backend, not a mock.
+    await expect(page.getByText(/Line posted/).first()).toBeVisible({ timeout: 5_000 });
+  });
+
   test('switching to Regular Season shows Week 13 (most recent)', async ({ page }) => {
     // Click the season-type select and pick "Regular Season"
     const seasonTypeSelect = page.getByRole('combobox').last();

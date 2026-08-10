@@ -1,0 +1,119 @@
+using FourPlayWebApp.Server.Jobs;
+using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
+using NSubstitute;
+using Quartz;
+using Quartz.Impl.Matchers;
+
+namespace FourPlayWebApp.Server.UnitTests;
+
+public class NflSpreadSchedulerJobTests
+{
+    private readonly ILeagueRepository _repo;
+    private readonly ISchedulerFactory _schedulerFactory;
+    private readonly IScheduler _scheduler;
+    private readonly IJobExecutionContext _context;
+
+    public NflSpreadSchedulerJobTests()
+    {
+        _repo = Substitute.For<ILeagueRepository>();
+        _repo.GetWeeksWithSpreadDataAsync().Returns(new HashSet<(int, int)>());
+        _scheduler = Substitute.For<IScheduler>();
+        _schedulerFactory = Substitute.For<ISchedulerFactory>();
+        _schedulerFactory.GetScheduler(Arg.Any<CancellationToken>()).Returns(_scheduler);
+        _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>()).Returns(new HashSet<JobKey>());
+        _context = Substitute.For<IJobExecutionContext>();
+    }
+
+    private NflSpreadSchedulerJob BuildJob() => new(new NflSpreadScheduleSource(_repo), _schedulerFactory);
+
+    private static NflSeasonWeekConfig MakeConfig(int season, int weekId, DateTime spreadLock, string label = "Week") =>
+        new() { Season = season, WeekId = weekId, WeekLabel = label, SpreadLockDatetime = spreadLock };
+
+    [Fact]
+    public async Task Execute_FutureLockTime_SchedulesTrigger()
+    {
+        var lockTime = DateTime.UtcNow.AddDays(3);
+        _repo.GetNflSeasonWeekConfigsAsync().Returns([MakeConfig(2026, 6, lockTime)]);
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.Received(1).ScheduleJob(
+            Arg.Is<IJobDetail>(j => j.JobType == typeof(NflSpreadJob)),
+            Arg.Is<ITrigger>(t => t.StartTimeUtc == new DateTimeOffset(lockTime, TimeSpan.Zero)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_PastLockTime_NoData_FiresNowAsCatchUp()
+    {
+        var lockTime = DateTime.UtcNow.AddDays(-1);
+        _repo.GetNflSeasonWeekConfigsAsync().Returns([MakeConfig(2026, 6, lockTime)]);
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.Received(1).ScheduleJob(
+            Arg.Is<IJobDetail>(j => j.JobType == typeof(NflSpreadJob)),
+            Arg.Any<ITrigger>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_PastLockTime_HasData_Skipped()
+    {
+        var lockTime = DateTime.UtcNow.AddDays(-1);
+        _repo.GetNflSeasonWeekConfigsAsync().Returns([MakeConfig(2026, 6, lockTime)]);
+        _repo.GetWeeksWithSpreadDataAsync().Returns(new HashSet<(int, int)> { (2026, 6) });
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_WhenTriggerAlreadyScheduled_IsIdempotent()
+    {
+        var lockTime = DateTime.UtcNow.AddDays(3);
+        _repo.GetNflSeasonWeekConfigsAsync().Returns([MakeConfig(2026, 6, lockTime)]);
+        _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<JobKey> { new("NFL Spreads 2026 Wk6") });
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Execute_MultipleFutureWeeks_SchedulesEachWithDistinctKey()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync().Returns([
+            MakeConfig(2026, 6, DateTime.UtcNow.AddDays(3)),
+            MakeConfig(2026, 7, DateTime.UtcNow.AddDays(10)),
+        ]);
+
+        var scheduledKeys = new List<JobKey>();
+        await _scheduler.ScheduleJob(
+            Arg.Do<IJobDetail>(j => scheduledKeys.Add(j.Key)),
+            Arg.Any<ITrigger>(),
+            Arg.Any<CancellationToken>());
+
+        await BuildJob().Execute(_context);
+
+        Assert.Equal(2, scheduledKeys.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task Execute_MixOfAlreadySucceededPastAndFutureWeeks_OnlySchedulesFuture()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync().Returns([
+            MakeConfig(2026, 5, DateTime.UtcNow.AddDays(-3)),
+            MakeConfig(2026, 6, DateTime.UtcNow.AddDays(3)),
+        ]);
+        // Week 5's lock time already passed AND it already has data — already succeeded, no catch-up needed.
+        _repo.GetWeeksWithSpreadDataAsync().Returns(new HashSet<(int, int)> { (2026, 5) });
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.Received(1).ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
+    }
+}

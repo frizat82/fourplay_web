@@ -18,7 +18,18 @@ public class CfbCurrentSlateService(ICfbRepository repo) : ICfbCurrentSlateServi
 
         // First slate whose end date hasn't passed = current; all past → show last (off-season)
         var active = slates.FirstOrDefault(s => s.EndDate >= today) ?? slates[^1];
+
+        var configs = await repo.GetWeekConfigsForSeasonAsync(active.Season);
+        var matchingConfig = configs.FirstOrDefault(c => c.IvLeagueWeekNumber == active.SlateNumber);
+        // Every CfbSlates row is seeded FROM a CfbSeasonWeekConfig row (CfbSlateSeederJob sets
+        // SlateNumber = cfg.IvLeagueWeekNumber) — a slate with no matching config is a broken
+        // data-integrity invariant, not an expected "not configured yet" state (SpreadLockDatetime
+        // itself can no longer be null), so this fails loudly rather than silently skipping.
+        if (matchingConfig is null)
+            throw new InvalidOperationException(
+                $"CfbSlates {active.Id} (Season {active.Season}, SlateNumber {active.SlateNumber}) has no matching CfbSeasonWeekConfig row — data integrity issue, not a normal state.");
+
         return new CfbSlateInfo(active.Id, active.Season, active.SlateNumber, active.Label,
-            active.SlateType, active.StartDate, active.EndDate, active.FirstGameUtc);
+            active.SlateType, active.StartDate, active.EndDate, active.FirstGameUtc, matchingConfig.SpreadLockDatetime);
     }
 }

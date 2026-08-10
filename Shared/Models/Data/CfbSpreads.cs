@@ -16,4 +16,9 @@ public class CfbSpreads {
     public double OverUnder { get; set; }
     public DateTimeOffset GameTime { get; set; }
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
+
+    // True when either team was ranked (or the game is CFP postseason) and it isn't a Tue/Wed
+    // MAC-only game, computed once at ingestion from that week's CfbRanking rows. The full FBS
+    // slate is always persisted regardless of this flag — it only gates what's served to users.
+    public bool IsLeagueEligible { get; set; }
 }
