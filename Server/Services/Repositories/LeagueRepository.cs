@@ -272,12 +272,6 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     }
 
     // Add operations
-    public async Task AddLeagueUserAsync(LeagueUsers leagueUser) {
-        await using var db = await dbContextFactory.CreateDbContextAsync();
-        await db.LeagueUsers.AddAsync(leagueUser);
-        await db.SaveChangesAsync();
-    }
-
     public async Task AddLeagueUserMappingAsync(LeagueUserMapping mapping) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         await db.LeagueUserMapping.AddAsync(mapping);
