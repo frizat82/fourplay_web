@@ -32,7 +32,7 @@ public class CfbSpreadSchedulerJobTests
 
     private CfbSpreadSchedulerJob BuildJob() => new(new CfbSpreadScheduleSource(_repo), _schedulerFactory);
 
-    private static List<CfbSeasonWeekConfig> MakeConfigsWithLockTimes(params DateTime?[] lockTimes) =>
+    private static List<CfbSeasonWeekConfig> MakeConfigsWithLockTimes(params DateTime[] lockTimes) =>
         lockTimes.Select((lockTime, i) => new CfbSeasonWeekConfig {
             Season = Season, EspnWeekNumber = i + 1, IvLeagueWeekNumber = i + 1,
             WeekType = "Regular Season", ScoringFormat = "Standard", InScopeIvLeague = true,
@@ -72,16 +72,6 @@ public class CfbSpreadSchedulerJobTests
     {
         _repo.GetAllWeekConfigsAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(-1)));
         _repo.GetWeeksWithSpreadDataAsync().Returns(new HashSet<(int, int)> { (Season, 1) });
-
-        await BuildJob().Execute(_context);
-
-        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Execute_NullLockTime_NoTriggerScheduled()
-    {
-        _repo.GetAllWeekConfigsAsync().Returns(MakeConfigsWithLockTimes((DateTime?)null));
 
         await BuildJob().Execute(_context);
 

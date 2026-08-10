@@ -303,18 +303,15 @@ public class CfbSpreadJobTests
     }
 
     [Fact]
-    public async Task Execute_LockTimeNull_NoForce_SkipsFailClosed()
+    public async Task Execute_WhenSlateHasNoMatchingConfig_PropagatesException()
     {
-        var slate = BuildSlate();
-        _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
-            slate.Id, slate.Season, slate.SlateNumber, slate.Label, slate.SlateType,
-            slate.StartDate, slate.EndDate, slate.FirstGameUtc, SpreadLockDatetime: null));
-        _repo.GetSlateByIdAsync(slate.Id).Returns(slate);
+        // CfbCurrentSlateService now throws if a slate has no matching CfbSeasonWeekConfig row —
+        // SpreadLockDatetime is a required column, so "missing config" is a data-integrity bug,
+        // not an expected "not configured yet" state to silently skip.
+        _currentSlateService.GetCurrentSlateAsync()
+            .Returns(Task.FromException<CfbSlateInfo?>(new InvalidOperationException("no matching config")));
 
-        await BuildJob().Execute(_context);
-
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
-        await _repo.DidNotReceive().UpsertAsync(Arg.Any<IEnumerable<CfbSpreads>>());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
     }
 
     [Fact]

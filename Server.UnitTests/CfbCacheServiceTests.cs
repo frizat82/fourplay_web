@@ -26,7 +26,7 @@ public class CfbCacheServiceTests
     private static readonly CfbSlateInfo DefaultSlateInfo = new(
         Id: 1, Season: 2026, SlateNumber: 5, Label: "Week 5", SlateType: "RegularSeason",
         StartDate: new DateOnly(2026, 9, 27), EndDate: new DateOnly(2026, 9, 28), FirstGameUtc: null,
-        SpreadLockDatetime: null);
+        SpreadLockDatetime: new DateTime(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc));
 
     private static readonly CfbSlates DefaultSlate = new() {
         Id = 1, Season = 2026, SlateNumber = 5, Label = "Week 5", SlateType = "RegularSeason",

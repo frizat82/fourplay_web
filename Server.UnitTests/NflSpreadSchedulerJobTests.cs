@@ -27,7 +27,7 @@ public class NflSpreadSchedulerJobTests
 
     private NflSpreadSchedulerJob BuildJob() => new(new NflSpreadScheduleSource(_repo), _schedulerFactory);
 
-    private static NflSeasonWeekConfig MakeConfig(int season, int weekId, DateTime? spreadLock, string label = "Week") =>
+    private static NflSeasonWeekConfig MakeConfig(int season, int weekId, DateTime spreadLock, string label = "Week") =>
         new() { Season = season, WeekId = weekId, WeekLabel = label, SpreadLockDatetime = spreadLock };
 
     [Fact]
@@ -64,16 +64,6 @@ public class NflSpreadSchedulerJobTests
         var lockTime = DateTime.UtcNow.AddDays(-1);
         _repo.GetNflSeasonWeekConfigsAsync().Returns([MakeConfig(2026, 6, lockTime)]);
         _repo.GetWeeksWithSpreadDataAsync().Returns(new HashSet<(int, int)> { (2026, 6) });
-
-        await BuildJob().Execute(_context);
-
-        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Execute_NullLockTime_Skipped()
-    {
-        _repo.GetNflSeasonWeekConfigsAsync().Returns([MakeConfig(2026, 6, null)]);
 
         await BuildJob().Execute(_context);
 

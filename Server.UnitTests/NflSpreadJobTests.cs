@@ -568,18 +568,6 @@ public class NflSpreadJobTests
     }
 
     [Fact]
-    public async Task Execute_LockTimeNull_NoForce_SkipsFailClosed()
-    {
-        _nflCurrentWeekService.GetCurrentWeekAsync()
-            .Returns(new NflWeekInfo(5, 5, 2024, false, "Week 5", "Standard", null));
-
-        await BuildJob().Execute(_context);
-
-        await _espnApi.DidNotReceive().GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>());
-        await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
-    }
-
-    [Fact]
     public async Task Execute_LockTimeInFuture_Forced_WritesAnyway()
     {
         _nflCurrentWeekService.GetCurrentWeekAsync()

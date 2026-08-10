@@ -21,14 +21,14 @@ internal static class SpreadTriggerScheduler {
         CancellationToken cancellationToken) where TJob : IJob {
 
         var now = DateTime.UtcNow;
-        var withLockTime = candidates.Where(c => c.LockTime is not null).ToList();
-        if (withLockTime.Count == 0) return;
+        var candidateList = candidates.ToList();
+        if (candidateList.Count == 0) return;
 
         var existingKeys = (await scheduler.GetJobKeys(GroupMatcher<JobKey>.AnyGroup(), cancellationToken))
             .ToHashSet();
 
-        foreach (var candidate in withLockTime) {
-            var lockTime = candidate.LockTime!.Value;
+        foreach (var candidate in candidateList) {
+            var lockTime = candidate.LockTime;
             var jobKey = new JobKey(candidate.Identity);
             if (existingKeys.Contains(jobKey)) continue; // idempotent — already scheduled by a previous run
 

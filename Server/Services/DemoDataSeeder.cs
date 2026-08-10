@@ -1327,6 +1327,11 @@ public class DemoDataSeeder(
             new() { Season = CfbDemoSeason, EspnWeekNumber = 21, IvLeagueWeekNumber = 18, WeekType = "FBS Playoff",              ScoringFormat = "NFLSuperBowl",  InScopeIvLeague = true,  WeekStartDate = new DateOnly(2026,  1, 19), WeekEndDate = new DateOnly(2026,  1, 19) },
         };
 
+        // SpreadLockDatetime is required (NOT NULL) — demo rows don't need real-world accuracy,
+        // just a deterministic, non-default value; midnight UTC on the week's own start date.
+        foreach (var config in configs)
+            config.SpreadLockDatetime = DateTime.SpecifyKind(config.WeekStartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+
         db.CfbSeasonWeekConfigs.AddRange(configs);
         await db.SaveChangesAsync();
         Log.Information("DemoDataSeeder: seeded {Count} CfbSeasonWeekConfig rows for {Season}", configs.Count, CfbDemoSeason);

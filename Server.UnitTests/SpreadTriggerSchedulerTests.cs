@@ -67,16 +67,6 @@ public class SpreadTriggerSchedulerTests
     }
 
     [Fact]
-    public async Task NullLockTime_Skipped()
-    {
-        var candidate = new SpreadTriggerCandidate(null, "id-1", "desc", HasData: false);
-
-        await SpreadTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [candidate], _token);
-
-        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task AlreadyRegisteredTrigger_SkippedRegardlessOfCase()
     {
         var lockTime = DateTime.UtcNow.AddDays(3);
@@ -96,7 +86,6 @@ public class SpreadTriggerSchedulerTests
             new SpreadTriggerCandidate(DateTime.UtcNow.AddDays(3), "future", "desc", HasData: false),
             new SpreadTriggerCandidate(DateTime.UtcNow.AddDays(-1), "catchup", "desc", HasData: false),
             new SpreadTriggerCandidate(DateTime.UtcNow.AddDays(-1), "done", "desc", HasData: true),
-            new SpreadTriggerCandidate(null, "none", "desc", HasData: false),
         };
 
         await SpreadTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, candidates, _token);
