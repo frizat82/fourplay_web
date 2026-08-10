@@ -17,7 +17,7 @@ public class LeagueInfoConfiguration : IEntityTypeConfiguration<LeagueInfo>
             .HasDefaultValue(LeagueType.Nfl);
         entity.HasIndex(e => e.LeagueName).IsUnique();
 
-        entity.HasMany(e => e.LeagueUsers)
+        entity.HasMany(e => e.LeagueUserMappings)
             .WithOne(e => e.League)
             .HasForeignKey(e => e.LeagueId)
             .IsRequired();
