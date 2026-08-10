@@ -83,5 +83,80 @@ namespace FourPlayWebApp.Server.UnitTests
                 Arg.Any<string>(),
                 Arg.Is<string>(body => body.Contains($"inviteCode={created.InvitationCode}")));
         }
+
+        // frizat-9vm: Invitations.Email was globally unique across the whole table, not scoped
+        // per league — inviting the same real-world email to two different leagues (routine once
+        // self-serve league creation shipped) threw an unhandled DbUpdateException. Scoped to
+        // (Email, LeagueId); CreateInvitationAsync is now an upsert instead of a blind insert.
+        [Fact]
+        public async Task CreateInvitationAsync_SameEmailTwoDifferentLeagues_BothSucceed()
+        {
+            var (service, _) = BuildService(nameof(CreateInvitationAsync_SameEmailTwoDifferentLeagues_BothSucceed));
+
+            var first = await service.CreateInvitationAsync("multi@example.com", "user123", leagueId: 1);
+            var second = await service.CreateInvitationAsync("multi@example.com", "user123", leagueId: 2);
+
+            Assert.NotEqual(first.Id, second.Id);
+            Assert.Equal(1, first.LeagueId);
+            Assert.Equal(2, second.LeagueId);
+        }
+
+        // frizat-9vm follow-up (code review): the [Index(Email, LeagueId)] unique constraint only
+        // fires when LeagueId is non-null (Postgres treats every NULL as distinct); a global,
+        // non-league-scoped invite (leagueId: null) relies entirely on the app-level upsert below
+        // to avoid duplicating, backed by a separate partial unique index (Email WHERE LeagueId IS
+        // NULL) at the DB level for the concurrent-request case this in-memory test can't exercise.
+        [Fact]
+        public async Task CreateInvitationAsync_ReinviteSameEmailNoLeague_RefreshesExistingRowInsteadOfDuplicating()
+        {
+            var (service, _) = BuildService(nameof(CreateInvitationAsync_ReinviteSameEmailNoLeague_RefreshesExistingRowInsteadOfDuplicating));
+            var first = await service.CreateInvitationAsync("global@example.com", "user123");
+
+            var second = await service.CreateInvitationAsync("global@example.com", "user123");
+
+            Assert.Equal(first.Id, second.Id);
+            Assert.Null(second.LeagueId);
+        }
+
+        [Fact]
+        public async Task CreateInvitationAsync_ReinviteSameEmailSameLeague_RefreshesExistingRowInsteadOfThrowing()
+        {
+            var (service, _) = BuildService(nameof(CreateInvitationAsync_ReinviteSameEmailSameLeague_RefreshesExistingRowInsteadOfThrowing));
+            var first = await service.CreateInvitationAsync("resend2@example.com", "user123", leagueId: 5);
+
+            var second = await service.CreateInvitationAsync("resend2@example.com", "user123", leagueId: 5);
+
+            Assert.Equal(first.Id, second.Id);
+            Assert.True(second.ExpiresAt >= first.ExpiresAt);
+        }
+
+        [Fact]
+        public async Task CreateInvitationAsync_ReinviteSameEmailSameLeague_ResendsEmail()
+        {
+            var (service, emailSender) = BuildService(nameof(CreateInvitationAsync_ReinviteSameEmailSameLeague_ResendsEmail));
+            var first = await service.CreateInvitationAsync("resend3@example.com", "user123", leagueId: 5, baseUrl: "https://ivleague.com");
+
+            await service.CreateInvitationAsync("resend3@example.com", "user123", leagueId: 5, baseUrl: "https://ivleague.com");
+
+            await emailSender.Received(2).SendEmailAsync(
+                "resend3@example.com",
+                Arg.Any<string>(),
+                Arg.Is<string>(body => body.Contains($"inviteCode={first.InvitationCode}")));
+        }
+
+        [Fact]
+        public async Task CreateInvitationAsync_ReinviteAlreadyUsedInvitation_DoesNotOverwriteRegistration()
+        {
+            var (service, emailSender) = BuildService(nameof(CreateInvitationAsync_ReinviteAlreadyUsedInvitation_DoesNotOverwriteRegistration));
+            var first = await service.CreateInvitationAsync("used@example.com", "user123", leagueId: 5);
+            await service.MarkInvitationAsUsedAsync(first.InvitationCode, "the-registered-user");
+
+            var second = await service.CreateInvitationAsync("used@example.com", "user123", leagueId: 5, baseUrl: "https://ivleague.com");
+
+            Assert.Equal(first.Id, second.Id);
+            Assert.True(second.IsUsed);
+            Assert.Equal("the-registered-user", second.RegisteredUserId);
+            await emailSender.DidNotReceiveWithAnyArgs().SendEmailAsync(default!, default!, default!);
+        }
     }
 }
