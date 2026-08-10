@@ -1,7 +1,6 @@
 using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models.Identity;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
 
@@ -52,14 +51,9 @@ public class UserManagerJobConfigTests
         userManager.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>())
                    .Returns(IdentityResult.Success);
 
-        var dbOptions = new DbContextOptionsBuilder<Data.ApplicationDbContext>()
-            .UseInMemoryDatabase("UMJobTest_" + Guid.NewGuid())
-            .Options;
-        var db = new Data.ApplicationDbContext(dbOptions);
-
         var config = BuildConfig(configEmail, configUser);
         var services = Substitute.For<IServiceProvider>();
-        var job = new UserManagerJob(roleManager, userManager, config, db, services);
+        var job = new UserManagerJob(roleManager, userManager, config, services);
 
         await job.CreateUser(configEmail);
 
@@ -85,14 +79,9 @@ public class UserManagerJobConfigTests
         userManager.CreateAsync(Arg.Do<ApplicationUser>(u => capturedUser = u), Arg.Any<string>())
                    .Returns(IdentityResult.Success);
 
-        var dbOptions = new DbContextOptionsBuilder<Data.ApplicationDbContext>()
-            .UseInMemoryDatabase("UMJobTest_" + Guid.NewGuid())
-            .Options;
-        var db = new Data.ApplicationDbContext(dbOptions);
-
         var config = BuildConfig(configEmail, configUser);
         var services = Substitute.For<IServiceProvider>();
-        var job = new UserManagerJob(roleManager, userManager, config, db, services);
+        var job = new UserManagerJob(roleManager, userManager, config, services);
 
         await job.CreateUser(configEmail);
 
@@ -112,13 +101,9 @@ public class UserManagerJobConfigTests
         var (userManager, roleManager) = BuildMocks();
         userManager.FindByEmailAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
 
-        var dbOptions = new DbContextOptionsBuilder<Data.ApplicationDbContext>()
-            .UseInMemoryDatabase("UMJobTest_" + Guid.NewGuid())
-            .Options;
-        var db = new Data.ApplicationDbContext(dbOptions);
         var config = BuildConfig("ghost@example.com", "ghost");
         var services = Substitute.For<IServiceProvider>();
-        var job = new UserManagerJob(roleManager, userManager, config, db, services);
+        var job = new UserManagerJob(roleManager, userManager, config, services);
 
         // Should not throw, should not call AddToRoleAsync
         await job.AddUserToRole("ghost@example.com", "Administrator");

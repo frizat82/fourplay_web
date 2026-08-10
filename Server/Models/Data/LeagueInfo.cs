@@ -12,9 +12,6 @@ public class LeagueInfo {
     public LeagueType LeagueType { get; set; } = LeagueType.Nfl;
     public ICollection<LeagueJuiceMapping> LeagueJuiceMappings { get; set; } = new List<LeagueJuiceMapping>();
 
-    // Renamed from "LeagueUsers" (frizat-896 schema audit) — that name collided with the unrelated
-    // LeagueUsers entity/table (an orphaned write-only email allowlist, see audit notes on
-    // frizat-896), even though this collection is actually LeagueUserMapping rows.
     public ICollection<LeagueUserMapping> LeagueUserMappings { get; set; }
     public ICollection<NflPicks> NflPicks { get; set; }
 }

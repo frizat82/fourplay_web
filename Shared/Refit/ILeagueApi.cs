@@ -129,9 +129,6 @@ public interface ILeagueApi
     Task<bool> UserExistsInLeague(string userId, int leagueId);
 
     // Core Entity Operations
-    [Post("/api/league/league-user")]
-    Task AddLeagueUser([Body] LeagueUsersDto leagueUser);
-
     [Post("/api/league/league-user-mapping")]
     Task AddLeagueUserMapping([Body] LeagueUserMappingDto mapping);
 
