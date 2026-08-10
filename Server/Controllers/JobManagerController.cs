@@ -12,7 +12,7 @@ namespace FourPlayWebApp.Server.Controllers {
     public class JobManagerController(ISchedulerFactory schedulerFactory, IJobObserverService observer) : ControllerBase {
         [Authorize(Roles = "Administrator")]
         [HttpPost("run-spreads")]
-        public async Task<IActionResult> RunSpreads() {
+        public async Task<IActionResult> RunSpreads([FromQuery] bool force = false) {
             try {
                 var scheduler = await schedulerFactory.GetScheduler();
                 var allJobs = await GetAllJobsStatusAsync();
@@ -25,8 +25,18 @@ namespace FourPlayWebApp.Server.Controllers {
                     .MinBy(job => job.NextRun);
                 if (jobName is null)
                     return NotFound();
-                await scheduler.TriggerJob(new JobKey(jobName.JobName));
-                Log.Information("Started Spread Job {JobName}", jobName.JobName);
+                // force=true bypasses NflSpreadJob's lock-time write guard (SpreadLockGuard) —
+                // deliberately not the default; this endpoint is normally held to the same
+                // no-write-before-lock-time rule as the scheduler. Logged distinctly so an
+                // early write via this path is always auditable after the fact.
+                if (force) {
+                    var data = new JobDataMap { { "force", true } };
+                    await scheduler.TriggerJob(new JobKey(jobName.JobName), data);
+                    Log.Warning("Admin FORCED Spread Job {JobName} — bypassing lock-time guard", jobName.JobName);
+                } else {
+                    await scheduler.TriggerJob(new JobKey(jobName.JobName));
+                    Log.Information("Started Spread Job {JobName}", jobName.JobName);
+                }
                 return Ok(new {message = "Started Spread Job"});
             }
             catch (Exception e) {
@@ -79,7 +89,7 @@ namespace FourPlayWebApp.Server.Controllers {
         }
         [Authorize(Roles = "Administrator")]
         [HttpPost("run-cfb-spreads")]
-        public async Task<IActionResult> RunCfbSpreads() {
+        public async Task<IActionResult> RunCfbSpreads([FromQuery] bool force = false) {
             try {
                 var scheduler = await schedulerFactory.GetScheduler();
                 var allJobs = await GetAllJobsStatusAsync();
@@ -91,8 +101,16 @@ namespace FourPlayWebApp.Server.Controllers {
                     .MinBy(job => job.NextRun);
                 if (jobName is null)
                     return NotFound();
-                await scheduler.TriggerJob(new JobKey(jobName.JobName));
-                Log.Information("Started CFB Spread Job {JobName}", jobName.JobName);
+                // See RunSpreads above — force=true bypasses CfbSpreadJob's lock-time write guard,
+                // same symmetric design as NFL.
+                if (force) {
+                    var data = new JobDataMap { { "force", true } };
+                    await scheduler.TriggerJob(new JobKey(jobName.JobName), data);
+                    Log.Warning("Admin FORCED CFB Spread Job {JobName} — bypassing lock-time guard", jobName.JobName);
+                } else {
+                    await scheduler.TriggerJob(new JobKey(jobName.JobName));
+                    Log.Information("Started CFB Spread Job {JobName}", jobName.JobName);
+                }
                 return Ok(new { message = "Started CFB Spread Job" });
             }
             catch (Exception e) {
@@ -113,7 +131,7 @@ namespace FourPlayWebApp.Server.Controllers {
             }
         }
 
-        [Authorize]
+        [Authorize(Roles = "Administrator")]
         [HttpGet("get-jobs")]
         public async Task<IEnumerable<JobStatusResponse>> GetAllJobsStatusAsync() {
             var scheduler = await schedulerFactory.GetScheduler();
@@ -176,7 +194,7 @@ namespace FourPlayWebApp.Server.Controllers {
 
             return candidates.MinBy(job => job.NextRun)?.NextRun;
         }
-        [Authorize]
+        [Authorize(Roles = "Administrator")]
         [HttpGet("get-job/{jobName}")]
         public async Task<JobStatusResponse?> GetJobStatusAsync(string jobName) {
             var allJobs = await GetAllJobsStatusAsync();

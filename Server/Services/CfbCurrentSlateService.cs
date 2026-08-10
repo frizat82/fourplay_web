@@ -18,7 +18,11 @@ public class CfbCurrentSlateService(ICfbRepository repo) : ICfbCurrentSlateServi
 
         // First slate whose end date hasn't passed = current; all past → show last (off-season)
         var active = slates.FirstOrDefault(s => s.EndDate >= today) ?? slates[^1];
+
+        var configs = await repo.GetWeekConfigsForSeasonAsync(active.Season);
+        var lockDatetime = configs.FirstOrDefault(c => c.IvLeagueWeekNumber == active.SlateNumber)?.SpreadLockDatetime;
+
         return new CfbSlateInfo(active.Id, active.Season, active.SlateNumber, active.Label,
-            active.SlateType, active.StartDate, active.EndDate, active.FirstGameUtc);
+            active.SlateType, active.StartDate, active.EndDate, active.FirstGameUtc, lockDatetime);
     }
 }

@@ -280,6 +280,9 @@ builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
 builder.Services.AddScoped<ICfbRepository, CfbRepository>();
 builder.Services.AddScoped<ICfbPicksRepository, CfbPicksRepository>();
 builder.Services.AddSingleton<INflCurrentWeekService, NflCurrentWeekService>();
+// Injectable clock for NflSpreadJob/CfbSpreadJob's lock-time write guard (SpreadLockGuard) — lets
+// tests control "now" exactly instead of depending on the real wall clock.
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ICfbCurrentSlateService, CfbCurrentSlateService>();
 builder.Services.AddSingleton<ICfbLiveScoreFetcher, CfbLiveScoreFetcher>();
 builder.Services.AddScoped<NflSpreadScheduleSource>();

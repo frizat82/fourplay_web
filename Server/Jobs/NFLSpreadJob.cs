@@ -9,11 +9,17 @@ using Quartz;
 using Serilog;
 namespace FourPlayWebApp.Server.Jobs;
 [DisallowConcurrentExecution]
-public class NflSpreadJob(IEspnCoreOddsService sportsOdds, IEspnApiService espn, ILeagueRepository leagueRepository, INflCurrentWeekService nflCurrentWeekService)
+public class NflSpreadJob(IEspnCoreOddsService sportsOdds, IEspnApiService espn, ILeagueRepository leagueRepository, INflCurrentWeekService nflCurrentWeekService, TimeProvider timeProvider)
     : IJob {
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("Grabbing NFL Spreads at {Time}",DateTime.UtcNow);
         var currentWeek = await nflCurrentWeekService.GetCurrentWeekAsync();
+
+        if (SpreadLockGuard.ShouldSkip(currentWeek.SpreadLockDatetime, timeProvider.GetUtcNow().UtcDateTime, context)) {
+            Log.Information("NflSpreadJob: skipping {Week} — lock time {LockTime} not yet reached", currentWeek.WeekLabel, currentWeek.SpreadLockDatetime);
+            return;
+        }
+
         var scoreboard = await espn.GetWeekScores(currentWeek.EspnWeek, currentWeek.Season, currentWeek.IsPostSeason);
         if (scoreboard is null)
             return;

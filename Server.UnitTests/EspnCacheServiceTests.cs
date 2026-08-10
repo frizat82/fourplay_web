@@ -16,7 +16,7 @@ public class EspnCacheServiceTests
     private readonly INflCurrentWeekService _nflCurrentWeekService;
 
     // Default week returned by the mock — tests that don't care about the specific week use this
-    private static readonly NflWeekInfo DefaultWeek = new(5, 5, 2025, false, "Week 5", "Standard");
+    private static readonly NflWeekInfo DefaultWeek = new(5, 5, 2025, false, "Week 5", "Standard", null);
 
     public EspnCacheServiceTests()
     {

@@ -33,6 +33,11 @@ public class JobManagerControllerTests
         nameof(JobManagerController.RunCfbSpreads),
         nameof(JobManagerController.RunCfbScores),
         nameof(JobManagerController.DeleteJob),
+        // The full job registry (every job's status/next-run/last error message) is internal
+        // operational detail — only GetNextSpreadJobAsync (a single timestamp, backs the public
+        // Rules page) is meant for any logged-in user.
+        nameof(JobManagerController.GetAllJobsStatusAsync),
+        nameof(JobManagerController.GetJobStatusAsync),
     ];
 
     [Theory]
@@ -53,7 +58,6 @@ public class JobManagerControllerTests
 
     public static TheoryData<string> AuthenticatedOnlyEndpoints =>
     [
-        nameof(JobManagerController.GetAllJobsStatusAsync),
         nameof(JobManagerController.GetNextSpreadJobAsync),
     ];
 
@@ -127,6 +131,21 @@ public class JobManagerControllerTests
 
         Assert.IsType<OkObjectResult>(result);
         await scheduler.Received(1).TriggerJob(new JobKey("CFB Spreads 2026 Wk6"));
+    }
+
+    [Fact]
+    public async Task RunCfbSpreads_Forced_PassesForceFlagInJobDataMap()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("CFB Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(3)));
+        scheduler.TriggerJob(new JobKey("CFB Spreads 2026 Wk6"), Arg.Any<JobDataMap>()).Returns(Task.CompletedTask);
+
+        var result = await controller.RunCfbSpreads(force: true);
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(
+            new JobKey("CFB Spreads 2026 Wk6"),
+            Arg.Is<JobDataMap>(d => d.GetBoolean("force")));
     }
 
     [Fact]
@@ -214,6 +233,37 @@ public class JobManagerControllerTests
 
         Assert.IsType<OkObjectResult>(result);
         await scheduler.Received(1).TriggerJob(new JobKey("NFL Spreads 2026 Wk6"));
+    }
+
+    [Fact]
+    public async Task RunSpreads_DefaultNoForce_TriggersWithoutJobDataMap()
+    {
+        // The default (unforced) call must not pass a "force" flag through — NflSpreadJob's
+        // lock-time guard treats an absent key as "not forced."
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("NFL Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(3)));
+        scheduler.TriggerJob(new JobKey("NFL Spreads 2026 Wk6")).Returns(Task.CompletedTask);
+
+        var result = await controller.RunSpreads();
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("NFL Spreads 2026 Wk6"));
+        await scheduler.DidNotReceive().TriggerJob(Arg.Any<JobKey>(), Arg.Any<JobDataMap>());
+    }
+
+    [Fact]
+    public async Task RunSpreads_Forced_PassesForceFlagInJobDataMap()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("NFL Spreads 2026 Wk6", DateTimeOffset.UtcNow.AddDays(3)));
+        scheduler.TriggerJob(new JobKey("NFL Spreads 2026 Wk6"), Arg.Any<JobDataMap>()).Returns(Task.CompletedTask);
+
+        var result = await controller.RunSpreads(force: true);
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(
+            new JobKey("NFL Spreads 2026 Wk6"),
+            Arg.Is<JobDataMap>(d => d.GetBoolean("force")));
     }
 
     [Fact]
