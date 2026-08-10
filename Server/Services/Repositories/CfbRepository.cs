@@ -18,6 +18,12 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         await db.SaveChangesAsync();
     }
 
+    // frizat-2lc: unlike DemoDataSeeder.SeedCfbSlatesAsync's equivalent re-seed path, this does not
+    // clean up dependent CfbSpreads/CfbScores/CfbPicks before deleting. CfbSlateSeederJob is the
+    // only caller and only invokes this when existing < configured slate count. As of frizat-896,
+    // CfbSlateId now carries a Restrict FK from those three tables, so a slate with real dependent
+    // data will now throw here (loud failure) instead of silently orphaning rows — but the
+    // underlying gap (no guard against deleting a slate that already has real data) is unfixed.
     public async Task DeleteSlatesAsync(IEnumerable<CfbSlates> slates) {
         await using var db = await dbFactory.CreateDbContextAsync();
         db.CfbSlates.RemoveRange(slates);
