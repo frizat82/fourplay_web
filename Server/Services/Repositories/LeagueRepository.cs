@@ -47,7 +47,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.LeagueInfo.Where(x => x.Id == leagueId)
             .Include(li => li.LeagueJuiceMappings)
-            .Include(li => li.LeagueUsers)
+            .Include(li => li.LeagueUserMappings)
             .FirstAsync();
     }
 

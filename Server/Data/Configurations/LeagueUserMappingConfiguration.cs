@@ -14,7 +14,7 @@ public class LeagueUserMappingConfiguration : IEntityTypeConfiguration<LeagueUse
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         entity.HasOne(e => e.League)
-            .WithMany(l => l.LeagueUsers)
+            .WithMany(l => l.LeagueUserMappings)
             .HasForeignKey(e => e.LeagueId)
             .IsRequired();
 
