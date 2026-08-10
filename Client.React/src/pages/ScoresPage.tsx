@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Badge, Box, Button, CircularProgress, Grid,
+  Alert, Badge, Box, Button, CircularProgress, Grid,
   IconButton, Paper, Stack, Typography,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
@@ -9,6 +9,7 @@ import GppBadIcon from '@mui/icons-material/GppBad';
 import GppMaybeIcon from '@mui/icons-material/GppMaybe';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import PageHeader from '../components/PageHeader';
 import WeekYearSelector from '../components/WeekYearSelector';
 import NoLeague from '../components/NoLeague';
@@ -20,7 +21,7 @@ import FieldPosition from '../components/FieldPosition';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { spreadLabel } from '../utils/gameHelpers';
-import type { SportAdapter, GameView, WeekState, LoadedScores } from '../services/sportAdapter';
+import type { SportAdapter, GameView, WeekState } from '../services/sportAdapter';
 
 // GameView.gameStatus is canonical GameStatusValue — use === directly, no string parsing
 
@@ -63,11 +64,16 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   const { currentLeague, leaguesLoaded } = useSession();
   const { user } = useAuth();
 
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<LoadedScores | null>(null);
-  const [isCurrentWeek, setIsCurrentWeek] = useState(true);
-  const [maxWeek, setMaxWeek] = useState(adapter.weekSelectorConfig.maxRegularSeasonWeek);
-  const [maxSeason, setMaxSeason] = useState(new Date().getFullYear());
+  // null = live current week (polls in background); non-null = historical navigation
+  const [weekState, setWeekState] = useState<WeekState | null>(null);
+  // The real navigable ceiling and the real "current week" identity — captured only from a
+  // current-week load, mirroring PicksPage's currentBounds. loadHistoricalScores returns
+  // maxWeek/maxSeason/season/week set to whatever is being VIEWED, not "today" — re-deriving
+  // either from the active query's data would collapse the selector's ceiling, or make selecting
+  // your own current week from the dropdown look like a historical navigation.
+  const [currentWeekSnapshot, setCurrentWeekSnapshot] = useState<
+    (WeekState & { maxWeek: number; maxSeason: number }) | null
+  >(null);
   const [isPageVisible, setIsPageVisible] = useState(true);
   const [showMatrixView, setShowMatrixView] = useState(false);
   const [showOnlyMyPicks, setShowOnlyMyPicks] = useState(false);
@@ -76,84 +82,81 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     userNames: string[]; userNamesOver: string[]; userNamesUnder: string[];
   } | null>(null);
 
-  const reload = useCallback(async () => {
-    if (!currentLeague || !user?.userId) { setLoading(false); return; }
-    setLoading(true);
-    try {
-      const result = await adapter.loadCurrentScores(currentLeague, user.userId);
-      const fp = (d: typeof result) => d.games.map(g => `${g.id}:${g.homeScore}:${g.awayScore}:${g.gameStatus}`).join('|');
-      setData(prev => prev && fp(prev) === fp(result) ? prev : result);
-      // Do NOT set isCurrentWeek=true here — polling races with handleWeekChange and would
-      // reset historical navigation. isCurrentWeek is managed by the callers.
-      setMaxWeek(result.maxWeek);
-      setMaxSeason(result.maxSeason);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentLeague, user?.userId, adapter]);
+  const isCurrentWeek = weekState === null;
+  const enabled = leaguesLoaded && !!currentLeague && !!user?.userId;
 
-  const loadHistorical = useCallback(async (state: WeekState) => {
-    if (!currentLeague || !user?.userId) return;
-    setLoading(true);
-    try {
-      // If the selected week matches the current (frozen demo) week, use the current
-      // scores path so the in-progress state is shown instead of the real ESPN final.
-      // If the selected week matches the frozen demo week, use current path for consistency
-      const isSameAsCurrentWeek =
-        data != null &&
-        state.season === data.season &&
-        state.week === data.week &&
-        state.isPostSeason === data.isPostSeason;
-      if (isSameAsCurrentWeek) {
-        await reload();
-        setIsCurrentWeek(true);
-        return;
-      }
-      const result = await adapter.loadHistoricalScores(currentLeague, user.userId, state);
-      setData(result);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentLeague, user?.userId, adapter, data, reload]);
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: [adapter.sport, 'scores', currentLeague, user?.userId, weekState],
+    queryFn: () => weekState
+      ? adapter.loadHistoricalScores(currentLeague!, user!.userId, weekState)
+      : adapter.loadCurrentScores(currentLeague!, user!.userId),
+    enabled,
+    refetchInterval: query => isCurrentWeek && isPageVisible && adapter.pollIntervalMs > 0
+      ? (query.state.data?.hasActiveGames ? adapter.pollIntervalMs : adapter.pollIntervalMs * 4)
+      : false,
+    placeholderData: keepPreviousData,
+  });
 
-  // Page visibility
+  useEffect(() => {
+    if (!isCurrentWeek || !data) return;
+    // data gets a new reference on every poll/SSE tick (scores/clock change), which would
+    // otherwise force this state — and everything derived from it below, including
+    // WeekYearSelector's props — to re-render on every tick even when nothing here actually
+    // changed. Bail out unless the fields this snapshot actually cares about moved.
+    setCurrentWeekSnapshot(prev =>
+      prev
+        && prev.season === data.season && prev.week === data.week && prev.isPostSeason === data.isPostSeason
+        && prev.maxWeek === data.maxWeek && prev.maxSeason === data.maxSeason
+        ? prev
+        : { season: data.season, week: data.week, isPostSeason: data.isPostSeason, maxWeek: data.maxWeek, maxSeason: data.maxSeason });
+  }, [isCurrentWeek, data]);
+
+  // Page visibility — pause polling for a hidden tab rather than burn cycles/battery on it.
   useEffect(() => {
     const h = () => setIsPageVisible(!document.hidden);
     document.addEventListener('visibilitychange', h);
     return () => document.removeEventListener('visibilitychange', h);
   }, []);
 
-  // Load + poll (fallback — SSE is primary when active games exist)
-  useEffect(() => {
-    if (!isCurrentWeek || !isPageVisible || !leaguesLoaded) return;
-    void reload();
-    if (adapter.pollIntervalMs <= 0) return;
-    const interval = setInterval(() => void reload(), data?.hasActiveGames ? adapter.pollIntervalMs : adapter.pollIntervalMs * 4);
-    return () => clearInterval(interval);
-  }, [reload, isCurrentWeek, isPageVisible, leaguesLoaded, data?.hasActiveGames, adapter.pollIntervalMs]);
-
-  // SSE — primary update mechanism when on current NFL week with active games
+  // SSE — primary update mechanism when on current NFL week with active games; polling above
+  // is the fallback (and the only mechanism at all for adapters with no sseUrl, e.g. CFB).
   useEffect(() => {
     if (!isCurrentWeek || !isPageVisible || !leaguesLoaded || !data?.hasActiveGames || !adapter.sseUrl) return;
     const es = new EventSource(adapter.sseUrl, { withCredentials: true });
-    es.onmessage = () => void reload();
+    es.onmessage = () => void refetch();
     es.onerror = () => es.close(); // fallback polling takes over
     return () => es.close();
-  }, [isCurrentWeek, isPageVisible, leaguesLoaded, data?.hasActiveGames, adapter.sseUrl, reload]);
+  }, [isCurrentWeek, isPageVisible, leaguesLoaded, data?.hasActiveGames, adapter.sseUrl, refetch]);
+
+  const maxWeek = currentWeekSnapshot?.maxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
+  const maxSeason = currentWeekSnapshot?.maxSeason ?? new Date().getFullYear();
+
+  // Selecting the week that IS the current week (from the dropdown, not the "Current Week"
+  // button) routes back to the live query instead of a one-off historical fetch — the historical
+  // path has no equivalent of hasActiveGames/SSE eligibility, so it would freeze live updates.
+  const routeToCurrentIfMatches = useCallback((candidate: WeekState): WeekState | null => {
+    if (currentWeekSnapshot
+      && candidate.season === currentWeekSnapshot.season
+      && candidate.week === currentWeekSnapshot.week
+      && candidate.isPostSeason === currentWeekSnapshot.isPostSeason) {
+      return null;
+    }
+    return candidate;
+  }, [currentWeekSnapshot]);
 
   const handleWeekChange = useCallback((week: number, meta?: { isPostSeason?: boolean }) => {
+    const season = data?.season ?? new Date().getFullYear();
     const isPostSeason = meta?.isPostSeason ?? data?.isPostSeason ?? false;
-    setIsCurrentWeek(false);
-    void loadHistorical({ season: data?.season ?? new Date().getFullYear(), week, isPostSeason });
-  }, [data?.isPostSeason, data?.season, loadHistorical]);
+    setWeekState(routeToCurrentIfMatches({ season, week, isPostSeason }));
+  }, [data?.season, data?.isPostSeason, routeToCurrentIfMatches]);
   const handleSeasonChange = useCallback((season: number) => {
-    setIsCurrentWeek(false);
-    void loadHistorical({ season, week: data?.week ?? 1, isPostSeason: data?.isPostSeason ?? false });
-  }, [data?.week, data?.isPostSeason, loadHistorical]);
+    const week = data?.week ?? 1;
+    const isPostSeason = data?.isPostSeason ?? false;
+    setWeekState(routeToCurrentIfMatches({ season, week, isPostSeason }));
+  }, [data?.week, data?.isPostSeason, routeToCurrentIfMatches]);
   const handleSeasonTypeChange = useCallback((_isPostSeason: boolean) => {
     // WeekYearSelector.handleSeasonTypeSelect also calls onWeekChange with the last week —
     // don't double-load here, let handleWeekChange handle it.
-    setIsCurrentWeek(false);
   }, []);
 
   // Pick query helpers
@@ -192,12 +195,25 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
   // ─── Guard states ─────────────────────────────────────────────────────────
 
-  if (loading) return (
+  // First load only — background refetches (polling, SSE) keep the grid mounted via
+  // placeholderData: keepPreviousData, so isLoading here only reflects a truly empty cache.
+  if (!leaguesLoaded || isLoading) return (
     <Box><PageHeader title="Scores" />
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
     </Box>
   );
   if (!currentLeague) return <NoLeague />;
+  if (isError && !data) return (
+    <Box><PageHeader title="Scores" />
+      <Alert
+        severity="error"
+        sx={{ mt: 4 }}
+        action={<Button color="inherit" size="small" onClick={() => void refetch()}>Retry</Button>}
+      >
+        Couldn&apos;t load scores. Check your connection and try again.
+      </Alert>
+    </Box>
+  );
   if (!data?.hasOdds && isCurrentWeek) return <SpreadRelease sport={adapter.sport} />;
   if (!data) return null;
 
@@ -227,7 +243,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
         />
         {!isCurrentWeek && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>
-            <Button size="small" variant="outlined" onClick={() => { setIsCurrentWeek(true); void reload(); }}>
+            <Button size="small" variant="outlined" onClick={() => setWeekState(null)}>
               Current Week
             </Button>
           </Box>
