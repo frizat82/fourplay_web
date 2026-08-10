@@ -25,13 +25,27 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     public async Task<IActionResult> GetSlates(int season) =>
         Ok(await cfbRepo.GetSlatesForSeasonAsync(season));
 
+    // frizat-9m0: the full FBS slate is persisted for audit (see CfbSpreadJob), but only
+    // league-eligible games (ranked-either-side or CFP, excluding MAC Tue/Wed) are ever served —
+    // the filter moved here, from ingestion, so the historical data underneath stays complete.
     [HttpGet("spreads/{cfbSlateId}")]
-    public async Task<IActionResult> GetSpreads(int cfbSlateId) =>
-        Ok(await cfbRepo.GetSpreadsForSlateAsync(cfbSlateId));
+    public async Task<IActionResult> GetSpreads(int cfbSlateId) {
+        var spreads = await cfbRepo.GetSpreadsForSlateAsync(cfbSlateId);
+        return Ok(spreads.WhereLeagueEligible());
+    }
 
     [HttpGet("scores/{cfbSlateId}")]
     public async Task<IActionResult> GetScores(int cfbSlateId) {
-        var scores = await cfbRepo.GetScoresForSlateAsync(cfbSlateId);
+        var spreadsTask = cfbRepo.GetSpreadsForSlateAsync(cfbSlateId);
+        var scoresTask = cfbRepo.GetScoresForSlateAsync(cfbSlateId);
+        await Task.WhenAll(spreadsTask, scoresTask);
+
+        // Fail-open, same philosophy as AddPicks's ineligibility guard: exclude only events we
+        // KNOW are ineligible (a matching CfbSpreads row exists and says so). A completed game
+        // with no matching spread row at all (e.g. CfbSpreadJob's one-shot-per-week fetch missed
+        // a late schedule change) still shows rather than silently vanishing from the scores page.
+        var ineligibleEventIds = spreadsTask.Result.WhereLeagueIneligible().Select(s => s.EspnEventId).ToHashSet();
+        var scores = scoresTask.Result.Where(s => !ineligibleEventIds.Contains(s.EspnEventId));
         var dtos = scores.Select(s => new CfbScoreDto {
             Id                  = s.Id,
             CfbSlateId          = s.CfbSlateId,
@@ -106,9 +120,18 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
 
         // Guard: reject picks for any game that has already kicked off.
         var startedEventIds = StartedEventIds(spreadsTask.Result, DateTimeOffset.UtcNow);
+
+        // Guard: reject picks for an event we KNOW is excluded from the league (MAC Tue/Wed,
+        // unranked, etc. — frizat-9m0). Distinct from "no matching spread at all", which stays
+        // fail-open below (e.g. an ESPN cache gap) — this only rejects positive knowledge of
+        // ineligibility, not absence of data.
+        var ineligibleEventIds = spreadsTask.Result.WhereLeagueIneligible().Select(s => s.EspnEventId).ToHashSet();
+
         foreach (var pick in request.Picks) {
             if (startedEventIds.Contains(pick.EspnEventId))
                 return BadRequest($"Pick rejected: {pick.Team}'s game has already kicked off.");
+            if (ineligibleEventIds.Contains(pick.EspnEventId))
+                return BadRequest($"Pick rejected: {pick.Team}'s game is not part of this league's slate.");
         }
 
         var existingPicks = existingPicksTask.Result.ToList();

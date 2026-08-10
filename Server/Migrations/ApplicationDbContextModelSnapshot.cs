@@ -22,6 +22,40 @@ namespace FourPlayWebApp.Server.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.CfbRanking", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CuratedRank")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EspnEventId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EspnWeekNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Season")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TeamAbbreviation")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Season", "EspnWeekNumber", "EspnEventId", "TeamAbbreviation");
+
+                    b.ToTable("CfbRankings");
+                });
+
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.CfbSeasonWeekConfig", b =>
                 {
                     b.Property<int>("Id")
@@ -49,6 +83,9 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<int>("Season")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime>("SpreadLockDatetime")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateOnly>("WeekEndDate")
                         .HasColumnType("date");
 
@@ -64,6 +101,10 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("Season", "EspnWeekNumber")
                         .IsUnique();
 
+                    b.HasIndex("Season", "IvLeagueWeekNumber")
+                        .IsUnique()
+                        .HasFilter("\"IvLeagueWeekNumber\" <> 99");
+
                     b.ToTable("CfbSeasonWeekConfigs");
                 });
 
@@ -76,7 +117,9 @@ namespace FourPlayWebApp.Server.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTimeOffset>("DateCreated")
-                        .HasColumnType("timestamp with time zone");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamptz")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<DateOnly>("EndDate")
                         .HasColumnType("date");
@@ -108,6 +151,9 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("date");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Season", "SlateNumber")
+                        .IsUnique();
 
                     b.ToTable("CfbSlates");
                 });
@@ -310,6 +356,9 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.Property<int>("Season")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime>("SpreadLockDatetime")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("WeekEndDatetime")
                         .HasColumnType("timestamp with time zone");
@@ -535,7 +584,9 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("DateCreated")
-                        .HasColumnType("timestamp with time zone");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamptz")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<int>("EspnEventId")
                         .HasColumnType("integer");
@@ -560,6 +611,13 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CfbSlateId");
+
+                    b.HasIndex("LeagueId");
+
+                    b.HasIndex("UserId", "LeagueId", "CfbSlateId", "Season", "Team", "PickType")
+                        .IsUnique();
+
                     b.ToTable("CfbPicks");
                 });
 
@@ -582,7 +640,9 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("DateCreated")
-                        .HasColumnType("timestamp with time zone");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamptz")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<int>("EspnEventId")
                         .HasColumnType("integer");
@@ -612,6 +672,11 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CfbSlateId");
+
+                    b.HasIndex("EspnEventId")
+                        .IsUnique();
+
                     b.ToTable("CfbScores");
                 });
 
@@ -634,7 +699,9 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("DateCreated")
-                        .HasColumnType("timestamp with time zone");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamptz")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<int>("EspnEventId")
                         .HasColumnType("integer");
@@ -649,10 +716,18 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<double>("HomeTeamSpread")
                         .HasColumnType("double precision");
 
+                    b.Property<bool>("IsLeagueEligible")
+                        .HasColumnType("boolean");
+
                     b.Property<double>("OverUnder")
                         .HasColumnType("double precision");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CfbSlateId");
+
+                    b.HasIndex("EspnEventId")
+                        .IsUnique();
 
                     b.ToTable("CfbSpreads");
                 });

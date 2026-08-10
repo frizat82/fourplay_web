@@ -347,7 +347,7 @@ public class LeaderboardServiceTests {
         var cfbRepo = Substitute.For<ICfbRepository>();
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
         cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[
-            new CfbSpreads { Id = 1, CfbSlateId = slateId, EspnEventId = 100, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50 }
+            new CfbSpreads { Id = 1, CfbSlateId = slateId, EspnEventId = 100, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true }
         ]);
         cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
             new CfbScores { Id = 1, CfbSlateId = slateId, EspnEventId = 100, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = "StatusFinal" }
@@ -397,8 +397,8 @@ public class LeaderboardServiceTests {
 
         // Add a second game that the user did NOT pick
         cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
-            new CfbSpreads { Id = 1, CfbSlateId = 1, EspnEventId = 100, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50 },
-            new CfbSpreads { Id = 2, CfbSlateId = 1, EspnEventId = 101, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47 },
+            new CfbSpreads { Id = 1, CfbSlateId = 1, EspnEventId = 100, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true },
+            new CfbSpreads { Id = 2, CfbSlateId = 1, EspnEventId = 101, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true },
         ]);
 
         var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
@@ -439,7 +439,7 @@ public class LeaderboardServiceTests {
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
         cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[
             new CfbSpreads { Id = 1, CfbSlateId = slateId, EspnEventId = 100,
-                HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50 }
+                HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true }
         ]);
         cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
             new CfbScores { Id = 1, CfbSlateId = slateId, EspnEventId = 100,
@@ -471,7 +471,7 @@ public class LeaderboardServiceTests {
 
         cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
             new CfbSpreads { Id = 1, CfbSlateId = 1, EspnEventId = 100,
-                HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -10, AwayTeamSpread = 10, OverUnder = 50 }
+                HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -10, AwayTeamSpread = 10, OverUnder = 50, IsLeagueEligible = true }
         ]);
         cfbRepo.GetScoresForSlateAsync(1).Returns((IEnumerable<CfbScores>)[
             new CfbScores { Id = 1, CfbSlateId = 1, EspnEventId = 100,

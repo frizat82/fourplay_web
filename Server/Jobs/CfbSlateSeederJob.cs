@@ -5,6 +5,9 @@ using Serilog;
 
 namespace FourPlayWebApp.Server.Jobs;
 
+// Slate seeding only — spread-trigger scheduling lives in CfbSpreadSchedulerJob (frizat-pxy
+// follow-on: CFB's scheduler is now structurally identical to NflSpreadSchedulerJob, on its own
+// cadence, not fused into this job).
 [DisallowConcurrentExecution]
 public class CfbSlateSeederJob(ICfbRepository repo) : IJob {
     private const int Season = 2026;
@@ -49,7 +52,7 @@ public class CfbSlateSeederJob(ICfbRepository repo) : IJob {
         var slates = configs.Select(cfg => new CfbSlates {
             Season       = Season,
             SlateNumber  = cfg.IvLeagueWeekNumber,
-            Label        = LabelFromConfig(cfg),
+            Label        = CfbWeekLabelHelper.LabelFromConfig(cfg),
             SlateType    = SlateTypeFromConfig(cfg),
             StartDate    = cfg.WeekStartDate,
             EndDate      = cfg.WeekEndDate,
@@ -60,16 +63,4 @@ public class CfbSlateSeederJob(ICfbRepository repo) : IJob {
         await repo.AddSlatesAsync(slates);
         Log.Information("CfbSlateSeederJob: seeded {Count} slates for {Season}", slates.Length, Season);
     }
-
-    private static string LabelFromConfig(CfbSeasonWeekConfig cfg) => cfg.WeekType switch {
-        "Conference Championships" => "Conf. Championships",
-        "FBS Playoff" => cfg.ScoringFormat switch {
-            "NFLDivisional" when cfg.IvLeagueWeekNumber == 15 => "CFP First Round",
-            "NFLDivisional" => "CFP Quarterfinals",
-            "NFLConference" => "CFP Semifinals",
-            "NFLSuperBowl"  => "CFP Championship",
-            _ => $"CFP Week {cfg.IvLeagueWeekNumber}",
-        },
-        _ => $"Week {cfg.IvLeagueWeekNumber}",
-    };
 }
