@@ -38,7 +38,7 @@ Every ✗ gets its own bead; retest after fix. The test passes only when every r
 - [ ] Staging live at a stable URL, auto-deploying from `dev`, `DEMO_MODE=false`
 - [ ] Both hosts resolve: apex (NFL) and `cfb.` subdomain (CFB)
 - [ ] 2026 season config rows exist: `SELECT COUNT(*) FROM "NflSeasonWeekConfigs" WHERE "Season"=2026` → 22; CFB → 18
-- [ ] `ALLOWED_ORIGINS`, SMTP creds, odds API key, `ADMIN_ALERT_EMAIL` set in staging env
+- [ ] `ALLOWED_ORIGINS`, SMTP creds, odds API key set in staging env
 - [ ] 5 real test people recruited (real inboxes — Gmail aliases like `you+alice@gmail.com` work)
 
 ## Phase 1 — Infra smoke (any day, ~15 min)
@@ -103,7 +103,7 @@ Every ✗ gets its own bead; retest after fix. The test passes only when every r
 
 ## Phase 9 — Failure drills (staging only, after Phase 7)
 
-- [ ] Break the odds API key → trigger spread job → admin alert email arrives (job-alerting bead); restore key
+- [ ] Break the odds API key → trigger spread job → job fails cleanly (logged, no crash), no bad data written; restore key. (Admin alert email is out of scope until frizat-703.2 ships — add that assertion back once it exists.)
 - [ ] Restart the backend service mid-day → Quartz recovers, missed triggers fire per misfire policy, no duplicate score rows
 - [ ] Deploy a new build while a tester is mid-session → stale-build banner appears (frizat-066); session survives
 - [ ] Brief DB outage (pause Neon compute) → app shows error states, recovers without restart, session init doesn't hang
