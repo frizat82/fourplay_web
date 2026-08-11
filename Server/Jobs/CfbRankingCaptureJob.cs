@@ -18,20 +18,25 @@ namespace FourPlayWebApp.Server.Jobs;
 // schedule-known and spread-locked). CfbRanking is append-only by design, so two captures over the
 // week is more complete history, not redundant noise.
 [DisallowConcurrentExecution]
-public class CfbRankingCaptureJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo) : IJob {
+public class CfbRankingCaptureJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, TimeProvider timeProvider) : IJob {
     private const int Season = 2026;
 
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("CfbRankingCaptureJob: capturing CFB rankings at {Time}", DateTime.UtcNow);
 
-        var slates = (await repo.GetSlatesForSeasonAsync(Season)).ToList();
-        if (slates.Count == 0) {
+        var allSlates = (await repo.GetSlatesForSeasonAsync(Season)).ToList();
+        if (allSlates.Count == 0) {
             Log.Warning("CfbRankingCaptureJob: no slates found for season {Season} — run CfbSlateSeederJob first", Season);
             return;
         }
 
-        // Each slate's scoreboard fetch is an independent ESPN call — no data dependency between
-        // them, so fetch all slates concurrently rather than serializing ~18 round-trips.
+        // CfbRankingExtractor only emits rows for StatusScheduled competitions, so a slate whose
+        // games are all already final is a guaranteed zero-yield ESPN call — skip it.
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var slates = allSlates.Where(s => s.EndDate >= today).ToList();
+
+        // Each remaining slate's scoreboard fetch is an independent ESPN call — no data dependency
+        // between them, so fetch all slates concurrently rather than serializing the round-trips.
         var scoreboards = await Task.WhenAll(slates.Select(async slate =>
             (slate, scoreboard: await fetcher.FetchForSlateAsync(slate))));
 

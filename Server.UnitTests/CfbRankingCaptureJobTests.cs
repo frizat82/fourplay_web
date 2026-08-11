@@ -17,15 +17,26 @@ public class CfbRankingCaptureJobTests
     private readonly ICfbLiveScoreFetcher _fetcher;
     private readonly ICfbRepository _repo;
     private readonly IJobExecutionContext _context;
+    private readonly TimeProvider _timeProvider;
+
+    // Fixed, controlled "now" — not tied to the real wall clock, so the EndDate-based skip filter
+    // is deterministic regardless of when the suite actually runs. Set before BuildSlate's default
+    // EndDate (2026-09-07) so existing "current" slates are still in scope by default.
+    private static readonly DateTimeOffset FakeNow = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
+
+    private sealed class FakeTimeProvider(DateTimeOffset now) : TimeProvider {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 
     public CfbRankingCaptureJobTests()
     {
         _fetcher = Substitute.For<ICfbLiveScoreFetcher>();
         _repo = Substitute.For<ICfbRepository>();
         _context = Substitute.For<IJobExecutionContext>();
+        _timeProvider = new FakeTimeProvider(FakeNow);
     }
 
-    private CfbRankingCaptureJob BuildJob() => new(_fetcher, _repo);
+    private CfbRankingCaptureJob BuildJob() => new(_fetcher, _repo, _timeProvider);
 
     private static CfbSlates BuildSlate(int slateId = 1) => new()
     {
@@ -109,6 +120,22 @@ public class CfbRankingCaptureJobTests
 
         await BuildJob().Execute(_context);
 
+        await _repo.DidNotReceive().AddRankingsAsync(Arg.Any<IEnumerable<CfbRanking>>());
+    }
+
+    [Fact]
+    public async Task Execute_SkipsSlateWhoseEndDateHasPassed_NoWastedFetch()
+    {
+        // CfbRankingExtractor only emits rows for StatusScheduled competitions, so a slate whose
+        // games are all already final is a guaranteed zero-yield ESPN call — skip it entirely
+        // rather than fetching and discarding.
+        var pastSlate = BuildSlate();
+        pastSlate.EndDate = DateOnly.FromDateTime(FakeNow.UtcDateTime.AddDays(-1));
+        _repo.GetSlatesForSeasonAsync(2026).Returns([pastSlate]);
+
+        await BuildJob().Execute(_context);
+
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
         await _repo.DidNotReceive().AddRankingsAsync(Arg.Any<IEnumerable<CfbRanking>>());
     }
 
