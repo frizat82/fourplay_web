@@ -33,12 +33,12 @@ jobs:
         env:
           # main -> prod DB, dev -> dev DB. Each branch's own secret, resolved once here so a
           # misconfigured/missing secret fails loudly instead of silently running against "".
-          CONN: ${{ github.ref_name == 'main' && secrets.NEON_PROD_CONNECTION_STRING || secrets.NEON_DEV_CONNECTION_STRING }}
+          # ApplicationDbContextFactory (Server/Data/) reads this exact env var directly — no
+          # app pipeline boot required, so no other config (JWT, email, ALLOWED_ORIGINS) is needed.
+          ConnectionStrings__POSTGRES_CONNECTION_STRING: ${{ github.ref_name == 'main' && secrets.NEON_PROD_CONNECTION_STRING || secrets.NEON_DEV_CONNECTION_STRING }}
         run: |
-          if [ -z "$CONN" ]; then
+          if [ -z "$ConnectionStrings__POSTGRES_CONNECTION_STRING" ]; then
             echo "::error::Connection string secret is empty for branch '${{ github.ref_name }}' — check NEON_PROD_CONNECTION_STRING/NEON_DEV_CONNECTION_STRING are set in repo secrets."
             exit 1
           fi
-          dotnet ef database update \
-            --project Server \
-            --connection "$CONN"
+          dotnet ef database update --project Server
