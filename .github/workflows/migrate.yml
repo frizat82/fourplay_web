@@ -2,14 +2,15 @@ name: DB Migrate
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - 'Server/Migrations/**'
       - 'Server/Data/**'
+  workflow_dispatch: {}
 
 jobs:
   migrate:
-    name: Run EF migrations (prod)
+    name: Run EF migrations (${{ github.ref_name }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,14 +20,25 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Install EF tools
-        run: dotnet tool install --global dotnet-ef
+      # A local tool manifest (.config/dotnet-tools.json) already declares dotnet-ef —
+      # `tool install --global` fights that manifest and leaves `dotnet ef` unresolvable
+      # ("Run 'dotnet tool restore'"). Restore the manifest's own version instead.
+      - name: Restore EF tool
+        run: dotnet tool restore
 
       - name: Restore
         run: dotnet restore
 
       - name: Migrate
+        env:
+          # main -> prod DB, dev -> dev DB. Each branch's own secret, resolved once here so a
+          # misconfigured/missing secret fails loudly instead of silently running against "".
+          CONN: ${{ github.ref_name == 'main' && secrets.NEON_PROD_CONNECTION_STRING || secrets.NEON_DEV_CONNECTION_STRING }}
         run: |
+          if [ -z "$CONN" ]; then
+            echo "::error::Connection string secret is empty for branch '${{ github.ref_name }}' — check NEON_PROD_CONNECTION_STRING/NEON_DEV_CONNECTION_STRING are set in repo secrets."
+            exit 1
+          fi
           dotnet ef database update \
             --project Server \
-            --connection "${{ secrets.NEON_PROD_CONNECTION_STRING }}"
+            --connection "$CONN"

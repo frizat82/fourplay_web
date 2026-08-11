@@ -386,11 +386,28 @@ try
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var pending = db.Database.GetPendingMigrations().ToList();
-    if (pending.Count > 0)
-        Log.Information("Applying {Count} pending migration(s): {Names}", pending.Count, pending);
-    else
+
+    if (app.Environment.IsDevelopment()) {
+        // Local machine + demo stack: auto-apply for convenience, matches CLAUDE.md.
+        if (pending.Count > 0)
+            Log.Information("Applying {Count} pending migration(s): {Names}", pending.Count, pending);
+        else
+            Log.Information("Database is up to date, no migrations needed");
+        db.Database.Migrate();
+    } else if (pending.Count > 0) {
+        // Deployed environments (Railway dev/prod): migrations are applied by the "DB Migrate"
+        // GitHub Actions workflow (.github/workflows/migrate.yml) before this deploy is allowed
+        // to happen at all (Railway's checkSuites gate blocks the deploy on that job failing).
+        // Reaching pending migrations here means that gate was bypassed or the job never ran —
+        // fail loudly instead of silently serving traffic against a stale schema, which is
+        // exactly what happened silently for days before this check existed.
+        Log.Fatal("{Count} pending migration(s) not applied: {Names}. The DB Migrate workflow " +
+            "should have applied these before this deploy started — refusing to serve traffic " +
+            "against a stale schema.", pending.Count, pending);
+        throw new InvalidOperationException($"{pending.Count} pending migration(s) not applied: {string.Join(", ", pending)}");
+    } else {
         Log.Information("Database is up to date, no migrations needed");
-    db.Database.Migrate();
+    }
 }
 catch (Exception ex)
 {
