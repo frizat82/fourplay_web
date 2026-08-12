@@ -6,6 +6,7 @@ import {
   TableHead,
   TableRow,
   Typography,
+  useTheme,
 } from '@mui/material';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
@@ -22,6 +23,7 @@ interface UserPicksMatrixProps {
 }
 
 export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }: UserPicksMatrixProps) {
+  const isDark = useTheme().palette.mode === 'dark';
   const getUserPicks = (user: string) => picks.filter((p) => p.userName === user);
 
   const getWinner = (teamAbbr: string, pickType: NflPickDto['pick']) => {
@@ -61,7 +63,14 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
                     );
                   }
                   const result = getWinner(pick.team, pick.pick);
-                  const bgColor = result === true ? 'success.light' : result === false ? 'error.light' : 'grey.200';
+                  // TeamHelmet's dark-mode logos are neon assets designed to glow against a dark
+                  // background (see TeamHelmet.tsx) — the light literal tones below washed them
+                  // out in dark mode, so pick each cell's tone from the active theme instead.
+                  const bgColor = result === true
+                    ? (isDark ? 'success.dark' : 'success.light')
+                    : result === false
+                      ? (isDark ? 'error.dark' : 'error.light')
+                      : (isDark ? 'grey.800' : 'grey.200');
 
                   return (
                     <TableCell key={idx} align="center">

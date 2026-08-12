@@ -95,15 +95,51 @@ export default function GameCard({
 
   const pickButtonSx = { minWidth: 80, height: 44, textTransform: 'none', fontSize: '0.85rem', flexShrink: 0 } as const;
 
+  // MUI's `disabled` state flattens contained (filled) buttons to uniform gray regardless of
+  // `color`. Keep the real color at reduced opacity instead of falling back to generic gray.
+  const lockedFillSx = (color: 'success' | 'warning') => ({
+    '&.Mui-disabled': {
+      color: `${color}.contrastText`,
+      backgroundColor: `${color}.main`,
+      opacity: 0.6,
+    },
+  });
+  // Same idea for outlined buttons: keep the tinted border/text instead of MUI's disabled gray.
+  const lockedOutlineSx = (color: 'success' | 'warning') => ({
+    '&.Mui-disabled': {
+      color: `${color}.main`,
+      borderColor: `${color}.main`,
+      opacity: 0.6,
+    },
+  });
+
   const renderPickButton = (team: string, pickState: PickState, onPick?: () => void) => {
     if (pickState === 'submitted')
       // aria-label stays "locked in" for accessible-name test/query stability — only the visible
       // label changed (matches the pending-state "Picked" text; disabled + checkmark still
       // distinguish submitted from pending for sighted users).
-      return <Button color="success" variant="contained" disabled startIcon={<CheckIcon />} aria-label={`${team} locked in`} sx={pickButtonSx}>Picked</Button>;
+      return <Button color="success" variant="contained" disabled startIcon={<CheckIcon />} aria-label={`${team} locked in`} sx={[pickButtonSx, lockedFillSx('success')]}>Picked</Button>;
     if (pickState !== 'none')
       return <Button color="success" variant="contained" onClick={onPick} aria-label={`${team} picked`} sx={pickButtonSx}>Picked</Button>;
-    return <Button color="warning" variant="contained" disabled={locked} onClick={onPick} aria-label={`Pick ${team}`} sx={pickButtonSx}>Pick</Button>;
+    // Outlined, not filled — an unpicked option shouldn't compete visually with a filled "Picked"
+    // button; two solid color blocks side by side read as "both selected," not "pick one."
+    return <Button color="warning" variant="outlined" disabled={locked} onClick={onPick} aria-label={`Pick ${team}`} sx={[pickButtonSx, lockedOutlineSx('warning')]}>Pick</Button>;
+  };
+
+  const renderOverUnderButton = (label: string, value: number, pickState: PickState, onPick?: () => void) => {
+    const picked = pickState !== 'none';
+    const color = picked ? 'success' : 'warning';
+    return (
+      <Button
+        variant={picked ? 'contained' : 'outlined'}
+        color={color}
+        sx={[pickButtonSx, picked ? lockedFillSx(color) : lockedOutlineSx(color)]}
+        disabled={overUnderLocked && !picked}
+        onClick={onPick}
+      >
+        {picked ? `${label} ${value} ✓` : label}
+      </Button>
+    );
   };
 
   const renderTeamLogo = (abbr: string, jerseyUrl: string | undefined) => (
@@ -202,27 +238,11 @@ export default function GameCard({
           >
             <CardContent sx={{ p: '12px !important' }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ gap: 1 }}>
-                <Button
-                  variant="contained"
-                  color={overPickState !== 'none' ? 'success' : 'warning'}
-                  sx={pickButtonSx}
-                  disabled={overUnderLocked && overPickState === 'none'}
-                  onClick={onPickOver}
-                >
-                  {overPickState !== 'none' ? `Over ${overValue} ✓` : 'Over'}
-                </Button>
+                {renderOverUnderButton('Over', overValue, overPickState, onPickOver)}
                 <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center', flexShrink: 0 }}>
                   {overValue}
                 </Typography>
-                <Button
-                  variant="contained"
-                  color={underPickState !== 'none' ? 'success' : 'warning'}
-                  sx={pickButtonSx}
-                  disabled={overUnderLocked && underPickState === 'none'}
-                  onClick={onPickUnder}
-                >
-                  {underPickState !== 'none' ? `Under ${underValue} ✓` : 'Under'}
-                </Button>
+                {renderOverUnderButton('Under', underValue, underPickState, onPickUnder)}
               </Stack>
             </CardContent>
           </Card>
