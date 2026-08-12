@@ -11,7 +11,6 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Chip,
   Typography,
 } from '@mui/material';
 import PageHeader from '../../components/PageHeader';
@@ -25,6 +24,10 @@ export default function CfbSchedulePage() {
   const [season, setSeason] = useState(CURRENT_SEASON);
   const [configs, setConfigs] = useState<CfbSeasonWeekConfigDto[]>([]);
   const [loading, setLoading] = useState(false);
+  // Out-of-scope rows (e.g. ESPN Week 0 openers, bye/dead weeks) are a real, deliberate exclusion
+  // marker the app needs to know which games have no pick'em slate — but they're internal
+  // scheduling detail, not something an admin needs to see here.
+  const inScopeConfigs = configs.filter((c) => c.inScopeIvLeague);
 
   useEffect(() => {
     setLoading(true);
@@ -59,21 +62,20 @@ export default function CfbSchedulePage() {
                 <TableCell>Scoring Format</TableCell>
                 <TableCell>Start Date</TableCell>
                 <TableCell>End Date</TableCell>
-                <TableCell>In Scope</TableCell>
                 <TableCell>Notes</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {configs.length === 0 && (
+              {inScopeConfigs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8}>
+                  <TableCell colSpan={7}>
                     <Typography color="text.secondary" variant="body2">
                       No week configs found for {season}
                     </Typography>
                   </TableCell>
                 </TableRow>
               )}
-              {configs.map((c) => (
+              {inScopeConfigs.map((c) => (
                 <TableRow key={c.espnWeekNumber}>
                   <TableCell>{c.espnWeekNumber}</TableCell>
                   <TableCell>{c.ivLeagueWeekNumber}</TableCell>
@@ -81,13 +83,6 @@ export default function CfbSchedulePage() {
                   <TableCell>{c.scoringFormat}</TableCell>
                   <TableCell>{c.weekStartDate}</TableCell>
                   <TableCell>{c.weekEndDate}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={c.inScopeIvLeague ? 'Yes' : 'No'}
-                      color={c.inScopeIvLeague ? 'success' : 'default'}
-                      size="small"
-                    />
-                  </TableCell>
                   <TableCell>{c.notes ?? '—'}</TableCell>
                 </TableRow>
               ))}
