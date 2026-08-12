@@ -71,3 +71,15 @@ export interface NflWeekDto {
   endDate: string;
   dateCreated: string;
 }
+
+// GET /api/league/current-week — mirrors CfbSlateDto's role for NFL: the season/week to treat
+// as "current," resolved server-side with a real off-season/pre-season fallback (NflCurrentWeekService).
+export interface NflCurrentWeekDto {
+  weekId: number;
+  espnWeek: number;
+  season: number;
+  isPostSeason: boolean;
+  weekLabel: string;
+  scoringFormat: string;
+  spreadLockDatetime: string;
+}
