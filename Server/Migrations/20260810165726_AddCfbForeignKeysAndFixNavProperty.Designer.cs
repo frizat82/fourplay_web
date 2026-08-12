@@ -3,6 +3,7 @@ using System;
 using FourPlayWebApp.Server.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FourPlayWebApp.Server.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260810165726_AddCfbForeignKeysAndFixNavProperty")]
+    partial class AddCfbForeignKeysAndFixNavProperty
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -269,6 +272,26 @@ namespace FourPlayWebApp.Server.Migrations
                         .IsUnique();
 
                     b.ToTable("LeagueUserMapping");
+                });
+
+            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueUsers", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("LeagueUsers");
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.NflPicks", b =>
@@ -541,17 +564,13 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
-                        .IsUnique()
-                        .HasFilter("\"LeagueId\" IS NULL");
+                        .IsUnique();
 
                     b.HasIndex("InvitedByUserId");
 
                     b.HasIndex("LeagueId");
 
                     b.HasIndex("RegisteredUserId");
-
-                    b.HasIndex("Email", "LeagueId")
-                        .IsUnique();
 
                     b.ToTable("Invitations");
                 });
@@ -1022,18 +1041,15 @@ namespace FourPlayWebApp.Server.Migrations
                 {
                     b.HasOne("FourPlayWebApp.Server.Models.Identity.ApplicationUser", "InvitedByUser")
                         .WithMany()
-                        .HasForeignKey("InvitedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("InvitedByUserId");
 
                     b.HasOne("FourPlayWebApp.Server.Models.Data.LeagueInfo", "League")
                         .WithMany()
-                        .HasForeignKey("LeagueId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .HasForeignKey("LeagueId");
 
                     b.HasOne("FourPlayWebApp.Server.Models.Identity.ApplicationUser", "RegisteredUser")
                         .WithMany()
-                        .HasForeignKey("RegisteredUserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .HasForeignKey("RegisteredUserId");
 
                     b.Navigation("InvitedByUser");
 

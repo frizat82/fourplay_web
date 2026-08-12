@@ -26,25 +26,45 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
-        var invitation = new Invitation
-        {
-            Email = email,
-            InvitedByUserId = invitedByUserId,
-            LeagueId = leagueId,
-            CreatedAt = DateTimeOffset.UtcNow,
-            ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
-        };
+        // frizat-9vm: Invitations is unique on (Email, LeagueId), not just Email — the same
+        // address can be invited to several different leagues. This is an upsert against that
+        // key rather than a blind insert, so re-inviting the same email to the same league
+        // refreshes/resends instead of throwing on the duplicate-key violation.
+        var existing = await dbContext.Invitations
+            .FirstOrDefaultAsync(i => i.Email == email && i.LeagueId == leagueId);
 
-        dbContext.Invitations.Add(invitation);
+        if (existing is not null && existing.IsUsed) {
+            // Already registered via this invite — nothing to refresh or resend, just hand back
+            // the existing record so the caller doesn't see this as a failure.
+            Log.Information("Invitation for {Email} to league {LeagueId} already used by {UserId} — no-op", email, leagueId, existing.RegisteredUserId);
+            return existing;
+        }
+
+        Invitation invitation;
+        if (existing is not null) {
+            invitation = existing;
+            invitation.InvitedByUserId = invitedByUserId;
+            invitation.ExpiresAt = DateTimeOffset.UtcNow.AddDays(7);
+            Log.Information("Invitation for {Email} to league {LeagueId} refreshed by {UserId}", email, leagueId, invitedByUserId);
+        } else {
+            invitation = new Invitation {
+                Email = email,
+                InvitedByUserId = invitedByUserId,
+                LeagueId = leagueId,
+                CreatedAt = DateTimeOffset.UtcNow,
+                ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
+            };
+            dbContext.Invitations.Add(invitation);
+            Log.Information("Invitation created for {Email} by {UserId}", email, invitedByUserId);
+        }
+
         await dbContext.SaveChangesAsync();
-
-        Log.Information("Invitation created for {Email} by {UserId}", email, invitedByUserId);
 
         if (!string.IsNullOrWhiteSpace(baseUrl)) {
             try {
                 await SendInvitationEmailAsync(invitation, baseUrl);
             } catch (Exception ex) {
-                // Invitation was created successfully; a failed email send must not undo it.
+                // Invitation was created/refreshed successfully; a failed email send must not undo it.
                 Log.Error(ex, "Failed to send invitation email to {Email}", email);
             }
         }

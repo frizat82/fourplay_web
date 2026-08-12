@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
@@ -40,7 +41,7 @@ public class CfbSpreadJob(
         }
 
         var spreads = new List<CfbSpreads>();
-        var rankings = new List<Models.Data.CfbRanking>();
+        var rankings = new List<CfbRanking>();
 
         var scoreboard = await fetcher.FetchForSlateAsync(slate);
         if (scoreboard?.Events is not null) {
@@ -61,8 +62,8 @@ public class CfbSpreadJob(
 
     private async Task ProcessEventsForSpreads(
         List<CfbSpreads> spreads,
-        FourPlayWebApp.Server.Models.Data.CfbSlates slate,
-        IEnumerable<FourPlayWebApp.Shared.Models.Event> events) {
+        CfbSlates slate,
+        IEnumerable<Event> events) {
         var isCfp = CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat);
 
         foreach (var evt in events) {

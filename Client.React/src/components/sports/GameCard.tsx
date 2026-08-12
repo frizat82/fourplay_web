@@ -3,6 +3,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import TeamHelmet from './TeamHelmet';
 import WeatherIcon from '../WeatherIcon';
 import { spreadLabel } from '../../utils/gameHelpers';
+import { toLocalDisplay } from '../../utils/time';
 
 export type PickState = 'none' | 'pending' | 'submitted';
 
@@ -51,7 +52,7 @@ export interface GameCardProps {
 }
 
 function formatShortDateTime(iso: string) {
-  return new Date(iso).toLocaleString([], {
+  return toLocalDisplay(iso, {
     weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
   });
 }

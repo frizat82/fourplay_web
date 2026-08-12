@@ -47,7 +47,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.LeagueInfo.Where(x => x.Id == leagueId)
             .Include(li => li.LeagueJuiceMappings)
-            .Include(li => li.LeagueUsers)
+            .Include(li => li.LeagueUserMappings)
             .FirstAsync();
     }
 
@@ -120,14 +120,18 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     // NFL Scores and Spreads methods
     public async Task UpsertAsync(IEnumerable<NflSpreads> spreads) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
+        var spreadList = spreads.ToList();
 
-        foreach (var spread in spreads) {
-            var existing = await db.NflSpreads.FirstOrDefaultAsync(s =>
-                s.Season == spread.Season &&
-                s.NflWeek == spread.NflWeek &&
-                s.HomeTeam == spread.HomeTeam);
+        // Batch the existing-row lookup into one query (mirrors CfbRepository.UpsertAsync) instead
+        // of a per-spread FirstOrDefaultAsync — avoids an N+1 round-trip on every spread fetch.
+        var seasons = spreadList.Select(s => s.Season).ToHashSet();
+        var weeks = spreadList.Select(s => s.NflWeek).ToHashSet();
+        var existingMap = await db.NflSpreads
+            .Where(s => seasons.Contains(s.Season) && weeks.Contains(s.NflWeek))
+            .ToDictionaryAsync(s => (s.Season, s.NflWeek, s.HomeTeam));
 
-            if (existing == null) {
+        foreach (var spread in spreadList) {
+            if (!existingMap.TryGetValue((spread.Season, spread.NflWeek, spread.HomeTeam), out var existing)) {
                 // Doesn't exist -> Insert new record
                 await db.NflSpreads.AddAsync(spread);
             }
@@ -272,12 +276,6 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     }
 
     // Add operations
-    public async Task AddLeagueUserAsync(LeagueUsers leagueUser) {
-        await using var db = await dbContextFactory.CreateDbContextAsync();
-        await db.LeagueUsers.AddAsync(leagueUser);
-        await db.SaveChangesAsync();
-    }
-
     public async Task AddLeagueUserMappingAsync(LeagueUserMapping mapping) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         await db.LeagueUserMapping.AddAsync(mapping);

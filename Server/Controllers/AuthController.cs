@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -224,7 +225,18 @@ public class AuthController(
         var user = await userManager.FindByIdAsync(userId);
         if (user == null)
             return NotFound();
-        var result = await userManager.DeleteAsync(user);
+
+        IdentityResult result;
+        try {
+            result = await userManager.DeleteAsync(user);
+        } catch (DbUpdateException ex) {
+            // frizat-5rp: every table referencing AspNetUsers/LeagueInfo now cascades on delete,
+            // so this shouldn't be reachable in normal operation — this is a safety net against
+            // any future FK left un-cascaded, so an admin gets a clear 500 instead of the raw
+            // exception, and the failure is at least logged with enough detail to diagnose.
+            logger.LogError(ex, "DeleteUser: unhandled DB error deleting user {UserId}", userId);
+            return StatusCode(500, "Failed to delete user due to a database error. See server logs for details.");
+        }
         if (result.Errors.Any())
             return BadRequest(string.Join(Environment.NewLine, result.Errors.Select(x => x.Description)));
         return Ok();

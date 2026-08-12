@@ -13,6 +13,7 @@ import {
 import { getEspnRequiredPicks, getCfbRequiredPicks } from '../utils/gameHelpers';
 import { useSportContext } from '../services/sport';
 import { getNextSpreadJob } from '../services/spreadRelease';
+import { toLocalDisplay } from '../utils/time';
 import PageHeader from '../components/PageHeader';
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -284,7 +285,7 @@ function InfoCallout({ children }: { children: React.ReactNode }) {
 }
 
 function formatLockTime(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
+  return toLocalDisplay(iso, {
     weekday: 'long',
     month: 'short',
     day: 'numeric',

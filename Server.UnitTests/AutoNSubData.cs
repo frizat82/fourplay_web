@@ -124,7 +124,6 @@ public class DbContextFactoryStub : IDbContextFactory<ApplicationDbContext>
                 await _dbContext.SaveChangesAsync();
             }
 
-            _dbContext.LeagueUsers.Add(new LeagueUsers {Email = user.Email!});
             _dbContext.LeagueUserMapping.Add(new LeagueUserMapping {
                 LeagueId = 1,
                 League = leagueInfo!,

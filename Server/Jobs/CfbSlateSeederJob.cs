@@ -45,7 +45,14 @@ public class CfbSlateSeederJob(ICfbRepository repo) : IJob {
         }
 
         if (existing.Count > 0) {
-            await repo.DeleteSlatesAsync(existing);
+            // frizat-2lc: DeleteSlatesAsync fails closed and skips the delete if any of these
+            // slates already carry real dependent CfbSpreads/CfbScores/CfbPicks data — in that
+            // case, the whole reseed must be skipped too rather than adding new slates on top of
+            // stale ones that couldn't be removed.
+            if (!await repo.DeleteSlatesAsync(existing)) {
+                Log.Warning("CfbSlateSeederJob: {Count} stale slates for {Season} have dependent spread/score/pick data — skipping reseed", existing.Count, Season);
+                return;
+            }
             Log.Information("CfbSlateSeederJob: removed {Count} stale slates for {Season}", existing.Count, Season);
         }
 
