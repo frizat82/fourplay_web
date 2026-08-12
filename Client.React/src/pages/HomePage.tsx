@@ -84,8 +84,7 @@ export default function HomePage({ adapter }: HomePageProps) {
                 <Chip
                   label={isCfb ? 'College Football' : 'NFL'}
                   color="secondary"
-                  size="small"
-                  sx={{ fontWeight: 700, letterSpacing: '0.04em', mb: 1.5 }}
+                  sx={{ fontWeight: 700, fontSize: '1rem', letterSpacing: '0.04em', height: 36, px: 1, mb: 1.5 }}
                 />
                 <Typography variant="h2" className="hero-title">
                   {isAuthed ? 'Welcome Back.' : 'Skip the Draft.\nMake Picks.\nBeat Your Friends.'}

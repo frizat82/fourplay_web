@@ -97,18 +97,13 @@ export default function GameCard({
 
   // MUI's `disabled` state flattens contained (filled) buttons to uniform gray regardless of
   // `color`. Keep the real color at reduced opacity instead of falling back to generic gray.
-  const lockedFillSx = (color: 'success' | 'warning') => ({
+  // frizat: warning/amber was hard to read in both light and dark mode — "available to pick"
+  // uses info (blue) instead, filled the same as the picked (success/green) state so both read
+  // as equally solid, deliberate choices rather than one looking washed out.
+  const lockedFillSx = (color: 'success' | 'info') => ({
     '&.Mui-disabled': {
       color: `${color}.contrastText`,
       backgroundColor: `${color}.main`,
-      opacity: 0.6,
-    },
-  });
-  // Same idea for outlined buttons: keep the tinted border/text instead of MUI's disabled gray.
-  const lockedOutlineSx = (color: 'success' | 'warning') => ({
-    '&.Mui-disabled': {
-      color: `${color}.main`,
-      borderColor: `${color}.main`,
       opacity: 0.6,
     },
   });
@@ -121,19 +116,17 @@ export default function GameCard({
       return <Button color="success" variant="contained" disabled startIcon={<CheckIcon />} aria-label={`${team} locked in`} sx={[pickButtonSx, lockedFillSx('success')]}>Picked</Button>;
     if (pickState !== 'none')
       return <Button color="success" variant="contained" onClick={onPick} aria-label={`${team} picked`} sx={pickButtonSx}>Picked</Button>;
-    // Outlined, not filled — an unpicked option shouldn't compete visually with a filled "Picked"
-    // button; two solid color blocks side by side read as "both selected," not "pick one."
-    return <Button color="warning" variant="outlined" disabled={locked} onClick={onPick} aria-label={`Pick ${team}`} sx={[pickButtonSx, lockedOutlineSx('warning')]}>Pick</Button>;
+    return <Button color="info" variant="contained" disabled={locked} onClick={onPick} aria-label={`Pick ${team}`} sx={[pickButtonSx, lockedFillSx('info')]}>Pick</Button>;
   };
 
   const renderOverUnderButton = (label: string, value: number, pickState: PickState, onPick?: () => void) => {
     const picked = pickState !== 'none';
-    const color = picked ? 'success' : 'warning';
+    const color = picked ? 'success' : 'info';
     return (
       <Button
-        variant={picked ? 'contained' : 'outlined'}
+        variant="contained"
         color={color}
-        sx={[pickButtonSx, picked ? lockedFillSx(color) : lockedOutlineSx(color)]}
+        sx={[pickButtonSx, lockedFillSx(color)]}
         disabled={overUnderLocked && !picked}
         onClick={onPick}
       >
@@ -164,7 +157,7 @@ export default function GameCard({
               {!isPostSeason && awayRecord && (
                 <Typography variant="subtitle2">{awayRecord}</Typography>
               )}
-              <Typography variant="h6" className="fixed-width">
+              <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center' }}>
                 {mode === 'score' && showScore ? awayScore : awaySpread != null ? spreadLabel(awaySpread) : ""}
               </Typography>
               {mode === 'pick' ? renderPickButton(awayTeam, awayPickState, onPickAway) : (
@@ -208,7 +201,7 @@ export default function GameCard({
               {!isPostSeason && homeRecord && (
                 <Typography variant="subtitle2">{homeRecord}</Typography>
               )}
-              <Typography variant="h6" className="fixed-width">
+              <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center' }}>
                 {mode === 'score' && showScore ? homeScore : homeSpread != null ? spreadLabel(homeSpread) : ""}
               </Typography>
               {mode === 'pick' ? renderPickButton(homeTeam, homePickState, onPickHome) : (
