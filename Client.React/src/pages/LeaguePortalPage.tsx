@@ -30,6 +30,7 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import PageHeader from '../components/PageHeader';
 import OwnerCostSummary from '../components/OwnerCostSummary';
 import { useSession } from '../services/session';
+import { useSportContext } from '../services/sport';
 import { useAuth } from '../services/auth';
 import { useToast } from '../services/toast';
 import { isAdmin } from '../utils/auth';
@@ -70,13 +71,18 @@ function UserOptions({ users }: { users: UserSummaryDto[] }) {
 
 export default function LeaguePortalPage() {
   const { ownedLeagues, leaguesLoaded, reloadLeagues } = useSession();
+  const { isCfb } = useSportContext();
   const { user } = useAuth();
   const admin = isAdmin(user);
   const toast = useToast();
 
   const [allLeagues, setAllLeagues] = useState<LeagueInfoDto[]>([]);
   const [allLeaguesLoaded, setAllLeaguesLoaded] = useState(false);
-  const leagueOptions = admin ? allLeagues : ownedLeagues;
+  // Admins see every league platform-wide (allLeagues), but still only for the sport they're
+  // currently on — ownedLeagues already applies this same filter for non-admins (session.tsx).
+  const leagueOptions = admin
+    ? allLeagues.filter((l) => l.leagueType === (isCfb ? 'Cfb' : 'Nfl'))
+    : ownedLeagues;
   // Guards the empty state against the pre-fetch window — without it, an admin with leagues
   // platform-wide would see a false "no leagues yet" flash while allLeagues is still [].
   const optionsLoaded = admin ? allLeaguesLoaded : leaguesLoaded;
