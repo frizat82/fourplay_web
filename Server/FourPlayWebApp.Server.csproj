@@ -39,6 +39,19 @@
     <Folder Include="wwwroot\" />
   </ItemGroup>
 
+  <!-- DEMO_MODE fixtures live at the repo root, one level above this project. Embedded as
+       resources (not copy-to-output) so DemoFixtureLoader can find them by assembly-relative
+       logical name regardless of ContentRootPath or working directory; copy-to-output would
+       still break on Railway, where the deployed ContentRootPath differs from the local layout. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\sample_espn_nfl.json"><LogicalName>sample_espn_nfl.json</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\sample_espn_nfl_final.json"><LogicalName>sample_espn_nfl_final.json</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\sample_espn_nfl_halftime.json"><LogicalName>sample_espn_nfl_halftime.json</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\sample_espn_nfl_scheduled.json"><LogicalName>sample_espn_nfl_scheduled.json</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\sample_espn_nfl_in_progress.json"><LogicalName>sample_espn_nfl_in_progress.json</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="..\sample_espn_cfb.json"><LogicalName>sample_espn_cfb.json</LogicalName></EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup>
     <_ContentIncludedByDefault Remove="Areas\Identity\Pages\Account\Login.cshtml" />
     <_ContentIncludedByDefault Remove="Areas\Identity\Pages\Account\Manage\ChangePassword.cshtml" />
