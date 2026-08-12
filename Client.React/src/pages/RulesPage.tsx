@@ -92,10 +92,19 @@ function TeaseFormula() {
 }
 
 function MatchupExample() {
-  const teams = [
-    { name: 'Seattle Seahawks', detail: 'Home favorite', vegas: '−4.5', teased: '+8.5' },
-    { name: 'Chicago Bears', detail: 'Road underdog', vegas: '+4.5', teased: '+17.5' },
-  ];
+  const { isCfb } = useSportContext();
+  const teams = isCfb
+    ? [
+        { name: 'Ohio State Buckeyes', detail: 'Home favorite', vegas: '−4.5', teased: '+8.5' },
+        { name: 'Michigan Wolverines', detail: 'Road underdog', vegas: '+4.5', teased: '+17.5' },
+      ]
+    : [
+        { name: 'Seattle Seahawks', detail: 'Home favorite', vegas: '−4.5', teased: '+8.5' },
+        { name: 'Chicago Bears', detail: 'Road underdog', vegas: '+4.5', teased: '+17.5' },
+      ];
+  const header = isCfb
+    ? 'Week 1 · 2026 · OSU hosts MICH · 13-pt tease example'
+    : 'Week 1 · 2026 · SEA hosts CHI · 13-pt tease example';
 
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 2 }}>
@@ -116,7 +125,7 @@ function MatchupExample() {
           color="text.secondary"
           sx={{ letterSpacing: '0.06em', textTransform: 'uppercase' }}
         >
-          Week 1 · 2026 · SEA hosts CHI · 13-pt tease example
+          {header}
         </Typography>
         <Typography variant="caption" color="text.secondary">
           Vegas → Teased
@@ -161,20 +170,39 @@ function MatchupExample() {
 }
 
 function ScenarioExample() {
-  const rows = [
-    {
-      team: 'Seattle Seahawks',
-      detail: 'Teased line: +8.5 · Lost by 10',
-      score: 17,
-      result: 'Loser' as const,
-    },
-    {
-      team: 'Chicago Bears',
-      detail: 'Teased line: +17.5 · Won outright',
-      score: 27,
-      result: 'Winner' as const,
-    },
-  ];
+  const { isCfb } = useSportContext();
+  const rows = isCfb
+    ? [
+        {
+          team: 'Ohio State Buckeyes',
+          detail: 'Teased line: +8.5 · Lost by 10',
+          score: 17,
+          result: 'Loser' as const,
+        },
+        {
+          team: 'Michigan Wolverines',
+          detail: 'Teased line: +17.5 · Won outright',
+          score: 27,
+          result: 'Winner' as const,
+        },
+      ]
+    : [
+        {
+          team: 'Seattle Seahawks',
+          detail: 'Teased line: +8.5 · Lost by 10',
+          score: 17,
+          result: 'Loser' as const,
+        },
+        {
+          team: 'Chicago Bears',
+          detail: 'Teased line: +17.5 · Won outright',
+          score: 27,
+          result: 'Winner' as const,
+        },
+      ];
+  const header = isCfb
+    ? 'Final: Michigan 27, Ohio State 17  ·  Michigan wins by 10'
+    : 'Final: Bears 27, Seahawks 17  ·  Bears win by 10';
 
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 2 }}>
@@ -188,7 +216,7 @@ function ScenarioExample() {
         }}
       >
         <Typography variant="body2" fontWeight={500}>
-          Final: Bears 27, Seahawks 17 &nbsp;·&nbsp; Bears win by 10
+          {header}
         </Typography>
       </Box>
       {rows.map((row, i) => (
@@ -396,7 +424,9 @@ export function RulesContent() {
         <MatchupExample />
         <InfoCallout>
           You can pick <strong>both sides</strong> of the same game. Expect a close game? Take
-          Seattle +8.5 and Chicago +17.5 — that&apos;s two of your four picks from one matchup.
+          {isCfb
+            ? ' Ohio State +8.5 and Michigan +17.5 — that’s two of your four picks from one matchup.'
+            : ' Seattle +8.5 and Chicago +17.5 — that’s two of your four picks from one matchup.'}
         </InfoCallout>
       </Box>
 
@@ -407,8 +437,9 @@ export function RulesContent() {
         <SectionLabel>Live example — final score</SectionLabel>
         <ScenarioExample />
         <InfoCallout>
-          Seattle lost by 10 — not enough to cover their teased line of +8.5. Chicago won the game
-          outright by 10, easily covering their teased line of +17.5.
+          {isCfb
+            ? 'Ohio State lost by 10 — not enough to cover their teased line of +8.5. Michigan won the game outright by 10, easily covering their teased line of +17.5.'
+            : 'Seattle lost by 10 — not enough to cover their teased line of +8.5. Chicago won the game outright by 10, easily covering their teased line of +17.5.'}
         </InfoCallout>
       </Box>
 

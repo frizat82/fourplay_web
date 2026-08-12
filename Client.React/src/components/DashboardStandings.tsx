@@ -2,6 +2,7 @@ import { Box, Paper, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
+import { useSportContext } from '../services/sport';
 import { getLeaderboard } from '../api/leaderboard';
 import type { SportAdapter } from '../services/sportAdapter';
 
@@ -30,6 +31,7 @@ interface DashboardStandingsProps {
 export default function DashboardStandings({ adapter }: DashboardStandingsProps) {
   const { availableLeagues, leaguesLoaded } = useSession();
   const { user } = useAuth();
+  const { isCfb } = useSportContext();
 
   const { data: standings } = useQuery({
     queryKey: [adapter.sport, 'dashboard-standings', availableLeagues.map(l => l.leagueId), user?.userId],
@@ -47,7 +49,39 @@ export default function DashboardStandings({ adapter }: DashboardStandingsProps)
     staleTime: 60_000,
   });
 
-  if (!leaguesLoaded || availableLeagues.length === 0 || !standings || standings.length === 0) return null;
+  // Still resolving session/auth state — avoid flashing an empty state before we know whether
+  // the user has leagues in this sport.
+  if (!leaguesLoaded || !user?.userId) return null;
+
+  const sportLabel = isCfb ? 'CFB' : 'NFL';
+
+  // A user can genuinely have leagues in one sport and none in the other (e.g. NFL-only or
+  // CFB-only membership) — show that explicitly instead of silently rendering nothing, so the
+  // dashboard doesn't look structurally different (or broken) between subdomains for the same
+  // account.
+  if (availableLeagues.length === 0) {
+    return (
+      <Paper data-testid="dashboard-standings" elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>Your Standings</Typography>
+        <Typography variant="body2" color="text.secondary">
+          You're not in any {sportLabel} leagues yet. Ask your commissioner for an invite.
+        </Typography>
+      </Paper>
+    );
+  }
+
+  if (!standings) return null; // leaderboard query still in flight
+
+  if (standings.length === 0) {
+    return (
+      <Paper data-testid="dashboard-standings" elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>Your Standings</Typography>
+        <Typography variant="body2" color="text.secondary">
+          No {sportLabel} results yet this season.
+        </Typography>
+      </Paper>
+    );
+  }
 
   const grandTotal = standings.reduce((sum, s) => sum + s.total, 0);
 

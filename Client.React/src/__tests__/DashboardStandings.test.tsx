@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import DashboardStandings from '../components/DashboardStandings';
@@ -13,6 +13,7 @@ const sessionState = {
 
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/auth', () => ({ useAuth: () => ({ user: { userId: 'user-1', name: 'Alice', claims: [] } }) }));
+vi.mock('../services/sport', () => ({ useSportContext: () => ({ isCfb: false, isNfl: true, sport: 'NFL' }) }));
 
 vi.mock('../api/leaderboard', () => ({ getLeaderboard: vi.fn() }));
 import { getLeaderboard } from '../api/leaderboard';
@@ -51,10 +52,10 @@ describe('DashboardStandings', () => {
     sessionState.leaguesLoaded = true;
   });
 
-  it('renders nothing when the user has no leagues', async () => {
+  it('shows an empty state (not a blank panel) when the user has no leagues in this sport', async () => {
     sessionState.availableLeagues = [];
-    const { container } = renderWithClient();
-    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    renderWithClient();
+    await screen.findByText(/not in any NFL leagues yet/i);
   });
 
   it('shows per-league rank and total, plus a summed grand total', async () => {
