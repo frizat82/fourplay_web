@@ -19,11 +19,13 @@ test.describe('Dashboard standings (authenticated /dashboard)', () => {
     await expect(standings.getByText('+150')).toBeVisible();
   });
 
-  test('shows nothing when the user has no leaderboard entry yet (empty state)', async ({ page }) => {
+  test('shows an explicit empty state, not a blank panel, when the user has no leaderboard entry yet', async ({ page }) => {
     await mockAuth(page, { authUser: TEST_USER, navigateTo: '/dashboard', leaderboard: [] });
     await waitForSpinner(page);
 
     await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('dashboard-standings')).not.toBeVisible();
+    const standings = page.getByTestId('dashboard-standings');
+    await expect(standings).toBeVisible();
+    await expect(standings.getByText(/no nfl results yet this season/i)).toBeVisible();
   });
 });
