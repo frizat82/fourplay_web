@@ -70,7 +70,7 @@ function UserOptions({ users }: { users: UserSummaryDto[] }) {
 }
 
 export default function LeaguePortalPage() {
-  const { ownedLeagues, leaguesLoaded, reloadLeagues } = useSession();
+  const { ownedLeagues, leaguesLoaded, reloadLeagues, currentLeague } = useSession();
   const { isCfb } = useSportContext();
   const { user } = useAuth();
   const admin = isAdmin(user);
@@ -147,9 +147,15 @@ export default function LeaguePortalPage() {
 
   useEffect(() => {
     if (leagueOptions.length > 0 && !selectedLeague) {
-      setSelectedLeague(leagueOptions[0]);
+      // Default to whichever league is active in the top-right league switcher, if you happen to
+      // administer it — so "My Leagues" opens already showing the league you were just looking
+      // at instead of an arbitrary one. Falls back to the first owned league if you're not
+      // currently in one you administer (e.g. picking in a league you're a member of, but not
+      // its commissioner).
+      const matchingCurrent = leagueOptions.find((l) => l.id === currentLeague);
+      setSelectedLeague(matchingCurrent ?? leagueOptions[0]);
     }
-  }, [leagueOptions, selectedLeague]);
+  }, [leagueOptions, selectedLeague, currentLeague]);
 
   const loadMembers = useCallback(async (leagueId: number) => {
     setLoadingMembers(true);
@@ -326,7 +332,10 @@ export default function LeaguePortalPage() {
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={2}>
-        <PageHeader title="My Leagues" subtitle="Commissioner portal" />
+        <PageHeader
+          title="My Leagues"
+          subtitle={selectedLeague ? selectedLeague.leagueName : 'Commissioner portal'}
+        />
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
           <OwnerCostSummary />
           <Button startIcon={<AddCircleIcon />} variant="outlined" onClick={openCreateLeague}>

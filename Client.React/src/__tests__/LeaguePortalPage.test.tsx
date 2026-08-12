@@ -21,6 +21,7 @@ const sessionState = {
   ownedLeagues: [] as LeagueInfoDto[],
   leaguesLoaded: true,
   reloadLeagues: vi.fn().mockResolvedValue(undefined),
+  currentLeague: null as number | null,
 };
 
 const OWNER_USER: UserInfo = { userId: 'owner-1', name: 'frizat', claims: [] };
@@ -206,6 +207,7 @@ describe('LeaguePortalPage (site admin)', () => {
   beforeEach(() => {
     authState.user = ADMIN_USER;
     sessionState.ownedLeagues = [];
+    sessionState.currentLeague = null;
     // Two leagues per sport so the league-picker <Select> renders in both sport contexts below
     // (LeaguePortalPage hides it entirely when there's only one option to choose from).
     mockedGetAllLeagues.mockResolvedValue([
@@ -218,10 +220,36 @@ describe('LeaguePortalPage (site admin)', () => {
 
   it('lists every league platform-wide for the current sport, not just owned ones', async () => {
     renderPage();
-    await screen.findByText('Demo League', { exact: false });
+    await screen.findAllByRole('combobox');
     await userEvent.click(screen.getAllByRole('combobox')[0]);
     // "someone-else"-owned NFL league still shows — admin sees platform-wide, not just owned.
     expect(await screen.findByRole('option', { name: /Second NFL League/i })).toBeInTheDocument();
+  });
+
+  // frizat: opening My Leagues should default to whichever league is active in the top-right
+  // league switcher (session.currentLeague), not always the first owned/available league —
+  // otherwise it opens on an arbitrary league unrelated to what you were just looking at.
+  it('defaults the selected league to the one active in the top-right switcher', async () => {
+    sessionState.currentLeague = 3; // "Second NFL League", not the first option in the list
+    renderPage();
+    await screen.findByText('Second NFL League');
+  });
+
+  it('falls back to the first available league when the switcher is on one you don\'t administer', async () => {
+    sessionState.currentLeague = 999; // not in leagueOptions at all
+    renderPage();
+    await screen.findByText('Demo League');
+  });
+
+  // frizat: the page title alone ("My Leagues") doesn't say which league you're looking at when
+  // the picker is hidden (single-league case) — the subtitle should always name it.
+  it('shows the selected league\'s name in the page subtitle', async () => {
+    sportContext.sport = 'CFB';
+    sportContext.isCfb = true;
+    sportContext.isNfl = false;
+    sessionState.currentLeague = 2; // "CFB Demo League"
+    renderPage();
+    await screen.findByText('CFB Demo League');
   });
 
   // frizat: My Leagues must stay scoped to the current sport even for admins — ownedLeagues
@@ -229,7 +257,7 @@ describe('LeaguePortalPage (site admin)', () => {
   // platform-wide allLeagues list, which has no sport filter applied at the API layer.
   it('does not show leagues from the other sport, even for admins', async () => {
     renderPage();
-    await screen.findByText('Demo League', { exact: false });
+    await screen.findAllByRole('combobox');
     await userEvent.click(screen.getAllByRole('combobox')[0]);
     expect(screen.queryByRole('option', { name: /CFB Demo League/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /Second CFB League/i })).not.toBeInTheDocument();
@@ -241,7 +269,7 @@ describe('LeaguePortalPage (site admin)', () => {
     sportContext.isNfl = false;
 
     renderPage();
-    await screen.findByText('CFB Demo League', { exact: false });
+    await screen.findAllByRole('combobox');
     await userEvent.click(screen.getAllByRole('combobox')[0]);
     expect(await screen.findByRole('option', { name: /Second CFB League/i })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /^Demo League$/i })).not.toBeInTheDocument();

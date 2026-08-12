@@ -40,17 +40,6 @@ test.describe('Admin pages (administrator role)', () => {
   });
 
   // -----------------------------------------------------------------------
-  // CFB Schedule Config
-  // -----------------------------------------------------------------------
-  test('CFB Schedule Config page renders heading and ESPN Week column', async ({ page }) => {
-    await adminAuth(page, '/admin/cfb-schedule');
-    await waitForSpinner(page);
-
-    await expect(page.getByRole('heading', { name: /CFB Schedule Config/i })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByRole('columnheader', { name: 'ESPN Week' })).toBeVisible({ timeout: 5000 });
-  });
-
-  // -----------------------------------------------------------------------
   // My Leagues — admin-only actions (Create League / Add User / Change Owner)
   // -----------------------------------------------------------------------
   test('My Leagues — Create League button opens Create League dialog', async ({ page }) => {

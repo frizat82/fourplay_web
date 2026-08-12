@@ -31,6 +31,11 @@ public class SpreadCalculator(List<NflSpreads> odds, LeagueJuiceMapping juiceMap
         return spread + CalculateLeagueSpread();
     }
 
+    public DateTimeOffset? GetDateCreated(string teamAbbr) {
+        var spread = odds.FirstOrDefault(x => x.HomeTeam == teamAbbr || x.AwayTeam == teamAbbr);
+        return spread?.DateCreated;
+    }
+
     public double CalculateLeagueSpread() {
         if (juiceMapping is null)
             throw new NullReferenceException("League Spread not configured");
