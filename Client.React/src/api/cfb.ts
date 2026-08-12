@@ -1,4 +1,4 @@
-import type { CfbPickDto, CfbScoreDto, CfbSlateDto, CfbSpreadDto } from '../types/league';
+import type { CfbPickDto, CfbScoreDto, CfbSlateDto, CfbSpreadDto, SpreadLockWeekDto } from '../types/league';
 import type { CfbSeasonWeekConfigDto } from '../types/admin';
 
 const BASE = '/api/cfb';
@@ -6,6 +6,12 @@ const BASE = '/api/cfb';
 export async function getCfbCurrentSlate(): Promise<CfbSlateDto | null> {
   const res = await fetch(`${BASE}/current-slate`);
   if (!res.ok) return null;
+  return res.json();
+}
+
+export async function getCfbSpreadLockSchedule(): Promise<SpreadLockWeekDto[]> {
+  const res = await fetch(`${BASE}/spread-lock-schedule`);
+  if (!res.ok) return [];
   return res.json();
 }
 

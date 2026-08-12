@@ -83,3 +83,11 @@ export interface NflCurrentWeekDto {
   scoringFormat: string;
   spreadLockDatetime: string;
 }
+
+// GET /api/league/spread-lock-schedule (NFL) / /api/cfb/spread-lock-schedule (CFB) — Rules page:
+// the full current season's spread-lock schedule, one row per in-scope week, shared shape for
+// both sports.
+export interface SpreadLockWeekDto {
+  weekLabel: string;
+  spreadLockDatetime: string;
+}

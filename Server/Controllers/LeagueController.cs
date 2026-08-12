@@ -43,6 +43,20 @@ public class LeagueController(
     public async Task<IActionResult> GetCurrentWeek([FromServices] INflCurrentWeekService svc) =>
         Ok(await svc.GetCurrentWeekAsync());
 
+    // Rules page: the full current season's spread-lock schedule, every week — resolves "current
+    // season" the same way GetCurrentWeek does, so the frontend doesn't need a separate round-trip
+    // just to learn which season to ask for.
+    [HttpGet("spread-lock-schedule")]
+    public async Task<IActionResult> GetSpreadLockSchedule([FromServices] INflCurrentWeekService currentWeekService) {
+        var current = await currentWeekService.GetCurrentWeekAsync();
+        var configs = await repo.GetNflSeasonWeekConfigsAsync();
+        var schedule = configs
+            .Where(c => c.Season == current.Season)
+            .OrderBy(c => c.WeekId)
+            .Select(c => new SpreadLockWeekDto(c.WeekLabel, c.SpreadLockDatetime));
+        return Ok(schedule);
+    }
+
     // ---------- League Info ----------
     [HttpGet("{leagueId:int}")]
     [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]

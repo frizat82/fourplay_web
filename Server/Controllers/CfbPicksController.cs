@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Auth;
+using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
@@ -19,6 +20,23 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     public async Task<IActionResult> GetCurrentSlate([FromServices] ICfbCurrentSlateService svc) {
         var slate = await svc.GetCurrentSlateAsync();
         return slate is null ? NotFound() : Ok(slate);
+    }
+
+    // Rules page: the full current season's spread-lock schedule, every in-scope week — mirrors
+    // LeagueController.GetSpreadLockSchedule's role for NFL. Resolves "current season" via the
+    // same service GetCurrentSlate uses, so the frontend doesn't need a separate round-trip just
+    // to learn which season to ask for.
+    [HttpGet("spread-lock-schedule")]
+    public async Task<IActionResult> GetSpreadLockSchedule([FromServices] ICfbCurrentSlateService currentSlateService) {
+        var current = await currentSlateService.GetCurrentSlateAsync();
+        if (current is null) return Ok(Array.Empty<SpreadLockWeekDto>());
+
+        var configs = await cfbRepo.GetWeekConfigsForSeasonAsync(current.Season);
+        var schedule = configs
+            .Where(c => c.InScopeIvLeague)
+            .OrderBy(c => c.IvLeagueWeekNumber)
+            .Select(c => new SpreadLockWeekDto(CfbWeekLabelHelper.LabelFromConfig(c), c.SpreadLockDatetime));
+        return Ok(schedule);
     }
 
     [HttpGet("slates/{season}")]
