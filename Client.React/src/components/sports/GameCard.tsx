@@ -248,13 +248,20 @@ export default function GameCard({
             sx={{ mt: 1, p: 0 }}
           >
             <CardContent sx={{ p: '12px !important' }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ gap: 1 }}>
-                {renderOverUnderButton('Over', overValue, overPickState, onPickOver)}
+              {/* Same fixed grid as the team rows above (60/56/80/1fr) so the O/U value lands in
+                  the exact same column as the spread values, instead of centering independently
+                  within this row's own narrower content. */}
+              <Box sx={teamRowGridSx}>
+                <Box sx={{ gridColumn: '1 / 3' }}>
+                  {renderOverUnderButton('Over', overValue, overPickState, onPickOver)}
+                </Box>
                 <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center', flexShrink: 0 }}>
                   {overValue}
                 </Typography>
-                {renderOverUnderButton('Under', underValue, underPickState, onPickUnder)}
-              </Stack>
+                <Box sx={{ justifySelf: 'end' }}>
+                  {renderOverUnderButton('Under', underValue, underPickState, onPickUnder)}
+                </Box>
+              </Box>
             </CardContent>
           </Card>
         )}
