@@ -3,6 +3,7 @@ using System;
 using FourPlayWebApp.Server.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FourPlayWebApp.Server.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260810200334_FixInvitationScopingAndCascade")]
+    partial class FixInvitationScopingAndCascade
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -269,6 +272,26 @@ namespace FourPlayWebApp.Server.Migrations
                         .IsUnique();
 
                     b.ToTable("LeagueUserMapping");
+                });
+
+            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueUsers", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("LeagueUsers");
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.NflPicks", b =>
@@ -964,7 +987,7 @@ namespace FourPlayWebApp.Server.Migrations
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueUserMapping", b =>
                 {
                     b.HasOne("FourPlayWebApp.Server.Models.Data.LeagueInfo", "League")
-                        .WithMany("LeagueUserMappings")
+                        .WithMany("LeagueUsers")
                         .HasForeignKey("LeagueId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1042,45 +1065,6 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Navigation("RegisteredUser");
                 });
 
-            modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbPicks", b =>
-                {
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSlates", null)
-                        .WithMany()
-                        .HasForeignKey("CfbSlateId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.LeagueInfo", null)
-                        .WithMany()
-                        .HasForeignKey("LeagueId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("FourPlayWebApp.Server.Models.Identity.ApplicationUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbScores", b =>
-                {
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSlates", null)
-                        .WithMany()
-                        .HasForeignKey("CfbSlateId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbSpreads", b =>
-                {
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSlates", null)
-                        .WithMany()
-                        .HasForeignKey("CfbSlateId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -1136,7 +1120,7 @@ namespace FourPlayWebApp.Server.Migrations
                 {
                     b.Navigation("LeagueJuiceMappings");
 
-                    b.Navigation("LeagueUserMappings");
+                    b.Navigation("LeagueUsers");
 
                     b.Navigation("NflPicks");
                 });

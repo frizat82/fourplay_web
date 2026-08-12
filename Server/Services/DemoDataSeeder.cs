@@ -392,13 +392,6 @@ public class DemoDataSeeder(
             Log.Information("DemoDataSeeder: created demo user {Username}", username);
         }
 
-        // Ensure LeagueUsers record
-        if (!await db.LeagueUsers.AnyAsync(lu => lu.Email == email))
-        {
-            db.LeagueUsers.Add(new LeagueUsers { Email = email });
-            await db.SaveChangesAsync();
-        }
-
         // Ensure league membership
         if (!await db.LeagueUserMapping.AnyAsync(m => m.LeagueId == league.Id && m.UserId == user.Id))
         {

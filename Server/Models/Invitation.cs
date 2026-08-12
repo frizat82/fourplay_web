@@ -5,7 +5,9 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace FourPlayWebApp.Server.Models;
-[Index(nameof(Email), IsUnique = true)]
+// frizat-9vm: scoped per league — the same email can legitimately be invited to several
+// different leagues; only a duplicate invite to the SAME league should be rejected/upserted.
+[Index(nameof(Email), nameof(LeagueId), IsUnique = true)]
 public class Invitation
 {
     [Key]

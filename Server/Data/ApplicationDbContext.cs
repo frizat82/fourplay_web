@@ -9,7 +9,6 @@ namespace FourPlayWebApp.Server.Data;
 
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
     : IdentityDbContext<ApplicationUser>(options) {
-    public DbSet<LeagueUsers> LeagueUsers { get; set; }
     public DbSet<LeagueJuiceMapping> LeagueJuiceMapping { get; set; }
     public DbSet<LeagueUserMapping> LeagueUserMapping { get; set; }
     public DbSet<NflPicks> NflPicks { get; set; }

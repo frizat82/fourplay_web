@@ -66,6 +66,43 @@ public class CfbRepositoryTests
         Assert.Equal(originalPostTime, saved.DateCreated);
     }
 
+    // frizat-2lc, moved down to the repository per /simplify's altitude review: guarding only in
+    // CfbSlateSeederJob protected that one caller, but left CfbRepository.DeleteSlatesAsync itself
+    // unguarded for any future caller. The guard now lives where the destructive RemoveRange
+    // actually happens, so it can't be bypassed by a caller that forgets to check first.
+    [Fact]
+    public async Task DeleteSlatesAsync_SlateHasDependentSpread_SkipsDeleteAndReturnsFalse()
+    {
+        var factory = new DbContextFactoryStub(nameof(DeleteSlatesAsync_SlateHasDependentSpread_SkipsDeleteAndReturnsFalse));
+        var seedDb = factory.CreateDbContext();
+        var slate = new CfbSlates { Id = 1, Season = 2026, SlateNumber = 3, Label = "Week 3", SlateType = "RegularSeason" };
+        seedDb.CfbSlates.Add(slate);
+        seedDb.CfbSpreads.Add(new CfbSpreads { CfbSlateId = 1, EspnEventId = 100, HomeTeam = "A", AwayTeam = "B" });
+        await seedDb.SaveChangesAsync();
+        var repo = new CfbRepository(factory);
+
+        var deleted = await repo.DeleteSlatesAsync([slate]);
+
+        Assert.False(deleted);
+        Assert.True(await factory.CreateDbContext().CfbSlates.AnyAsync(s => s.Id == 1));
+    }
+
+    [Fact]
+    public async Task DeleteSlatesAsync_NoDependentData_DeletesAndReturnsTrue()
+    {
+        var factory = new DbContextFactoryStub(nameof(DeleteSlatesAsync_NoDependentData_DeletesAndReturnsTrue));
+        var seedDb = factory.CreateDbContext();
+        var slate = new CfbSlates { Id = 1, Season = 2026, SlateNumber = 3, Label = "Week 3", SlateType = "RegularSeason" };
+        seedDb.CfbSlates.Add(slate);
+        await seedDb.SaveChangesAsync();
+        var repo = new CfbRepository(factory);
+
+        var deleted = await repo.DeleteSlatesAsync([slate]);
+
+        Assert.True(deleted);
+        Assert.False(await factory.CreateDbContext().CfbSlates.AnyAsync(s => s.Id == 1));
+    }
+
     [Fact]
     public async Task GetWeeksWithSpreadDataAsync_ReturnsSeasonSlateNumberPairsWithSpreads()
     {

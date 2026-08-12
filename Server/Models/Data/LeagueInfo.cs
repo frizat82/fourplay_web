@@ -12,6 +12,6 @@ public class LeagueInfo {
     public LeagueType LeagueType { get; set; } = LeagueType.Nfl;
     public ICollection<LeagueJuiceMapping> LeagueJuiceMappings { get; set; } = new List<LeagueJuiceMapping>();
 
-    public ICollection<LeagueUserMapping> LeagueUsers { get; set; }
+    public ICollection<LeagueUserMapping> LeagueUserMappings { get; set; }
     public ICollection<NflPicks> NflPicks { get; set; }
 }

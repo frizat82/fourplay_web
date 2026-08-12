@@ -18,10 +18,24 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         await db.SaveChangesAsync();
     }
 
-    public async Task DeleteSlatesAsync(IEnumerable<CfbSlates> slates) {
+    public async Task<bool> DeleteSlatesAsync(IEnumerable<CfbSlates> slates) {
         await using var db = await dbFactory.CreateDbContextAsync();
-        db.CfbSlates.RemoveRange(slates);
+        var slateList = slates.ToList();
+        var ids = slateList.Select(s => s.Id).ToHashSet();
+
+        // frizat-2lc: never bulk-delete slates that already carry real dependent data — guard
+        // lives here, not just in the one caller that exists today, so any future caller of
+        // DeleteSlatesAsync gets the same protection against real data loss / an unhandled FK
+        // violation (CfbSpreads/CfbScores/CfbPicks.CfbSlateId is Restrict, not Cascade).
+        var hasDependentData = ids.Count > 0 &&
+            (await db.CfbSpreads.AnyAsync(s => ids.Contains(s.CfbSlateId))
+             || await db.CfbScores.AnyAsync(s => ids.Contains(s.CfbSlateId))
+             || await db.CfbPicks.AnyAsync(p => ids.Contains(p.CfbSlateId)));
+        if (hasDependentData) return false;
+
+        db.CfbSlates.RemoveRange(slateList);
         await db.SaveChangesAsync();
+        return true;
     }
 
     public async Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season) {
