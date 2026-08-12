@@ -193,21 +193,6 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             h => cfbCacheService.ScoresChanged -= h,
             ct);
 
-    [HttpGet("week-configs/{season:int}")]
-    [Authorize(Roles = AppRoles.Administrator)]
-    public async Task<ActionResult<List<CfbSeasonWeekConfigDto>>> GetWeekConfigs(int season) {
-        var configs = await cfbRepo.GetWeekConfigsForSeasonAsync(season);
-        var dtos = configs.Select(c => new CfbSeasonWeekConfigDto(
-            c.EspnWeekNumber,
-            c.IvLeagueWeekNumber,
-            c.WeekType,
-            c.ScoringFormat,
-            c.InScopeIvLeague,
-            c.WeekStartDate,
-            c.WeekEndDate,
-            c.Notes));
-        return Ok(dtos);
-    }
 }
 
 public record AddCfbPicksRequest {

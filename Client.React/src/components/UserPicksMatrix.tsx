@@ -58,7 +58,7 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
                   if (!pick?.team) {
                     return (
                       <TableCell key={idx} align="center">
-                        <Paper sx={{ height: 60, width: 60, borderRadius: 2 }} />
+                        <Paper sx={{ height: 76, width: 60, borderRadius: 2 }} />
                       </TableCell>
                     );
                   }
@@ -76,11 +76,12 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
                     <TableCell key={idx} align="center">
                       <Paper
                         sx={{
-                          height: 60,
+                          height: 76,
                           width: 60,
                           borderRadius: 2,
                           position: 'relative',
                           display: 'flex',
+                          flexDirection: 'column',
                           alignItems: 'center',
                           justifyContent: 'center',
                           backgroundColor: bgColor,
@@ -100,7 +101,9 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
                             color={result ? 'success' : 'error'}
                           />
                         )}
-                        <TeamHelmet abbr={pick.team} size={40} showLabel={false} />
+                        {/* frizat: the team logo alone was hard to identify at a glance against
+                            the win/loss color-coded background — show the abbreviation too. */}
+                        <TeamHelmet abbr={pick.team} size={36} showLabel />
                         {result === true && (
                           <CheckCircleIcon
                             fontSize="small"
