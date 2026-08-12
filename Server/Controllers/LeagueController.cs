@@ -35,6 +35,14 @@ public class LeagueController(
     ISpreadCalculatorBuilder spreadCalculatorBuilder,
     IEspnCacheService espnCacheService,
     IInvitationService invitationService) : ControllerBase {
+    // Mirrors CfbPicksController.GetCurrentSlate's role for CFB — exposes NflCurrentWeekService's
+    // existing off-season/pre-season fallback (already used internally by NflSpreadJob and
+    // EspnCacheService) to the frontend, so nflAdapter.ts no longer falls back to
+    // `new Date().getFullYear()` whenever ESPN's live "current" scoreboard has nothing in progress.
+    [HttpGet("current-week")]
+    public async Task<IActionResult> GetCurrentWeek([FromServices] INflCurrentWeekService svc) =>
+        Ok(await svc.GetCurrentWeekAsync());
+
     // ---------- League Info ----------
     [HttpGet("{leagueId:int}")]
     [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]
