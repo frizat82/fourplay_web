@@ -12,7 +12,9 @@ import {
 } from '@mui/material';
 import { getEspnRequiredPicks, getCfbRequiredPicks } from '../utils/gameHelpers';
 import { useSportContext } from '../services/sport';
-import { getNextSpreadJob } from '../services/spreadRelease';
+import { getNflSpreadLockSchedule } from '../api/league';
+import { getCfbSpreadLockSchedule } from '../api/cfb';
+import type { SpreadLockWeekDto } from '../types/league';
 import { toLocalDisplay } from '../utils/time';
 import PageHeader from '../components/PageHeader';
 
@@ -296,21 +298,64 @@ function formatLockTime(iso: string) {
   });
 }
 
-function SpreadLockInfo({ sport }: { sport: 'NFL' | 'CFB' }) {
-  // undefined = not loaded yet; null = loaded, no upcoming lock; string = ISO timestamp.
-  const [nextLock, setNextLock] = useState<string | null | undefined>(undefined);
+// Sport-scoped — NFL page shows only NFL lock times, CFB page shows only CFB's, never both at
+// once (matches every other sport-agnostic view in this app).
+function SpreadLockSchedule({ isCfb }: { isCfb: boolean }) {
+  // undefined = not loaded yet.
+  const [weeks, setWeeks] = useState<SpreadLockWeekDto[] | undefined>(undefined);
+  // Snapshotted once per mount (lazy initializer) rather than read during render — "upcoming"
+  // only needs to be roughly right for this page, not live-ticking.
+  const [now] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
-    setNextLock(undefined);
-    void getNextSpreadJob(sport).then((result) => {
-      if (!cancelled) setNextLock(result);
+    setWeeks(undefined);
+    const load = isCfb ? getCfbSpreadLockSchedule : getNflSpreadLockSchedule;
+    void load().then((result) => {
+      if (!cancelled) setWeeks(result);
     });
     return () => {
       cancelled = true;
     };
-  }, [sport]);
+  }, [isCfb]);
 
+  if (!weeks || weeks.length === 0) return null;
+
+  // Soonest week whose spread hasn't locked yet — the one to highlight as "upcoming."
+  const upcomingIndex = weeks.findIndex((w) => new Date(w.spreadLockDatetime).getTime() > now);
+
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', mt: 1.5, maxHeight: 320, overflowY: 'auto' }}>
+      {weeks.map((w, i) => (
+        <Box
+          key={w.weekLabel}
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 2,
+            px: 2,
+            py: 1,
+            bgcolor: i === upcomingIndex ? 'action.selected' : 'transparent',
+            '&:not(:last-child)': { borderBottom: '1px solid', borderColor: 'divider' },
+          }}
+        >
+          <Typography variant="body2" fontWeight={i === upcomingIndex ? 600 : 400}>
+            {w.weekLabel}
+          </Typography>
+          <Typography
+            variant="body2"
+            color={i === upcomingIndex ? 'text.primary' : 'text.secondary'}
+            fontWeight={i === upcomingIndex ? 600 : 400}
+          >
+            {formatLockTime(w.spreadLockDatetime)}
+          </Typography>
+        </Box>
+      ))}
+    </Paper>
+  );
+}
+
+function SpreadLockInfo({ isCfb }: { isCfb: boolean }) {
   return (
     <Box>
       <SectionLabel>When spreads lock</SectionLabel>
@@ -318,12 +363,6 @@ function SpreadLockInfo({ sport }: { sport: 'NFL' | 'CFB' }) {
         <RuleRow color="secondary">
           The teased line for each week freezes once, at a set time before that week&apos;s first
           game — it won&apos;t move again after that.
-          {nextLock != null && (
-            <>
-              {' '}
-              Next lock: <strong>{formatLockTime(nextLock)}</strong>.
-            </>
-          )}
         </RuleRow>
         <RuleRow color="info">
           This is different from when your <strong>picks</strong> lock, below. The spread freezes
@@ -331,6 +370,7 @@ function SpreadLockInfo({ sport }: { sport: 'NFL' | 'CFB' }) {
           game kicks off.
         </RuleRow>
       </Paper>
+      <SpreadLockSchedule isCfb={isCfb} />
     </Box>
   );
 }
@@ -419,7 +459,7 @@ export function RulesContent() {
       <Divider />
 
       {/* When Spreads Lock */}
-      <SpreadLockInfo sport={isCfb ? 'CFB' : 'NFL'} />
+      <SpreadLockInfo isCfb={isCfb} />
 
       <Divider />
 
