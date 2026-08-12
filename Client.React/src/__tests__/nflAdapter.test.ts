@@ -12,11 +12,12 @@ vi.mock('../api/league', () => ({
   doOddsExist: vi.fn(),
   spreadBatch: vi.fn(),
   addPicks: vi.fn(),
+  getNflCurrentWeek: vi.fn(),
 }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 
 import { loadScoresWithRetry } from '../api/espn';
-import { getUserPicks, doOddsExist, spreadBatch } from '../api/league';
+import { getUserPicks, doOddsExist, spreadBatch, getNflCurrentWeek } from '../api/league';
 import { createSpreadResponse } from '../test/fixtures';
 
 const adapter = createNflAdapter();
@@ -95,6 +96,40 @@ describe('nflAdapter', () => {
       vi.mocked(loadScoresWithRetry).mockResolvedValue(makeScores('KC', 'BUF'));
       const year = await adapter.currentSeasonYear();
       expect(typeof year).toBe('number');
+    });
+
+    // frizat: ESPN's live "current" scoreboard has nothing in progress (off-season, between
+    // slates, etc.) — must fall back to NflCurrentWeekService's real resolved season/week via
+    // getNflCurrentWeek, not `new Date().getFullYear()` (today's real calendar year, which has
+    // no seeded data at all). Uses a fresh adapter instance — getCurrentWeek() caches for the
+    // adapter's lifetime, so reusing the shared module-level `adapter` here would leak state
+    // into/from other tests in this file.
+    it('currentSeasonYear falls back to the resolved current week, not the real calendar year', async () => {
+      vi.mocked(loadScoresWithRetry).mockResolvedValue(null);
+      vi.mocked(getNflCurrentWeek).mockResolvedValue({
+        weekId: 18, espnWeek: 18, season: 2025, isPostSeason: false,
+        weekLabel: 'Week 18', scoringFormat: 'Standard', spreadLockDatetime: '2026-01-04T18:00:00Z',
+      });
+
+      const freshAdapter = createNflAdapter();
+      const year = await freshAdapter.currentSeasonYear();
+
+      expect(year).toBe(2025);
+      expect(year).not.toBe(new Date().getFullYear());
+    });
+
+    it('loadCurrentGames falls back to the resolved current week when live scores are empty', async () => {
+      vi.mocked(loadScoresWithRetry).mockResolvedValue(null);
+      vi.mocked(getNflCurrentWeek).mockResolvedValue({
+        weekId: 18, espnWeek: 18, season: 2025, isPostSeason: false,
+        weekLabel: 'Week 18', scoringFormat: 'Standard', spreadLockDatetime: '2026-01-04T18:00:00Z',
+      });
+
+      const freshAdapter = createNflAdapter();
+      const result = await freshAdapter.loadCurrentGames(1, 'user1');
+
+      expect(result.season).toBe(2025);
+      expect(result.week).toBe(18);
     });
   });
 });
