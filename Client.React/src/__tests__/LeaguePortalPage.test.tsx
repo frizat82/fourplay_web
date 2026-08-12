@@ -27,8 +27,10 @@ const OWNER_USER: UserInfo = { userId: 'owner-1', name: 'frizat', claims: [] };
 const ADMIN_USER: UserInfo = { userId: 'admin-1', name: 'Admin', claims: [{ type: 'role', value: 'Administrator' }] };
 
 const authState = { user: OWNER_USER as UserInfo | null };
+const sportContext = { sport: 'NFL' as 'NFL' | 'CFB', isCfb: false, isNfl: true };
 
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
+vi.mock('../services/sport', () => ({ useSportContext: () => sportContext }));
 vi.mock('../services/auth', () => ({ useAuth: () => authState }));
 vi.mock('../services/toast', () => ({ useToast: () => ({ push: vi.fn() }) }));
 
@@ -109,6 +111,9 @@ const cost: LeagueCostDto = { memberCount: 1, cost: 100 };
 
 beforeEach(() => {
   authState.user = OWNER_USER;
+  sportContext.sport = 'NFL';
+  sportContext.isCfb = false;
+  sportContext.isNfl = true;
   sessionState.ownedLeagues = [makeLeague()];
   mockedGetMappings.mockResolvedValue([makeMember()]);
   mockedGetCost.mockResolvedValue(cost);
@@ -201,17 +206,46 @@ describe('LeaguePortalPage (site admin)', () => {
   beforeEach(() => {
     authState.user = ADMIN_USER;
     sessionState.ownedLeagues = [];
+    // Two leagues per sport so the league-picker <Select> renders in both sport contexts below
+    // (LeaguePortalPage hides it entirely when there's only one option to choose from).
     mockedGetAllLeagues.mockResolvedValue([
       makeLeague({ id: 1, leagueName: 'Demo League', leagueType: 'Nfl' }),
+      makeLeague({ id: 3, leagueName: 'Second NFL League', leagueType: 'Nfl', ownerUserId: 'someone-else' }),
       makeLeague({ id: 2, leagueName: 'CFB Demo League', leagueType: 'Cfb', ownerUserId: 'someone-else' }),
+      makeLeague({ id: 4, leagueName: 'Second CFB League', leagueType: 'Cfb', ownerUserId: 'someone-else' }),
     ]);
   });
 
-  it('lists all leagues across sports, not just owned ones', async () => {
+  it('lists every league platform-wide for the current sport, not just owned ones', async () => {
     renderPage();
     await screen.findByText('Demo League', { exact: false });
     await userEvent.click(screen.getAllByRole('combobox')[0]);
-    expect(await screen.findByRole('option', { name: /CFB Demo League/i })).toBeInTheDocument();
+    // "someone-else"-owned NFL league still shows — admin sees platform-wide, not just owned.
+    expect(await screen.findByRole('option', { name: /Second NFL League/i })).toBeInTheDocument();
+  });
+
+  // frizat: My Leagues must stay scoped to the current sport even for admins — ownedLeagues
+  // already applies this filter for non-admins (session.tsx), but admins use the separate
+  // platform-wide allLeagues list, which has no sport filter applied at the API layer.
+  it('does not show leagues from the other sport, even for admins', async () => {
+    renderPage();
+    await screen.findByText('Demo League', { exact: false });
+    await userEvent.click(screen.getAllByRole('combobox')[0]);
+    expect(screen.queryByRole('option', { name: /CFB Demo League/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Second CFB League/i })).not.toBeInTheDocument();
+  });
+
+  it('shows only CFB leagues when on the CFB domain', async () => {
+    sportContext.sport = 'CFB';
+    sportContext.isCfb = true;
+    sportContext.isNfl = false;
+
+    renderPage();
+    await screen.findByText('CFB Demo League', { exact: false });
+    await userEvent.click(screen.getAllByRole('combobox')[0]);
+    expect(await screen.findByRole('option', { name: /Second CFB League/i })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /^Demo League$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Second NFL League/i })).not.toBeInTheDocument();
   });
 
   // frizat-d6l follow-up: leagueOptions starts as [] for admins too (allLeagues loads async), so
