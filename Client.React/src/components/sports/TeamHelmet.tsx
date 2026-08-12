@@ -10,11 +10,11 @@ export default function TeamHelmet({ abbr, size = 56, showLabel = true }: TeamHe
   const { mode } = useThemeMode();
   const pngSrc = `/Icons/Helmets/${abbr.toLowerCase()}.png`;
   const svgSrc = `/Icons/Helmets/${abbr.toLowerCase()}.svg`;
-  // The neon PNG set is designed to glow against a dark background and washes out on light
-  // ones; the flat-color legacy SVG shields read better in light mode. Try the theme-matched
-  // asset first and fall back to the other set for the handful of teams missing from either.
-  const primarySrc = mode === 'dark' ? pngSrc : svgSrc;
-  const fallbackSrc = mode === 'dark' ? svgSrc : pngSrc;
+  // frizat: reverted the dark-mode neon PNG set — it wasn't reading well in practice. Flat-color
+  // SVG shield badges are used in both modes now; PNG stays only as a fallback for the handful of
+  // teams missing an SVG.
+  const primarySrc = svgSrc;
+  const fallbackSrc = pngSrc;
   const h = Math.round(size * 1.1);
 
   return (

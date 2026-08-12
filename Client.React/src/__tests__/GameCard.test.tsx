@@ -143,13 +143,13 @@ describe('GameCard', () => {
     expect(btn).toHaveClass('MuiButton-contained', 'MuiButton-containedSuccess');
   });
 
-  // A locked, never-picked button reads as an outlined warning button — visually distinct from
-  // the filled "Picked" button without the two competing as adjacent solid color blocks.
-  it('a locked, never-picked button keeps its outlined warning styling, not the default disabled gray', () => {
+  // A locked, never-picked button reads as a filled info (blue) button — distinct from the
+  // filled success (green) "Picked" button, and not the hard-to-read amber/warning color.
+  it('a locked, never-picked button keeps its filled info styling, not the default disabled gray', () => {
     render(<GameCard {...baseProps} awayPickState="none" locked />);
     const btn = screen.getByRole('button', { name: /^Pick BUF$/i });
     expect(btn).toBeDisabled();
-    expect(btn).toHaveClass('MuiButton-outlined', 'MuiButton-outlinedWarning');
+    expect(btn).toHaveClass('MuiButton-contained', 'MuiButton-containedInfo');
   });
 
   it('unpicked away team button has aria-label "Pick BUF"', () => {

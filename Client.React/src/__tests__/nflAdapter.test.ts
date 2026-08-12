@@ -50,6 +50,23 @@ describe('nflAdapter', () => {
       expect(game.awayScore).toBe(17);
     });
 
+    // frizat: NflSpreads.DateCreated existed on the backend but was never threaded through to
+    // the frontend, so "Line posted" only ever showed on the CFB site — cfbAdapter already
+    // mapped its equivalent field, nflAdapter silently dropped it.
+    it('maps spreadCache dateCreated to spreadPostedAt', async () => {
+      vi.mocked(loadScoresWithRetry).mockResolvedValue(makeScores('KC', 'BUF'));
+      vi.mocked(doOddsExist).mockResolvedValue(true);
+      vi.mocked(getUserPicks).mockResolvedValue([]);
+      vi.mocked(spreadBatch).mockResolvedValue({ responses: {
+        KC: { ...createSpreadResponse('KC', -3), dateCreated: '2026-01-02T12:00:00Z' },
+        BUF: { ...createSpreadResponse('BUF', 3), dateCreated: '2026-01-02T12:00:00Z' },
+      }});
+
+      const result = await adapter.loadCurrentGames(1, 'user1');
+
+      expect(result.games[0].spreadPostedAt).toBe('2026-01-02T12:00:00Z');
+    });
+
     it('sets hasOdds=true when odds exist', async () => {
       vi.mocked(loadScoresWithRetry).mockResolvedValue(makeScores('KC', 'BUF'));
       vi.mocked(doOddsExist).mockResolvedValue(true);

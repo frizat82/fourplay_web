@@ -77,10 +77,16 @@ public class DemoDataSeeder(
         ("DET","LV"),
     ];
 
+    // The only leagues the seeder itself ever creates — anything else in LeagueInfo is leftover
+    // test data (e.g. self-serve/admin "Create League" during manual testing) that should never
+    // survive a reseed.
+    private static readonly string[] CanonicalLeagueNames = ["Demo League", "CFB Demo League"];
+
     public async Task SeedAsync()
     {
         Log.Information("DemoDataSeeder: starting seed for season {Season} week {Week}", DemoSeason, DemoWeek);
 
+        await PurgeUnknownLeaguesAsync();
         await SeedNflWeekAsync();
         await SeedSpreadsAsync();
         var league = await SeedLeagueAsync();
@@ -107,6 +113,33 @@ public class DemoDataSeeder(
             await SeedReplayCfbSlateAsync();
 
         Log.Information("DemoDataSeeder: seed complete");
+    }
+
+    /// <summary>
+    /// Deletes any LeagueInfo row (and its LeagueUserMapping/LeagueJuiceMapping/NflPicks/CfbPicks/
+    /// Invitations) that the seeder didn't itself create. Self-serve/admin "Create League" testing
+    /// against the local demo stack otherwise leaves permanent debris behind, since the rest of
+    /// SeedAsync only ever find-or-creates the two canonical leagues by name — it never touches,
+    /// let alone clears, anything else in LeagueInfo.
+    /// </summary>
+    public async Task PurgeUnknownLeaguesAsync()
+    {
+        var strayLeagueIds = await db.LeagueInfo
+            .Where(l => !CanonicalLeagueNames.Contains(l.LeagueName))
+            .Select(l => l.Id)
+            .ToListAsync();
+
+        if (strayLeagueIds.Count == 0) return;
+
+        db.NflPicks.RemoveRange(db.NflPicks.Where(p => strayLeagueIds.Contains(p.LeagueId)));
+        db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => strayLeagueIds.Contains(p.LeagueId)));
+        db.Invitations.RemoveRange(db.Invitations.Where(i => i.LeagueId != null && strayLeagueIds.Contains(i.LeagueId.Value)));
+        db.LeagueJuiceMapping.RemoveRange(db.LeagueJuiceMapping.Where(m => strayLeagueIds.Contains(m.LeagueId)));
+        db.LeagueUserMapping.RemoveRange(db.LeagueUserMapping.Where(m => strayLeagueIds.Contains(m.LeagueId)));
+        db.LeagueInfo.RemoveRange(db.LeagueInfo.Where(l => strayLeagueIds.Contains(l.Id)));
+        await db.SaveChangesAsync();
+
+        Log.Information("DemoDataSeeder: purged {Count} stray league(s) not created by the seeder", strayLeagueIds.Count);
     }
 
     private async Task SeedLeagueJuiceMappingAsync(LeagueInfo? league)
@@ -1085,9 +1118,13 @@ public class DemoDataSeeder(
     // Dana: away for games 1,3,5 and home for 2,4,6
     // Eve: home for games 1,2,4 and away for 3,5,6
     // Regular season: 4 picks required per slate (slate has 6 games; pick first 4)
+    // frizat: admin (the seeded ADMIN_USERNAME account) mirrors Alice's picks in every CFB
+    // pattern below — admin previously had zero CFB picks seeded at all (only NFL), unlike every
+    // other demo user, which left "My Picks" empty for admin on the CFB site.
     private static readonly Dictionary<string, bool[]> CfbRegularSeasonPickPattern = new()
     {
         ["Alice"]  = [true,  true,  true,  true],
+        ["frizat"] = [true,  true,  true,  true],
         ["Bob"]    = [false, false, false, false],
         ["Carlos"] = [true,  false, true,  false],
         ["Dana"]   = [false, true,  false, true],
@@ -1099,6 +1136,7 @@ public class DemoDataSeeder(
     private static readonly Dictionary<string, bool[]> CfbConfChampPicks = new()
     {
         ["Alice"]  = [true,  false, false, true],   // OSU, UGA, CLEM, ORE
+        ["frizat"] = [true,  false, false, true],   // OSU, UGA, CLEM, ORE
         ["Bob"]    = [false, true,  true,  false],  // IU, ALA, ND, BOIS
         ["Carlos"] = [true,  false, true,  false],  // OSU, ALA, ND, BOIS
         ["Dana"]   = [false, true,  false, true],   // IU, UGA, CLEM, ORE
@@ -1110,6 +1148,7 @@ public class DemoDataSeeder(
     private static readonly Dictionary<string, bool[]> CfbFirstRoundPicks = new()
     {
         ["Alice"]  = [true,  true,  true],   // ORE, MISS, TAMU
+        ["frizat"] = [true,  true,  true],   // ORE, MISS, TAMU
         ["Bob"]    = [false, false, false],  // JMU, TULN, MIA
         ["Carlos"] = [true,  false, true],   // ORE, TULN, TAMU
         ["Dana"]   = [false, true,  false],  // JMU, MISS, MIA
@@ -1123,6 +1162,7 @@ public class DemoDataSeeder(
     private static readonly Dictionary<string, bool[]> CfbWeek8Picks = new()
     {
         ["Alice"]  = [true,  true,  true,  true],   // MICH, ALA, OSU, UGA
+        ["frizat"] = [true,  true,  true,  true],   // MICH, ALA, OSU, UGA
         ["Bob"]    = [false, false, false, false],  // PSU, TENN, ORE, MIA
         ["Carlos"] = [true,  false, true,  false],  // MICH, TENN, OSU, MIA
         ["Dana"]   = [false, true,  false, true],   // PSU, ALA, ORE, UGA
@@ -1134,6 +1174,7 @@ public class DemoDataSeeder(
     private static readonly Dictionary<string, bool[]> CfbQfPicks = new()
     {
         ["Alice"]  = [true,  true,  true],   // IU, UGA, ORE
+        ["frizat"] = [true,  true,  true],   // IU, UGA, ORE
         ["Bob"]    = [false, false, false],  // ALA, MISS, TTU
         ["Carlos"] = [true,  false, true],   // IU, MISS, ORE
         ["Dana"]   = [false, true,  false],  // ALA, UGA, TTU
@@ -1145,12 +1186,18 @@ public class DemoDataSeeder(
     private static readonly Dictionary<string, bool[]> CfbSfPicks = new()
     {
         ["Alice"]  = [true,  false],  // IU, UGA (UGA loses — Alice misses 2nd pick)
+        ["frizat"] = [true,  false],  // IU, UGA
         ["Bob"]    = [false, true],   // ORE, MIA
         ["Carlos"] = [true,  true],   // IU, MIA
         ["Dana"]   = [false, false],  // ORE, UGA
         ["Eve"]    = [true,  true],   // IU, MIA
     };
 
+    // frizat deliberately has NO entry here: SeedReplayCfbSlateAsync adds a second game (IND@ATL)
+    // to this same slate 18, and the CFB replay E2E spec (replay-cfb.spec.ts) runs as admin
+    // specifically because admin's single Championship-slate pick slot needs to be free for that
+    // replayed game. Giving admin a real pick on the original Championship matchup here would
+    // exhaust that slot and break the replay test.
     private static readonly Dictionary<string, bool> CfbFinalPicks = new()
     {
         ["Alice"]  = true,   // IU
@@ -1163,12 +1210,13 @@ public class DemoDataSeeder(
     private async Task SeedCfbPicksAsync(LeagueInfo? league, List<CfbSlates> slates)
     {
         if (league == null) return;
-        // 5 users × 65 picks each:
+        // 6 users × 65 picks each, except admin (frizat) who has no slate-18 spread pick — see
+        // CfbFinalPicks comment (replay E2E needs that slot free):
         // Slates 1-7: 7×4=28, Slate 8: 4, Slates 9-13: 5×4=20, Slate 14 (Conf.Champs): 4
         // Slate 15 (FR): 3, Slate 16 (QF): 3, Slate 17 (SF): 2, Slate 18 (Champ): 1
-        // Total per user: 28+4+20+4+3+3+2+1 = 65 → 5×65 = 325
+        // Total per user: 28+4+20+4+3+3+2+1 = 65 → 5×65 + 64 (frizat, no slate-18 pick) = 389
         // + Bob Over + Dana Under in each postseason slate (14-18) = 10 O/U picks
-        const int ExpectedPickCount = 335; // 325 spread + 10 O/U across all 5 postseason slates
+        const int ExpectedPickCount = 399; // 389 spread + 10 O/U across all 5 postseason slates
         if (await db.CfbPicks.CountAsync(p => p.LeagueId == league.Id) >= ExpectedPickCount) return;
         // Clear any partial seed before re-seeding
         db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => p.LeagueId == league.Id));
@@ -1186,7 +1234,8 @@ public class DemoDataSeeder(
                 picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, EspnEventId = eventId, Team = homeTeam, PickType = "Under", Season = CfbDemoSeason });
         }
 
-        foreach (var (username, _) in DemoUsers)
+        var seedUsernames = DemoUsers.Select(d => d.Username).Append("frizat");
+        foreach (var username in seedUsernames)
         {
             var user = await userManager.FindByNameAsync(username);
             if (user == null) continue;

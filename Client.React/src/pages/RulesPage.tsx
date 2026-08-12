@@ -51,10 +51,11 @@ function RuleRow({
           width: 24,
           height: 24,
           borderRadius: '50%',
+          // frizat: opacity tricks to "soften" the dot kept flipping which mode was unreadable
+          // (faint in light, invisible in dark, or vice versa). A solid dot at full color is
+          // trivially visible against both a light and a dark card background — no mode branch
+          // needed. See COLOR CONVENTIONS in app/theme.ts for the color semantics.
           bgcolor: `${color}.main`,
-          // A flat low opacity reads as a pale, visible dot on light backgrounds but nearly
-          // disappears against a dark card — bump it up specifically in dark mode.
-          opacity: (t) => (t.palette.mode === 'dark' ? 0.7 : 0.15),
           flexShrink: 0,
           mt: 0.25,
         }}

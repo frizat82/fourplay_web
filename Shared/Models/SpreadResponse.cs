@@ -6,4 +6,5 @@ public class SpreadResponse
     public double? Spread { get; set; }
     public double? Over { get; set; }
     public double? Under { get; set; }
+    public DateTimeOffset? DateCreated { get; set; }
 }

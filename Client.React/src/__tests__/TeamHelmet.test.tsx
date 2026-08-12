@@ -15,13 +15,14 @@ describe('TeamHelmet', () => {
     expect(screen.getByRole('img', { name: 'ne' })).toHaveAttribute('src', '/Icons/Helmets/ne.svg');
   });
 
-  it('uses the neon PNG as the primary source in dark mode', () => {
+  // frizat: the dark-mode neon PNG set was reverted — SVG is primary in both modes now.
+  it('uses the flat-color SVG shield as the primary source in dark mode too', () => {
     themeState.mode = 'dark';
     render(<TeamHelmet abbr="ne" />);
-    expect(screen.getByRole('img', { name: 'ne' })).toHaveAttribute('src', '/Icons/Helmets/ne.png');
+    expect(screen.getByRole('img', { name: 'ne' })).toHaveAttribute('src', '/Icons/Helmets/ne.svg');
   });
 
-  it('falls back to the PNG once, then hides, when the light-mode SVG 404s', () => {
+  it('falls back to the PNG once, then hides, when the SVG 404s', () => {
     render(<TeamHelmet abbr="ne" />);
     const img = screen.getByRole('img', { name: 'ne' });
 
@@ -33,13 +34,13 @@ describe('TeamHelmet', () => {
     expect(img.style.visibility).toBe('hidden');
   });
 
-  it('falls back to the SVG once, then hides, when the dark-mode PNG 404s', () => {
+  it('falls back to the PNG once, then hides, when the SVG 404s in dark mode too', () => {
     themeState.mode = 'dark';
     render(<TeamHelmet abbr="ne" />);
     const img = screen.getByRole('img', { name: 'ne' });
 
     fireEvent.error(img);
-    expect(img).toHaveAttribute('src', '/Icons/Helmets/ne.svg');
+    expect(img).toHaveAttribute('src', '/Icons/Helmets/ne.png');
 
     fireEvent.error(img);
     expect(img.style.visibility).toBe('hidden');

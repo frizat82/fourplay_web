@@ -518,6 +518,7 @@ public class LeagueController(
                     Spread = calculator.GetSpread(calc.Team),
                     Over = calculator.GetOverUnder(calc.Team, PickType.Over),
                     Under = calculator.GetOverUnder(calc.Team, PickType.Under),
+                    DateCreated = calculator.GetDateCreated(calc.Team),
                 };
         }
 

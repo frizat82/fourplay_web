@@ -331,18 +331,6 @@ export default function AppLayout() {
                       </ListItemIcon>
                       <ListItemText primary="Invitations" />
                     </ListItemButton>
-                    {isCfb && (
-                      <ListItemButton
-                        component={NavLink}
-                        to="/admin/cfb-schedule"
-                        sx={adminNavItemSx}
-                      >
-                        <ListItemIcon sx={{ minWidth: 36 }}>
-                          <ScoreboardIcon sx={{ fontSize: 20 }} />
-                        </ListItemIcon>
-                        <ListItemText primary="CFB Schedule" />
-                      </ListItemButton>
-                    )}
                   </List>
                 </Collapse>
               </List>
