@@ -77,10 +77,16 @@ public class DemoDataSeeder(
         ("DET","LV"),
     ];
 
+    // The only leagues the seeder itself ever creates — anything else in LeagueInfo is leftover
+    // test data (e.g. self-serve/admin "Create League" during manual testing) that should never
+    // survive a reseed.
+    private static readonly string[] CanonicalLeagueNames = ["Demo League", "CFB Demo League"];
+
     public async Task SeedAsync()
     {
         Log.Information("DemoDataSeeder: starting seed for season {Season} week {Week}", DemoSeason, DemoWeek);
 
+        await PurgeUnknownLeaguesAsync();
         await SeedNflWeekAsync();
         await SeedSpreadsAsync();
         var league = await SeedLeagueAsync();
@@ -107,6 +113,33 @@ public class DemoDataSeeder(
             await SeedReplayCfbSlateAsync();
 
         Log.Information("DemoDataSeeder: seed complete");
+    }
+
+    /// <summary>
+    /// Deletes any LeagueInfo row (and its LeagueUserMapping/LeagueJuiceMapping/NflPicks/CfbPicks/
+    /// Invitations) that the seeder didn't itself create. Self-serve/admin "Create League" testing
+    /// against the local demo stack otherwise leaves permanent debris behind, since the rest of
+    /// SeedAsync only ever find-or-creates the two canonical leagues by name — it never touches,
+    /// let alone clears, anything else in LeagueInfo.
+    /// </summary>
+    public async Task PurgeUnknownLeaguesAsync()
+    {
+        var strayLeagueIds = await db.LeagueInfo
+            .Where(l => !CanonicalLeagueNames.Contains(l.LeagueName))
+            .Select(l => l.Id)
+            .ToListAsync();
+
+        if (strayLeagueIds.Count == 0) return;
+
+        db.NflPicks.RemoveRange(db.NflPicks.Where(p => strayLeagueIds.Contains(p.LeagueId)));
+        db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => strayLeagueIds.Contains(p.LeagueId)));
+        db.Invitations.RemoveRange(db.Invitations.Where(i => i.LeagueId != null && strayLeagueIds.Contains(i.LeagueId.Value)));
+        db.LeagueJuiceMapping.RemoveRange(db.LeagueJuiceMapping.Where(m => strayLeagueIds.Contains(m.LeagueId)));
+        db.LeagueUserMapping.RemoveRange(db.LeagueUserMapping.Where(m => strayLeagueIds.Contains(m.LeagueId)));
+        db.LeagueInfo.RemoveRange(db.LeagueInfo.Where(l => strayLeagueIds.Contains(l.Id)));
+        await db.SaveChangesAsync();
+
+        Log.Information("DemoDataSeeder: purged {Count} stray league(s) not created by the seeder", strayLeagueIds.Count);
     }
 
     private async Task SeedLeagueJuiceMappingAsync(LeagueInfo? league)
