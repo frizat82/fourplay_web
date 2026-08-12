@@ -2,7 +2,6 @@ using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Xunit;
@@ -30,15 +29,26 @@ public class DemoEspnCacheServiceTests
         return factory;
     }
 
-    private static IWebHostEnvironment BuildFakeEnv()
+    // ── GetScoresAsync (fixture-backed) ─────────────────────────────────────
+
+    // frizat: regression test for the fixture silently failing to load on Railway.
+    // DemoFixtureLoader used to resolve sample_espn_nfl.json via
+    // Path.Combine(env.ContentRootPath, "..", fileName) — only correct locally by coincidence
+    // (dotnet run from Server/ puts the repo root one level up); on Railway, ContentRootPath is
+    // the deployed app's own directory, so ".." resolved to nothing and the fixture silently
+    // never loaded. No IWebHostEnvironment/working-directory setup needed here at all now — the
+    // fixture is an embedded resource, found by assembly-relative logical name regardless of
+    // where or how the process is actually running.
+    [Fact]
+    public async Task GetScoresAsync_LoadsFixture_RegardlessOfWorkingDirectoryOrContentRoot()
     {
-        var env = Substitute.For<IWebHostEnvironment>();
-        env.EnvironmentName.Returns("Development");
-        // Deliberately points nowhere — DemoFixtureLoader logs a warning and returns null when
-        // the fixture file doesn't exist, which is fine since these tests only exercise
-        // GetWeekScoresAsync (DB-backed), not GetScoresAsync (fixture-backed).
-        env.ContentRootPath.Returns("/nonexistent");
-        return env;
+        var sut = new DemoEspnCacheService(BuildFactory(BuildDb(nameof(GetScoresAsync_LoadsFixture_RegardlessOfWorkingDirectoryOrContentRoot))));
+
+        var scores = await sut.GetScoresAsync();
+
+        Assert.NotNull(scores);
+        Assert.NotNull(scores!.Events);
+        Assert.NotEmpty(scores.Events!);
     }
 
     // ── GetWeekScoresAsync ───────────────────────────────────────────────────
@@ -78,7 +88,7 @@ public class DemoEspnCacheServiceTests
         });
         await db.SaveChangesAsync();
 
-        var sut = new DemoEspnCacheService(BuildFakeEnv(), BuildFactory(db));
+        var sut = new DemoEspnCacheService(BuildFactory(db));
 
         var result = await sut.GetWeekScoresAsync(1, 2025, postSeason: true);
 
@@ -119,7 +129,7 @@ public class DemoEspnCacheServiceTests
         });
         await db.SaveChangesAsync();
 
-        var sut = new DemoEspnCacheService(BuildFakeEnv(), BuildFactory(db));
+        var sut = new DemoEspnCacheService(BuildFactory(db));
 
         // Week 5, regular season — nothing seeded for that combo.
         var result = await sut.GetWeekScoresAsync(5, 2025, postSeason: false);

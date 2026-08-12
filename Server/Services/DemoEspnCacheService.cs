@@ -8,18 +8,19 @@ namespace FourPlayWebApp.Server.Services;
 
 /// <summary>
 /// Demo-only implementation of IEspnCacheService that serves frozen ESPN data
-/// from sample_espn_nfl.json. Only registered when DEMO_MODE=true.
-/// Never used in dev or prod.
+/// from sample_espn_nfl.json. Only registered when DEMO_MODE=true (the Railway "development"
+/// environment included — DEMO_MODE is an app-config flag, not tied to any particular
+/// environment name). Real (non-demo) prod never registers this class at all.
 /// </summary>
 public class DemoEspnCacheService : IEspnCacheService
 {
     private readonly EspnScores? _scores;
     private readonly IDbContextFactory<ApplicationDbContext> _dbContextFactory;
 
-    public DemoEspnCacheService(IWebHostEnvironment env, IDbContextFactory<ApplicationDbContext> dbContextFactory)
+    public DemoEspnCacheService(IDbContextFactory<ApplicationDbContext> dbContextFactory)
     {
         _dbContextFactory = dbContextFactory;
-        _scores = DemoFixtureLoader.Load(env, "sample_espn_nfl.json", json =>
+        _scores = DemoFixtureLoader.Load("sample_espn_nfl.json", json =>
         {
             foreach (var map in NflTeamMappingHelpers.NflTeamAbbrMapping)
                 json = json.Replace($"\"{map.Key}\"", $"\"{map.Value}\"");
