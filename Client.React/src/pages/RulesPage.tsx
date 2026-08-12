@@ -50,7 +50,9 @@ function RuleRow({
           height: 24,
           borderRadius: '50%',
           bgcolor: `${color}.main`,
-          opacity: 0.15,
+          // A flat low opacity reads as a pale, visible dot on light backgrounds but nearly
+          // disappears against a dark card — bump it up specifically in dark mode.
+          opacity: (t) => (t.palette.mode === 'dark' ? 0.7 : 0.15),
           flexShrink: 0,
           mt: 0.25,
         }}
