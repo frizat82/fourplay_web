@@ -53,6 +53,7 @@ function competitionToGameView(
     homeLogo: getTeamLogo(homeAbbr),
     awayLogo: getTeamLogo(awayAbbr),
     situation: situationMap?.get(key) ?? null,
+    spreadPostedAt: spreadCache[homeAbbr]?.dateCreated ?? spreadCache[awayAbbr]?.dateCreated ?? null,
   };
 }
 

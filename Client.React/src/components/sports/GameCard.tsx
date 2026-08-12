@@ -95,6 +95,20 @@ export default function GameCard({
 
   const pickButtonSx = { minWidth: 80, height: 44, textTransform: 'none', fontSize: '0.85rem', flexShrink: 0 } as const;
 
+  // frizat: a team row's spread/action columns used to be positioned by a flex Stack with
+  // justifyContent="space-between" — whenever a row's record cell was conditionally omitted
+  // (record data unavailable, e.g. every CFB game today, or NFL bye-week/preseason games with no
+  // record yet), the remaining items shifted into different horizontal positions than rows that
+  // did have a record. Since each team row is its own layout container, "auto" column sizing
+  // can't guarantee alignment across rows/cards either — only fixed pixel columns can. The record
+  // cell is always rendered (blank when there's no data) so the column count never changes.
+  const teamRowGridSx = {
+    display: 'grid',
+    gridTemplateColumns: '60px 56px 80px 1fr',
+    alignItems: 'center',
+    columnGap: 1,
+  } as const;
+
   // MUI's `disabled` state flattens contained (filled) buttons to uniform gray regardless of
   // `color`. Keep the real color at reduced opacity instead of falling back to generic gray.
   // frizat: warning/amber was hard to read in both light and dark mode — "available to pick"
@@ -152,23 +166,25 @@ export default function GameCard({
         {/* Away team row */}
         <Card variant="outlined" sx={{ mb: 1.5 }}>
           <CardContent sx={{ p: '12px !important' }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Box sx={teamRowGridSx}>
               {renderTeamLogo(awayTeam, awayJerseyUrl)}
-              {!isPostSeason && awayRecord && (
-                <Typography variant="subtitle2">{awayRecord}</Typography>
-              )}
+              <Typography variant="subtitle2">
+                {!isPostSeason ? awayRecord : ''}
+              </Typography>
               <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center' }}>
                 {mode === 'score' && showScore ? awayScore : awaySpread != null ? spreadLabel(awaySpread) : ""}
               </Typography>
-              {mode === 'pick' ? renderPickButton(awayTeam, awayPickState, onPickAway) : (
-                mode === 'score' && (
-                  <Typography variant="caption" color="text.secondary">
-                    {awaySpread != null ? spreadLabel(awaySpread) : ""}
-                    {awayPickers !== undefined && ` · ${awayPickers}👤`}
-                  </Typography>
-                )
-              )}
-            </Stack>
+              <Box sx={{ justifySelf: 'end' }}>
+                {mode === 'pick' ? renderPickButton(awayTeam, awayPickState, onPickAway) : (
+                  mode === 'score' && (
+                    <Typography variant="caption" color="text.secondary">
+                      {awaySpread != null ? spreadLabel(awaySpread) : ""}
+                      {awayPickers !== undefined && ` · ${awayPickers}👤`}
+                    </Typography>
+                  )
+                )}
+              </Box>
+            </Box>
           </CardContent>
         </Card>
 
@@ -196,23 +212,25 @@ export default function GameCard({
         {/* Home team row */}
         <Card variant="outlined">
           <CardContent sx={{ p: '12px !important' }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Box sx={teamRowGridSx}>
               {renderTeamLogo(homeTeam, homeJerseyUrl)}
-              {!isPostSeason && homeRecord && (
-                <Typography variant="subtitle2">{homeRecord}</Typography>
-              )}
+              <Typography variant="subtitle2">
+                {!isPostSeason ? homeRecord : ''}
+              </Typography>
               <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center' }}>
                 {mode === 'score' && showScore ? homeScore : homeSpread != null ? spreadLabel(homeSpread) : ""}
               </Typography>
-              {mode === 'pick' ? renderPickButton(homeTeam, homePickState, onPickHome) : (
-                mode === 'score' && (
-                  <Typography variant="caption" color="text.secondary">
-                    {homeSpread != null ? spreadLabel(homeSpread) : ""}
-                    {homePickers !== undefined && ` · ${homePickers}👤`}
-                  </Typography>
-                )
-              )}
-            </Stack>
+              <Box sx={{ justifySelf: 'end' }}>
+                {mode === 'pick' ? renderPickButton(homeTeam, homePickState, onPickHome) : (
+                  mode === 'score' && (
+                    <Typography variant="caption" color="text.secondary">
+                      {homeSpread != null ? spreadLabel(homeSpread) : ""}
+                      {homePickers !== undefined && ` · ${homePickers}👤`}
+                    </Typography>
+                  )
+                )}
+              </Box>
+            </Box>
           </CardContent>
         </Card>
 

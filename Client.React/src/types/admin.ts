@@ -88,15 +88,4 @@ export interface LeagueCreateDto {
   weeklyCost: number;
 }
 
-export interface CfbSeasonWeekConfigDto {
-  espnWeekNumber: number;
-  ivLeagueWeekNumber: number;
-  weekType: string;
-  scoringFormat: string;
-  inScopeIvLeague: boolean;
-  weekStartDate: string;
-  weekEndDate: string;
-  notes?: string | null;
-}
-
 export type { LeagueUserMappingDto };
