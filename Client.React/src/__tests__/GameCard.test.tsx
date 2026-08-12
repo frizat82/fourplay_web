@@ -133,6 +133,25 @@ describe('GameCard', () => {
     expect(btn).toBeDisabled();
   });
 
+  // frizat: MUI's disabled state flattens every contained button to the same uniform gray
+  // regardless of `color`, erasing the picked/not-picked distinction the instant a game locks —
+  // the most common state once a week is underway. A locked "Picked" button should stay a filled
+  // success (green) button, not fall back to MUI's default disabled gray class.
+  it('a locked "Picked" button keeps its filled success styling, not the default disabled gray', () => {
+    render(<GameCard {...baseProps} homePickState="submitted" />);
+    const btn = screen.getByRole('button', { name: /KC locked in/i });
+    expect(btn).toHaveClass('MuiButton-contained', 'MuiButton-containedSuccess');
+  });
+
+  // A locked, never-picked button reads as an outlined warning button — visually distinct from
+  // the filled "Picked" button without the two competing as adjacent solid color blocks.
+  it('a locked, never-picked button keeps its outlined warning styling, not the default disabled gray', () => {
+    render(<GameCard {...baseProps} awayPickState="none" locked />);
+    const btn = screen.getByRole('button', { name: /^Pick BUF$/i });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveClass('MuiButton-outlined', 'MuiButton-outlinedWarning');
+  });
+
   it('unpicked away team button has aria-label "Pick BUF"', () => {
     render(<GameCard {...baseProps} awayPickState="none" />);
     expect(screen.getByRole('button', { name: /^Pick BUF$/i })).toBeInTheDocument();

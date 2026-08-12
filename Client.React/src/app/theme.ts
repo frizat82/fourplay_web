@@ -24,12 +24,16 @@ export function createAppTheme(mode: 'light' | 'dark') {
       light: '#60a5fa',
     },
     success: {
-      main: '#10b981', // Emerald green for positive actions
+      // Emerald-500 pops against the dark navy background; on white it's too pale to read
+      // comfortably as text/border, so light mode uses the darker emerald-700 instead.
+      main: isDark ? '#10b981' : '#047857',
       light: '#34d399',
       contrastText: '#FFFFFF',
     },
     warning: {
-      main: '#f59e0b', // Amber for caution
+      // Same story as success — amber-500 reads fine on dark navy but has poor contrast as
+      // text/border on a white background, so light mode uses the darker amber-700.
+      main: isDark ? '#f59e0b' : '#b45309',
       light: '#fbbf24',
     },
     error: {
