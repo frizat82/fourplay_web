@@ -110,13 +110,23 @@ export default function WeekYearSelector({
         border: '1px solid rgba(26, 40, 71, 0.1)',
       }}
     >
-      {/* Selects row */}
-      <Stack direction="row" alignItems="center" justifyContent="center" sx={{ flexWrap: 'wrap', gap: 1 }}>
+      {/* Selects row — frizat: flexWrap alone made mobile layout depend on content width: a short
+          label (e.g. "Super Bowl") left enough room for all three selects to share one row, a
+          long one ("Conference Championship") pushed to a stacked layout — same page, two
+          different arrangements depending on which week happened to be selected. Below `sm`,
+          always stack one-per-row (direction/width driven by breakpoint, not by wrap) so the
+          layout is consistent regardless of label length. */}
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        alignItems="center"
+        justifyContent="center"
+        sx={{ gap: 1 }}
+      >
         <Select
           value={season}
           onChange={(e) => onSeasonChange(Number(e.target.value))}
           size="small"
-          sx={{ minWidth: { xs: 90, sm: 100 } }}
+          sx={{ width: { xs: '100%', sm: 150 } }}
         >
           {seasonOptions.map((s) => (
             <MenuItem key={s} value={s}>
@@ -133,12 +143,9 @@ export default function WeekYearSelector({
           // selected — "Conference Championship" (the longest label across both sports) is
           // ~117px wider than "Wild Card"/"Week 1", so the whole select row (centered via
           // justifyContent) visibly shifted left/right depending which week was picked. A fixed
-          // width sized for the longest label keeps the row's total width constant regardless of
-          // week, so the centered group never moves. Same width at every breakpoint — the row
-          // already wraps onto its own line on narrow screens (flexWrap on the parent Stack), so
-          // there's no need to shrink this and truncate "Conference Championship" with an
-          // ellipsis on mobile; 260px fits with room to spare even at 390px.
-          sx={{ width: 260 }}
+          // width on sm+ keeps the row's total width constant regardless of week, so the centered
+          // group never moves; full-width on xs since mobile always stacks one-per-row now.
+          sx={{ width: { xs: '100%', sm: 260 } }}
         >
           {currentOptions.map((w) => (
             <MenuItem key={w} value={w}>
@@ -151,7 +158,7 @@ export default function WeekYearSelector({
           value={isPostSeason ? 'postseason' : 'regular'}
           onChange={(e) => handleSeasonTypeSelect(e.target.value as 'regular' | 'postseason')}
           size="small"
-          sx={{ minWidth: { xs: 120, sm: 140 } }}
+          sx={{ width: { xs: '100%', sm: 170 } }}
         >
           <MenuItem value="regular">Regular Season</MenuItem>
           <MenuItem value="postseason">Postseason</MenuItem>
