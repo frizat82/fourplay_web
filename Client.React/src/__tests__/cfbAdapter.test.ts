@@ -20,7 +20,7 @@ vi.mock('../api/espn', () => ({
   getCfbLiveGames: vi.fn(),
 }));
 
-import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, addCfbPicks } from '../api/cfb';
 import { loadCfbScoresWithRetry, getCfbLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
@@ -28,7 +28,7 @@ const slate: CfbSlateDto = {
   slateType: 'RegularSeason', startDate: '2026-10-20', endDate: '2026-10-26',
 };
 const spread: CfbSpreadDto = {
-  id: 1, cfbSlateId: 10, espnEventId: 999, homeTeam: 'MICH', awayTeam: 'PSU',
+  id: 1, cfbSlateId: 10, homeTeam: 'MICH', awayTeam: 'PSU',
   homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5,
   gameTime: '2025-10-11T20:00:00Z', dateCreated: '2025-10-09T14:00:00Z',
 };
@@ -86,7 +86,7 @@ describe('cfbAdapter', () => {
       expect(game.homeScore).toBe(27);
       expect(game.awayScore).toBe(13);
       expect(game.gameStatus).toBe('final');
-      expect(game.id).toBe('999');
+      expect(game.id).toBe('MICH');
       expect(game.spreadPostedAt).toBe('2025-10-09T14:00:00Z');
     });
 
@@ -110,10 +110,10 @@ describe('cfbAdapter', () => {
       expect(result.hasOdds).toBe(false);
     });
 
-    it('maps CfbPickDto to PickView with stringified gameId', async () => {
+    it('maps a home-team CfbPickDto to PickView with gameId = homeTeam', async () => {
       const pick: CfbPickDto = {
         id: 1, userId: 'user1', userName: 'user1', leagueId: 1, cfbSlateId: 10,
-        espnEventId: 999, team: 'MICH', pickType: 'Spread', season: 2026,
+        team: 'MICH', pickType: 'Spread', season: 2026,
       };
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
@@ -122,9 +122,29 @@ describe('cfbAdapter', () => {
 
       const result = await adapter.loadCurrentGames(1, 'user1');
       expect(result.userPicks).toHaveLength(1);
-      expect(result.userPicks[0].gameId).toBe('999');
+      expect(result.userPicks[0].gameId).toBe('MICH');
       expect(result.userPicks[0].team).toBe('MICH');
       expect(result.userPicks[0].pickType).toBe('Spread');
+    });
+
+    // frizat: CfbPicks.Team can be the AWAY side — since GameView.id is always the game's home
+    // team (a team plays at most one game per slate, so homeTeam alone is the join key), a pick
+    // on the away side must still resolve gameId back to the home team, not to pick.team itself,
+    // or it would never match GameView.id in ScoresPage's pickCountForTeam/didUserPick lookups.
+    it('maps an away-team CfbPickDto to PickView with gameId = the game\'s homeTeam, not the picked team', async () => {
+      const pick: CfbPickDto = {
+        id: 2, userId: 'user1', userName: 'user1', leagueId: 1, cfbSlateId: 10,
+        team: 'PSU', pickType: 'Spread', season: 2026,
+      };
+      vi.mocked(getCfbSlates).mockResolvedValue([slate]);
+      vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
+      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(espnFinalGame);
+      vi.mocked(getCfbUserPicks).mockResolvedValue([pick]);
+
+      const result = await adapter.loadCurrentGames(1, 'user1');
+      expect(result.userPicks).toHaveLength(1);
+      expect(result.userPicks[0].gameId).toBe('MICH');
+      expect(result.userPicks[0].team).toBe('PSU');
     });
 
     it('derives WeekState from slate slateNumber', async () => {
@@ -148,6 +168,23 @@ describe('cfbAdapter', () => {
       const result = await adapter.loadCurrentGames(1, 'user1');
       expect(result.games[0].gameStatus).toBe('scheduled');
       expect(result.games[0].homeScore).toBeNull();
+    });
+  });
+
+  describe('submitPicks', () => {
+    // frizat: the request payload no longer carries an ESPN event id — just team + pickType,
+    // matching NFL's submitPicks shape exactly (no per-pick game-id field at all).
+    it('sends only team and pickType, no espnEventId, per pick', async () => {
+      vi.mocked(getCfbSlates).mockResolvedValue([slate]);
+      vi.mocked(addCfbPicks).mockResolvedValue({ added: 1 });
+
+      await adapter.submitPicks(1, { season: 2026, week: 8, isPostSeason: false }, [
+        { gameId: 'MICH', team: 'MICH', pickType: 'Spread' },
+      ]);
+
+      expect(addCfbPicks).toHaveBeenCalledWith(1, slate.id, 2026, [
+        { team: 'MICH', pickType: 'Spread' },
+      ]);
     });
   });
 

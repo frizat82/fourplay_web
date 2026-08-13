@@ -295,7 +295,6 @@ public class DemoDataSeeder(
 
         db.CfbSpreads.Add(new CfbSpreads {
             CfbSlateId = slate.Id,
-            EspnEventId = 401772636,
             HomeTeam = "IND",
             AwayTeam = "ATL",
             HomeTeamSpread = -3.5,
@@ -1066,7 +1065,6 @@ public class DemoDataSeeder(
         var spreads = allGames.Select(g => new CfbSpreads
         {
             CfbSlateId     = slates.First(s => s.SlateNumber == g.SlateIdx).Id,
-            EspnEventId    = g.EventId,
             HomeTeam       = g.Home,
             AwayTeam       = g.Away,
             HomeTeamSpread = g.HomeSpread,
@@ -1105,7 +1103,6 @@ public class DemoDataSeeder(
         var scores = allGames.Select(g => new CfbScores
         {
             CfbSlateId    = slates.First(s => s.SlateNumber == g.SlateIdx).Id,
-            EspnEventId   = g.EventId,
             HomeTeam      = g.Home,
             AwayTeam      = g.Away,
             HomeTeamScore = g.HomeScore,
@@ -1237,8 +1234,8 @@ public class DemoDataSeeder(
 
         var picks = new List<CfbPicks>();
 
-        void AddPick(int leagueId, string userId, int slateId, int eventId, string team) =>
-            picks.Add(new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, EspnEventId = eventId, Team = team, PickType = "Spread", Season = CfbDemoSeason });
+        void AddPick(int leagueId, string userId, int slateId, string team) =>
+            picks.Add(new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, Team = team, PickType = "Spread", Season = CfbDemoSeason });
 
         // frizat: Over/Under is an alternate PICK TYPE for a game, not an additional pick beyond
         // the slate's required count — CfbPicksController's server-side validation enforces total
@@ -1248,16 +1245,16 @@ public class DemoDataSeeder(
         // requiredPicks+1 total picks, which no real submission could ever produce (confirmed via
         // direct DB query: Bob had 4 rows for a 3-required-pick week). Bob/Dana's O/U pick now
         // replaces their game-0 spread pick instead of adding to it.
-        void AddFirstPickOrOverUnder(string uName, string userId, int slateId, int eventId, string homeTeam, string pickedTeam) {
+        void AddFirstPickOrOverUnder(string uName, string userId, int slateId, string homeTeam, string pickedTeam) {
             if (uName == "Bob") {
-                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, EspnEventId = eventId, Team = homeTeam, PickType = "Over", Season = CfbDemoSeason });
+                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, Team = homeTeam, PickType = "Over", Season = CfbDemoSeason });
                 return;
             }
             if (uName == "Dana") {
-                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, EspnEventId = eventId, Team = homeTeam, PickType = "Under", Season = CfbDemoSeason });
+                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, Team = homeTeam, PickType = "Under", Season = CfbDemoSeason });
                 return;
             }
-            AddPick(league.Id, userId, slateId, eventId, pickedTeam);
+            AddPick(league.Id, userId, slateId, pickedTeam);
         }
 
         var seedUsernames = DemoUsers.Select(d => d.Username).Append("frizat");
@@ -1278,14 +1275,14 @@ public class DemoDataSeeder(
                 {
                     if (slates.FirstOrDefault(s => s.SlateNumber == slateNum) is not { } slate) continue;
                     for (int i = 0; i < Math.Min(rsPattern.Length, gamesArr.Length); i++)
-                        AddPick(league.Id, user.Id, slate.Id, gamesArr[i].EventId, rsPattern[i] ? gamesArr[i].Home : gamesArr[i].Away);
+                        AddPick(league.Id, user.Id, slate.Id, rsPattern[i] ? gamesArr[i].Home : gamesArr[i].Away);
                 }
             }
 
             // Week 8: 4 picks from 6 games
             if (CfbWeek8Picks.TryGetValue(username, out var w8) && slates.FirstOrDefault(s => s.SlateNumber == 8) is { } slate8)
                 for (int i = 0; i < Math.Min(w8.Length, Week8Games.Length); i++)
-                    AddPick(league.Id, user.Id, slate8.Id, Week8Games[i].EventId, w8[i] ? Week8Games[i].Home : Week8Games[i].Away);
+                    AddPick(league.Id, user.Id, slate8.Id, w8[i] ? Week8Games[i].Home : Week8Games[i].Away);
 
             // Regular season slates 9-13: 4 picks each
             if (CfbRegularSeasonPickPattern.TryGetValue(username, out var rsPattern2))
@@ -1299,7 +1296,7 @@ public class DemoDataSeeder(
                 {
                     if (slates.FirstOrDefault(s => s.SlateNumber == slateNum) is not { } slate) continue;
                     for (int i = 0; i < Math.Min(rsPattern2.Length, gamesArr.Length); i++)
-                        AddPick(league.Id, user.Id, slate.Id, gamesArr[i].EventId, rsPattern2[i] ? gamesArr[i].Home : gamesArr[i].Away);
+                        AddPick(league.Id, user.Id, slate.Id, rsPattern2[i] ? gamesArr[i].Home : gamesArr[i].Away);
                 }
             }
 
@@ -1308,8 +1305,8 @@ public class DemoDataSeeder(
             {
                 for (int i = 0; i < Math.Min(confPattern.Length, Slate15Games.Length); i++) {
                     var team = confPattern[i] ? Slate15Games[i].Home : Slate15Games[i].Away;
-                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slate14Champ.Id, Slate15Games[0].EventId, Slate15Games[0].Home, team);
-                    else AddPick(league.Id, user.Id, slate14Champ.Id, Slate15Games[i].EventId, team);
+                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slate14Champ.Id, Slate15Games[0].Home, team);
+                    else AddPick(league.Id, user.Id, slate14Champ.Id, team);
                 }
             }
 
@@ -1319,8 +1316,8 @@ public class DemoDataSeeder(
                 var fr15Games = CfpGames.Where(g => g.SlateIdx == 15).ToArray();
                 for (int i = 0; i < Math.Min(fr15Pattern.Length, fr15Games.Length); i++) {
                     var team = fr15Pattern[i] ? fr15Games[i].Home : fr15Games[i].Away;
-                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slate15.Id, fr15Games[0].EventId, fr15Games[0].Home, team);
-                    else AddPick(league.Id, user.Id, slate15.Id, fr15Games[i].EventId, team);
+                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slate15.Id, fr15Games[0].Home, team);
+                    else AddPick(league.Id, user.Id, slate15.Id, team);
                 }
             }
 
@@ -1330,8 +1327,8 @@ public class DemoDataSeeder(
                 var qfGames = CfpGames.Where(g => g.SlateIdx == 16).ToArray();
                 for (int i = 0; i < Math.Min(qf.Length, qfGames.Length); i++) {
                     var team = qf[i] ? qfGames[i].Home : qfGames[i].Away;
-                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slateQf.Id, qfGames[0].EventId, qfGames[0].Home, team);
-                    else AddPick(league.Id, user.Id, slateQf.Id, qfGames[i].EventId, team);
+                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slateQf.Id, qfGames[0].Home, team);
+                    else AddPick(league.Id, user.Id, slateQf.Id, team);
                 }
             }
 
@@ -1341,8 +1338,8 @@ public class DemoDataSeeder(
                 var sfGames = CfpGames.Where(g => g.SlateIdx == 17).ToArray();
                 for (int i = 0; i < Math.Min(sf.Length, sfGames.Length); i++) {
                     var team = sf[i] ? sfGames[i].Home : sfGames[i].Away;
-                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slateSf.Id, sfGames[0].EventId, sfGames[0].Home, team);
-                    else AddPick(league.Id, user.Id, slateSf.Id, sfGames[i].EventId, team);
+                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slateSf.Id, sfGames[0].Home, team);
+                    else AddPick(league.Id, user.Id, slateSf.Id, team);
                 }
             }
 
@@ -1352,7 +1349,7 @@ public class DemoDataSeeder(
                 var finalGame = CfpGames.First(g => g.SlateIdx == 18);
                 if (CfbFinalPicks.TryGetValue(username, out var final)) {
                     var team = final ? finalGame.Home : finalGame.Away;
-                    AddFirstPickOrOverUnder(username, user.Id, slateFinal.Id, finalGame.EventId, finalGame.Home, team);
+                    AddFirstPickOrOverUnder(username, user.Id, slateFinal.Id, finalGame.Home, team);
                 }
             }
         }

@@ -48,7 +48,7 @@ export async function addCfbPicks(
   leagueId: number,
   cfbSlateId: number,
   season: number,
-  picks: { espnEventId: number; team: string; pickType: string }[]
+  picks: { team: string; pickType: string }[]
 ): Promise<{ added: number }> {
   const res = await fetch(`${BASE}/picks`, {
     method: 'POST',

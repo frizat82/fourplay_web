@@ -53,7 +53,6 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo) : I
 
             scores.Add(new CfbScores {
                 CfbSlateId          = slate.Id,
-                EspnEventId         = int.Parse(evt.Id),
                 HomeTeam            = home.Team.Abbreviation,
                 AwayTeam            = away.Team.Abbreviation,
                 HomeTeamScore       = (int)home.Score,
