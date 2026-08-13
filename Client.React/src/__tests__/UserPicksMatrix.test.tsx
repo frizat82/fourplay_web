@@ -38,35 +38,30 @@ describe('UserPicksMatrix — dark mode cell coloring', () => {
 
 describe('UserPicksMatrix — spread vs Over/Under picks', () => {
   // frizat: a user can have both a spread pick and a separate Over/Under pick in the same
-  // postseason week (O/U isn't counted toward requiredPicks). Indexing into a single mixed-type
-  // array by position meant whichever pick sorted first won the one available column and the
-  // other was silently dropped — so a user's O/U pick could vanish entirely, or overwrite their
-  // spread pick's cell.
+  // postseason week (O/U isn't counted toward requiredPicks). The column count must always equal
+  // requiredPicks — a dedicated "O/U" column broke that for every other week. Both picks render
+  // as separate badges inside the same required-pick cell instead.
   const mixedPicks: NflPickDto[] = [
     { id: 1, userId: 'u1', userName: 'bob', team: 'NE', pick: 'Spread', season: 2025, nflWeek: 22, leagueId: 1, dateCreated: '' },
     { id: 2, userId: 'u1', userName: 'bob', team: 'NE', pick: 'Over', season: 2025, nflWeek: 22, leagueId: 1, dateCreated: '' },
   ];
 
-  function renderMixed() {
-    return render(
+  it('shows both the spread pick and the Over/Under pick as two badges in the same cell, not a new column', () => {
+    render(
       <ThemeProvider theme={createTheme()}>
         <UserPicksMatrix users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={1} />
       </ThemeProvider>,
     );
-  }
-
-  it('shows both the spread pick and the Over/Under pick, in separate columns', () => {
-    renderMixed();
-    expect(screen.getByText('O/U')).toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader')).toHaveLength(2); // User + Pick 1, no extra column
     expect(screen.getAllByTestId('helmet-NE')).toHaveLength(2);
   });
 
-  it('does not add an O/U column when no one has an Over/Under pick this week', () => {
+  it('column count always equals requiredPicks regardless of Over/Under picks', () => {
     render(
       <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix users={['alice']} picks={picks} spreads={{}} requiredPicks={1} />
+        <UserPicksMatrix users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={4} />
       </ThemeProvider>,
     );
-    expect(screen.queryByText('O/U')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader')).toHaveLength(5); // User + Pick 1-4
   });
 });
