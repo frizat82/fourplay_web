@@ -1,4 +1,5 @@
 import {
+  Box,
   Paper,
   Table,
   TableBody,
@@ -24,14 +25,6 @@ interface UserPicksMatrixProps {
 
 export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }: UserPicksMatrixProps) {
   const isDark = useTheme().palette.mode === 'dark';
-  // frizat: a user can have BOTH a spread pick and a separate Over/Under pick in the same
-  // postseason week (the O/U pick isn't counted toward requiredPicks) — indexing into a single
-  // mixed-type array by position meant whichever pick happened to sort first won that column and
-  // the other was silently dropped. Spread picks fill the requiredPicks columns; O/U (if any
-  // exist this week) gets its own dedicated column so both are always visible.
-  const getSpreadPicks = (user: string) => picks.filter((p) => p.userName === user && p.pick === 'Spread');
-  const getOverUnderPick = (user: string) => picks.find((p) => p.userName === user && p.pick !== 'Spread');
-  const hasOverUnder = picks.some((p) => p.pick !== 'Spread');
 
   const getWinner = (teamAbbr: string, pickType: NflPickDto['pick']) => {
     const calc = spreads[teamAbbr];
@@ -41,18 +34,11 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
     return calc.isUnderWinner;
   };
 
-  const renderCell = (key: string, pick: NflPickDto | undefined) => {
-    if (!pick?.team) {
-      return (
-        <TableCell key={key} align="center">
-          <Paper sx={{ height: 76, width: 60, borderRadius: 2 }} />
-        </TableCell>
-      );
-    }
+  const renderBadge = (pick: NflPickDto) => {
     const result = getWinner(pick.team, pick.pick);
     // TeamHelmet's dark-mode logos are neon assets designed to glow against a dark background
     // (see TeamHelmet.tsx) — the light literal tones below washed them out in dark mode, so pick
-    // each cell's tone from the active theme instead.
+    // each badge's tone from the active theme instead.
     const bgColor = result === true
       ? (isDark ? 'success.dark' : 'success.light')
       : result === false
@@ -60,53 +46,53 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
         : (isDark ? 'grey.800' : 'grey.200');
 
     return (
-      <TableCell key={key} align="center">
-        <Paper
-          sx={{
-            height: 76,
-            width: 60,
-            borderRadius: 2,
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: bgColor,
-          }}
-        >
-          {pick.pick === 'Over' && (
-            <ArrowCircleUpIcon
-              fontSize="small"
-              sx={{ position: 'absolute', top: 4, left: 4, bgcolor: 'white', borderRadius: '50%' }}
-              color={result ? 'success' : 'error'}
-            />
-          )}
-          {pick.pick === 'Under' && (
-            <ArrowCircleDownIcon
-              fontSize="small"
-              sx={{ position: 'absolute', top: 4, left: 4, bgcolor: 'white', borderRadius: '50%' }}
-              color={result ? 'success' : 'error'}
-            />
-          )}
-          {/* frizat: the team logo alone was hard to identify at a glance against the win/loss
-              color-coded background — show the abbreviation too. */}
-          <TeamHelmet abbr={pick.team} size={36} showLabel />
-          {result === true && (
-            <CheckCircleIcon
-              fontSize="small"
-              color="success"
-              sx={{ position: 'absolute', bottom: 4, right: 4, bgcolor: 'white', borderRadius: '50%' }}
-            />
-          )}
-          {result === false && (
-            <CancelIcon
-              fontSize="small"
-              color="error"
-              sx={{ position: 'absolute', bottom: 4, right: 4, bgcolor: 'white', borderRadius: '50%' }}
-            />
-          )}
-        </Paper>
-      </TableCell>
+      <Paper
+        key={`${pick.team}-${pick.pick}`}
+        sx={{
+          height: 76,
+          width: 60,
+          borderRadius: 2,
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: bgColor,
+          flexShrink: 0,
+        }}
+      >
+        {pick.pick === 'Over' && (
+          <ArrowCircleUpIcon
+            fontSize="small"
+            sx={{ position: 'absolute', top: 4, left: 4, bgcolor: 'white', borderRadius: '50%' }}
+            color={result ? 'success' : 'error'}
+          />
+        )}
+        {pick.pick === 'Under' && (
+          <ArrowCircleDownIcon
+            fontSize="small"
+            sx={{ position: 'absolute', top: 4, left: 4, bgcolor: 'white', borderRadius: '50%' }}
+            color={result ? 'success' : 'error'}
+          />
+        )}
+        {/* frizat: the team logo alone was hard to identify at a glance against the win/loss
+            color-coded background — show the abbreviation too. */}
+        <TeamHelmet abbr={pick.team} size={36} showLabel />
+        {result === true && (
+          <CheckCircleIcon
+            fontSize="small"
+            color="success"
+            sx={{ position: 'absolute', bottom: 4, right: 4, bgcolor: 'white', borderRadius: '50%' }}
+          />
+        )}
+        {result === false && (
+          <CancelIcon
+            fontSize="small"
+            color="error"
+            sx={{ position: 'absolute', bottom: 4, right: 4, bgcolor: 'white', borderRadius: '50%' }}
+          />
+        )}
+      </Paper>
     );
   };
 
@@ -119,19 +105,38 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
             {Array.from({ length: requiredPicks }).map((_, idx) => (
               <TableCell key={idx}>Pick {idx + 1}</TableCell>
             ))}
-            {hasOverUnder && <TableCell>O/U</TableCell>}
           </TableRow>
         </TableHead>
         <TableBody>
           {users.sort().map((user) => {
-            const spreadPicks = getSpreadPicks(user);
+            const spreadPicks = picks.filter((p) => p.userName === user && p.pick === 'Spread');
+            // frizat: a user can have both a spread pick AND a separate Over/Under pick for the
+            // same game in a postseason week (O/U isn't counted toward requiredPicks — it's
+            // always a single extra pick tied to that week's one required game). Rather than a
+            // dedicated table column, which breaks "columns == requiredPicks" for every other
+            // week, the O/U pick renders as a second badge alongside the spread pick in that
+            // same required-pick cell.
+            const overUnderPicks = picks.filter((p) => p.userName === user && p.pick !== 'Spread');
             return (
               <TableRow key={user}>
                 <TableCell>
                   <Typography fontWeight={600}>{user}</Typography>
                 </TableCell>
-                {Array.from({ length: requiredPicks }).map((_, idx) => renderCell(`${user}-${idx}`, spreadPicks[idx]))}
-                {hasOverUnder && renderCell(`${user}-ou`, getOverUnderPick(user))}
+                {Array.from({ length: requiredPicks }).map((_, idx) => {
+                  const cellPicks = [spreadPicks[idx], ...(idx === 0 ? overUnderPicks : [])]
+                    .filter((p): p is NflPickDto => Boolean(p?.team));
+                  return (
+                    <TableCell key={idx} align="center">
+                      {cellPicks.length === 0 ? (
+                        <Paper sx={{ height: 76, width: 60, borderRadius: 2 }} />
+                      ) : (
+                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                          {cellPicks.map(renderBadge)}
+                        </Box>
+                      )}
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             );
           })}
