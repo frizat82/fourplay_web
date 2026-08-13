@@ -109,8 +109,10 @@ export default function GameCard({
   // (value/action) — the left cluster can vary in width (record present or not) without ever
   // shifting the right cluster, which always hugs the right edge. The value itself stays
   // dead-centered within its own fixed-width box, matching what "aligned in the middle" means for
-  // the number itself.
+  // the number itself. Typography variant matches ScoresPage's own spread-value text
+  // (subtitle1, not h6) — h6 read visibly larger than Scores' equivalent number.
   const spreadValueSx = { minWidth: 64, textAlign: 'center', flexShrink: 0 } as const;
+  const spreadValueVariant = 'subtitle1' as const;
 
   // MUI's `disabled` state flattens contained (filled) buttons to uniform gray regardless of
   // `color`. Keep the real color at reduced opacity instead of falling back to generic gray.
@@ -171,31 +173,27 @@ export default function GameCard({
     <Card elevation={2} sx={{ height: '100%' }}>
       <CardContent sx={{ pb: '12px !important' }}>
         {/* Away team row */}
-        <Card variant="outlined" sx={{ mb: 1.5 }}>
-          <CardContent sx={{ p: '12px !important' }}>
-            <Stack direction="row" alignItems="center" sx={{ gap: 1 }}>
-              {renderTeamLogo(awayTeam, awayJerseyUrl)}
-              {!isPostSeason && awayRecord && (
-                <Typography variant="subtitle2">{awayRecord}</Typography>
-              )}
-              <Box sx={{ flexGrow: 1 }} />
-              <Typography variant="h6" sx={spreadValueSx}>
-                {mode === 'score' && showScore ? awayScore : awaySpread != null ? spreadLabel(awaySpread) : ""}
+        <Stack direction="row" alignItems="center" sx={{ gap: 1 }}>
+          {renderTeamLogo(awayTeam, awayJerseyUrl)}
+          {!isPostSeason && awayRecord && (
+            <Typography variant="subtitle2">{awayRecord}</Typography>
+          )}
+          <Box sx={{ flexGrow: 1 }} />
+          <Typography variant={spreadValueVariant} sx={spreadValueSx}>
+            {mode === 'score' && showScore ? awayScore : awaySpread != null ? spreadLabel(awaySpread) : ""}
+          </Typography>
+          {mode === 'pick' ? renderPickButton(awayTeam, awayPickState, onPickAway) : (
+            mode === 'score' && (
+              <Typography variant="caption" color="text.secondary">
+                {awaySpread != null ? spreadLabel(awaySpread) : ""}
+                {awayPickers !== undefined && ` · ${awayPickers}👤`}
               </Typography>
-              {mode === 'pick' ? renderPickButton(awayTeam, awayPickState, onPickAway) : (
-                mode === 'score' && (
-                  <Typography variant="caption" color="text.secondary">
-                    {awaySpread != null ? spreadLabel(awaySpread) : ""}
-                    {awayPickers !== undefined && ` · ${awayPickers}👤`}
-                  </Typography>
-                )
-              )}
-            </Stack>
-          </CardContent>
-        </Card>
+            )
+          )}
+        </Stack>
 
         {/* Middle: weather + status/detail */}
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5, gap: 1 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1.5, gap: 1 }}>
           {weatherDisplayValue ? (
             <WeatherIcon
               iconKey={weatherDisplayValue}
@@ -215,29 +213,27 @@ export default function GameCard({
           </Box>
         </Stack>
 
-        {/* Home team row */}
-        <Card variant="outlined">
-          <CardContent sx={{ p: '12px !important' }}>
-            <Stack direction="row" alignItems="center" sx={{ gap: 1 }}>
-              {renderTeamLogo(homeTeam, homeJerseyUrl)}
-              {!isPostSeason && homeRecord && (
-                <Typography variant="subtitle2">{homeRecord}</Typography>
-              )}
-              <Box sx={{ flexGrow: 1 }} />
-              <Typography variant="h6" sx={spreadValueSx}>
-                {mode === 'score' && showScore ? homeScore : homeSpread != null ? spreadLabel(homeSpread) : ""}
+        {/* Home team row — flat Stack, no nested Card, matching ScoresPage's own team rows
+            (see spreadValueSx comment above): two bordered boxes per game read as separate
+            panels rather than one continuous list, which was the "HUGE"/disjointed feel. */}
+        <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1 }}>
+          {renderTeamLogo(homeTeam, homeJerseyUrl)}
+          {!isPostSeason && homeRecord && (
+            <Typography variant="subtitle2">{homeRecord}</Typography>
+          )}
+          <Box sx={{ flexGrow: 1 }} />
+          <Typography variant={spreadValueVariant} sx={spreadValueSx}>
+            {mode === 'score' && showScore ? homeScore : homeSpread != null ? spreadLabel(homeSpread) : ""}
+          </Typography>
+          {mode === 'pick' ? renderPickButton(homeTeam, homePickState, onPickHome) : (
+            mode === 'score' && (
+              <Typography variant="caption" color="text.secondary">
+                {homeSpread != null ? spreadLabel(homeSpread) : ""}
+                {homePickers !== undefined && ` · ${homePickers}👤`}
               </Typography>
-              {mode === 'pick' ? renderPickButton(homeTeam, homePickState, onPickHome) : (
-                mode === 'score' && (
-                  <Typography variant="caption" color="text.secondary">
-                    {homeSpread != null ? spreadLabel(homeSpread) : ""}
-                    {homePickers !== undefined && ` · ${homePickers}👤`}
-                  </Typography>
-                )
-              )}
-            </Stack>
-          </CardContent>
-        </Card>
+            )
+          )}
+        </Stack>
 
         {spreadPostedAt && (
           <Typography variant="caption" color="text.secondary" display="block" sx={{ textAlign: 'center', mt: 0.75 }}>
@@ -247,23 +243,17 @@ export default function GameCard({
 
         {/* Postseason O/U picks */}
         {isPostSeason && mode === 'pick' && overValue != null && underValue != null && (
-          <Card
+          <Stack
             data-testid="over-under-controls"
-            variant="outlined"
-            sx={{ mt: 1, p: 0 }}
+            direction="row" alignItems="center" justifyContent="space-between"
+            sx={{ mt: 2, gap: 1 }}
           >
-            <CardContent sx={{ p: '12px !important' }}>
-              {/* Mirrors ScoresPage's own O/U row (button — value — button, evenly spaced) —
-                  three always-present items balance naturally without needing a spacer. */}
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ gap: 1 }}>
-                {renderOverUnderButton('Over', overValue, overPickState, onPickOver)}
-                <Typography variant="h6" sx={spreadValueSx}>
-                  {overValue}
-                </Typography>
-                {renderOverUnderButton('Under', underValue, underPickState, onPickUnder)}
-              </Stack>
-            </CardContent>
-          </Card>
+            {renderOverUnderButton('Over', overValue, overPickState, onPickOver)}
+            <Typography variant={spreadValueVariant} sx={spreadValueSx}>
+              {overValue}
+            </Typography>
+            {renderOverUnderButton('Under', underValue, underPickState, onPickUnder)}
+          </Stack>
         )}
       </CardContent>
     </Card>
