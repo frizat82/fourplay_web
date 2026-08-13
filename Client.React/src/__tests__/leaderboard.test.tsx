@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react';
+import { alpha, ThemeProvider } from '@mui/material';
 import LeaderboardPage from '../pages/LeaderboardPage';
 import { vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { createLeaderboardEntry, createLeaderboardWeekResult } from '../test/fixtures';
 import type { SportAdapter } from '../services/sportAdapter';
+import { createAppTheme } from '../app/theme';
 
 const sessionState = {
   currentLeague: 1 as number | null,
@@ -37,14 +39,16 @@ const mockAdapter: SportAdapter = {
   weekSelectorConfig: { maxRegularSeasonWeek: 18, minSeason: 2020 },
 };
 
-function renderPage() {
+function renderPage(mode: 'light' | 'dark' = 'light') {
   return render(
-    <MemoryRouter initialEntries={['/leaderboard']}>
-      <Routes>
-        <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
-        <Route path="/leaguepicker" element={<div>League Picker</div>} />
-      </Routes>
-    </MemoryRouter>
+    <ThemeProvider theme={createAppTheme(mode)}>
+      <MemoryRouter initialEntries={['/leaderboard']}>
+        <Routes>
+          <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
+          <Route path="/leaguepicker" element={<div>League Picker</div>} />
+        </Routes>
+      </MemoryRouter>
+    </ThemeProvider>
   );
 }
 
@@ -94,5 +98,42 @@ describe('LeaderboardPage', () => {
     sessionState.currentLeague = null;
     renderPage();
     await screen.findByText(/League Picker/i);
+  });
+});
+
+describe('LeaderboardPage — week-cell colors', () => {
+  beforeEach(() => {
+    sessionState.currentLeague = 1;
+    mockedGetLeaderboard.mockReset();
+    vi.mocked(mockAdapter.currentSeasonYear).mockResolvedValue(2023);
+  });
+
+  // frizat: getWeekSx used to hardcode literal rgba() constants (e.g. rgba(22, 163, 74, 0.12) for
+  // "Won") that don't match theme.ts's actual success/error/warning/info hex values at all, and
+  // stayed fixed at the same opacity in both light and dark mode — reported as hard to read.
+  // Deriving the background via alpha(theme.palette.X.main, ...) guarantees it always matches the
+  // theme's own already-mode-tuned color, in both themes.
+  it.each([
+    ['light', 'Won', 'success'] as const,
+    ['dark', 'Won', 'success'] as const,
+    ['light', 'MissingPicks', 'warning'] as const,
+    ['dark', 'MissingPicks', 'warning'] as const,
+    ['light', 'MissingGameResults', 'info'] as const,
+    ['dark', 'MissingGameResults', 'info'] as const,
+    ['light', 'Lost', 'error'] as const,
+    ['dark', 'Lost', 'error'] as const,
+  ])('%s mode: %s cell background is derived from theme.palette.%s.main', async (mode, weekResult, paletteKey) => {
+    mockedGetLeaderboard.mockResolvedValue([
+      createLeaderboardEntry({
+        userId: '123', userName: 'TestUser', rank: '1', total: 5,
+        weekResults: [createLeaderboardWeekResult({ week: 1, score: 25, weekResult })],
+      }),
+    ]);
+
+    renderPage(mode);
+    const cell = (await screen.findByText('25')).closest('td');
+    const theme = createAppTheme(mode);
+    const expected = alpha(theme.palette[paletteKey].main, 0.16);
+    expect(cell).toHaveStyle({ backgroundColor: expected });
   });
 });
