@@ -19,6 +19,7 @@ import { useAuth } from '../services/auth';
 import { getLeaderboard } from '../api/leaderboard';
 import type { LeaderboardDto } from '../types/leaderboard';
 import type { SportAdapter } from '../services/sportAdapter';
+import { stickyColumnSx } from '../utils/tableStyles';
 
 interface LeaderboardPageProps {
   adapter: SportAdapter;
@@ -121,7 +122,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
                 <TableHead>
                   <TableRow>
                     <TableCell>Rank</TableCell>
-                    <TableCell>User</TableCell>
+                    <TableCell sx={stickyColumnSx}>User</TableCell>
                     <TableCell>Total</TableCell>
                     {Array.from({ length: maxWeek }).map((_, idx) => (
                       <TableCell key={idx}>{`W${maxWeek - idx}`}</TableCell>
@@ -132,7 +133,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
                   {leaderboard.map((row) => (
                     <TableRow key={row.userId} sx={rowClass(row)}>
                       <TableCell>{row.rank}</TableCell>
-                      <TableCell>{row.userName}</TableCell>
+                      <TableCell sx={stickyColumnSx}>{row.userName}</TableCell>
                       <TableCell sx={{ color: getTotalColor(row.total), fontWeight: 'bold' }}>
                         {row.total}
                       </TableCell>

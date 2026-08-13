@@ -12,7 +12,7 @@ test.describe('Admin pages (administrator role)', () => {
     await adminAuth(page, '/admin/jobManagement');
     await waitForSpinner(page);
 
-    await expect(page.getByRole('heading', { name: /administrator user management/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: /^job manager$/i })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('NflScoresJob')).toBeVisible({ timeout: 5000 });
   });
 
