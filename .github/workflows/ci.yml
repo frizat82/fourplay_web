@@ -16,6 +16,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Backend/frontend jobs below run `dotnet build`/`npm run build` directly from the repo root,
+  # which never exercises the Dockerfile's own COPY/build-context rules -- so a change that's
+  # only wrong from the Docker build's point of view (e.g. a file referenced by a project file
+  # that the Dockerfile never copies into its build context) passes every other check here and
+  # only fails once Railway actually builds and deploys it. Confirmed the hard way: PR #196 added
+  # an EmbeddedResource the Dockerfile didn't COPY, passed this whole workflow, then failed on
+  # Railway. This job runs the exact same `docker build` Railway does, so that class of failure
+  # shows up as a normal PR check instead of a live deploy failure.
+  docker-build:
+    name: Docker build (Railway parity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f Dockerfile .
+
   backend:
     name: Backend build & test
     runs-on: ubuntu-latest

@@ -184,6 +184,7 @@ The login endpoint is rate-limited to 5 requests/minute per IP (`Program.cs`). E
 - `useMediaQuery(theme.breakpoints.down('md'))` returns `false` on first render — always pass `{ noSsr: true }` for drawer open/close logic
 - MUI Select `toHaveValue` doesn't work in Vitest/JSDOM — check visible text content instead
 - All data tables need `<Box sx={{ overflowX: 'auto' }}>` wrapper for mobile scroll
+- **Run `/style-guide` before touching any color, button variant, or status indicator (dot, chip, badge).** Color semantics, MUI disabled-state gotchas, and the recurring light/dark contrast bug live there — don't re-derive or re-litigate them per component.
 
 ### Chrome DevTools MCP
 `mcp__plugin_chrome-devtools-mcp_chrome-devtools__*` tools. Browser emulates iPhone (390×844) by default. Use `list_network_requests` to diagnose API failures before reading code.

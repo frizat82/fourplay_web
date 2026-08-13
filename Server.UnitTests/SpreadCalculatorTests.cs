@@ -313,5 +313,35 @@ namespace FourPlayWebApp.Server.UnitTests
             Assert.True(dalWin);
             Assert.False(dalLoss);
         }
+
+        // frizat: NflSpreads.DateCreated existed on the entity but was never threaded through to
+        // the frontend ("Line posted" only showed on CFB, never NFL) — GetDateCreated is the
+        // missing piece GetSpreadBatch now calls.
+        [Fact]
+        public void GetDateCreated_ReturnsSpreadRowDateCreated_ForHomeOrAwayTeam()
+        {
+            var postedAt = new DateTimeOffset(2026, 1, 2, 12, 0, 0, TimeSpan.Zero);
+            var spreads = new List<NflSpreads>
+            {
+                new NflSpreads {
+                    HomeTeam = "DAL", AwayTeam = "NYG",
+                    HomeTeamSpread = -7.0, AwayTeamSpread = 7.0,
+                    DateCreated = postedAt,
+                },
+            };
+            var calculator = new SpreadCalculator(spreads, new LeagueJuiceMapping { Juice = 0 }, 5);
+
+            Assert.Equal(postedAt, calculator.GetDateCreated("DAL"));
+            Assert.Equal(postedAt, calculator.GetDateCreated("NYG"));
+        }
+
+        [Fact]
+        public void GetDateCreated_ReturnsNull_ForUnknownTeam()
+        {
+            var spreads = CreateMockSpreads();
+            var calculator = new SpreadCalculator(spreads, new LeagueJuiceMapping { Juice = 0 }, 5);
+
+            Assert.Null(calculator.GetDateCreated("KC"));
+        }
     }
 }

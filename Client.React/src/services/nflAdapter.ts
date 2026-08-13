@@ -1,5 +1,5 @@
 import { loadScoresWithRetry, getWeekScores, getLiveGames } from '../api/espn';
-import { getUserPicks, doOddsExist, spreadBatch, addPicks, getLeaguePicks } from '../api/league';
+import { getUserPicks, doOddsExist, spreadBatch, addPicks, getLeaguePicks, getNflCurrentWeek } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import type { Competition, Event } from '../types/espn';
 import type { NflPickDto, PickType, SpreadResponse } from '../types/picks';
@@ -53,6 +53,7 @@ function competitionToGameView(
     homeLogo: getTeamLogo(homeAbbr),
     awayLogo: getTeamLogo(awayAbbr),
     situation: situationMap?.get(key) ?? null,
+    spreadPostedAt: spreadCache[homeAbbr]?.dateCreated ?? spreadCache[awayAbbr]?.dateCreated ?? null,
   };
 }
 
@@ -105,6 +106,20 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
 }
 
 export function createNflAdapter(): SportAdapter {
+  // undefined = not yet fetched; null = backend couldn't resolve one (e.g. no season configs seeded)
+  let cachedCurrentWeek: Awaited<ReturnType<typeof getNflCurrentWeek>> | null | undefined = undefined;
+
+  // NflCurrentWeekService (backing this) already has a real off-season/pre-season fallback (most
+  // recent completed week, or upcoming Week 1) — mirrors cfbAdapter.ts's getCurrentSlate(). Used
+  // as the fallback when ESPN's live "current" scoreboard has nothing in progress, instead of
+  // `new Date().getFullYear()` — today's real calendar year, not a season with any actual data.
+  async function getCurrentWeek() {
+    if (cachedCurrentWeek === undefined) {
+      cachedCurrentWeek = await getNflCurrentWeek().catch(() => null);
+    }
+    return cachedCurrentWeek;
+  }
+
   return {
     sport: 'nfl',
     pollIntervalMs: 300_000,
@@ -132,7 +147,9 @@ export function createNflAdapter(): SportAdapter {
 
     async currentSeasonYear() {
       const data = await loadScoresWithRetry();
-      return data?.season?.year ?? new Date().getFullYear();
+      if (data?.season?.year) return data.season.year;
+      const current = await getCurrentWeek();
+      return current?.season ?? new Date().getFullYear();
     },
 
     // ─── Picks ──────────────────────────────────────────────────────────────
@@ -140,7 +157,9 @@ export function createNflAdapter(): SportAdapter {
     async loadCurrentGames(leagueId, userId) {
       const data = await loadScoresWithRetry();
       if (!data?.season || !data.week) {
-        return { season: new Date().getFullYear(), week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 4, maxWeek: 1, maxSeason: new Date().getFullYear() };
+        const current = await getCurrentWeek();
+        const season = current?.season ?? new Date().getFullYear();
+        return { season, week: current?.espnWeek ?? 1, isPostSeason: current?.isPostSeason ?? false, games: [], userPicks: [], hasOdds: false, requiredPicks: 4, maxWeek: 1, maxSeason: season };
       }
       const postSeason = isPostSeasonHelper(data);
       const weekNum = data.week.number;
@@ -182,7 +201,9 @@ export function createNflAdapter(): SportAdapter {
     async loadCurrentScores(leagueId, userId) {
       const data = await loadScoresWithRetry();
       if (!data?.season || !data.week) {
-        return { season: new Date().getFullYear(), week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 4, maxWeek: 1, maxSeason: new Date().getFullYear() };
+        const current = await getCurrentWeek();
+        const season = current?.season ?? new Date().getFullYear();
+        return { season, week: current?.espnWeek ?? 1, isPostSeason: current?.isPostSeason ?? false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 4, maxWeek: 1, maxSeason: season };
       }
       const postSeason = isPostSeasonHelper(data);
       const weekNum = data.week.number;

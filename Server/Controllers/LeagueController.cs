@@ -35,6 +35,28 @@ public class LeagueController(
     ISpreadCalculatorBuilder spreadCalculatorBuilder,
     IEspnCacheService espnCacheService,
     IInvitationService invitationService) : ControllerBase {
+    // Mirrors CfbPicksController.GetCurrentSlate's role for CFB — exposes NflCurrentWeekService's
+    // existing off-season/pre-season fallback (already used internally by NflSpreadJob and
+    // EspnCacheService) to the frontend, so nflAdapter.ts no longer falls back to
+    // `new Date().getFullYear()` whenever ESPN's live "current" scoreboard has nothing in progress.
+    [HttpGet("current-week")]
+    public async Task<IActionResult> GetCurrentWeek([FromServices] INflCurrentWeekService svc) =>
+        Ok(await svc.GetCurrentWeekAsync());
+
+    // Rules page: the full current season's spread-lock schedule, every week — resolves "current
+    // season" the same way GetCurrentWeek does, so the frontend doesn't need a separate round-trip
+    // just to learn which season to ask for.
+    [HttpGet("spread-lock-schedule")]
+    public async Task<IActionResult> GetSpreadLockSchedule([FromServices] INflCurrentWeekService currentWeekService) {
+        var current = await currentWeekService.GetCurrentWeekAsync();
+        var configs = await repo.GetNflSeasonWeekConfigsAsync();
+        var schedule = configs
+            .Where(c => c.Season == current.Season)
+            .OrderBy(c => c.WeekId)
+            .Select(c => new SpreadLockWeekDto(c.WeekLabel, c.SpreadLockDatetime));
+        return Ok(schedule);
+    }
+
     // ---------- League Info ----------
     [HttpGet("{leagueId:int}")]
     [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]
@@ -496,6 +518,7 @@ public class LeagueController(
                     Spread = calculator.GetSpread(calc.Team),
                     Over = calculator.GetOverUnder(calc.Team, PickType.Over),
                     Under = calculator.GetOverUnder(calc.Team, PickType.Under),
+                    DateCreated = calculator.GetDateCreated(calc.Team),
                 };
         }
 

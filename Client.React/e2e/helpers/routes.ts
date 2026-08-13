@@ -398,18 +398,6 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
-    // ── CFB week configs ───────────────────────────────────────────────────
-    if (url.includes('/api/cfb/week-configs/') && method === 'GET') {
-      void route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([
-          { espnWeekNumber: 1, ivLeagueWeekNumber: 1, weekType: 'RegularSeason', scoringFormat: 'Spread', inScopeIvLeague: true, weekStartDate: '2025-08-30', weekEndDate: '2025-09-01', notes: null },
-        ]),
-      });
-      return;
-    }
-
     if (url.match(/\/api\/league\/\d+\/users$/) && method === 'GET') {
       void route.fulfill({
         status: 200,

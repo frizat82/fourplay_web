@@ -17,6 +17,7 @@ export interface SpreadResponse {
   spread?: number | null;
   over?: number | null;
   under?: number | null;
+  dateCreated?: string | null;
 }
 
 export interface SpreadCalculationResponse extends SpreadResponse {

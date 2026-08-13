@@ -6,5 +6,6 @@ public interface ISpreadCalculator {
     public bool DoOddsExist();
     double? GetOverUnder(string teamAbbr, PickType pickType);
     double? GetSpread(string teamAbbr);
+    DateTimeOffset? GetDateCreated(string teamAbbr);
     bool DidUserWinPick(string team, int pickTeamScore, int otherTeamScore, PickType pick = PickType.Spread);
 }
