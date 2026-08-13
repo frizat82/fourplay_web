@@ -3,7 +3,7 @@ import { loadCfbScoresWithRetry, getCfbScoresForSlate, getCfbLiveGames } from '.
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins, getCfbRequiredPicks } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
-import { getHomeTeamScore, getAwayTeamScore, toGameStatus } from '../utils/gameHelpers';
+import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } from './sportAdapter';
 import { revealPicksForStartedGames } from './sportAdapter';
 
@@ -50,7 +50,10 @@ function buildGamesFromEspn(
   const espnMap = new Map<string, import('../types/espn').Competition>();
   for (const event of espnData?.events ?? []) {
     for (const comp of event.competitions) {
-      const home = comp.competitors.find(c => c.homeAway === 'home');
+      // isHomeAway handles both string ('home') and numeric (1) forms — our backend re-serializes
+      // the ESPN homeAway enum as a number (see toGameStatus's status.type.name comment above for
+      // the same pattern), so a bare `=== 'home'` string comparison never matches.
+      const home = comp.competitors.find(c => isHomeAway(c.homeAway, 'home'));
       if (home) espnMap.set(home.team.abbreviation, comp);
     }
   }
