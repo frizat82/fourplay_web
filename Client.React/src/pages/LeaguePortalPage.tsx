@@ -51,6 +51,7 @@ import {
 import type { LeagueInfoDto, LeagueJuiceMappingDto, LeagueCostDto, UserSummaryDto } from '../types/admin';
 import type { LeagueUserMappingDto } from '../types/league';
 import { computeLeagueCost } from '../utils/leagueHelpers';
+import { stickyColumnSx } from '../utils/tableStyles';
 
 const CURRENT_SEASON = new Date().getFullYear();
 
@@ -368,7 +369,7 @@ export default function LeaguePortalPage() {
           >
             {leagueOptions.map((l) => (
               <MenuItem key={l.id} value={l.id}>
-                {l.leagueName} {admin && `(${l.leagueType})`}
+                {l.leagueName} {admin && `(${l.leagueType.toUpperCase()})`}
               </MenuItem>
             ))}
           </Select>
@@ -588,7 +589,7 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Name</TableCell>
+                <TableCell sx={stickyColumnSx}>Name</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>Joined</TableCell>
                 <TableCell align="right">Actions</TableCell>
@@ -604,7 +605,7 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
               )}
               {members.map((m) => (
                 <TableRow key={m.id}>
-                  <TableCell>{m.userName ?? m.userId}</TableCell>
+                  <TableCell sx={stickyColumnSx}>{m.userName ?? m.userId}</TableCell>
                   <TableCell>{m.email ?? m.userId}</TableCell>
                   <TableCell>{new Date(m.dateCreated).toLocaleDateString()}</TableCell>
                   <TableCell align="right">
@@ -724,7 +725,7 @@ function InfoTab({ league, isAdmin: admin, onChangeOwner }: { league: LeagueInfo
         </Stack>
         <Stack direction="row" justifyContent="space-between">
           <Typography color="text.secondary">Sport</Typography>
-          <Typography fontWeight={600}>{league.leagueType}</Typography>
+          <Typography fontWeight={600}>{league.leagueType.toUpperCase()}</Typography>
         </Stack>
         <Stack direction="row" justifyContent="space-between">
           <Typography color="text.secondary">Created</Typography>

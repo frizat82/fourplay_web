@@ -22,8 +22,14 @@ export default function OwnerCostSummary() {
   return (
     <Chip
       data-testid="owner-cost-summary"
+      // frizat: this chip renders on the Dashboard hero, which always has a dark navy background
+      // regardless of the app's light/dark theme (see .hero-section in home.css — it isn't
+      // theme-aware). An outlined chip has no fill, so in light mode primary.main (near-black
+      // navy, tuned for text on a light background) was nearly invisible against that fixed-dark
+      // backdrop. A filled chip always paints an opaque colored background with contrastText
+      // (white), so it stays legible everywhere this component is used, in both themes.
       color="primary"
-      variant="outlined"
+      variant="filled"
       label={`$${total} across ${count} league${count !== 1 ? 's' : ''}`}
     />
   );

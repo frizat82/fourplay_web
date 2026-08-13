@@ -130,11 +130,15 @@ export default function AppLayout() {
               onDelete={(e) => setMenuAnchor(e.currentTarget)}
               deleteIcon={<ArrowDropDownIcon />}
               variant="outlined"
-              size="small"
+              // frizat: MUI's small Chip is only 24px tall — well under the 44px minimum touch
+              // target (see CLAUDE.md "Dev Environment"). This chip doubles as the league
+              // switcher button in the header, so bump its height explicitly rather than using
+              // size="small"/"medium" (neither MUI Chip size meets 44px).
               sx={{
                 color: 'inherit',
                 borderColor: 'rgba(255,255,255,0.4)',
                 maxWidth: 140,
+                height: 44,
                 '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
                 '& .MuiChip-deleteIcon': { color: 'inherit', opacity: 0.7 },
                 '& .MuiChip-deleteIcon:hover': { color: 'inherit', opacity: 1 },
@@ -305,6 +309,7 @@ export default function AppLayout() {
                       component={NavLink}
                       to="/admin/jobManagement"
                       sx={adminNavItemSx}
+                      onClick={() => handleNavClick('/admin/jobManagement')}
                     >
                       <ListItemIcon sx={{ minWidth: 36 }}>
                         <WorkIcon sx={{ fontSize: 20 }} />
@@ -315,6 +320,7 @@ export default function AppLayout() {
                       component={NavLink}
                       to="/admin/users"
                       sx={adminNavItemSx}
+                      onClick={() => handleNavClick('/admin/users')}
                     >
                       <ListItemIcon sx={{ minWidth: 36 }}>
                         <PersonIcon sx={{ fontSize: 20 }} />
@@ -325,6 +331,7 @@ export default function AppLayout() {
                       component={NavLink}
                       to="/admin/invitations"
                       sx={adminNavItemSx}
+                      onClick={() => handleNavClick('/admin/invitations')}
                     >
                       <ListItemIcon sx={{ minWidth: 36 }}>
                         <MailIcon sx={{ fontSize: 20 }} />

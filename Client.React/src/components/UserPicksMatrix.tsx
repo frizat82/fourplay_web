@@ -14,6 +14,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import type { NflPickDto, SpreadCalculationResponse } from '../types/picks';
 import TeamHelmet from './sports/TeamHelmet';
+import { stickyColumnSx } from '../utils/tableStyles';
 
 interface UserPicksMatrixProps {
   users: string[];
@@ -100,7 +101,7 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
       <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell>User</TableCell>
+            <TableCell sx={stickyColumnSx}>User</TableCell>
             {Array.from({ length: requiredPicks }).map((_, idx) => (
               <TableCell key={idx}>Pick {idx + 1}</TableCell>
             ))}
@@ -115,7 +116,7 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
             const userPicks = picks.filter((p) => p.userName === user);
             return (
               <TableRow key={user}>
-                <TableCell>
+                <TableCell sx={stickyColumnSx}>
                   <Typography fontWeight={600}>{user}</Typography>
                 </TableCell>
                 {Array.from({ length: requiredPicks }).map((_, idx) => {
