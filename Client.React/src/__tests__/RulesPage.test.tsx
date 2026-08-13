@@ -225,4 +225,18 @@ describe('RulesPage — spread lock section', () => {
     expect(upcoming).toHaveStyle({ fontWeight: 600 });
     expect(past).toHaveStyle({ fontWeight: 400 });
   });
+
+  it('shows a "Next" chip only on the highlighted upcoming week', async () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
+    vi.mocked(getNflSpreadLockSchedule).mockResolvedValue([
+      { weekLabel: 'Past Week', spreadLockDatetime: '2020-01-01T00:00:00Z' },
+      { weekLabel: 'Upcoming Week', spreadLockDatetime: '2099-01-01T00:00:00Z' },
+    ]);
+    renderPage();
+
+    await screen.findByText('Upcoming Week');
+    expect(screen.getByText('Next')).toBeInTheDocument();
+    // Exactly one "Next" chip — not one per row.
+    expect(screen.getAllByText('Next')).toHaveLength(1);
+  });
 });
