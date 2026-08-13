@@ -134,8 +134,11 @@ export default function WeekYearSelector({
           // ~117px wider than "Wild Card"/"Week 1", so the whole select row (centered via
           // justifyContent) visibly shifted left/right depending which week was picked. A fixed
           // width sized for the longest label keeps the row's total width constant regardless of
-          // week, so the centered group never moves.
-          sx={{ width: { xs: 190, sm: 260 } }}
+          // week, so the centered group never moves. Same width at every breakpoint — the row
+          // already wraps onto its own line on narrow screens (flexWrap on the parent Stack), so
+          // there's no need to shrink this and truncate "Conference Championship" with an
+          // ellipsis on mobile; 260px fits with room to spare even at 390px.
+          sx={{ width: 260 }}
         >
           {currentOptions.map((w) => (
             <MenuItem key={w} value={w}>
