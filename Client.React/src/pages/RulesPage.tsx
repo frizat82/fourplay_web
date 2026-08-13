@@ -12,7 +12,9 @@ import {
 } from '@mui/material';
 import { getEspnRequiredPicks, getCfbRequiredPicks } from '../utils/gameHelpers';
 import { useSportContext } from '../services/sport';
-import { getNextSpreadJob } from '../services/spreadRelease';
+import { getNflSpreadLockSchedule } from '../api/league';
+import { getCfbSpreadLockSchedule } from '../api/cfb';
+import type { SpreadLockWeekDto } from '../types/league';
 import { toLocalDisplay } from '../utils/time';
 import PageHeader from '../components/PageHeader';
 
@@ -49,8 +51,11 @@ function RuleRow({
           width: 24,
           height: 24,
           borderRadius: '50%',
+          // frizat: opacity tricks to "soften" the dot kept flipping which mode was unreadable
+          // (faint in light, invisible in dark, or vice versa). A solid dot at full color is
+          // trivially visible against both a light and a dark card background — no mode branch
+          // needed. See COLOR CONVENTIONS in app/theme.ts for the color semantics.
           bgcolor: `${color}.main`,
-          opacity: 0.15,
           flexShrink: 0,
           mt: 0.25,
         }}
@@ -88,10 +93,19 @@ function TeaseFormula() {
 }
 
 function MatchupExample() {
-  const teams = [
-    { name: 'Seattle Seahawks', detail: 'Home favorite', vegas: '−4.5', teased: '+8.5' },
-    { name: 'Chicago Bears', detail: 'Road underdog', vegas: '+4.5', teased: '+17.5' },
-  ];
+  const { isCfb } = useSportContext();
+  const teams = isCfb
+    ? [
+        { name: 'Ohio State Buckeyes', detail: 'Home favorite', vegas: '−4.5', teased: '+8.5' },
+        { name: 'Michigan Wolverines', detail: 'Road underdog', vegas: '+4.5', teased: '+17.5' },
+      ]
+    : [
+        { name: 'Seattle Seahawks', detail: 'Home favorite', vegas: '−4.5', teased: '+8.5' },
+        { name: 'Chicago Bears', detail: 'Road underdog', vegas: '+4.5', teased: '+17.5' },
+      ];
+  const header = isCfb
+    ? 'Week 1 · 2026 · OSU hosts MICH · 13-pt tease example'
+    : 'Week 1 · 2026 · SEA hosts CHI · 13-pt tease example';
 
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 2 }}>
@@ -112,7 +126,7 @@ function MatchupExample() {
           color="text.secondary"
           sx={{ letterSpacing: '0.06em', textTransform: 'uppercase' }}
         >
-          Week 1 · 2026 · SEA hosts CHI · 13-pt tease example
+          {header}
         </Typography>
         <Typography variant="caption" color="text.secondary">
           Vegas → Teased
@@ -157,20 +171,39 @@ function MatchupExample() {
 }
 
 function ScenarioExample() {
-  const rows = [
-    {
-      team: 'Seattle Seahawks',
-      detail: 'Teased line: +8.5 · Lost by 10',
-      score: 17,
-      result: 'Loser' as const,
-    },
-    {
-      team: 'Chicago Bears',
-      detail: 'Teased line: +17.5 · Won outright',
-      score: 27,
-      result: 'Winner' as const,
-    },
-  ];
+  const { isCfb } = useSportContext();
+  const rows = isCfb
+    ? [
+        {
+          team: 'Ohio State Buckeyes',
+          detail: 'Teased line: +8.5 · Lost by 10',
+          score: 17,
+          result: 'Loser' as const,
+        },
+        {
+          team: 'Michigan Wolverines',
+          detail: 'Teased line: +17.5 · Won outright',
+          score: 27,
+          result: 'Winner' as const,
+        },
+      ]
+    : [
+        {
+          team: 'Seattle Seahawks',
+          detail: 'Teased line: +8.5 · Lost by 10',
+          score: 17,
+          result: 'Loser' as const,
+        },
+        {
+          team: 'Chicago Bears',
+          detail: 'Teased line: +17.5 · Won outright',
+          score: 27,
+          result: 'Winner' as const,
+        },
+      ];
+  const header = isCfb
+    ? 'Final: Michigan 27, Ohio State 17  ·  Michigan wins by 10'
+    : 'Final: Bears 27, Seahawks 17  ·  Bears win by 10';
 
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 2 }}>
@@ -184,7 +217,7 @@ function ScenarioExample() {
         }}
       >
         <Typography variant="body2" fontWeight={500}>
-          Final: Bears 27, Seahawks 17 &nbsp;·&nbsp; Bears win by 10
+          {header}
         </Typography>
       </Box>
       {rows.map((row, i) => (
@@ -294,21 +327,64 @@ function formatLockTime(iso: string) {
   });
 }
 
-function SpreadLockInfo({ sport }: { sport: 'NFL' | 'CFB' }) {
-  // undefined = not loaded yet; null = loaded, no upcoming lock; string = ISO timestamp.
-  const [nextLock, setNextLock] = useState<string | null | undefined>(undefined);
+// Sport-scoped — NFL page shows only NFL lock times, CFB page shows only CFB's, never both at
+// once (matches every other sport-agnostic view in this app).
+function SpreadLockSchedule({ isCfb }: { isCfb: boolean }) {
+  // undefined = not loaded yet.
+  const [weeks, setWeeks] = useState<SpreadLockWeekDto[] | undefined>(undefined);
+  // Snapshotted once per mount (lazy initializer) rather than read during render — "upcoming"
+  // only needs to be roughly right for this page, not live-ticking.
+  const [now] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
-    setNextLock(undefined);
-    void getNextSpreadJob(sport).then((result) => {
-      if (!cancelled) setNextLock(result);
+    setWeeks(undefined);
+    const load = isCfb ? getCfbSpreadLockSchedule : getNflSpreadLockSchedule;
+    void load().then((result) => {
+      if (!cancelled) setWeeks(result);
     });
     return () => {
       cancelled = true;
     };
-  }, [sport]);
+  }, [isCfb]);
 
+  if (!weeks || weeks.length === 0) return null;
+
+  // Soonest week whose spread hasn't locked yet — the one to highlight as "upcoming."
+  const upcomingIndex = weeks.findIndex((w) => new Date(w.spreadLockDatetime).getTime() > now);
+
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', mt: 1.5, maxHeight: 320, overflowY: 'auto' }}>
+      {weeks.map((w, i) => (
+        <Box
+          key={w.weekLabel}
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 2,
+            px: 2,
+            py: 1,
+            bgcolor: i === upcomingIndex ? 'action.selected' : 'transparent',
+            '&:not(:last-child)': { borderBottom: '1px solid', borderColor: 'divider' },
+          }}
+        >
+          <Typography variant="body2" fontWeight={i === upcomingIndex ? 600 : 400}>
+            {w.weekLabel}
+          </Typography>
+          <Typography
+            variant="body2"
+            color={i === upcomingIndex ? 'text.primary' : 'text.secondary'}
+            fontWeight={i === upcomingIndex ? 600 : 400}
+          >
+            {formatLockTime(w.spreadLockDatetime)}
+          </Typography>
+        </Box>
+      ))}
+    </Paper>
+  );
+}
+
+function SpreadLockInfo({ isCfb }: { isCfb: boolean }) {
   return (
     <Box>
       <SectionLabel>When spreads lock</SectionLabel>
@@ -316,12 +392,6 @@ function SpreadLockInfo({ sport }: { sport: 'NFL' | 'CFB' }) {
         <RuleRow color="secondary">
           The teased line for each week freezes once, at a set time before that week&apos;s first
           game — it won&apos;t move again after that.
-          {nextLock != null && (
-            <>
-              {' '}
-              Next lock: <strong>{formatLockTime(nextLock)}</strong>.
-            </>
-          )}
         </RuleRow>
         <RuleRow color="info">
           This is different from when your <strong>picks</strong> lock, below. The spread freezes
@@ -329,6 +399,7 @@ function SpreadLockInfo({ sport }: { sport: 'NFL' | 'CFB' }) {
           game kicks off.
         </RuleRow>
       </Paper>
+      <SpreadLockSchedule isCfb={isCfb} />
     </Box>
   );
 }
@@ -354,7 +425,9 @@ export function RulesContent() {
         <MatchupExample />
         <InfoCallout>
           You can pick <strong>both sides</strong> of the same game. Expect a close game? Take
-          Seattle +8.5 and Chicago +17.5 — that&apos;s two of your four picks from one matchup.
+          {isCfb
+            ? ' Ohio State +8.5 and Michigan +17.5 — that’s two of your four picks from one matchup.'
+            : ' Seattle +8.5 and Chicago +17.5 — that’s two of your four picks from one matchup.'}
         </InfoCallout>
       </Box>
 
@@ -365,8 +438,9 @@ export function RulesContent() {
         <SectionLabel>Live example — final score</SectionLabel>
         <ScenarioExample />
         <InfoCallout>
-          Seattle lost by 10 — not enough to cover their teased line of +8.5. Chicago won the game
-          outright by 10, easily covering their teased line of +17.5.
+          {isCfb
+            ? 'Ohio State lost by 10 — not enough to cover their teased line of +8.5. Michigan won the game outright by 10, easily covering their teased line of +17.5.'
+            : 'Seattle lost by 10 — not enough to cover their teased line of +8.5. Chicago won the game outright by 10, easily covering their teased line of +17.5.'}
         </InfoCallout>
       </Box>
 
@@ -417,7 +491,7 @@ export function RulesContent() {
       <Divider />
 
       {/* When Spreads Lock */}
-      <SpreadLockInfo sport={isCfb ? 'CFB' : 'NFL'} />
+      <SpreadLockInfo isCfb={isCfb} />
 
       <Divider />
 

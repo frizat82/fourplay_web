@@ -2,15 +2,22 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { useSportContext } from '../services/sport';
-import { getNextSpreadJob } from '../services/spreadRelease';
+import { getNflSpreadLockSchedule } from '../api/league';
+import { getCfbSpreadLockSchedule } from '../api/cfb';
 import RulesPage from '../pages/RulesPage';
 
 vi.mock('../services/sport', () => ({
   useSportContext: vi.fn(() => ({ sport: 'NFL', isCfb: false, isNfl: true })),
 }));
 
-vi.mock('../services/spreadRelease', () => ({
-  getNextSpreadJob: vi.fn().mockResolvedValue(null),
+vi.mock('../api/league', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/league')>()),
+  getNflSpreadLockSchedule: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('../api/cfb', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/cfb')>()),
+  getCfbSpreadLockSchedule: vi.fn().mockResolvedValue([]),
 }));
 
 function renderPage() {
@@ -153,50 +160,69 @@ describe('RulesPage — CFB playoff grid', () => {
 
 describe('RulesPage — spread lock section', () => {
   beforeEach(() => {
-    vi.mocked(getNextSpreadJob).mockReset();
+    vi.mocked(getNflSpreadLockSchedule).mockReset().mockResolvedValue([]);
+    vi.mocked(getCfbSpreadLockSchedule).mockReset().mockResolvedValue([]);
   });
 
   it('shows the "When spreads lock" section', () => {
     vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
-    vi.mocked(getNextSpreadJob).mockResolvedValue(null);
     renderPage();
     expect(screen.getByText(/when spreads lock/i)).toBeInTheDocument();
   });
 
   it('explains the distinction between spread lock and pick lock', () => {
     vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
-    vi.mocked(getNextSpreadJob).mockResolvedValue(null);
     renderPage();
     expect(screen.getByText(/freezes once for the whole week/i)).toBeInTheDocument();
   });
 
-  it('calls getNextSpreadJob with NFL for the NFL site', () => {
+  it('fetches the NFL schedule, not CFB, on the NFL site', () => {
     vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
-    vi.mocked(getNextSpreadJob).mockResolvedValue(null);
     renderPage();
-    expect(getNextSpreadJob).toHaveBeenCalledWith('NFL');
+    expect(getNflSpreadLockSchedule).toHaveBeenCalled();
+    expect(getCfbSpreadLockSchedule).not.toHaveBeenCalled();
   });
 
-  it('calls getNextSpreadJob with CFB for the CFB site', () => {
+  it('fetches the CFB schedule, not NFL, on the CFB site', () => {
     vi.mocked(useSportContext).mockReturnValue({ sport: 'CFB', isCfb: true, isNfl: false });
-    vi.mocked(getNextSpreadJob).mockResolvedValue(null);
     renderPage();
-    expect(getNextSpreadJob).toHaveBeenCalledWith('CFB');
+    expect(getCfbSpreadLockSchedule).toHaveBeenCalled();
+    expect(getNflSpreadLockSchedule).not.toHaveBeenCalled();
   });
 
-  it('shows the next lock time once loaded', async () => {
+  it('shows every week with its lock time once loaded', async () => {
     vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
-    vi.mocked(getNextSpreadJob).mockResolvedValue('2026-09-09T14:20:00Z');
+    vi.mocked(getNflSpreadLockSchedule).mockResolvedValue([
+      { weekLabel: 'Week 1', spreadLockDatetime: '2026-09-02T14:20:00Z' },
+      { weekLabel: 'Week 2', spreadLockDatetime: '2026-09-09T14:20:00Z' },
+    ]);
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText(/next lock:/i)).toBeInTheDocument();
+      expect(screen.getByText('Week 1')).toBeInTheDocument();
+      expect(screen.getByText('Week 2')).toBeInTheDocument();
     });
   });
 
-  it('does not show "Next lock" text before the fetch resolves', () => {
+  it('does not render the schedule section before the fetch resolves', () => {
     vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
-    vi.mocked(getNextSpreadJob).mockReturnValue(new Promise(() => {})); // never resolves
+    vi.mocked(getNflSpreadLockSchedule).mockReturnValue(new Promise(() => {})); // never resolves
     renderPage();
-    expect(screen.queryByText(/next lock:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Week 1')).not.toBeInTheDocument();
+  });
+
+  it('highlights the soonest week that has not locked yet', async () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
+    vi.mocked(getNflSpreadLockSchedule).mockResolvedValue([
+      { weekLabel: 'Past Week', spreadLockDatetime: '2020-01-01T00:00:00Z' },
+      { weekLabel: 'Upcoming Week', spreadLockDatetime: '2099-01-01T00:00:00Z' },
+    ]);
+    renderPage();
+
+    const upcoming = await screen.findByText('Upcoming Week');
+    const past = screen.getByText('Past Week');
+    // MUI applies fontWeight via inline style on the Typography — 600 for the highlighted row,
+    // 400 for every other row.
+    expect(upcoming).toHaveStyle({ fontWeight: 600 });
+    expect(past).toHaveStyle({ fontWeight: 400 });
   });
 });

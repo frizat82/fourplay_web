@@ -1,4 +1,4 @@
-import { Box, Button, Container, Dialog, DialogContent, DialogTitle, Grid, IconButton, Paper, Stack, Typography } from '@mui/material';
+import { Box, Button, Chip, Container, Dialog, DialogContent, DialogTitle, Grid, IconButton, Paper, Stack, Typography } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import SportsTennisIcon from '@mui/icons-material/SportsTennis';
@@ -10,6 +10,7 @@ import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import { Link as RouterLink } from 'react-router-dom';
 import { useRef, useState } from 'react';
 import { useAuth } from '../services/auth';
+import { useSportContext } from '../services/sport';
 import { RulesContent } from './RulesPage';
 import DashboardStandings from '../components/DashboardStandings';
 import OwnerCostSummary from '../components/OwnerCostSummary';
@@ -47,6 +48,7 @@ interface HomePageProps {
 
 export default function HomePage({ adapter }: HomePageProps) {
   const { user } = useAuth();
+  const { isCfb } = useSportContext();
   const isAuthed = Boolean(user);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
@@ -79,13 +81,18 @@ export default function HomePage({ adapter }: HomePageProps) {
                 <img src="/Images/retro_logo.png" alt="IV League Logo" className="hero-logo-img" />
               </Box>
               <Box className="hero-text-inner">
+                <Chip
+                  label={isCfb ? 'College Football' : 'NFL'}
+                  color="secondary"
+                  sx={{ fontWeight: 700, fontSize: '1rem', letterSpacing: '0.04em', height: 36, px: 1, mb: 1.5 }}
+                />
                 <Typography variant="h2" className="hero-title">
                   {isAuthed ? 'Welcome Back.' : 'Skip the Draft.\nMake Picks.\nBeat Your Friends.'}
                 </Typography>
                 <Typography variant="h6" className="hero-subtitle">
                   {isAuthed
                     ? 'Your picks are waiting. Check the leaderboard and see where you stand.'
-                    : "IV League is what fantasy football should have been — no draft, no waiver wire, no dead lineups. Pick NFL games against the spread each week and watch the leaderboard."}
+                    : `IV League is what fantasy football should have been — no draft, no waiver wire, no dead lineups. Pick ${isCfb ? 'college football' : 'NFL'} games against the spread each week and watch the leaderboard.`}
                 </Typography>
                 {!isAuthed && (
                   <Stack spacing={1} sx={{ mb: 3 }}>
@@ -229,7 +236,7 @@ export default function HomePage({ adapter }: HomePageProps) {
                     </Box>
                     <Typography variant="h6" fontWeight={700}>2. Pick Against the Spread</Typography>
                     <Typography color="text.secondary">
-                      Each week pick NFL games — not just who wins, but who <em>covers</em>. Chiefs&nbsp;-6.5 means they need to win by 7 or more. Same lines Vegas uses.
+                      Each week pick {isCfb ? 'college football' : 'NFL'} games — not just who wins, but who <em>covers</em>. {isCfb ? 'Ohio State -6.5' : 'Chiefs -6.5'} means they need to win by 7 or more. Same lines Vegas uses.
                     </Typography>
                   </Stack>
                 </Grid>

@@ -1,5 +1,17 @@
 import { createTheme } from '@mui/material/styles';
 
+// COLOR CONVENTIONS — read this before reaching for a new color or opacity trick on a status
+// indicator (dot, chip, button). Every semantic color below is tuned to already be legible in
+// BOTH light and dark mode at full opacity — don't add per-component opacity/mode branches to
+// "soften" or "fix" one of these; that's what caused the same colors to keep getting reported as
+// unreadable in one mode after being fixed in the other. If a color still reads poorly somewhere,
+// fix it here (one definition, both modes covered) rather than patching the call site.
+//   success  — picked/positive/winning (green)
+//   info     — available/neutral action, e.g. an unpicked-but-pickable option (blue)
+//   error    — negative/losing (red)
+//   warning  — caution/attention, NOT used for pick-state buttons (amber reads poorly as a small
+//              button fill in both modes) — fine for one-off accents like a single rule callout
+//   secondary — brand accent (orange), CTAs
 export function createAppTheme(mode: 'light' | 'dark') {
   const isDark = mode === 'dark';
   return createTheme({
@@ -24,12 +36,16 @@ export function createAppTheme(mode: 'light' | 'dark') {
       light: '#60a5fa',
     },
     success: {
-      main: '#10b981', // Emerald green for positive actions
+      // Emerald-500 pops against the dark navy background; on white it's too pale to read
+      // comfortably as text/border, so light mode uses the darker emerald-700 instead.
+      main: isDark ? '#10b981' : '#047857',
       light: '#34d399',
       contrastText: '#FFFFFF',
     },
     warning: {
-      main: '#f59e0b', // Amber for caution
+      // Same story as success — amber-500 reads fine on dark navy but has poor contrast as
+      // text/border on a white background, so light mode uses the darker amber-700.
+      main: isDark ? '#f59e0b' : '#b45309',
       light: '#fbbf24',
     },
     error: {

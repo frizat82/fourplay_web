@@ -71,3 +71,23 @@ export interface NflWeekDto {
   endDate: string;
   dateCreated: string;
 }
+
+// GET /api/league/current-week — mirrors CfbSlateDto's role for NFL: the season/week to treat
+// as "current," resolved server-side with a real off-season/pre-season fallback (NflCurrentWeekService).
+export interface NflCurrentWeekDto {
+  weekId: number;
+  espnWeek: number;
+  season: number;
+  isPostSeason: boolean;
+  weekLabel: string;
+  scoringFormat: string;
+  spreadLockDatetime: string;
+}
+
+// GET /api/league/spread-lock-schedule (NFL) / /api/cfb/spread-lock-schedule (CFB) — Rules page:
+// the full current season's spread-lock schedule, one row per in-scope week, shared shape for
+// both sports.
+export interface SpreadLockWeekDto {
+  weekLabel: string;
+  spreadLockDatetime: string;
+}
