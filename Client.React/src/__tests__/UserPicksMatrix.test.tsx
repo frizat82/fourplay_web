@@ -36,27 +36,29 @@ describe('UserPicksMatrix — dark mode cell coloring', () => {
   });
 });
 
-describe('UserPicksMatrix — spread vs Over/Under picks', () => {
-  // frizat: a user can have both a spread pick and a separate Over/Under pick in the same
-  // postseason week (O/U isn't counted toward requiredPicks). The column count must always equal
-  // requiredPicks — a dedicated "O/U" column broke that for every other week. Both picks render
-  // as separate badges inside the same required-pick cell instead.
+describe('UserPicksMatrix — Over/Under is an alternate pick type, not an additional pick', () => {
+  // frizat: AddPicks' server-side validation caps total picks (any type) at requiredPicks — a
+  // real user's Over/Under pick REPLACES one of their spread picks, it never adds a pick beyond
+  // requiredPicks. One badge per required-pick column; column count always equals requiredPicks.
   const mixedPicks: NflPickDto[] = [
-    { id: 1, userId: 'u1', userName: 'bob', team: 'NE', pick: 'Spread', season: 2025, nflWeek: 22, leagueId: 1, dateCreated: '' },
-    { id: 2, userId: 'u1', userName: 'bob', team: 'NE', pick: 'Over', season: 2025, nflWeek: 22, leagueId: 1, dateCreated: '' },
+    { id: 1, userId: 'u1', userName: 'bob', team: 'NE', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
+    { id: 2, userId: 'u1', userName: 'bob', team: 'KC', pick: 'Spread', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
+    { id: 3, userId: 'u1', userName: 'bob', team: 'BUF', pick: 'Spread', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
   ];
 
-  it('shows both the spread pick and the Over/Under pick as two badges in the same cell, not a new column', () => {
+  it('renders exactly one badge per required-pick column, regardless of pick type', () => {
     render(
       <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={1} />
+        <UserPicksMatrix users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={3} />
       </ThemeProvider>,
     );
-    expect(screen.getAllByRole('columnheader')).toHaveLength(2); // User + Pick 1, no extra column
-    expect(screen.getAllByTestId('helmet-NE')).toHaveLength(2);
+    expect(screen.getAllByRole('columnheader')).toHaveLength(4); // User + Pick 1-3
+    expect(screen.getAllByTestId('helmet-NE')).toHaveLength(1);
+    expect(screen.getAllByTestId('helmet-KC')).toHaveLength(1);
+    expect(screen.getAllByTestId('helmet-BUF')).toHaveLength(1);
   });
 
-  it('column count always equals requiredPicks regardless of Over/Under picks', () => {
+  it('column count always equals requiredPicks', () => {
     render(
       <ThemeProvider theme={createTheme()}>
         <UserPicksMatrix users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={4} />

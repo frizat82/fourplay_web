@@ -729,9 +729,23 @@ public class DemoDataSeeder(
             var patternKey = pickPatterns.ContainsKey(name) ? name : "Alice";
             if (!pickPatterns.TryGetValue(patternKey, out var pattern)) continue;
 
-            // Only seed as many picks as the pattern specifies — pattern.Length = required picks for this round
+            // Only seed as many picks as the pattern specifies — pattern.Length = required picks
+            // for this round. frizat: Over/Under is an alternate pick TYPE, not an additional
+            // pick beyond the week's required count — AddPicks' server-side validation caps total
+            // picks (any type) at GetRequiredPicks(week), so a real user could never submit
+            // pattern.Length spread picks PLUS a separate O/U pick (confirmed via direct DB
+            // query: Bob had 4 rows for NflWeek 19, a 3-required-pick week). Bob/Dana's O/U pick
+            // now replaces their game-0 spread pick instead of adding to it.
             for (int i = 0; i < Math.Min(pattern.Length, games.Length); i++)
             {
+                if (i == 0 && name == "Bob") {
+                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Over, NflWeek = week, Season = DemoSeason, NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow });
+                    continue;
+                }
+                if (i == 0 && name == "Dana") {
+                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Under, NflWeek = week, Season = DemoSeason, NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow });
+                    continue;
+                }
                 var team = pattern[i] ? games[i].Home : games[i].Away;
                 db.NflPicks.Add(new NflPicks
                 {
@@ -739,11 +753,6 @@ public class DemoDataSeeder(
                     Pick = PickType.Spread, NflWeek = week, Season = DemoSeason,
                     NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow,
                 });
-                // Add Over/Under picks for Bob and Dana so the O/U row is testable in-progress games
-                if (name == "Bob" && i == 0)
-                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Over, NflWeek = week, Season = DemoSeason, NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow });
-                if (name == "Dana" && i == 0)
-                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Under, NflWeek = week, Season = DemoSeason, NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow });
             }
         }
         await db.SaveChangesAsync();
@@ -1210,13 +1219,17 @@ public class DemoDataSeeder(
     private async Task SeedCfbPicksAsync(LeagueInfo? league, List<CfbSlates> slates)
     {
         if (league == null) return;
-        // 6 users × 65 picks each, except admin (frizat) who has no slate-18 spread pick — see
+        // 6 users × 65 picks each, except admin (frizat) who has no slate-18 pick — see
         // CfbFinalPicks comment (replay E2E needs that slot free):
         // Slates 1-7: 7×4=28, Slate 8: 4, Slates 9-13: 5×4=20, Slate 14 (Conf.Champs): 4
         // Slate 15 (FR): 3, Slate 16 (QF): 3, Slate 17 (SF): 2, Slate 18 (Champ): 1
         // Total per user: 28+4+20+4+3+3+2+1 = 65 → 5×65 + 64 (frizat, no slate-18 pick) = 389
-        // + Bob Over + Dana Under in each postseason slate (14-18) = 10 O/U picks
-        const int ExpectedPickCount = 399; // 389 spread + 10 O/U across all 5 postseason slates
+        // frizat: Over/Under is an alternate pick TYPE for Bob/Dana's first pick in each
+        // postseason slate (14-18), not an additional pick — CfbPicksController's server-side
+        // validation caps total picks (any type) at GetCfbRequiredPicks(slateNumber), so the
+        // count above already accounts for it; O/U doesn't add to the total, just recolors 5 of
+        // Bob's and 5 of Dana's picks from Spread to Over/Under.
+        const int ExpectedPickCount = 389;
         if (await db.CfbPicks.CountAsync(p => p.LeagueId == league.Id) >= ExpectedPickCount) return;
         // Clear any partial seed before re-seeding
         db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => p.LeagueId == league.Id));
@@ -1227,11 +1240,24 @@ public class DemoDataSeeder(
         void AddPick(int leagueId, string userId, int slateId, int eventId, string team) =>
             picks.Add(new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, EspnEventId = eventId, Team = team, PickType = "Spread", Season = CfbDemoSeason });
 
-        void AddOverUnder(string uName, string userId, int slateId, int eventId, string homeTeam) {
-            if (uName == "Bob")
+        // frizat: Over/Under is an alternate PICK TYPE for a game, not an additional pick beyond
+        // the slate's required count — CfbPicksController's server-side validation enforces total
+        // picks (any type) <= GetCfbRequiredPicks(slateNumber), so a real user can never submit
+        // more picks than required. This used to call AddPick for every game INCLUDING game 0,
+        // then separately add an O/U pick for Bob/Dana on that same game — giving them
+        // requiredPicks+1 total picks, which no real submission could ever produce (confirmed via
+        // direct DB query: Bob had 4 rows for a 3-required-pick week). Bob/Dana's O/U pick now
+        // replaces their game-0 spread pick instead of adding to it.
+        void AddFirstPickOrOverUnder(string uName, string userId, int slateId, int eventId, string homeTeam, string pickedTeam) {
+            if (uName == "Bob") {
                 picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, EspnEventId = eventId, Team = homeTeam, PickType = "Over", Season = CfbDemoSeason });
-            if (uName == "Dana")
+                return;
+            }
+            if (uName == "Dana") {
                 picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, EspnEventId = eventId, Team = homeTeam, PickType = "Under", Season = CfbDemoSeason });
+                return;
+            }
+            AddPick(league.Id, userId, slateId, eventId, pickedTeam);
         }
 
         var seedUsernames = DemoUsers.Select(d => d.Username).Append("frizat");
@@ -1277,48 +1303,57 @@ public class DemoDataSeeder(
                 }
             }
 
-            // Slate 14: Conference Championships — 4 picks + O/U for Bob/Dana
+            // Slate 14: Conference Championships — 4 picks total (Bob/Dana's first pick is O/U instead of spread)
             if (CfbConfChampPicks.TryGetValue(username, out var confPattern) && slates.FirstOrDefault(s => s.SlateNumber == 14) is { } slate14Champ)
             {
-                for (int i = 0; i < Math.Min(confPattern.Length, Slate15Games.Length); i++)
-                    AddPick(league.Id, user.Id, slate14Champ.Id, Slate15Games[i].EventId, confPattern[i] ? Slate15Games[i].Home : Slate15Games[i].Away);
-                AddOverUnder(username, user.Id, slate14Champ.Id, Slate15Games[0].EventId, Slate15Games[0].Home);
+                for (int i = 0; i < Math.Min(confPattern.Length, Slate15Games.Length); i++) {
+                    var team = confPattern[i] ? Slate15Games[i].Home : Slate15Games[i].Away;
+                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slate14Champ.Id, Slate15Games[0].EventId, Slate15Games[0].Home, team);
+                    else AddPick(league.Id, user.Id, slate14Champ.Id, Slate15Games[i].EventId, team);
+                }
             }
 
-            // CFP First Round (slate 15): 3 picks + O/U for Bob/Dana
+            // CFP First Round (slate 15): 3 picks total (Bob/Dana's first pick is O/U instead of spread)
             if (CfbFirstRoundPicks.TryGetValue(username, out var fr15Pattern) && slates.FirstOrDefault(s => s.SlateNumber == 15) is { } slate15)
             {
                 var fr15Games = CfpGames.Where(g => g.SlateIdx == 15).ToArray();
-                for (int i = 0; i < Math.Min(fr15Pattern.Length, fr15Games.Length); i++)
-                    AddPick(league.Id, user.Id, slate15.Id, fr15Games[i].EventId, fr15Pattern[i] ? fr15Games[i].Home : fr15Games[i].Away);
-                AddOverUnder(username, user.Id, slate15.Id, fr15Games[0].EventId, fr15Games[0].Home);
+                for (int i = 0; i < Math.Min(fr15Pattern.Length, fr15Games.Length); i++) {
+                    var team = fr15Pattern[i] ? fr15Games[i].Home : fr15Games[i].Away;
+                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slate15.Id, fr15Games[0].EventId, fr15Games[0].Home, team);
+                    else AddPick(league.Id, user.Id, slate15.Id, fr15Games[i].EventId, team);
+                }
             }
 
-            // CFP Quarterfinals (slate 16): 3 picks + O/U for Bob/Dana
+            // CFP Quarterfinals (slate 16): 3 picks total (Bob/Dana's first pick is O/U instead of spread)
             if (CfbQfPicks.TryGetValue(username, out var qf) && slates.FirstOrDefault(s => s.SlateNumber == 16) is { } slateQf)
             {
                 var qfGames = CfpGames.Where(g => g.SlateIdx == 16).ToArray();
-                for (int i = 0; i < Math.Min(qf.Length, qfGames.Length); i++)
-                    AddPick(league.Id, user.Id, slateQf.Id, qfGames[i].EventId, qf[i] ? qfGames[i].Home : qfGames[i].Away);
-                AddOverUnder(username, user.Id, slateQf.Id, qfGames[0].EventId, qfGames[0].Home);
+                for (int i = 0; i < Math.Min(qf.Length, qfGames.Length); i++) {
+                    var team = qf[i] ? qfGames[i].Home : qfGames[i].Away;
+                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slateQf.Id, qfGames[0].EventId, qfGames[0].Home, team);
+                    else AddPick(league.Id, user.Id, slateQf.Id, qfGames[i].EventId, team);
+                }
             }
 
-            // CFP Semifinals (slate 17): 2 picks + O/U for Bob/Dana
+            // CFP Semifinals (slate 17): 2 picks total (Bob/Dana's first pick is O/U instead of spread)
             if (CfbSfPicks.TryGetValue(username, out var sf) && slates.FirstOrDefault(s => s.SlateNumber == 17) is { } slateSf)
             {
                 var sfGames = CfpGames.Where(g => g.SlateIdx == 17).ToArray();
-                for (int i = 0; i < Math.Min(sf.Length, sfGames.Length); i++)
-                    AddPick(league.Id, user.Id, slateSf.Id, sfGames[i].EventId, sf[i] ? sfGames[i].Home : sfGames[i].Away);
-                AddOverUnder(username, user.Id, slateSf.Id, sfGames[0].EventId, sfGames[0].Home);
+                for (int i = 0; i < Math.Min(sf.Length, sfGames.Length); i++) {
+                    var team = sf[i] ? sfGames[i].Home : sfGames[i].Away;
+                    if (i == 0) AddFirstPickOrOverUnder(username, user.Id, slateSf.Id, sfGames[0].EventId, sfGames[0].Home, team);
+                    else AddPick(league.Id, user.Id, slateSf.Id, sfGames[i].EventId, team);
+                }
             }
 
-            // CFP Championship (slate 18): 1 spread pick + O/U for Bob/Dana (in-progress game)
+            // CFP Championship (slate 18): 1 pick total — Bob/Dana's is O/U instead of spread
             if (slates.FirstOrDefault(s => s.SlateNumber == 18) is { } slateFinal)
             {
                 var finalGame = CfpGames.First(g => g.SlateIdx == 18);
-                if (CfbFinalPicks.TryGetValue(username, out var final))
-                    AddPick(league.Id, user.Id, slateFinal.Id, finalGame.EventId, final ? finalGame.Home : finalGame.Away);
-                AddOverUnder(username, user.Id, slateFinal.Id, finalGame.EventId, finalGame.Home);
+                if (CfbFinalPicks.TryGetValue(username, out var final)) {
+                    var team = final ? finalGame.Home : finalGame.Away;
+                    AddFirstPickOrOverUnder(username, user.Id, slateFinal.Id, finalGame.EventId, finalGame.Home, team);
+                }
             }
         }
 

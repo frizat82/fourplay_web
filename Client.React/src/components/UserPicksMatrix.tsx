@@ -1,5 +1,4 @@
 import {
-  Box,
   Paper,
   Table,
   TableBody,
@@ -109,31 +108,21 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
         </TableHead>
         <TableBody>
           {users.sort().map((user) => {
-            const spreadPicks = picks.filter((p) => p.userName === user && p.pick === 'Spread');
-            // frizat: a user can have both a spread pick AND a separate Over/Under pick for the
-            // same game in a postseason week (O/U isn't counted toward requiredPicks — it's
-            // always a single extra pick tied to that week's one required game). Rather than a
-            // dedicated table column, which breaks "columns == requiredPicks" for every other
-            // week, the O/U pick renders as a second badge alongside the spread pick in that
-            // same required-pick cell.
-            const overUnderPicks = picks.filter((p) => p.userName === user && p.pick !== 'Spread');
+            // frizat: Over/Under is an alternate pick TYPE for one game, not an additional pick —
+            // AddPicks' server-side validation caps total picks (any type) at requiredPicks, so a
+            // real user's picks for this user/week always number exactly requiredPicks regardless
+            // of type mix. One badge per required-pick column, no type filtering needed.
+            const userPicks = picks.filter((p) => p.userName === user);
             return (
               <TableRow key={user}>
                 <TableCell>
                   <Typography fontWeight={600}>{user}</Typography>
                 </TableCell>
                 {Array.from({ length: requiredPicks }).map((_, idx) => {
-                  const cellPicks = [spreadPicks[idx], ...(idx === 0 ? overUnderPicks : [])]
-                    .filter((p): p is NflPickDto => Boolean(p?.team));
+                  const pick = userPicks[idx];
                   return (
                     <TableCell key={idx} align="center">
-                      {cellPicks.length === 0 ? (
-                        <Paper sx={{ height: 76, width: 60, borderRadius: 2 }} />
-                      ) : (
-                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                          {cellPicks.map(renderBadge)}
-                        </Box>
-                      )}
+                      {pick ? renderBadge(pick) : <Paper sx={{ height: 76, width: 60, borderRadius: 2 }} />}
                     </TableCell>
                   );
                 })}
