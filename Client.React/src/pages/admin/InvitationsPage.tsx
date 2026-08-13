@@ -167,7 +167,7 @@ export default function AdminInvitationsPage() {
                 <MenuItem value=""><em>No league</em></MenuItem>
                 {leagues.map((l) => (
                   <MenuItem key={l.id} value={l.id}>
-                    {l.leagueName} ({l.leagueType})
+                    {l.leagueName} ({l.leagueType.toUpperCase()})
                   </MenuItem>
                 ))}
               </Select>
