@@ -361,16 +361,31 @@ function SpreadLockSchedule({ isCfb }: { isCfb: boolean }) {
           sx={{
             display: 'flex',
             justifyContent: 'space-between',
+            alignItems: 'center',
             gap: 2,
             px: 2,
             py: 1,
-            bgcolor: i === upcomingIndex ? 'action.selected' : 'transparent',
+            // frizat: plain `action.selected` (a faint ~8% gray overlay by default) read as no
+            // highlight at all, especially in dark mode — reuse RuleRow's own info-tint formula
+            // above so "next lock" reads with the same visual language as this page's other info
+            // callouts, plus a border to make the row's extent unambiguous at a glance.
+            ...(i === upcomingIndex && {
+              backgroundColor: (t) =>
+                t.palette.mode === 'dark' ? 'rgba(59,130,246,0.14)' : 'rgba(59,130,246,0.08)',
+              borderLeft: '3px solid',
+              borderColor: 'info.main',
+            }),
             '&:not(:last-child)': { borderBottom: '1px solid', borderColor: 'divider' },
           }}
         >
-          <Typography variant="body2" fontWeight={i === upcomingIndex ? 600 : 400}>
-            {w.weekLabel}
-          </Typography>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="body2" fontWeight={i === upcomingIndex ? 600 : 400}>
+              {w.weekLabel}
+            </Typography>
+            {i === upcomingIndex && (
+              <Chip label="Next" size="small" color="info" sx={{ height: 20, fontSize: '0.7rem' }} />
+            )}
+          </Stack>
           <Typography
             variant="body2"
             color={i === upcomingIndex ? 'text.primary' : 'text.secondary'}
