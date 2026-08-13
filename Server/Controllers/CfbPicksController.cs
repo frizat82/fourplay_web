@@ -62,12 +62,13 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         // KNOW are ineligible (a matching CfbSpreads row exists and says so). A completed game
         // with no matching spread row at all (e.g. CfbSpreadJob's one-shot-per-week fetch missed
         // a late schedule change) still shows rather than silently vanishing from the scores page.
-        var ineligibleEventIds = spreadsTask.Result.WhereLeagueIneligible().Select(s => s.EspnEventId).ToHashSet();
-        var scores = scoresTask.Result.Where(s => !ineligibleEventIds.Contains(s.EspnEventId));
+        // Matched by HomeTeam (unique within a slate) rather than an ESPN id — CfbScores.HomeTeam
+        // and CfbSpreads.HomeTeam are populated from the same real-world game by design.
+        var ineligibleHomeTeams = spreadsTask.Result.WhereLeagueIneligible().Select(s => s.HomeTeam).ToHashSet();
+        var scores = scoresTask.Result.Where(s => !ineligibleHomeTeams.Contains(s.HomeTeam));
         var dtos = scores.Select(s => new CfbScoreDto {
             Id                  = s.Id,
             CfbSlateId          = s.CfbSlateId,
-            EspnEventId         = s.EspnEventId,
             HomeTeam            = s.HomeTeam,
             AwayTeam            = s.AwayTeam,
             HomeTeamScore       = s.HomeTeamScore,
@@ -85,8 +86,9 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
 
     // CFB has no live ESPN status feed the way NFL does (see cfbAdapter.ts) — CfbSpreads.GameTime
     // is the source of truth for kickoff time, same as the frontend's own gameIsLocked check.
-    private static HashSet<int> StartedEventIds(IEnumerable<CfbSpreads> spreads, DateTimeOffset now) =>
-        spreads.Where(s => s.GameTime <= now).Select(s => s.EspnEventId).ToHashSet();
+    // Returns both home and away team names for started games — a pick can be on either side.
+    private static HashSet<string> StartedTeams(IEnumerable<CfbSpreads> spreads, DateTimeOffset now) =>
+        spreads.Where(s => s.GameTime <= now).SelectMany(s => new[] { s.HomeTeam, s.AwayTeam }).ToHashSet();
 
     [HttpGet("picks/{leagueId}/{cfbSlateId}")]
     public async Task<IActionResult> GetAllPicks(int leagueId, int cfbSlateId) {
@@ -105,9 +107,9 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         // Hide other users' picks for games that haven't kicked off yet — same rule as NFL's
         // GetLeaguePicks. Admins always see all picks, same as NFL.
         if (!isAdmin) {
-            var startedEventIds = StartedEventIds(spreadsTask.Result, DateTimeOffset.UtcNow);
+            var startedTeams = StartedTeams(spreadsTask.Result, DateTimeOffset.UtcNow);
             allPicks = allPicks
-                .Where(p => p.UserId == callerId || startedEventIds.Contains(p.EspnEventId))
+                .Where(p => p.UserId == callerId || startedTeams.Contains(p.Team))
                 .ToList();
         }
 
@@ -136,33 +138,35 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         if (slate is null)
             return BadRequest("Cfb Slate Does Not Exist");
 
-        // Guard: reject picks for any game that has already kicked off.
-        var startedEventIds = StartedEventIds(spreadsTask.Result, DateTimeOffset.UtcNow);
+        // Guard: reject picks for any game that has already kicked off. Matched by team name
+        // (either side) rather than an ESPN id — a team plays at most one game per slate, so
+        // Team alone unambiguously identifies which CfbSpreads row a pick belongs to.
+        var startedTeams = StartedTeams(spreadsTask.Result, DateTimeOffset.UtcNow);
 
-        // Guard: reject picks for an event we KNOW is excluded from the league (MAC Tue/Wed,
+        // Guard: reject picks for a team we KNOW is excluded from the league (MAC Tue/Wed,
         // unranked, etc. — frizat-9m0). Distinct from "no matching spread at all", which stays
         // fail-open below (e.g. an ESPN cache gap) — this only rejects positive knowledge of
         // ineligibility, not absence of data.
-        var ineligibleEventIds = spreadsTask.Result.WhereLeagueIneligible().Select(s => s.EspnEventId).ToHashSet();
+        var ineligibleTeams = spreadsTask.Result.WhereLeagueIneligible()
+            .SelectMany(s => new[] { s.HomeTeam, s.AwayTeam }).ToHashSet();
 
         foreach (var pick in request.Picks) {
-            if (startedEventIds.Contains(pick.EspnEventId))
+            if (startedTeams.Contains(pick.Team))
                 return BadRequest($"Pick rejected: {pick.Team}'s game has already kicked off.");
-            if (ineligibleEventIds.Contains(pick.EspnEventId))
+            if (ineligibleTeams.Contains(pick.Team))
                 return BadRequest($"Pick rejected: {pick.Team}'s game is not part of this league's slate.");
         }
 
         var existingPicks = existingPicksTask.Result.ToList();
         var existingKeys = existingPicks
-            .Select(p => $"{p.EspnEventId}|{p.Team}|{p.PickType}")
+            .Select(p => $"{p.Team}|{p.PickType}")
             .ToHashSet();
         var newPicks = request.Picks
-            .Where(p => !existingKeys.Contains($"{p.EspnEventId}|{p.Team}|{p.PickType}"))
+            .Where(p => !existingKeys.Contains($"{p.Team}|{p.PickType}"))
             .Select(p => new CfbPicks {
                 UserId      = userId,
                 LeagueId    = request.LeagueId,
                 CfbSlateId  = request.CfbSlateId,
-                EspnEventId = p.EspnEventId,
                 Team        = p.Team,
                 PickType    = p.PickType,
                 Season      = request.Season,
@@ -203,7 +207,6 @@ public record AddCfbPicksRequest {
 }
 
 public record CfbPickItem {
-    public int    EspnEventId { get; init; }
     public string Team        { get; init; } = string.Empty;
     public string PickType    { get; init; } = "Spread";
 }

@@ -7,62 +7,64 @@ using Xunit;
 namespace FourPlayWebApp.Server.UnitTests;
 
 // TDD, written RED first (frizat-pxy follow-on plan, Phase 1): CfbRepository.UpsertAsync must
-// dedupe by EspnEventId (no blind insert -> no duplicate rows on a re-fired spread job) and must
-// preserve the original DateCreated on update, since that's the "line first posted" timestamp
-// shown to users, not a re-fire timestamp.
+// dedupe by (CfbSlateId, HomeTeam) — a natural key mirroring NflSpreadsConfiguration's
+// (Season, NflWeek, HomeTeam), not an ESPN-specific id — (no blind insert -> no duplicate rows on
+// a re-fired spread job) and must preserve the original DateCreated on update, since that's the
+// "line first posted" timestamp shown to users, not a re-fire timestamp.
 public class CfbRepositoryTests
 {
     [Fact]
-    public async Task UpsertAsync_NewEspnEventId_Inserts()
+    public async Task UpsertAsync_NewGame_Inserts()
     {
-        var factory = new DbContextFactoryStub(nameof(UpsertAsync_NewEspnEventId_Inserts));
+        var factory = new DbContextFactoryStub(nameof(UpsertAsync_NewGame_Inserts));
         var repo = new CfbRepository(factory);
 
         await repo.UpsertAsync([
-            new CfbSpreads { CfbSlateId = 1, EspnEventId = 100, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -3.5, AwayTeamSpread = 3.5 },
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -3.5, AwayTeamSpread = 3.5 },
         ]);
 
-        var saved = await factory.CreateDbContext().CfbSpreads.SingleAsync(s => s.EspnEventId == 100);
+        var saved = await factory.CreateDbContext().CfbSpreads.SingleAsync(s => s.CfbSlateId == 1 && s.HomeTeam == "A");
         Assert.Equal("A", saved.HomeTeam);
         Assert.Equal(-3.5, saved.HomeTeamSpread);
     }
 
     [Fact]
-    public async Task UpsertAsync_ExistingEspnEventId_UpdatesInPlace_NoDuplicateRow()
+    public async Task UpsertAsync_ExistingGame_UpdatesInPlace_NoDuplicateRow()
     {
-        var factory = new DbContextFactoryStub(nameof(UpsertAsync_ExistingEspnEventId_UpdatesInPlace_NoDuplicateRow));
+        var factory = new DbContextFactoryStub(nameof(UpsertAsync_ExistingGame_UpdatesInPlace_NoDuplicateRow));
         var repo = new CfbRepository(factory);
 
         await repo.UpsertAsync([
-            new CfbSpreads { CfbSlateId = 1, EspnEventId = 100, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -3.5, AwayTeamSpread = 3.5 },
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -3.5, AwayTeamSpread = 3.5 },
         ]);
 
-        // Re-fire with the same EspnEventId (e.g. a catch-up run re-processing an already-saved week)
+        // Re-fire with the same (CfbSlateId, HomeTeam) (e.g. a catch-up run re-processing an
+        // already-saved week)
         await repo.UpsertAsync([
-            new CfbSpreads { CfbSlateId = 1, EspnEventId = 100, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -4.0, AwayTeamSpread = 4.0 },
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -4.0, AwayTeamSpread = 4.0 },
         ]);
 
-        var all = await factory.CreateDbContext().CfbSpreads.Where(s => s.EspnEventId == 100).ToListAsync();
+        var all = await factory.CreateDbContext().CfbSpreads.Where(s => s.CfbSlateId == 1 && s.HomeTeam == "A").ToListAsync();
         Assert.Single(all);
         Assert.Equal(-4.0, all[0].HomeTeamSpread);
     }
 
     [Fact]
-    public async Task UpsertAsync_ExistingEspnEventId_PreservesOriginalDateCreated()
+    public async Task UpsertAsync_ExistingGame_PreservesOriginalDateCreated()
     {
-        var factory = new DbContextFactoryStub(nameof(UpsertAsync_ExistingEspnEventId_PreservesOriginalDateCreated));
+        var factory = new DbContextFactoryStub(nameof(UpsertAsync_ExistingGame_PreservesOriginalDateCreated));
         var repo = new CfbRepository(factory);
         var originalPostTime = new DateTimeOffset(2026, 9, 1, 9, 0, 0, TimeSpan.Zero);
 
         await repo.UpsertAsync([
-            new CfbSpreads { CfbSlateId = 1, EspnEventId = 100, HomeTeam = "A", AwayTeam = "B", DateCreated = originalPostTime },
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", DateCreated = originalPostTime },
         ]);
 
         await repo.UpsertAsync([
-            new CfbSpreads { CfbSlateId = 1, EspnEventId = 100, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -1, DateCreated = DateTimeOffset.UtcNow },
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -1, DateCreated = DateTimeOffset.UtcNow },
         ]);
 
-        var saved = await factory.CreateDbContext().CfbSpreads.SingleAsync(s => s.EspnEventId == 100);
+        var saved = await factory.CreateDbContext().CfbSpreads.SingleAsync(s => s.CfbSlateId == 1 && s.HomeTeam == "A");
         Assert.Equal(originalPostTime, saved.DateCreated);
     }
 
@@ -77,7 +79,7 @@ public class CfbRepositoryTests
         var seedDb = factory.CreateDbContext();
         var slate = new CfbSlates { Id = 1, Season = 2026, SlateNumber = 3, Label = "Week 3", SlateType = "RegularSeason" };
         seedDb.CfbSlates.Add(slate);
-        seedDb.CfbSpreads.Add(new CfbSpreads { CfbSlateId = 1, EspnEventId = 100, HomeTeam = "A", AwayTeam = "B" });
+        seedDb.CfbSpreads.Add(new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B" });
         await seedDb.SaveChangesAsync();
         var repo = new CfbRepository(factory);
 
@@ -110,7 +112,7 @@ public class CfbRepositoryTests
         var seedDb = factory.CreateDbContext();
         seedDb.CfbSlates.Add(new CfbSlates { Id = 1, Season = 2026, SlateNumber = 3, Label = "Week 3", SlateType = "RegularSeason" });
         seedDb.CfbSlates.Add(new CfbSlates { Id = 2, Season = 2026, SlateNumber = 4, Label = "Week 4", SlateType = "RegularSeason" });
-        seedDb.CfbSpreads.Add(new CfbSpreads { CfbSlateId = 1, EspnEventId = 100, HomeTeam = "A", AwayTeam = "B" });
+        seedDb.CfbSpreads.Add(new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B" });
         await seedDb.SaveChangesAsync();
 
         var repo = new CfbRepository(factory);

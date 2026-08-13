@@ -47,9 +47,11 @@ public class CfbPicksControllerTests
         Id = id, Season = 2025, SlateNumber = slateNumber, Label = "Week 1", SlateType = "RegularSeason",
     };
 
-    private static CfbSpreads MakeSpread(int espnEventId, DateTimeOffset gameTime, string home = "ORE", string away = "OSU", bool isLeagueEligible = true) => new()
+    // frizat: a team plays at most one game per slate, so (CfbSlateId, HomeTeam) — not an ESPN id
+    // — is what uniquely identifies a game, mirroring NflSpreads' (Season, NflWeek, HomeTeam).
+    private static CfbSpreads MakeSpread(DateTimeOffset gameTime, string home = "ORE", string away = "OSU", bool isLeagueEligible = true) => new()
     {
-        CfbSlateId = 1, EspnEventId = espnEventId, HomeTeam = home, AwayTeam = away, GameTime = gameTime,
+        CfbSlateId = 1, HomeTeam = home, AwayTeam = away, GameTime = gameTime,
         IsLeagueEligible = isLeagueEligible,
     };
 
@@ -58,7 +60,7 @@ public class CfbPicksControllerTests
     {
         var picks = new List<CfbPicks>
         {
-            new() { Id = 1, UserId = UserId, LeagueId = 1, CfbSlateId = 1, Team = "ORE", EspnEventId = 401800001 }
+            new() { Id = 1, UserId = UserId, LeagueId = 1, CfbSlateId = 1, Team = "ORE" }
         };
         _repo.GetUserPicksAsync(1, 1, UserId).Returns(picks);
 
@@ -73,13 +75,13 @@ public class CfbPicksControllerTests
     public async Task AddPicks_ValidPicks_ReturnsCount()
     {
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
-        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2))]);
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1,
             CfbSlateId = 1,
             Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", EspnEventId = 401800001, PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
         };
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
         _repo.AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>()).Returns(Task.CompletedTask);
@@ -94,17 +96,17 @@ public class CfbPicksControllerTests
     public async Task AddPicks_DuplicatePick_IsSkipped()
     {
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
-        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2))]);
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
         var existing = new List<CfbPicks>
         {
-            new() { UserId = UserId, LeagueId = 1, CfbSlateId = 1, Team = "ORE", EspnEventId = 401800001 }
+            new() { UserId = UserId, LeagueId = 1, CfbSlateId = 1, Team = "ORE" }
         };
         _repo.GetUserPicksAsync(1, 1, UserId).Returns(existing);
 
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", EspnEventId = 401800001, PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -122,7 +124,7 @@ public class CfbPicksControllerTests
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", EspnEventId = 401800001, PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -137,12 +139,12 @@ public class CfbPicksControllerTests
         // Regression: the required-pick-count cap must fail closed on a bad/stale CfbSlateId, not
         // silently skip enforcement — GetSlateByIdAsync returning null (default NSubstitute stub)
         // must reject the whole request before any picks are inserted.
-        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2))]);
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", EspnEventId = 401800001, PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -157,12 +159,12 @@ public class CfbPicksControllerTests
     public async Task AddPicks_WhenGameKickoffHasPassed_ReturnsBadRequest()
     {
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
-        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(-2))]);
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(-2))]);
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", EspnEventId = 401800001, PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -176,13 +178,13 @@ public class CfbPicksControllerTests
     public async Task AddPicks_WhenGameKickoffIsInFuture_ReturnsOk()
     {
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
-        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2))]);
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
         _repo.AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>()).Returns(Task.CompletedTask);
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", EspnEventId = 401800001, PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -201,7 +203,7 @@ public class CfbPicksControllerTests
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", EspnEventId = 401800001, PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -217,8 +219,8 @@ public class CfbPicksControllerTests
         // Slate 18 (Championship-style, > 17) requires exactly 1 pick.
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(slateNumber: 18));
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
-            MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU"),
-            MakeSpread(401800002, DateTimeOffset.UtcNow.AddHours(2), "ALA", "UGA"),
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU"),
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ALA", "UGA"),
         ]);
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
         var request = new AddCfbPicksRequest
@@ -226,8 +228,8 @@ public class CfbPicksControllerTests
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
             Picks =
             [
-                new CfbPickItem { Team = "ORE", EspnEventId = 401800001, PickType = "Spread" },
-                new CfbPickItem { Team = "ALA", EspnEventId = 401800002, PickType = "Spread" },
+                new CfbPickItem { Team = "ORE", PickType = "Spread" },
+                new CfbPickItem { Team = "ALA", PickType = "Spread" },
             ]
         };
 
@@ -253,11 +255,11 @@ public class CfbPicksControllerTests
     [Fact]
     public async Task GetAllPicks_HidesOtherUsersPicksForNotYetStartedGames()
     {
-        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2))]);
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
         _repo.GetAllPicksForSlateAsync(1, 1).Returns(
         [
-            new CfbPickDto { UserId = UserId, EspnEventId = 401800001, Team = "ORE" },
-            new CfbPickDto { UserId = OtherUserId, EspnEventId = 401800001, Team = "OSU" },
+            new CfbPickDto { UserId = UserId, Team = "ORE" },
+            new CfbPickDto { UserId = OtherUserId, Team = "OSU" },
         ]);
 
         var result = await BuildController().GetAllPicks(1, 1);
@@ -271,11 +273,11 @@ public class CfbPicksControllerTests
     [Fact]
     public async Task GetAllPicks_ShowsOtherUsersPicksForStartedGames()
     {
-        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(-1))]);
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(-1))]);
         _repo.GetAllPicksForSlateAsync(1, 1).Returns(
         [
-            new CfbPickDto { UserId = UserId, EspnEventId = 401800001, Team = "ORE" },
-            new CfbPickDto { UserId = OtherUserId, EspnEventId = 401800001, Team = "OSU" },
+            new CfbPickDto { UserId = UserId, Team = "ORE" },
+            new CfbPickDto { UserId = OtherUserId, Team = "OSU" },
         ]);
 
         var result = await BuildController().GetAllPicks(1, 1);
@@ -289,11 +291,11 @@ public class CfbPicksControllerTests
     public async Task GetAllPicks_AdminSeesAllPicksRegardlessOfGameStatus()
     {
         _leagueRepo.UserExistsInLeagueAsync(Arg.Any<string>(), 1).Returns(false); // admin not a member
-        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2))]);
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
         _repo.GetAllPicksForSlateAsync(1, 1).Returns(
         [
-            new CfbPickDto { UserId = UserId, EspnEventId = 401800001, Team = "ORE" },
-            new CfbPickDto { UserId = OtherUserId, EspnEventId = 401800001, Team = "OSU" },
+            new CfbPickDto { UserId = UserId, Team = "ORE" },
+            new CfbPickDto { UserId = OtherUserId, Team = "OSU" },
         ]);
 
         var result = await BuildController("admin-001", isAdmin: true).GetAllPicks(1, 1);
@@ -323,8 +325,8 @@ public class CfbPicksControllerTests
     public async Task GetSpreads_ReturnsOnlyLeagueEligibleSpreads()
     {
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
-            MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU", isLeagueEligible: true),
-            MakeSpread(401800002, DateTimeOffset.UtcNow.AddHours(2), "TOL", "BALLST", isLeagueEligible: false),
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU", isLeagueEligible: true),
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "TOL", "BALLST", isLeagueEligible: false),
         ]);
 
         var result = await BuildController().GetSpreads(1);
@@ -332,14 +334,14 @@ public class CfbPicksControllerTests
         var ok = Assert.IsType<OkObjectResult>(result);
         var returned = Assert.IsAssignableFrom<IEnumerable<CfbSpreads>>(ok.Value).ToList();
         Assert.Single(returned);
-        Assert.Equal(401800001, returned[0].EspnEventId);
+        Assert.Equal("ORE", returned[0].HomeTeam);
     }
 
     // ── GetScores — serving-layer eligibility filter (frizat-9m0) ───────────
 
-    private static CfbScores MakeScore(int espnEventId, string home = "ORE", string away = "OSU") => new()
+    private static CfbScores MakeScore(string home = "ORE", string away = "OSU") => new()
     {
-        CfbSlateId = 1, EspnEventId = espnEventId, HomeTeam = home, AwayTeam = away,
+        CfbSlateId = 1, HomeTeam = home, AwayTeam = away,
         HomeTeamScore = 24, AwayTeamScore = 17, GameStatus = "STATUS_FINAL",
     };
 
@@ -347,12 +349,12 @@ public class CfbPicksControllerTests
     public async Task GetScores_ExcludesScoresForKnownIneligibleEvents()
     {
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
-            MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(-2), "ORE", "OSU", isLeagueEligible: true),
-            MakeSpread(401800002, DateTimeOffset.UtcNow.AddHours(-2), "TOL", "BALLST", isLeagueEligible: false),
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(-2), "ORE", "OSU", isLeagueEligible: true),
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(-2), "TOL", "BALLST", isLeagueEligible: false),
         ]);
         _cfbRepo.GetScoresForSlateAsync(1).Returns([
-            MakeScore(401800001, "ORE", "OSU"),
-            MakeScore(401800002, "TOL", "BALLST"),
+            MakeScore("ORE", "OSU"),
+            MakeScore("TOL", "BALLST"),
         ]);
 
         var result = await BuildController().GetScores(1);
@@ -360,7 +362,7 @@ public class CfbPicksControllerTests
         var ok = Assert.IsType<OkObjectResult>(result);
         var returned = Assert.IsAssignableFrom<IEnumerable<CfbScoreDto>>(ok.Value).ToList();
         Assert.Single(returned);
-        Assert.Equal(401800001, returned[0].EspnEventId);
+        Assert.Equal("ORE", returned[0].HomeTeam);
     }
 
     [Fact]
@@ -371,34 +373,34 @@ public class CfbPicksControllerTests
         // schedule change) should still show, not silently vanish — only games we POSITIVELY know
         // are ineligible get excluded.
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([]);
-        _cfbRepo.GetScoresForSlateAsync(1).Returns([MakeScore(401800001, "ORE", "OSU")]);
+        _cfbRepo.GetScoresForSlateAsync(1).Returns([MakeScore("ORE", "OSU")]);
 
         var result = await BuildController().GetScores(1);
 
         var ok = Assert.IsType<OkObjectResult>(result);
         var returned = Assert.IsAssignableFrom<IEnumerable<CfbScoreDto>>(ok.Value).ToList();
         Assert.Single(returned);
-        Assert.Equal(401800001, returned[0].EspnEventId);
+        Assert.Equal("ORE", returned[0].HomeTeam);
     }
 
-    // ── AddPicks — ineligible-event guard (frizat-9m0) ───────────────────────
-    // Rejects a pick for an event we KNOW is excluded (MAC Tue/Wed, unranked, etc.) — distinct
+    // ── AddPicks — ineligible-team guard (frizat-9m0) ────────────────────────
+    // Rejects a pick for a team we KNOW is excluded (MAC Tue/Wed, unranked, etc.) — distinct
     // from AddPicks_WhenNoMatchingSpread_AllowsPick above, which fails open when we have NO data
-    // for the event at all (e.g. ESPN cache gap). Positive knowledge of ineligibility rejects;
+    // for the game at all (e.g. ESPN cache gap). Positive knowledge of ineligibility rejects;
     // absence of knowledge does not.
 
     [Fact]
-    public async Task AddPicks_WhenEventIsKnownIneligible_ReturnsBadRequest()
+    public async Task AddPicks_WhenTeamIsKnownIneligible_ReturnsBadRequest()
     {
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
-            MakeSpread(401800001, DateTimeOffset.UtcNow.AddHours(2), isLeagueEligible: false),
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(2), isLeagueEligible: false),
         ]);
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", EspnEventId = 401800001, PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
         };
 
         var result = await BuildController().AddPicks(request);
