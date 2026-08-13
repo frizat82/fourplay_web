@@ -129,7 +129,13 @@ export default function WeekYearSelector({
           value={clampedWeek}
           onChange={(e) => onWeekChange(Number(e.target.value), { isPostSeason: isPostSeason })}
           size="small"
-          sx={{ minWidth: { xs: 120, sm: 140 } }}
+          // frizat: minWidth let MUI auto-size the box to whichever label happened to be
+          // selected — "Conference Championship" (the longest label across both sports) is
+          // ~117px wider than "Wild Card"/"Week 1", so the whole select row (centered via
+          // justifyContent) visibly shifted left/right depending which week was picked. A fixed
+          // width sized for the longest label keeps the row's total width constant regardless of
+          // week, so the centered group never moves.
+          sx={{ width: { xs: 190, sm: 260 } }}
         >
           {currentOptions.map((w) => (
             <MenuItem key={w} value={w}>
