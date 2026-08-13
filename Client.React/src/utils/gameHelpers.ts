@@ -266,7 +266,7 @@ export function computeOverWins(
   return (homeScore + awayScore) > overUnder;
 }
 
-function isHomeAway(value: HomeAway, expected: 'home' | 'away') {
+export function isHomeAway(value: HomeAway, expected: 'home' | 'away') {
   if (typeof value === 'number') {
     return expected === 'away' ? value === 0 : value === 1;
   }
