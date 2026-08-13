@@ -93,21 +93,26 @@ export default function GameCard({
   const isLive = gameStatus === 'StatusInProgress' || gameStatus === 'status_in_progress';
   const showScore = mode === 'score' && (isFinal || isLive);
 
-  const pickButtonSx = { minWidth: 80, height: 44, textTransform: 'none', fontSize: '0.85rem', flexShrink: 0 } as const;
+  // frizat: "Picked" (with its checkmark icon) renders ~29px wider than "Pick" at minWidth alone
+  // — since the button sits after the spread value in a right-hugging cluster, that width
+  // difference shifted the value's position between a submitted row and an unsubmitted one. A
+  // fixed `width` (not just minWidth) keeps every pick-state button identical, so the value's
+  // position never depends on which state a given row happens to be in.
+  const pickButtonSx = { width: 112, height: 44, textTransform: 'none', fontSize: '0.85rem', flexShrink: 0 } as const;
 
-  // frizat: a team row's spread/action columns used to be positioned by a flex Stack with
-  // justifyContent="space-between" — whenever a row's record cell was conditionally omitted
-  // (record data unavailable, e.g. every CFB game today, or NFL bye-week/preseason games with no
-  // record yet), the remaining items shifted into different horizontal positions than rows that
-  // did have a record. Since each team row is its own layout container, "auto" column sizing
-  // can't guarantee alignment across rows/cards either — only fixed pixel columns can. The record
-  // cell is always rendered (blank when there's no data) so the column count never changes.
-  const teamRowGridSx = {
-    display: 'grid',
-    gridTemplateColumns: '60px 56px 80px 1fr',
-    alignItems: 'center',
-    columnGap: 1,
-  } as const;
+  // frizat: a rigid fixed-column grid (60/56/80/1fr) made row alignment robust but pinned the
+  // spread value at a fixed offset near the left edge, with a large dead gap before the button —
+  // it read as "left-aligned," not centered, and looked nothing like ScoresPage's own team rows
+  // (a completely separate hand-built layout ScoresPage.tsx uses — GameCard is only ever rendered
+  // in pick mode, never score mode, in the live app). ScoresPage's trick is simpler and more
+  // robust: a flexGrow spacer between the left cluster (logo/record) and the right cluster
+  // (value/action) — the left cluster can vary in width (record present or not) without ever
+  // shifting the right cluster, which always hugs the right edge. The value itself stays
+  // dead-centered within its own fixed-width box, matching what "aligned in the middle" means for
+  // the number itself. Typography variant matches ScoresPage's own spread-value text
+  // (subtitle1, not h6) — h6 read visibly larger than Scores' equivalent number.
+  const spreadValueSx = { minWidth: 64, textAlign: 'center', flexShrink: 0 } as const;
+  const spreadValueVariant = 'subtitle1' as const;
 
   // MUI's `disabled` state flattens contained (filled) buttons to uniform gray regardless of
   // `color`. Keep the real color at reduced opacity instead of falling back to generic gray.
@@ -137,10 +142,14 @@ export default function GameCard({
     const picked = pickState !== 'none';
     const color = picked ? 'success' : 'info';
     return (
+      // frizat: doesn't share pickButtonSx's fixed width — "Over 45.5 ✓" is much longer than
+      // "Picked" and would overflow/clip a box sized for the shorter label. This row balances via
+      // justifyContent="space-between" across 3 always-present items instead, so it doesn't need
+      // a fixed button width to stay readable.
       <Button
         variant="contained"
         color={color}
-        sx={[pickButtonSx, lockedFillSx(color)]}
+        sx={[{ minWidth: 80, height: 44, textTransform: 'none', fontSize: '0.85rem', flexShrink: 0 }, lockedFillSx(color)]}
         disabled={overUnderLocked && !picked}
         onClick={onPick}
       >
@@ -164,32 +173,27 @@ export default function GameCard({
     <Card elevation={2} sx={{ height: '100%' }}>
       <CardContent sx={{ pb: '12px !important' }}>
         {/* Away team row */}
-        <Card variant="outlined" sx={{ mb: 1.5 }}>
-          <CardContent sx={{ p: '12px !important' }}>
-            <Box sx={teamRowGridSx}>
-              {renderTeamLogo(awayTeam, awayJerseyUrl)}
-              <Typography variant="subtitle2">
-                {!isPostSeason ? awayRecord : ''}
+        <Stack direction="row" alignItems="center" sx={{ gap: 1 }}>
+          {renderTeamLogo(awayTeam, awayJerseyUrl)}
+          {!isPostSeason && awayRecord && (
+            <Typography variant="subtitle2">{awayRecord}</Typography>
+          )}
+          <Box sx={{ flexGrow: 1 }} />
+          <Typography variant={spreadValueVariant} sx={spreadValueSx}>
+            {mode === 'score' && showScore ? awayScore : awaySpread != null ? spreadLabel(awaySpread) : ""}
+          </Typography>
+          {mode === 'pick' ? renderPickButton(awayTeam, awayPickState, onPickAway) : (
+            mode === 'score' && (
+              <Typography variant="caption" color="text.secondary">
+                {awaySpread != null ? spreadLabel(awaySpread) : ""}
+                {awayPickers !== undefined && ` · ${awayPickers}👤`}
               </Typography>
-              <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center' }}>
-                {mode === 'score' && showScore ? awayScore : awaySpread != null ? spreadLabel(awaySpread) : ""}
-              </Typography>
-              <Box sx={{ justifySelf: 'end' }}>
-                {mode === 'pick' ? renderPickButton(awayTeam, awayPickState, onPickAway) : (
-                  mode === 'score' && (
-                    <Typography variant="caption" color="text.secondary">
-                      {awaySpread != null ? spreadLabel(awaySpread) : ""}
-                      {awayPickers !== undefined && ` · ${awayPickers}👤`}
-                    </Typography>
-                  )
-                )}
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
+            )
+          )}
+        </Stack>
 
         {/* Middle: weather + status/detail */}
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5, gap: 1 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1.5, gap: 1 }}>
           {weatherDisplayValue ? (
             <WeatherIcon
               iconKey={weatherDisplayValue}
@@ -209,30 +213,27 @@ export default function GameCard({
           </Box>
         </Stack>
 
-        {/* Home team row */}
-        <Card variant="outlined">
-          <CardContent sx={{ p: '12px !important' }}>
-            <Box sx={teamRowGridSx}>
-              {renderTeamLogo(homeTeam, homeJerseyUrl)}
-              <Typography variant="subtitle2">
-                {!isPostSeason ? homeRecord : ''}
+        {/* Home team row — flat Stack, no nested Card, matching ScoresPage's own team rows
+            (see spreadValueSx comment above): two bordered boxes per game read as separate
+            panels rather than one continuous list, which was the "HUGE"/disjointed feel. */}
+        <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1 }}>
+          {renderTeamLogo(homeTeam, homeJerseyUrl)}
+          {!isPostSeason && homeRecord && (
+            <Typography variant="subtitle2">{homeRecord}</Typography>
+          )}
+          <Box sx={{ flexGrow: 1 }} />
+          <Typography variant={spreadValueVariant} sx={spreadValueSx}>
+            {mode === 'score' && showScore ? homeScore : homeSpread != null ? spreadLabel(homeSpread) : ""}
+          </Typography>
+          {mode === 'pick' ? renderPickButton(homeTeam, homePickState, onPickHome) : (
+            mode === 'score' && (
+              <Typography variant="caption" color="text.secondary">
+                {homeSpread != null ? spreadLabel(homeSpread) : ""}
+                {homePickers !== undefined && ` · ${homePickers}👤`}
               </Typography>
-              <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center' }}>
-                {mode === 'score' && showScore ? homeScore : homeSpread != null ? spreadLabel(homeSpread) : ""}
-              </Typography>
-              <Box sx={{ justifySelf: 'end' }}>
-                {mode === 'pick' ? renderPickButton(homeTeam, homePickState, onPickHome) : (
-                  mode === 'score' && (
-                    <Typography variant="caption" color="text.secondary">
-                      {homeSpread != null ? spreadLabel(homeSpread) : ""}
-                      {homePickers !== undefined && ` · ${homePickers}👤`}
-                    </Typography>
-                  )
-                )}
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
+            )
+          )}
+        </Stack>
 
         {spreadPostedAt && (
           <Typography variant="caption" color="text.secondary" display="block" sx={{ textAlign: 'center', mt: 0.75 }}>
@@ -242,28 +243,17 @@ export default function GameCard({
 
         {/* Postseason O/U picks */}
         {isPostSeason && mode === 'pick' && overValue != null && underValue != null && (
-          <Card
+          <Stack
             data-testid="over-under-controls"
-            variant="outlined"
-            sx={{ mt: 1, p: 0 }}
+            direction="row" alignItems="center" justifyContent="space-between"
+            sx={{ mt: 2, gap: 1 }}
           >
-            <CardContent sx={{ p: '12px !important' }}>
-              {/* Same fixed grid as the team rows above (60/56/80/1fr) so the O/U value lands in
-                  the exact same column as the spread values, instead of centering independently
-                  within this row's own narrower content. */}
-              <Box sx={teamRowGridSx}>
-                <Box sx={{ gridColumn: '1 / 3' }}>
-                  {renderOverUnderButton('Over', overValue, overPickState, onPickOver)}
-                </Box>
-                <Typography variant="h6" className="fixed-width" sx={{ textAlign: 'center', flexShrink: 0 }}>
-                  {overValue}
-                </Typography>
-                <Box sx={{ justifySelf: 'end' }}>
-                  {renderOverUnderButton('Under', underValue, underPickState, onPickUnder)}
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
+            {renderOverUnderButton('Over', overValue, overPickState, onPickOver)}
+            <Typography variant={spreadValueVariant} sx={spreadValueSx}>
+              {overValue}
+            </Typography>
+            {renderOverUnderButton('Under', underValue, underPickState, onPickUnder)}
+          </Stack>
         )}
       </CardContent>
     </Card>

@@ -21,6 +21,7 @@ import PageHeader from '../../components/PageHeader';
 import { getAllJobsStatus, runScores, runSpreads, runUserManager } from '../../api/jobManager';
 import type { JobStatusResponse } from '../../types/admin';
 import { useToast } from '../../services/toast';
+import { stickyColumnSx } from '../../utils/tableStyles';
 
 export default function AdminJobManagerPage() {
   const [jobs, setJobs] = useState<JobStatusResponse[]>([]);
@@ -60,7 +61,7 @@ export default function AdminJobManagerPage() {
 
   return (
     <Box>
-      <PageHeader title="Administrator User Management" />
+      <PageHeader title="Job Manager" />
       <Paper sx={{ p: 3, mb: 3 }}>
         <Typography variant="h5" align="center" sx={{ mb: 2 }}>
           Admin Tasks
@@ -114,7 +115,7 @@ export default function AdminJobManagerPage() {
           <Box sx={{ overflowX: 'auto' }}><Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Job Name</TableCell>
+                <TableCell sx={stickyColumnSx}>Job Name</TableCell>
                 <TableCell>Description</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Next Run</TableCell>
@@ -125,7 +126,7 @@ export default function AdminJobManagerPage() {
             <TableBody>
               {jobs.map((job) => (
                 <TableRow key={job.jobName}>
-                  <TableCell>{job.jobName}</TableCell>
+                  <TableCell sx={stickyColumnSx}>{job.jobName}</TableCell>
                   <TableCell>{job.description}</TableCell>
                   <TableCell>
                     <Chip size="small" label={job.status} color={getStatusColor(job.status)} />
