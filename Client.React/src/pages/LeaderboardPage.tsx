@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
+  alpha,
   Box,
   Card,
   CardContent,
@@ -12,6 +13,7 @@ import {
   TableHead,
   TableRow,
   Typography,
+  useTheme,
 } from '@mui/material';
 import PageHeader from '../components/PageHeader';
 import { useSession } from '../services/session';
@@ -26,6 +28,7 @@ interface LeaderboardPageProps {
 }
 
 export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
+  const theme = useTheme();
   const { currentLeague, leaguesLoaded } = useSession();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -55,29 +58,39 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
     return 'text.primary';
   };
 
+  // frizat: these used literal hardcoded rgba() constants (e.g. rgba(22, 163, 74, 0.12) for
+  // "Won") that don't match theme.ts's actual success/warning/error hex values at all, and stay
+  // fixed at the same opacity in both light and dark mode — exactly the anti-pattern the style
+  // guide warns about (a literal color at fixed opacity reads fine against one background and
+  // washes out against the other). Deriving the tint from the theme's own already-mode-tuned
+  // palette color (via alpha()) guarantees the background always matches the text color exactly,
+  // in both themes, with one definition instead of four guessed constants. MissingGameResults
+  // moved from `primary` (structural navy — very dark in light mode, reads as a near-black smudge
+  // at low opacity) to `info` (this app's documented "neutral/informational" semantic), which is
+  // what "results not in yet" actually means.
   const getWeekSx = (result: string) => {
     switch (result) {
       case 'Won':
         return {
-          backgroundColor: 'rgba(22, 163, 74, 0.12)',
+          backgroundColor: alpha(theme.palette.success.main, 0.16),
           color: 'success.main',
           fontWeight: 500,
         };
       case 'MissingPicks':
         return {
-          backgroundColor: 'rgba(230, 126, 34, 0.12)',
+          backgroundColor: alpha(theme.palette.warning.main, 0.16),
           color: 'warning.main',
           fontWeight: 500,
         };
       case 'MissingGameResults':
         return {
-          backgroundColor: 'rgba(25, 103, 210, 0.12)',
-          color: 'primary.main',
+          backgroundColor: alpha(theme.palette.info.main, 0.16),
+          color: 'info.main',
           fontWeight: 500,
         };
       default:
         return {
-          backgroundColor: 'rgba(229, 57, 53, 0.12)',
+          backgroundColor: alpha(theme.palette.error.main, 0.16),
           color: 'error.main',
           fontWeight: 500,
         };
@@ -156,7 +169,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
 
               <Grid container spacing={2} justifyContent="center" sx={{ mt: 2 }}>
                 <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                  <Card sx={{ backgroundColor: 'rgba(22, 163, 74, 0.12)' }}>
+                  <Card sx={{ backgroundColor: getWeekSx('Won').backgroundColor }}>
                     <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Box
                         sx={{
@@ -171,14 +184,14 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
                   </Card>
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                  <Card sx={{ backgroundColor: 'rgba(25, 103, 210, 0.12)' }}>
+                  <Card sx={{ backgroundColor: getWeekSx('MissingGameResults').backgroundColor }}>
                     <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Box
                         sx={{
                           width: 12,
                           height: 12,
                           borderRadius: 0.5,
-                          backgroundColor: 'primary.main',
+                          backgroundColor: 'info.main',
                         }}
                       />
                       <Typography>Games Incomplete</Typography>
@@ -186,7 +199,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
                   </Card>
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                  <Card sx={{ backgroundColor: 'rgba(230, 126, 34, 0.12)' }}>
+                  <Card sx={{ backgroundColor: getWeekSx('MissingPicks').backgroundColor }}>
                     <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Box
                         sx={{
@@ -201,7 +214,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
                   </Card>
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                  <Card sx={{ backgroundColor: 'rgba(229, 57, 53, 0.12)' }}>
+                  <Card sx={{ backgroundColor: getWeekSx('Lost').backgroundColor }}>
                     <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Box
                         sx={{

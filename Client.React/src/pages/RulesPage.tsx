@@ -170,6 +170,80 @@ function MatchupExample() {
   );
 }
 
+// frizat: Over/Under is an alternate pick TYPE for one game, not an additional pick beyond
+// requiredPicks — AddPicks'/CfbPicksController's server-side validation caps total picks (any
+// type) at requiredPicks for that round. This example exists specifically because that rule was
+// once violated in seeded demo data (a user showing requiredPicks+1 total picks), which read as a
+// UI bug until traced back to the data itself — the Rules page should state the rule plainly so
+// it's never ambiguous again.
+function OverUnderExample() {
+  const { isCfb } = useSportContext();
+  const roundLabel = isCfb ? 'CFP First Round' : 'Wild Card';
+  const requiredPicks = isCfb ? getCfbRequiredPicks(15) : getEspnRequiredPicks(1, true);
+  const picks = isCfb
+    ? [
+        { type: 'spread' as const, label: 'Ohio State Buckeyes', detail: 'Teased line +8.5' },
+        { type: 'spread' as const, label: 'Michigan Wolverines', detail: 'Teased line +17.5' },
+        { type: 'overUnder' as const, label: 'Over 54.5', detail: 'Georgia @ Texas total' },
+      ]
+    : [
+        { type: 'spread' as const, label: 'Seattle Seahawks', detail: 'Teased line +8.5' },
+        { type: 'spread' as const, label: 'Chicago Bears', detail: 'Teased line +17.5' },
+        { type: 'overUnder' as const, label: 'Over 45.5', detail: 'Buffalo @ Kansas City total' },
+      ];
+
+  return (
+    <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 2 }} data-testid="over-under-example">
+      <Box
+        sx={{
+          px: 2,
+          py: 1,
+          bgcolor: 'action.hover',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ letterSpacing: '0.06em', textTransform: 'uppercase' }}
+        >
+          {roundLabel} · {requiredPicks} picks required
+        </Typography>
+      </Box>
+      {picks.map((p, i) => (
+        <Box
+          key={p.label}
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            px: 2,
+            py: 1.25,
+            borderBottom: i < picks.length - 1 ? '1px solid' : 'none',
+            borderColor: 'divider',
+          }}
+        >
+          <Box>
+            <Typography variant="body2" fontWeight={500}>
+              Pick {i + 1}: {p.label}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {p.detail}
+            </Typography>
+          </Box>
+          <Chip
+            label={p.type === 'overUnder' ? 'Over/Under' : 'Spread'}
+            size="small"
+            color={p.type === 'overUnder' ? 'info' : 'default'}
+            variant="outlined"
+          />
+        </Box>
+      ))}
+    </Paper>
+  );
+}
+
 function ScenarioExample() {
   const { isCfb } = useSportContext();
   const rows = isCfb
@@ -276,7 +350,7 @@ function PlayoffGrid() {
       ];
 
   return (
-    <Grid container spacing={1}>
+    <Grid container spacing={1} data-testid="playoff-grid">
       {rounds.map(({ round, picks }) => (
         <Grid size={6} key={round}>
           <Box sx={{ bgcolor: 'action.hover', borderRadius: 1.5, p: 1.5 }}>
@@ -542,6 +616,35 @@ export function RulesContent() {
           Fewer games each round means fewer required picks.
         </Typography>
         <PlayoffGrid />
+      </Box>
+
+      <Divider />
+
+      {/* Over/Under in the postseason */}
+      <Box>
+        <SectionLabel>Over/Under in the postseason</SectionLabel>
+        <Paper variant="outlined" sx={{ borderRadius: 2, p: 1.5 }}>
+          <RuleRow color="info">
+            Starting in the postseason, one of your required picks each week can be an{' '}
+            <strong>Over/Under</strong> total on any game instead of a side of the spread — pick
+            whether the combined score finishes above or below the posted number.
+          </RuleRow>
+          <RuleRow color="secondary">
+            Over/Under <strong>replaces</strong> one of your spread picks — it&apos;s never an
+            extra pick added on top. Your total number of picks for the week never changes, no
+            matter how many of them are Over/Under.
+          </RuleRow>
+          <RuleRow color="error">
+            An Over/Under pick counts exactly like a spread pick toward winning the week — get it
+            wrong and it&apos;s the same as missing any other pick.
+          </RuleRow>
+        </Paper>
+        <OverUnderExample />
+        <InfoCallout>
+          {isCfb
+            ? 'CFP First Round needs 3 correct picks. Two spread picks plus one Over/Under is still 3 total picks — not 4.'
+            : 'Wild Card needs 3 correct picks. Two spread picks plus one Over/Under is still 3 total picks — not 4.'}
+        </InfoCallout>
       </Box>
     </Stack>
   );

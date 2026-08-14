@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { useSportContext } from '../services/sport';
@@ -86,15 +86,16 @@ describe('RulesPage — NFL', () => {
 
   it('shows all four NFL playoff rounds', () => {
     renderPage();
-    expect(screen.getByText(/wild card/i)).toBeInTheDocument();
-    expect(screen.getByText(/divisional/i)).toBeInTheDocument();
-    expect(screen.getByText(/championship/i)).toBeInTheDocument();
-    expect(screen.getByText(/super bowl/i)).toBeInTheDocument();
+    const grid = within(screen.getByTestId('playoff-grid'));
+    expect(grid.getByText(/wild card/i)).toBeInTheDocument();
+    expect(grid.getByText(/divisional/i)).toBeInTheDocument();
+    expect(grid.getByText(/championship/i)).toBeInTheDocument();
+    expect(grid.getByText(/super bowl/i)).toBeInTheDocument();
   });
 
   it('shows correct Wild Card required picks (3)', () => {
     renderPage();
-    const wildCardSection = screen.getByText(/wild card/i).closest('div');
+    const wildCardSection = within(screen.getByTestId('playoff-grid')).getByText(/wild card/i).closest('div');
     expect(wildCardSection).toHaveTextContent('3');
   });
 
@@ -107,6 +108,35 @@ describe('RulesPage — NFL', () => {
   it('mentions server-side enforcement of deadlines', () => {
     renderPage();
     expect(screen.getByText(/enforced server-side/i)).toBeInTheDocument();
+  });
+});
+
+describe('RulesPage — Over/Under in the postseason', () => {
+  it('explains Over/Under replaces a pick rather than adding one (NFL)', () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
+    renderPage();
+    expect(screen.getByText(/over\/under in the postseason/i)).toBeInTheDocument();
+    expect(screen.getByText(/replaces/i)).toBeInTheDocument();
+    expect(screen.getByText(/not 4/i)).toBeInTheDocument();
+  });
+
+  it('shows an NFL example with exactly one Over/Under pick among the required picks', () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'NFL', isCfb: false, isNfl: true });
+    renderPage();
+    const example = within(screen.getByTestId('over-under-example'));
+    expect(example.getByText(/wild card · 3 picks required/i)).toBeInTheDocument();
+    expect(example.getAllByText('Spread')).toHaveLength(2);
+    expect(example.getAllByText('Over/Under')).toHaveLength(1);
+  });
+
+  it('shows a CFB example with exactly one Over/Under pick among the required picks', () => {
+    vi.mocked(useSportContext).mockReturnValue({ sport: 'CFB', isCfb: true, isNfl: false });
+    renderPage();
+    const example = within(screen.getByTestId('over-under-example'));
+    expect(example.getByText(/cfp first round · 3 picks required/i)).toBeInTheDocument();
+    expect(example.getAllByText('Spread')).toHaveLength(2);
+    expect(example.getAllByText('Over/Under')).toHaveLength(1);
+    expect(screen.getByText(/not 4/i)).toBeInTheDocument();
   });
 });
 
@@ -128,7 +158,7 @@ describe('RulesPage — CFB playoff grid', () => {
 
   it('shows First Round with 3 picks', () => {
     renderPage();
-    const section = screen.getByText(/first round/i).closest('div');
+    const section = within(screen.getByTestId('playoff-grid')).getByText(/first round/i).closest('div');
     expect(section).toHaveTextContent('3');
   });
 
@@ -148,11 +178,12 @@ describe('RulesPage — CFB playoff grid', () => {
 
   it('shows 5 CFB rounds, not 4 NFL rounds', () => {
     renderPage();
-    expect(screen.getByText(/conf\. championships/i)).toBeInTheDocument();
-    expect(screen.getByText(/first round/i)).toBeInTheDocument();
-    expect(screen.getByText(/quarterfinals/i)).toBeInTheDocument();
-    expect(screen.getByText(/semifinals/i)).toBeInTheDocument();
-    // NFL-specific rounds should not appear
+    const grid = within(screen.getByTestId('playoff-grid'));
+    expect(grid.getByText(/conf\. championships/i)).toBeInTheDocument();
+    expect(grid.getByText(/first round/i)).toBeInTheDocument();
+    expect(grid.getByText(/quarterfinals/i)).toBeInTheDocument();
+    expect(grid.getByText(/semifinals/i)).toBeInTheDocument();
+    // NFL-specific rounds should not appear anywhere on the page
     expect(screen.queryByText(/wild card/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/super bowl/i)).not.toBeInTheDocument();
   });

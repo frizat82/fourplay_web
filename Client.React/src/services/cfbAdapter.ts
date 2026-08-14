@@ -3,7 +3,7 @@ import { loadCfbScoresWithRetry, getCfbScoresForSlate, getCfbLiveGames } from '.
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins, getCfbRequiredPicks } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
-import { getHomeTeamScore, getAwayTeamScore, toGameStatus } from '../utils/gameHelpers';
+import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } from './sportAdapter';
 import { revealPicksForStartedGames } from './sportAdapter';
 
@@ -36,7 +36,7 @@ function toCfbGameStatusFromString(s: string | null | undefined): GameStatusValu
 /**
  * Build GameView from spread data + live ESPN data.
  * ESPN is the primary source. Falls back to dbScores when ESPN has no event
- * for a given espnEventId (e.g. off-season, demo mode, or before game is created).
+ * for a given team (e.g. off-season, demo mode, or before game is created).
  */
 function buildGamesFromEspn(
   spreads: CfbSpreadDto[],
@@ -44,17 +44,24 @@ function buildGamesFromEspn(
   dbScores: CfbScoreDto[],
   situationMap: Map<string, import('../types/liveGame').GameSituation | null>,
 ): GameView[] {
-  const espnMap = new Map<number, import('../types/espn').Competition>();
+  // frizat: joined by home team abbreviation, not an ESPN event id — a team plays at most one
+  // game per slate (the scope every caller of this function already loads spreads/scores at), so
+  // homeTeam alone is an unambiguous join key. Matches CfbSpreads/CfbScores' own natural key.
+  const espnMap = new Map<string, import('../types/espn').Competition>();
   for (const event of espnData?.events ?? []) {
     for (const comp of event.competitions) {
-      espnMap.set(parseInt(comp.id), comp);
+      // isHomeAway handles both string ('home') and numeric (1) forms — our backend re-serializes
+      // the ESPN homeAway enum as a number (see toGameStatus's status.type.name comment above for
+      // the same pattern), so a bare `=== 'home'` string comparison never matches.
+      const home = comp.competitors.find(c => isHomeAway(c.homeAway, 'home'));
+      if (home) espnMap.set(home.team.abbreviation, comp);
     }
   }
-  const dbMap = new Map(dbScores.map(s => [s.espnEventId, s]));
+  const dbMap = new Map(dbScores.map(s => [s.homeTeam, s]));
 
   return spreads.map(sp => {
-    const comp = espnMap.get(sp.espnEventId);
-    const db = dbMap.get(sp.espnEventId);
+    const comp = espnMap.get(sp.homeTeam);
+    const db = dbMap.get(sp.homeTeam);
 
     let status: GameStatusValue;
     let hs: number | null;
@@ -81,7 +88,9 @@ function buildGamesFromEspn(
 
     const key = `${sp.homeTeam}-${sp.awayTeam}`;
     return {
-      id: sp.espnEventId.toString(),
+      // Unique within a single slate's spread list (the only scope this ever gets rendered in) —
+      // a team plays at most one game per slate, same reasoning as the espnMap/dbMap join keys.
+      id: sp.homeTeam,
       homeTeam: sp.homeTeam,
       awayTeam: sp.awayTeam,
       homeSpread: sp.homeTeamSpread,
@@ -102,9 +111,23 @@ function buildGamesFromEspn(
   });
 }
 
-function cfbPickToPickView(pick: CfbPickDto): PickView {
+// frizat: CfbPicks.Team is whichever side the user picked — it can be the home OR away team, but
+// GameView.id is always the game's home team (see buildGamesFromEspn). A pick on the away side
+// still needs its PickView.gameId to resolve to the game's home team so it matches GameView.id
+// (pickCountForTeam/didUserPick in ScoresPage.tsx key off exact gameId equality) — this map
+// resolves either side back to that game's homeTeam, built once per slate's spread list.
+function buildTeamToHomeTeamMap(spreads: CfbSpreadDto[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const sp of spreads) {
+    map.set(sp.homeTeam, sp.homeTeam);
+    map.set(sp.awayTeam, sp.homeTeam);
+  }
+  return map;
+}
+
+function cfbPickToPickView(pick: CfbPickDto, teamToHomeTeam: Map<string, string>): PickView {
   return {
-    gameId: pick.espnEventId.toString(),
+    gameId: teamToHomeTeam.get(pick.team) ?? pick.team,
     team: pick.team,
     pickType: pick.pickType as PickView['pickType'],
     userId: pick.userId,
@@ -133,9 +156,10 @@ async function loadSlate(leagueId: number, _userId: string, slateId: number, sla
     getCfbDbScores(slateId),
     fetchCfbEspnData(slate, isCurrent),
   ]);
+  const teamToHomeTeam = buildTeamToHomeTeamMap(spreads);
   return {
     games: buildGamesFromEspn(spreads, espn, dbScores, situations),
-    userPicks: picks.map(cfbPickToPickView),
+    userPicks: picks.map(p => cfbPickToPickView(p, teamToHomeTeam)),
   };
 }
 
@@ -166,7 +190,8 @@ export function createCfbAdapter(): SportAdapter {
       fetchCfbEspnData(slate, isCurrent),
     ]);
     const games = buildGamesFromEspn(spreads, espn, dbScores, situations);
-    const allPicks = allPickDtos.map(cfbPickToPickView);
+    const teamToHomeTeam = buildTeamToHomeTeamMap(spreads);
+    const allPicks = allPickDtos.map(p => cfbPickToPickView(p, teamToHomeTeam));
     const userPicks = allPicks.filter(p => p.userId === userId);
     return { games, allPicks: revealPicksForStartedGames(allPicks, games, userId), userPicks };
   }
@@ -223,7 +248,6 @@ export function createCfbAdapter(): SportAdapter {
       const slate = slates.find(s => s.slateNumber === slateNum);
       if (!slate) return;
       await addCfbPicks(leagueId, slate.id, season, picks.map(p => ({
-        espnEventId: parseInt(p.gameId),
         team: p.team,
         pickType: p.pickType,
       })));
@@ -235,8 +259,12 @@ export function createCfbAdapter(): SportAdapter {
       const slate = slates.find(s => s.slateNumber === slateNum);
       if (!slate) return [];
       await deleteCfbPicks(leagueId, slate.id);
-      const fresh = await getCfbUserPicks(leagueId, slate.id);
-      return fresh.map(cfbPickToPickView);
+      const [fresh, spreads] = await Promise.all([
+        getCfbUserPicks(leagueId, slate.id),
+        getCfbSpreads(slate.id),
+      ]);
+      const teamToHomeTeam = buildTeamToHomeTeamMap(spreads);
+      return fresh.map(p => cfbPickToPickView(p, teamToHomeTeam));
     },
 
     // ─── Scores ─────────────────────────────────────────────────────────────

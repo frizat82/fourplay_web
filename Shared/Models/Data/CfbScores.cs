@@ -8,7 +8,6 @@ public class CfbScores {
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
     public int CfbSlateId { get; set; }
-    public int EspnEventId { get; set; }
     public string HomeTeam { get; set; } = string.Empty;
     public string AwayTeam { get; set; } = string.Empty;
     public int HomeTeamScore { get; set; }
