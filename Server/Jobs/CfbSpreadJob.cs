@@ -95,7 +95,6 @@ public class CfbSpreadJob(
 
                 spreads.Add(new CfbSpreads {
                     CfbSlateId    = slate.Id,
-                    EspnEventId   = eventId,
                     HomeTeam      = home,
                     AwayTeam      = away,
                     HomeTeamSpread = parsedHome,

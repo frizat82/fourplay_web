@@ -14,8 +14,11 @@ public class CfbSpreadsConfiguration : IEntityTypeConfiguration<CfbSpreads>
             .HasColumnType("timestamptz")
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-        entity.HasIndex(e => e.EspnEventId).IsUnique();
-        entity.HasIndex(e => e.CfbSlateId);
+        // Natural key mirroring NflSpreadsConfiguration's (Season, NflWeek, HomeTeam) — a team
+        // plays at most one game per slate, so (CfbSlateId, HomeTeam) uniquely identifies a game
+        // without depending on an ESPN-specific id. CfbSlateId already encodes season via
+        // CfbSlates.Season, so a separate Season column isn't needed in this index.
+        entity.HasIndex(e => new { e.CfbSlateId, e.HomeTeam }).IsUnique();
 
         // CfbSlateId was previously an unenforced "soft FK" (indexed, joined against in queries,
         // but no DB-level constraint) — frizat-896 schema audit. Restrict (not Cascade): CfbSlates

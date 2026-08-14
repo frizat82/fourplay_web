@@ -26,7 +26,6 @@ export interface CfbSlateDto {
 export interface CfbSpreadDto {
   id: number;
   cfbSlateId: number;
-  espnEventId: number;
   homeTeam: string;
   awayTeam: string;
   homeTeamSpread: number;
@@ -39,7 +38,6 @@ export interface CfbSpreadDto {
 export interface CfbScoreDto {
   id: number;
   cfbSlateId: number;
-  espnEventId: number;
   homeTeam: string;
   awayTeam: string;
   homeTeamScore: number;
@@ -57,7 +55,6 @@ export interface CfbPickDto {
   userName: string;
   leagueId: number;
   cfbSlateId: number;
-  espnEventId: number;
   team: string;
   pickType: string;
   season: number;
