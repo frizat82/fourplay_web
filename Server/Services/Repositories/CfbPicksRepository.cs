@@ -24,7 +24,6 @@ public class CfbPicksRepository(IDbContextFactory<ApplicationDbContext> dbFactor
                 UserName   = u.UserName ?? string.Empty,
                 LeagueId   = p.LeagueId,
                 CfbSlateId = p.CfbSlateId,
-                EspnEventId = p.EspnEventId,
                 Team       = p.Team,
                 PickType   = p.PickType,
                 Season     = p.Season,

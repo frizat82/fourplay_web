@@ -54,17 +54,15 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
     public async Task UpsertAsync(IEnumerable<CfbSpreads> spreads) {
         await using var db = await dbFactory.CreateDbContextAsync();
         var spreadList = spreads.ToList();
-        var ids = spreadList.Select(s => s.EspnEventId).ToHashSet();
+        var slateIds = spreadList.Select(s => s.CfbSlateId).ToHashSet();
         var existingMap = await db.CfbSpreads
-            .Where(s => ids.Contains(s.EspnEventId))
-            .ToDictionaryAsync(s => s.EspnEventId);
+            .Where(s => slateIds.Contains(s.CfbSlateId))
+            .ToDictionaryAsync(s => (s.CfbSlateId, s.HomeTeam));
 
         foreach (var spread in spreadList) {
-            if (!existingMap.TryGetValue(spread.EspnEventId, out var existing))
+            if (!existingMap.TryGetValue((spread.CfbSlateId, spread.HomeTeam), out var existing))
                 db.CfbSpreads.Add(spread);
             else {
-                existing.CfbSlateId       = spread.CfbSlateId;
-                existing.HomeTeam         = spread.HomeTeam;
                 existing.AwayTeam         = spread.AwayTeam;
                 existing.HomeTeamSpread   = spread.HomeTeamSpread;
                 existing.AwayTeamSpread   = spread.AwayTeamSpread;
@@ -126,13 +124,13 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
     public async Task UpsertCfbScoresAsync(IEnumerable<CfbScores> scores) {
         await using var db = await dbFactory.CreateDbContextAsync();
         var scoreList = scores.ToList();
-        var ids = scoreList.Select(s => s.EspnEventId).ToHashSet();
+        var slateIds = scoreList.Select(s => s.CfbSlateId).ToHashSet();
         var existingMap = await db.CfbScores
-            .Where(s => ids.Contains(s.EspnEventId))
-            .ToDictionaryAsync(s => s.EspnEventId);
+            .Where(s => slateIds.Contains(s.CfbSlateId))
+            .ToDictionaryAsync(s => (s.CfbSlateId, s.HomeTeam));
 
         foreach (var score in scoreList) {
-            if (!existingMap.TryGetValue(score.EspnEventId, out var existing))
+            if (!existingMap.TryGetValue((score.CfbSlateId, score.HomeTeam), out var existing))
                 db.CfbScores.Add(score);
             else {
                 existing.HomeTeamScore       = score.HomeTeamScore;

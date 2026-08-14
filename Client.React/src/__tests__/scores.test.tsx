@@ -381,7 +381,7 @@ describe('ScoresPage', () => {
     // cache entries" is that once CFB's OWN query settles, ITS data (MICH/PSU) is what renders,
     // not that NFL's cache entry got clobbered or that a spinner necessarily appears.
     const cfbSlate = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
-    const cfbSpread = { id: 1, cfbSlateId: 1, espnEventId: 100, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5, gameTime: '2025-10-11T20:00:00Z', dateCreated: '2025-10-09T14:00:00Z' };
+    const cfbSpread = { id: 1, cfbSlateId: 1, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5, gameTime: '2025-10-11T20:00:00Z', dateCreated: '2025-10-09T14:00:00Z' };
     mockedGetCfbCurrentSlate.mockResolvedValue(cfbSlate);
     mockedGetCfbSlates.mockResolvedValue([cfbSlate]);
     mockedGetCfbSpreads.mockResolvedValue([cfbSpread]);

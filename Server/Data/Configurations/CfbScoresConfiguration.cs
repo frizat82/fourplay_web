@@ -14,10 +14,10 @@ public class CfbScoresConfiguration : IEntityTypeConfiguration<CfbScores>
             .HasColumnType("timestamptz")
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-        // Mirrors NflScores' unique index — backstops UpsertCfbScoresAsync's app-level
-        // upsert-by-EspnEventId the same way CfbSpreads' index backstops its upsert.
-        entity.HasIndex(e => e.EspnEventId).IsUnique();
-        entity.HasIndex(e => e.CfbSlateId);
+        // Natural key mirroring NflScoresConfiguration's (Season, NflWeek, HomeTeam) — see
+        // CfbSpreadsConfiguration's comment for the full rationale. Backstops
+        // UpsertCfbScoresAsync's app-level upsert-by-(CfbSlateId, HomeTeam).
+        entity.HasIndex(e => new { e.CfbSlateId, e.HomeTeam }).IsUnique();
 
         // CfbSlateId was previously an unenforced "soft FK" — see CfbSpreadsConfiguration for the
         // full rationale (frizat-896 schema audit). Restrict protects real final-score history from
