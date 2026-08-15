@@ -140,11 +140,18 @@ export default function LeaguePortalPage() {
   useEffect(() => { void loadAllLeagues(); }, [loadAllLeagues]);
 
   // Platform user list backs all three admin dialogs (Create League, Add User, Assign Owner) —
-  // fetched once per admin visit rather than on every dialog open.
+  // fetched once per admin visit rather than on every dialog open. Without a .catch(), a failed
+  // fetch left availableUsers at [] for the whole session with no error and no retry — all three
+  // pickers looked "broken" with nothing to select and no indication why.
   useEffect(() => {
     if (!admin) return;
-    void getUsers().then(setAvailableUsers);
-  }, [admin]);
+    getUsers()
+      .then(setAvailableUsers)
+      .catch((err) => {
+        console.error('Failed to load platform user list', err);
+        toast.push('Failed to load users — try reloading the page', 'error');
+      });
+  }, [admin, toast]);
 
   useEffect(() => {
     if (leagueOptions.length > 0 && !selectedLeague) {

@@ -197,17 +197,19 @@ public class LeagueController(
     [ProducesResponseType(typeof(List<UserSummaryDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<UserSummaryDto>>> GetUsers() {
 
-        var users = await repo.GetUsersAsync(); // returns List<IdentityUser>
-        var usersOutput = new List<UserSummaryDto>();
-        foreach (var u in users) {
-            // Check if the user is in the Administrator role
-            var roles = await userManager.GetRolesAsync(u);
-            var isAdmin = roles.Contains("Administrator");
-
-            usersOutput.Add(new UserSummaryDto(u.Id, u.UserName, u.Email, u.EmailConfirmed, isAdmin));
-
-            //Console.WriteLine($"User: {u.Id}, {u.UserName}, {u.Email}, IsAdmin: {isAdmin}");
-        }
+        // Single batched role lookup instead of one GetRolesAsync call per user (N+1) — was slow
+        // enough at real user-base sizes to plausibly time out, which combined with a missing
+        // frontend error handler left Add User/Create League/Assign Owner pickers silently empty.
+        // repo.GetUsersAsync() and userManager.GetUsersInRoleAsync() use separate DbContexts
+        // (IDbContextFactory-created vs. Identity's request-scoped one), so they're safe to run
+        // concurrently rather than as two sequential round trips.
+        var usersTask = repo.GetUsersAsync();
+        var adminsTask = userManager.GetUsersInRoleAsync(AppRoles.Administrator);
+        await Task.WhenAll(usersTask, adminsTask);
+        var adminIds = adminsTask.Result.Select(u => u.Id).ToHashSet();
+        var usersOutput = usersTask.Result
+            .Select(u => new UserSummaryDto(u.Id, u.UserName, u.Email, u.EmailConfirmed, adminIds.Contains(u.Id)))
+            .ToList();
 
         return Ok(usersOutput);
     }

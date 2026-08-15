@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
@@ -29,11 +29,12 @@ const ADMIN_USER: UserInfo = { userId: 'admin-1', name: 'Admin', claims: [{ type
 
 const authState = { user: OWNER_USER as UserInfo | null };
 const sportContext = { sport: 'NFL' as 'NFL' | 'CFB', isCfb: false, isNfl: true };
+const toastPush = vi.fn();
 
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/sport', () => ({ useSportContext: () => sportContext }));
 vi.mock('../services/auth', () => ({ useAuth: () => authState }));
-vi.mock('../services/toast', () => ({ useToast: () => ({ push: vi.fn() }) }));
+vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 
 vi.mock('../api/league', () => ({
   getLeagueUserMappings: vi.fn(),
@@ -56,6 +57,7 @@ import {
   getAllLeagues,
   getUsers,
   createLeague,
+  addLeagueUserMapping,
 } from '../api/league';
 
 const mockedGetMappings = vi.mocked(getLeagueUserMappings);
@@ -64,6 +66,7 @@ const mockedGetCost = vi.mocked(getLeagueCost);
 const mockedGetAllLeagues = vi.mocked(getAllLeagues);
 const mockedGetUsers = vi.mocked(getUsers);
 const mockedCreateLeague = vi.mocked(createLeague);
+const mockedAddLeagueUserMapping = vi.mocked(addLeagueUserMapping);
 
 const CURRENT_SEASON = new Date().getFullYear();
 
@@ -122,7 +125,9 @@ beforeEach(() => {
   mockedGetAllLeagues.mockResolvedValue([]);
   mockedGetUsers.mockResolvedValue([makeUser()]);
   mockedCreateLeague.mockResolvedValue(makeLeague({ id: 99, leagueName: 'New League' }));
+  mockedAddLeagueUserMapping.mockResolvedValue(undefined);
   sessionState.reloadLeagues.mockClear();
+  toastPush.mockClear();
 });
 
 describe('LeaguePortalPage (owner, non-admin)', () => {
@@ -298,5 +303,29 @@ describe('LeaguePortalPage (site admin)', () => {
     expect(screen.getByRole('button', { name: /add user/i })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: 'Info' }));
     expect(screen.getByRole('button', { name: /change owner/i })).toBeInTheDocument();
+  });
+
+  // frizat: getUsers() backs Add User, Create League's owner picker, and Assign Owner —
+  // a failed fetch previously left all three silently empty forever (no catch, no toast,
+  // no retry). This proves the failure is now surfaced instead of invisible.
+  it('shows an error toast when the platform user list fails to load', async () => {
+    mockedGetUsers.mockRejectedValue(new Error('network down'));
+    renderPage();
+    await screen.findByText('frizat@example.com');
+    await waitFor(() => expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/failed to load users/i), 'error'));
+  });
+
+  it('adds a selected user to the league via the Add User dialog', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /add user/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const userSelect = within(dialog).getByLabelText(/^user$/i);
+    await userEvent.selectOptions(userSelect, 'bob@example.com');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^add user$/i }));
+
+    await waitFor(() => expect(mockedAddLeagueUserMapping).toHaveBeenCalledWith(1, 'user-2'));
+    expect(toastPush).toHaveBeenCalledWith('bob@example.com added to league', 'success');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });
