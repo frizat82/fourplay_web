@@ -328,4 +328,30 @@ describe('LeaguePortalPage (site admin)', () => {
     expect(toastPush).toHaveBeenCalledWith('bob@example.com added to league', 'success');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
+
+  // frizat: Create League's Sport field used to be a free-choice dropdown regardless of which
+  // subdomain the admin was on — an admin browsing cfb.* could create an NFL league and vice
+  // versa. The site you're on IS the sport you're creating for, so the field should show the
+  // current sport and not offer the other one at all.
+  it('locks the Create League sport field to the current subdomain, not an editable choice', async () => {
+    sportContext.sport = 'CFB';
+    sportContext.isCfb = true;
+    sportContext.isNfl = false;
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /create league/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const sportField = within(dialog).getByLabelText(/^sport$/i);
+    expect(sportField).toHaveValue('CFB');
+    expect(sportField).toBeDisabled();
+    expect(within(dialog).queryByRole('option', { name: /^nfl$/i })).not.toBeInTheDocument();
+  });
+
+  it('locks the Create League sport field to NFL on the NFL subdomain', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /create league/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText(/^sport$/i)).toHaveValue('NFL');
+  });
 });
