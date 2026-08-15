@@ -12,7 +12,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     public async Task<List<LeagueUserMapping>> GetLeagueUserMappingsAsync(int leagueId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.LeagueUserMapping
-            .Where(lum => lum.LeagueId == leagueId)
+            .Where(lum => lum.LeagueId == leagueId && lum.IsActive)
             .Include(lum => lum.User)
             .Include(lum => lum.League)
             .ToListAsync();
@@ -21,7 +21,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     public async Task<List<LeagueUserMapping>> GetLeagueUserMappingsAsync(ApplicationUser user) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.LeagueUserMapping
-            .Where(lum => lum.UserId == user.Id)
+            .Where(lum => lum.UserId == user.Id && lum.IsActive)
             .Include(lum => lum.User)
             .Include(lum => lum.League)
             .ToListAsync();
@@ -260,25 +260,46 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await db.SaveChangesAsync();
     }
 
+    // Soft-delete — keeps the row (and the member's pick history) for audit purposes, just
+    // excluded from active-membership reads (see the IsActive filters throughout this class).
     public async Task RemoveLeagueUserMappingAsync(int leagueId, string userId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         var mapping = await db.LeagueUserMapping
             .FirstOrDefaultAsync(m => m.LeagueId == leagueId && m.UserId == userId);
         if (mapping is not null) {
-            db.LeagueUserMapping.Remove(mapping);
+            mapping.IsActive = false;
+            mapping.RemovedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
         }
     }
 
+    // Shared with DemoDataSeeder.PurgeUnknownLeaguesAsync via LeagueCascadeDelete — one place for
+    // the ordered multi-table cascade instead of two independently-drifting copies.
+    public async Task DeleteLeagueAsync(int leagueId) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        LeagueCascadeDelete.RemoveLeaguesAndDependents(db, [leagueId]);
+        await db.SaveChangesAsync();
+    }
+
     public async Task<int> GetLeagueMemberCountAsync(int leagueId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        return await db.LeagueUserMapping.CountAsync(m => m.LeagueId == leagueId);
+        return await db.LeagueUserMapping.CountAsync(m => m.LeagueId == leagueId && m.IsActive);
     }
 
     // Add operations
+    // (LeagueId, UserId) is unique — a removed-then-re-added user must reactivate their existing
+    // (soft-deleted) row rather than insert a second one, or this throws a unique-index violation
+    // against real Postgres. Preserves the original DateCreated (join date), not a re-join date.
     public async Task AddLeagueUserMappingAsync(LeagueUserMapping mapping) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        await db.LeagueUserMapping.AddAsync(mapping);
+        var existing = await db.LeagueUserMapping
+            .FirstOrDefaultAsync(m => m.LeagueId == mapping.LeagueId && m.UserId == mapping.UserId);
+        if (existing is not null) {
+            existing.IsActive = true;
+            existing.RemovedAt = null;
+        } else {
+            await db.LeagueUserMapping.AddAsync(mapping);
+        }
         await db.SaveChangesAsync();
     }
 
@@ -349,6 +370,6 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     public async Task<bool> UserExistsInLeagueAsync(string userId, int leagueId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.LeagueUserMapping
-            .AnyAsync(lum => lum.UserId == userId && lum.LeagueId == leagueId);
+            .AnyAsync(lum => lum.UserId == userId && lum.LeagueId == leagueId && lum.IsActive);
     }
 }

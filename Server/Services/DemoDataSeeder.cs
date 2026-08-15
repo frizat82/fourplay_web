@@ -131,12 +131,7 @@ public class DemoDataSeeder(
 
         if (strayLeagueIds.Count == 0) return;
 
-        db.NflPicks.RemoveRange(db.NflPicks.Where(p => strayLeagueIds.Contains(p.LeagueId)));
-        db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => strayLeagueIds.Contains(p.LeagueId)));
-        db.Invitations.RemoveRange(db.Invitations.Where(i => i.LeagueId != null && strayLeagueIds.Contains(i.LeagueId.Value)));
-        db.LeagueJuiceMapping.RemoveRange(db.LeagueJuiceMapping.Where(m => strayLeagueIds.Contains(m.LeagueId)));
-        db.LeagueUserMapping.RemoveRange(db.LeagueUserMapping.Where(m => strayLeagueIds.Contains(m.LeagueId)));
-        db.LeagueInfo.RemoveRange(db.LeagueInfo.Where(l => strayLeagueIds.Contains(l.Id)));
+        LeagueCascadeDelete.RemoveLeaguesAndDependents(db, strayLeagueIds);
         await db.SaveChangesAsync();
 
         Log.Information("DemoDataSeeder: purged {Count} stray league(s) not created by the seeder", strayLeagueIds.Count);

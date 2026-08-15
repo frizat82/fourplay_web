@@ -223,6 +223,42 @@ public class LeagueOwnershipTests
     }
 
     [Fact]
+    public async Task DeleteLeague_ReturnsForbid_WhenCallerIsNotOwnerOrAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.DeleteLeague(1);
+
+        Assert.IsType<ForbidResult>(result);
+        await repo.DidNotReceive().DeleteLeagueAsync(Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task DeleteLeague_ReturnsNoContent_WhenCallerIsOwner()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.DeleteLeague(1);
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).DeleteLeagueAsync(1);
+    }
+
+    [Fact]
+    public async Task DeleteLeague_ReturnsNoContent_WhenCallerIsAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.DeleteLeague(1);
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).DeleteLeagueAsync(1);
+    }
+
+    [Fact]
     public async Task GetLeagueCost_ReturnsCorrectCostForBaseTier()
     {
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));

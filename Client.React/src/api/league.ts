@@ -154,6 +154,10 @@ export async function removeLeagueMember(leagueId: number, userId: string) {
   await http.delete(`/api/league/${leagueId}/members/${encodeURIComponent(userId)}`);
 }
 
+export async function deleteLeague(leagueId: number) {
+  await http.delete(`/api/league/${leagueId}`);
+}
+
 export async function inviteToLeague(leagueId: number, email: string) {
   await http.post(`/api/league/${leagueId}/invite`, { email, baseUrl: window.location.origin });
 }
