@@ -328,6 +328,75 @@ public class LeagueOwnershipTests
         Assert.Null(roleAttr); // any authenticated user may call this now — class-level [Authorize] still applies
     }
 
+    // frizat: the frontend locks the Create League Sport field to the current subdomain, but a
+    // crafted/replayed request can still send a mismatched LeagueType directly — this is the
+    // server-side backstop, mirroring useSportContext's own cfb.-prefix host check.
+    //
+    // Origin is the PRIMARY signal, not Host: prod traffic goes through Vercel's /api/:path*
+    // rewrite to the Railway backend with no UseForwardedHeaders middleware, so Request.Host
+    // reflects Railway's own domain, not cfb.ivleague.xyz — using Host directly would silently
+    // resolve every request to Nfl. Origin survives the rewrite untouched (same mechanism the
+    // existing ALLOWED_ORIGINS/CORS check already relies on). Host is only a last-resort
+    // fallback for the no-Origin-no-Referer case (e.g. this test suite's plain DefaultHttpContext).
+    [Fact]
+    public async Task CreateLeague_ReturnsBadRequest_WhenLeagueTypeDoesNotMatchOrigin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        ctrl.ControllerContext.HttpContext.Request.Headers.Origin = "https://cfb.ivleague.xyz";
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+
+        var dto = new LeagueCreateDto("My League", LeagueType.Nfl, OwnerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceive().AddLeagueInfoAsync(Arg.Any<LeagueInfo>());
+    }
+
+    [Fact]
+    public async Task CreateLeague_Succeeds_WhenLeagueTypeMatchesCfbOrigin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        ctrl.ControllerContext.HttpContext.Request.Headers.Origin = "https://cfb.ivleague.xyz";
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+        var createdLeague = new LeagueInfo { Id = 42, LeagueName = "My League", OwnerUserId = OwnerId, LeagueType = LeagueType.Cfb };
+        repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(createdLeague));
+
+        var dto = new LeagueCreateDto("My League", LeagueType.Cfb, OwnerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto);
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    // Origin absent (e.g. some non-browser callers omit it) but Referer present — same host
+    // extraction, second-priority fallback.
+    [Fact]
+    public async Task CreateLeague_ResolvesSportFromReferer_WhenOriginIsAbsent()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        ctrl.ControllerContext.HttpContext.Request.Headers.Referer = "https://cfb.ivleague.xyz/league/manage";
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+
+        var dto = new LeagueCreateDto("My League", LeagueType.Nfl, OwnerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    // Neither Origin nor Referer present — falls back to Host (matches this test suite's plain
+    // DefaultHttpContext, and is the pre-existing behavior for that edge case).
+    [Fact]
+    public async Task CreateLeague_FallsBackToHost_WhenOriginAndRefererAreBothAbsent()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        ctrl.ControllerContext.HttpContext.Request.Host = new HostString("cfb.ivleague.xyz");
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+
+        var dto = new LeagueCreateDto("My League", LeagueType.Nfl, OwnerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
     // frizat-d6l live-testing follow-up: the CreateLeague_* tests above construct LeagueCreateDto
     // directly as a C# record, which never exercises JSON deserialization — so they all passed
     // while the real [FromBody] endpoint 400'd on every request. The frontend sends leagueType as

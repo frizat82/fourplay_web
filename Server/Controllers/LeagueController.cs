@@ -639,6 +639,18 @@ public class LeagueController(
     [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateLeague([FromBody] LeagueCreateDto dto) {
+        // Mirrors useSportContext's own host-prefix check (Client.React/src/services/sport.tsx) —
+        // the frontend locks the Sport field to the current subdomain, but a crafted/replayed
+        // request could still send a mismatched LeagueType directly without this backstop.
+        // Request.Host can't be used here: prod traffic goes through Vercel's /api/:path*
+        // rewrite to the Railway backend (see CLAUDE.md's proxy note), and there's no
+        // UseForwardedHeaders middleware, so Host reflects Railway's own domain, not
+        // cfb.ivleague.xyz — it would resolve to Nfl for every request. Origin/Referer survive
+        // the rewrite untouched and are what the existing ALLOWED_ORIGINS/CORS check already
+        // relies on for this exact same-origin-per-sport distinction.
+        var requestSport = ResolveRequestSport(Request);
+        if (dto.LeagueType != requestSport)
+            return BadRequest($"League type '{dto.LeagueType}' does not match the current site.");
         if (await repo.LeagueExistsAsync(dto.LeagueName))
             return Conflict($"A league named '{dto.LeagueName}' already exists.");
         var ownerUserId = User.IsInRole(AppRoles.Administrator)
@@ -666,6 +678,23 @@ public class LeagueController(
         });
         return Ok(new LeagueInfoDto { Id = league.Id, LeagueName = league.LeagueName, LeagueType = league.LeagueType, OwnerUserId = league.OwnerUserId, DateCreated = league.DateCreated });
     }
+
+    // Prefers Origin (sent on every state-changing fetch, including same-origin ones — see
+    // CreateLeague's comment on why Host can't be used here), falls back to Referer, and if
+    // neither header is present at all falls back to Host rather than blind-guessing Nfl.
+    private static LeagueType ResolveRequestSport(HttpRequest request) {
+        var origin = request.Headers.Origin.FirstOrDefault();
+        if (origin is not null && Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
+            return HostIsCfb(originUri.Host) ? LeagueType.Cfb : LeagueType.Nfl;
+
+        var referer = request.Headers.Referer.FirstOrDefault();
+        if (referer is not null && Uri.TryCreate(referer, UriKind.Absolute, out var refererUri))
+            return HostIsCfb(refererUri.Host) ? LeagueType.Cfb : LeagueType.Nfl;
+
+        return HostIsCfb(request.Host.Host) ? LeagueType.Cfb : LeagueType.Nfl;
+    }
+
+    private static bool HostIsCfb(string host) => host.StartsWith("cfb.", StringComparison.OrdinalIgnoreCase);
 
     [HttpPut("{leagueId:int}/owner/{newOwnerUserId}")]
     [Authorize(Roles = AppRoles.Administrator)]

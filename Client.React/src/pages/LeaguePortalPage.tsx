@@ -76,13 +76,16 @@ export default function LeaguePortalPage() {
   const { user } = useAuth();
   const admin = isAdmin(user);
   const toast = useToast();
+  // The wire-format LeagueType for whichever sport's subdomain we're currently on — shared by
+  // the platform-wide league filter below and Create League's locked Sport field.
+  const currentLeagueType = isCfb ? 'Cfb' : 'Nfl';
 
   const [allLeagues, setAllLeagues] = useState<LeagueInfoDto[]>([]);
   const [allLeaguesLoaded, setAllLeaguesLoaded] = useState(false);
   // Admins see every league platform-wide (allLeagues), but still only for the sport they're
   // currently on — ownedLeagues already applies this same filter for non-admins (session.tsx).
   const leagueOptions = admin
-    ? allLeagues.filter((l) => l.leagueType === (isCfb ? 'Cfb' : 'Nfl'))
+    ? allLeagues.filter((l) => l.leagueType === currentLeagueType)
     : ownedLeagues;
   // Guards the empty state against the pre-fetch window — without it, an admin with leagues
   // platform-wide would see a false "no leagues yet" flash while allLeagues is still [].
@@ -260,7 +263,7 @@ export default function LeaguePortalPage() {
   };
 
   const openCreateLeague = () => {
-    setNewLeagueForm({ leagueName: '', leagueType: 'Nfl', ownerUserId: user?.userId ?? '' });
+    setNewLeagueForm({ leagueName: '', leagueType: currentLeagueType, ownerUserId: user?.userId ?? '' });
     setCreateLeagueOpen(true);
   };
 
@@ -472,17 +475,14 @@ export default function LeaguePortalPage() {
               value={newLeagueForm.leagueName}
               onChange={(e) => setNewLeagueForm((f) => ({ ...f, leagueName: e.target.value }))}
             />
-            <FormControl size="small">
-              <InputLabel>Sport</InputLabel>
-              <Select
-                value={newLeagueForm.leagueType}
-                label="Sport"
-                onChange={(e) => setNewLeagueForm((f) => ({ ...f, leagueType: e.target.value }))}
-              >
-                <MenuItem value="Nfl">NFL</MenuItem>
-                <MenuItem value="Cfb">CFB</MenuItem>
-              </Select>
-            </FormControl>
+            {/* frizat: the site you're on IS the sport you're creating for — locked, not a
+                choice, so there's no way to accidentally create a CFB league from the NFL
+                site (or vice versa) the way the old editable dropdown allowed. */}
+            <TextField
+              label="Sport"
+              value={isCfb ? 'CFB' : 'NFL'}
+              disabled
+            />
             {admin && (
               <TextField
                 select
