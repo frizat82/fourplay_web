@@ -25,6 +25,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<CfbSeasonWeekConfig> CfbSeasonWeekConfigs { get; set; }
     public DbSet<NflSeasonWeekConfig> NflSeasonWeekConfigs { get; set; }
     public DbSet<CfbRanking> CfbRankings { get; set; }
+    public DbSet<LeagueInviteLink> LeagueInviteLinks { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         base.OnModelCreating(modelBuilder);
