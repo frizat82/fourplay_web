@@ -185,8 +185,8 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
 
     [HttpDelete("picks/{leagueId}/{cfbSlateId}")]
     [Authorize(Roles = AppRoles.Administrator)]
-    public async Task<IActionResult> DeletePicks(int leagueId, int cfbSlateId) {
-        await repo.DeletePicksAsync(leagueId, cfbSlateId, CurrentUserId);
+    public async Task<IActionResult> DeletePicks(int leagueId, int cfbSlateId, [FromQuery] string userId) {
+        await repo.DeletePicksAsync(leagueId, cfbSlateId, userId);
         return Ok();
     }
 
