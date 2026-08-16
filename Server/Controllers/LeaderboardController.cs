@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
@@ -6,6 +7,7 @@ using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.Controllers;
 [Authorize]
@@ -19,6 +21,9 @@ public class LeaderboardController(
     : ControllerBase {
     [HttpGet("leaderboard/{seasonYear:long}")]
     public async Task<ActionResult<List<LeaderboardDto>>> GetLeaderboard(int leagueId, long seasonYear) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && !await leagueRepository.UserExistsInLeagueAsync(callerId, leagueId))
+            return Forbid();
         var scoreboard = await memoryCache.GetOrCreateAsync($"{leagueId}-{seasonYear}", async entry => {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
             var leagueInfo = await leagueRepository.GetLeagueInfoAsync(leagueId);

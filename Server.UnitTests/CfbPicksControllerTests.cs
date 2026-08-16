@@ -305,7 +305,7 @@ public class CfbPicksControllerTests
         Assert.Equal(2, returned.Count);
     }
 
-    // ── DeletePicks — admin-only ─────────────────────────────────────────────
+    // ── DeletePicks — admin-only, targets correct userId ─────────────────────
 
     [Fact]
     public void DeletePicks_IsRestrictedToAdministratorRole()
@@ -317,6 +317,19 @@ public class CfbPicksControllerTests
 
         Assert.NotNull(attr);
         Assert.Equal("Administrator", attr!.Roles);
+    }
+
+    [Fact]
+    public async Task DeletePicks_DeletesTargetUserId_NotAdminId()
+    {
+        const string targetUserId = "target-player-999";
+        _repo.DeletePicksAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string>()).Returns(Task.CompletedTask);
+
+        var result = await BuildController("admin-001", isAdmin: true).DeletePicks(1, 1, targetUserId);
+
+        Assert.IsType<OkResult>(result);
+        await _repo.Received(1).DeletePicksAsync(1, 1, targetUserId);
+        await _repo.DidNotReceive().DeletePicksAsync(1, 1, "admin-001");
     }
 
     // ── GetSpreads — serving-layer eligibility filter (frizat-9m0) ──────────

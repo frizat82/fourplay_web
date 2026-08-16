@@ -27,6 +27,8 @@ public class LeaderboardControllerTests
         _nflService  = Substitute.For<ILeaderboardService>();
         _cfbService  = Substitute.For<ICfbLeaderboardService>();
         _leagueRepo  = Substitute.For<ILeagueRepository>();
+        // Default: the test user ("user-1") is a member — tests that need Forbid override to false.
+        _leagueRepo.UserExistsInLeagueAsync("user-1", Arg.Any<int>()).Returns(true);
     }
 
     // Each test gets its own fresh MemoryCache so caching state doesn't bleed between tests.
@@ -166,6 +168,48 @@ public class LeaderboardControllerTests
         var result = await BuildController().GetLeaderboard(leagueId, seasonYear);
 
         Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    // ── Membership guard ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetLeaderboard_ReturnsForbid_WhenUserNotInLeague()
+    {
+        _leagueRepo.UserExistsInLeagueAsync("user-1", 99).Returns(false);
+
+        var result = await BuildController().GetLeaderboard(99, 2025);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _nflService.DidNotReceive().BuildLeaderboard(Arg.Any<int>(), Arg.Any<long>());
+        await _cfbService.DidNotReceive().BuildLeaderboard(Arg.Any<int>(), Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task GetLeaderboard_ReturnsOk_WhenAdminIsNotInLeague()
+    {
+        const int leagueId = 98;
+        const long seasonYear = 2025;
+        var league = new LeagueInfo { Id = leagueId, LeagueType = LeagueType.Nfl, LeagueName = "NFL", OwnerUserId = "owner" };
+
+        _leagueRepo.UserExistsInLeagueAsync(Arg.Any<string>(), leagueId).Returns(false);
+        _leagueRepo.GetLeagueInfoAsync(leagueId).Returns(league);
+        _nflService.BuildLeaderboard(leagueId, seasonYear).Returns(BuildLeaderboard(2));
+
+        var controller = new LeaderboardController(
+            _nflService, _cfbService, _leagueRepo, new MemoryCache(new MemoryCacheOptions()));
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, "admin-1"),
+                     new Claim(ClaimTypes.Role, "Administrator")], "Test"))
+            }
+        };
+
+        var result = await controller.GetLeaderboard(leagueId, seasonYear);
+
+        Assert.IsType<OkObjectResult>(result.Result);
     }
 
     // ── Memory cache — second call does NOT re-invoke service ─────────────────
