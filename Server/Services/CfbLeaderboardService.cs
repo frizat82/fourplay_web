@@ -58,10 +58,11 @@ public class CfbLeaderboardService(
         return leaderboard;
     }
 
-    private static double JuiceForSlate(int slateNumber, LeagueJuiceMapping juice) => slateNumber switch {
+    // internal so CfbLeaderboardServiceTests can verify the per-slate tease amounts directly.
+    internal static double JuiceForSlate(int slateNumber, LeagueJuiceMapping juice) => slateNumber switch {
         <= 14 => juice.Juice,
-        <= 17 => juice.JuiceDivisional,
-        _ => juice.JuiceConference,  // slates 18 (Semifinals) and 19 (Championship)
+        <= 16 => juice.JuiceDivisional,  // quarterfinals (slates 15–16)
+        _ => juice.JuiceConference,       // slate 17 Semifinals + slate 18 Championship
     };
 
     private LeaderboardWeekResults EvaluateSlate(int slateNumber, List<CfbSpreads> spreads, List<CfbScores> scores,

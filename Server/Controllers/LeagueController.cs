@@ -502,6 +502,9 @@ public class LeagueController(
     public async Task<ActionResult<BatchSpreadResponse>> GetSpreadBatch(
         int leagueId, int season, int week,
         [FromBody] BatchSpreadRequest request) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId, leagueId))
+            return Forbid();
         var calculator = await spreadCalculatorBuilder
             .WithLeagueId(leagueId)
             .WithWeek(week)
@@ -533,6 +536,9 @@ public class LeagueController(
     public async Task<ActionResult<BatchSpreadCalculationResponse>> CalculateSpreadBatch(
         int leagueId, int season, int week,
         [FromBody] BatchSpreadCalculationRequest request) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId, leagueId))
+            return Forbid();
         var calculator = await spreadCalculatorBuilder
             .WithLeagueId(leagueId)
             .WithWeek(week)
