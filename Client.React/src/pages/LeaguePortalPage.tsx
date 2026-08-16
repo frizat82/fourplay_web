@@ -47,6 +47,7 @@ import {
   createLeague,
   addLeagueUserMapping,
   assignLeagueOwner,
+  deleteLeague,
 } from '../api/league';
 import type { LeagueInfoDto, LeagueJuiceMappingDto, LeagueCostDto, UserSummaryDto } from '../types/admin';
 import type { LeagueUserMappingDto } from '../types/league';
@@ -76,13 +77,16 @@ export default function LeaguePortalPage() {
   const { user } = useAuth();
   const admin = isAdmin(user);
   const toast = useToast();
+  // The wire-format LeagueType for whichever sport's subdomain we're currently on — shared by
+  // the platform-wide league filter below and Create League's locked Sport field.
+  const currentLeagueType = isCfb ? 'Cfb' : 'Nfl';
 
   const [allLeagues, setAllLeagues] = useState<LeagueInfoDto[]>([]);
   const [allLeaguesLoaded, setAllLeaguesLoaded] = useState(false);
   // Admins see every league platform-wide (allLeagues), but still only for the sport they're
   // currently on — ownedLeagues already applies this same filter for non-admins (session.tsx).
   const leagueOptions = admin
-    ? allLeagues.filter((l) => l.leagueType === (isCfb ? 'Cfb' : 'Nfl'))
+    ? allLeagues.filter((l) => l.leagueType === currentLeagueType)
     : ownedLeagues;
   // Guards the empty state against the pre-fetch window — without it, an admin with leagues
   // platform-wide would see a false "no leagues yet" flash while allLeagues is still [].
@@ -130,6 +134,12 @@ export default function LeaguePortalPage() {
   const [newOwnerId, setNewOwnerId] = useState('');
   const [assigningOwner, setAssigningOwner] = useState(false);
 
+  // Owner or admin: Delete League dialog (Info tab) — type-to-confirm since this permanently
+  // removes the league's members, payout settings, picks, and invitations along with it.
+  const [deleteLeagueOpen, setDeleteLeagueOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingLeague, setDeletingLeague] = useState(false);
+
   const loadAllLeagues = useCallback(async () => {
     if (!admin) return;
     const leagues = await getAllLeagues();
@@ -140,11 +150,18 @@ export default function LeaguePortalPage() {
   useEffect(() => { void loadAllLeagues(); }, [loadAllLeagues]);
 
   // Platform user list backs all three admin dialogs (Create League, Add User, Assign Owner) —
-  // fetched once per admin visit rather than on every dialog open.
+  // fetched once per admin visit rather than on every dialog open. Without a .catch(), a failed
+  // fetch left availableUsers at [] for the whole session with no error and no retry — all three
+  // pickers looked "broken" with nothing to select and no indication why.
   useEffect(() => {
     if (!admin) return;
-    void getUsers().then(setAvailableUsers);
-  }, [admin]);
+    getUsers()
+      .then(setAvailableUsers)
+      .catch((err) => {
+        console.error('Failed to load platform user list', err);
+        toast.push('Failed to load users — try reloading the page', 'error');
+      });
+  }, [admin, toast]);
 
   useEffect(() => {
     if (leagueOptions.length > 0 && !selectedLeague) {
@@ -253,7 +270,7 @@ export default function LeaguePortalPage() {
   };
 
   const openCreateLeague = () => {
-    setNewLeagueForm({ leagueName: '', leagueType: 'Nfl', ownerUserId: user?.userId ?? '' });
+    setNewLeagueForm({ leagueName: '', leagueType: currentLeagueType, ownerUserId: user?.userId ?? '' });
     setCreateLeagueOpen(true);
   };
 
@@ -326,6 +343,27 @@ export default function LeaguePortalPage() {
     }
   };
 
+  const openDeleteLeague = () => {
+    setDeleteConfirmText('');
+    setDeleteLeagueOpen(true);
+  };
+
+  const handleDeleteLeague = async () => {
+    if (!selectedLeague) return;
+    setDeletingLeague(true);
+    try {
+      await deleteLeague(selectedLeague.id);
+      toast.push(`League "${selectedLeague.leagueName}" deleted`, 'success');
+      setDeleteLeagueOpen(false);
+      setSelectedLeague(null);
+      await Promise.all([loadAllLeagues(), reloadLeagues()]);
+    } catch {
+      toast.push('Failed to delete league', 'error');
+    } finally {
+      setDeletingLeague(false);
+    }
+  };
+
   const currentJuiceMapping = juiceMappings.find((m) => m.season === selectedSeason);
   const availableSeasons = juiceMappings.map((m) => m.season).sort((a, b) => b - a);
   if (!availableSeasons.includes(CURRENT_SEASON)) availableSeasons.unshift(CURRENT_SEASON);
@@ -380,7 +418,7 @@ export default function LeaguePortalPage() {
         <>
           <Tabs value={tab} onChange={(_, v: number) => setTab(v)} sx={{ mb: 2 }}>
             <Tab label="Members" />
-            <Tab label="Juice Settings" />
+            <Tab label="League Payouts" />
             <Tab label="Info" />
           </Tabs>
 
@@ -411,7 +449,13 @@ export default function LeaguePortalPage() {
             />
           )}
           {tab === 2 && (
-            <InfoTab league={selectedLeague} isAdmin={admin} onChangeOwner={openAssignOwner} />
+            <InfoTab
+              league={selectedLeague}
+              isAdmin={admin}
+              canDelete={admin || selectedLeague.ownerUserId === user?.userId}
+              onChangeOwner={openAssignOwner}
+              onDeleteLeague={openDeleteLeague}
+            />
           )}
         </>
       )}
@@ -421,7 +465,8 @@ export default function LeaguePortalPage() {
         <DialogContent>
           <Typography>
             Remove <strong>{removeTarget?.userName ?? removeTarget?.userId}</strong> from{' '}
-            <strong>{selectedLeague?.leagueName}</strong>? This cannot be undone.
+            <strong>{selectedLeague?.leagueName}</strong>? Their pick history is kept, and they
+            can be re-added later.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -465,17 +510,14 @@ export default function LeaguePortalPage() {
               value={newLeagueForm.leagueName}
               onChange={(e) => setNewLeagueForm((f) => ({ ...f, leagueName: e.target.value }))}
             />
-            <FormControl size="small">
-              <InputLabel>Sport</InputLabel>
-              <Select
-                value={newLeagueForm.leagueType}
-                label="Sport"
-                onChange={(e) => setNewLeagueForm((f) => ({ ...f, leagueType: e.target.value }))}
-              >
-                <MenuItem value="Nfl">NFL</MenuItem>
-                <MenuItem value="Cfb">CFB</MenuItem>
-              </Select>
-            </FormControl>
+            {/* frizat: the site you're on IS the sport you're creating for — locked, not a
+                choice, so there's no way to accidentally create a CFB league from the NFL
+                site (or vice versa) the way the old editable dropdown allowed. */}
+            <TextField
+              label="Sport"
+              value={isCfb ? 'CFB' : 'NFL'}
+              disabled
+            />
             {admin && (
               <TextField
                 select
@@ -548,6 +590,35 @@ export default function LeaguePortalPage() {
           <Button onClick={() => setAssignOwnerOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={() => void handleAssignOwner()} disabled={assigningOwner || !newOwnerId}>
             {assigningOwner ? <CircularProgress size={18} /> : 'Assign'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={deleteLeagueOpen} onClose={() => setDeleteLeagueOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete League</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography>
+              Deleting <strong>{selectedLeague?.leagueName}</strong> permanently removes its members,
+              payout settings, picks, and invitations. This cannot be undone.
+            </Typography>
+            <TextField
+              autoFocus
+              label="Type the league name to confirm"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteLeagueOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => void handleDeleteLeague()}
+            disabled={deletingLeague || deleteConfirmText !== selectedLeague?.leagueName}
+          >
+            {deletingLeague ? <CircularProgress size={18} /> : 'Delete League'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -700,7 +771,7 @@ function JuiceTab({
           onChange={(e) => onJuiceFormChange('juiceConference', Number(e.target.value))}
         />
         <TextField
-          label="Weekly Cost ($)"
+          label="Cost Per Week ($)"
           type="number"
           size="small"
           disabled={locked}
@@ -715,7 +786,11 @@ function JuiceTab({
   );
 }
 
-function InfoTab({ league, isAdmin: admin, onChangeOwner }: { league: LeagueInfoDto; isAdmin: boolean; onChangeOwner: () => void }) {
+function InfoTab({
+  league, isAdmin: admin, canDelete, onChangeOwner, onDeleteLeague,
+}: {
+  league: LeagueInfoDto; isAdmin: boolean; canDelete: boolean; onChangeOwner: () => void; onDeleteLeague: () => void;
+}) {
   return (
     <Box sx={{ maxWidth: 400 }}>
       <Stack spacing={1.5} divider={<Divider />}>
@@ -735,6 +810,13 @@ function InfoTab({ league, isAdmin: admin, onChangeOwner }: { league: LeagueInfo
           <Stack direction="row" justifyContent="flex-end">
             <Button size="small" variant="outlined" onClick={onChangeOwner}>
               Change Owner
+            </Button>
+          </Stack>
+        )}
+        {canDelete && (
+          <Stack direction="row" justifyContent="flex-end">
+            <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={onDeleteLeague}>
+              Delete League
             </Button>
           </Stack>
         )}

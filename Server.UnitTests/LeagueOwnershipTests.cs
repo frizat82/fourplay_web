@@ -222,6 +222,60 @@ public class LeagueOwnershipTests
         await repo.Received(1).RemoveLeagueUserMappingAsync(1, "victim-003");
     }
 
+    // frizat: GetLeagueInfoAsync's real (non-mocked) implementation uses FirstAsync(), which
+    // throws InvalidOperationException rather than returning null for a missing league — a
+    // double-submitted delete (slow network, already-deleted league) would otherwise 500 instead
+    // of a clean 404. This is realistic specifically for a delete endpoint, unlike the read/update
+    // endpoints elsewhere in this controller that share the same GetLeagueInfoAsync-then-use
+    // pattern against a league the frontend already has loaded.
+    [Fact]
+    public async Task DeleteLeague_ReturnsNotFound_WhenLeagueDoesNotExist()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(999).Returns(Task.FromException<LeagueInfo>(new InvalidOperationException("Sequence contains no elements")));
+
+        var result = await ctrl.DeleteLeague(999);
+
+        Assert.IsType<NotFoundResult>(result);
+        await repo.DidNotReceive().DeleteLeagueAsync(Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task DeleteLeague_ReturnsForbid_WhenCallerIsNotOwnerOrAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.DeleteLeague(1);
+
+        Assert.IsType<ForbidResult>(result);
+        await repo.DidNotReceive().DeleteLeagueAsync(Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task DeleteLeague_ReturnsNoContent_WhenCallerIsOwner()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.DeleteLeague(1);
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).DeleteLeagueAsync(1);
+    }
+
+    [Fact]
+    public async Task DeleteLeague_ReturnsNoContent_WhenCallerIsAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.DeleteLeague(1);
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).DeleteLeagueAsync(1);
+    }
+
     [Fact]
     public async Task GetLeagueCost_ReturnsCorrectCostForBaseTier()
     {
@@ -326,6 +380,75 @@ public class LeagueOwnershipTests
         var roleAttr = method!.GetCustomAttributes<AuthorizeAttribute>().FirstOrDefault(a => a.Roles is not null);
 
         Assert.Null(roleAttr); // any authenticated user may call this now — class-level [Authorize] still applies
+    }
+
+    // frizat: the frontend locks the Create League Sport field to the current subdomain, but a
+    // crafted/replayed request can still send a mismatched LeagueType directly — this is the
+    // server-side backstop, mirroring useSportContext's own cfb.-prefix host check.
+    //
+    // Origin is the PRIMARY signal, not Host: prod traffic goes through Vercel's /api/:path*
+    // rewrite to the Railway backend with no UseForwardedHeaders middleware, so Request.Host
+    // reflects Railway's own domain, not cfb.ivleague.xyz — using Host directly would silently
+    // resolve every request to Nfl. Origin survives the rewrite untouched (same mechanism the
+    // existing ALLOWED_ORIGINS/CORS check already relies on). Host is only a last-resort
+    // fallback for the no-Origin-no-Referer case (e.g. this test suite's plain DefaultHttpContext).
+    [Fact]
+    public async Task CreateLeague_ReturnsBadRequest_WhenLeagueTypeDoesNotMatchOrigin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        ctrl.ControllerContext.HttpContext.Request.Headers.Origin = "https://cfb.ivleague.xyz";
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+
+        var dto = new LeagueCreateDto("My League", LeagueType.Nfl, OwnerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceive().AddLeagueInfoAsync(Arg.Any<LeagueInfo>());
+    }
+
+    [Fact]
+    public async Task CreateLeague_Succeeds_WhenLeagueTypeMatchesCfbOrigin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        ctrl.ControllerContext.HttpContext.Request.Headers.Origin = "https://cfb.ivleague.xyz";
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+        var createdLeague = new LeagueInfo { Id = 42, LeagueName = "My League", OwnerUserId = OwnerId, LeagueType = LeagueType.Cfb };
+        repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(createdLeague));
+
+        var dto = new LeagueCreateDto("My League", LeagueType.Cfb, OwnerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto);
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    // Origin absent (e.g. some non-browser callers omit it) but Referer present — same host
+    // extraction, second-priority fallback.
+    [Fact]
+    public async Task CreateLeague_ResolvesSportFromReferer_WhenOriginIsAbsent()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        ctrl.ControllerContext.HttpContext.Request.Headers.Referer = "https://cfb.ivleague.xyz/league/manage";
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+
+        var dto = new LeagueCreateDto("My League", LeagueType.Nfl, OwnerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    // Neither Origin nor Referer present — falls back to Host (matches this test suite's plain
+    // DefaultHttpContext, and is the pre-existing behavior for that edge case).
+    [Fact]
+    public async Task CreateLeague_FallsBackToHost_WhenOriginAndRefererAreBothAbsent()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        ctrl.ControllerContext.HttpContext.Request.Host = new HostString("cfb.ivleague.xyz");
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+
+        var dto = new LeagueCreateDto("My League", LeagueType.Nfl, OwnerId, 2025, 0, 0, 0, 0);
+        var result = await ctrl.CreateLeague(dto);
+
+        Assert.IsType<BadRequestObjectResult>(result);
     }
 
     // frizat-d6l live-testing follow-up: the CreateLeague_* tests above construct LeagueCreateDto

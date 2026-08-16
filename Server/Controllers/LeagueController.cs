@@ -197,17 +197,19 @@ public class LeagueController(
     [ProducesResponseType(typeof(List<UserSummaryDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<UserSummaryDto>>> GetUsers() {
 
-        var users = await repo.GetUsersAsync(); // returns List<IdentityUser>
-        var usersOutput = new List<UserSummaryDto>();
-        foreach (var u in users) {
-            // Check if the user is in the Administrator role
-            var roles = await userManager.GetRolesAsync(u);
-            var isAdmin = roles.Contains("Administrator");
-
-            usersOutput.Add(new UserSummaryDto(u.Id, u.UserName, u.Email, u.EmailConfirmed, isAdmin));
-
-            //Console.WriteLine($"User: {u.Id}, {u.UserName}, {u.Email}, IsAdmin: {isAdmin}");
-        }
+        // Single batched role lookup instead of one GetRolesAsync call per user (N+1) — was slow
+        // enough at real user-base sizes to plausibly time out, which combined with a missing
+        // frontend error handler left Add User/Create League/Assign Owner pickers silently empty.
+        // repo.GetUsersAsync() and userManager.GetUsersInRoleAsync() use separate DbContexts
+        // (IDbContextFactory-created vs. Identity's request-scoped one), so they're safe to run
+        // concurrently rather than as two sequential round trips.
+        var usersTask = repo.GetUsersAsync();
+        var adminsTask = userManager.GetUsersInRoleAsync(AppRoles.Administrator);
+        await Task.WhenAll(usersTask, adminsTask);
+        var adminIds = adminsTask.Result.Select(u => u.Id).ToHashSet();
+        var usersOutput = usersTask.Result
+            .Select(u => new UserSummaryDto(u.Id, u.UserName, u.Email, u.EmailConfirmed, adminIds.Contains(u.Id)))
+            .ToList();
 
         return Ok(usersOutput);
     }
@@ -637,6 +639,18 @@ public class LeagueController(
     [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateLeague([FromBody] LeagueCreateDto dto) {
+        // Mirrors useSportContext's own host-prefix check (Client.React/src/services/sport.tsx) —
+        // the frontend locks the Sport field to the current subdomain, but a crafted/replayed
+        // request could still send a mismatched LeagueType directly without this backstop.
+        // Request.Host can't be used here: prod traffic goes through Vercel's /api/:path*
+        // rewrite to the Railway backend (see CLAUDE.md's proxy note), and there's no
+        // UseForwardedHeaders middleware, so Host reflects Railway's own domain, not
+        // cfb.ivleague.xyz — it would resolve to Nfl for every request. Origin/Referer survive
+        // the rewrite untouched and are what the existing ALLOWED_ORIGINS/CORS check already
+        // relies on for this exact same-origin-per-sport distinction.
+        var requestSport = ResolveRequestSport(Request);
+        if (dto.LeagueType != requestSport)
+            return BadRequest($"League type '{dto.LeagueType}' does not match the current site.");
         if (await repo.LeagueExistsAsync(dto.LeagueName))
             return Conflict($"A league named '{dto.LeagueName}' already exists.");
         var ownerUserId = User.IsInRole(AppRoles.Administrator)
@@ -664,6 +678,23 @@ public class LeagueController(
         });
         return Ok(new LeagueInfoDto { Id = league.Id, LeagueName = league.LeagueName, LeagueType = league.LeagueType, OwnerUserId = league.OwnerUserId, DateCreated = league.DateCreated });
     }
+
+    // Prefers Origin (sent on every state-changing fetch, including same-origin ones — see
+    // CreateLeague's comment on why Host can't be used here), falls back to Referer, and if
+    // neither header is present at all falls back to Host rather than blind-guessing Nfl.
+    private static LeagueType ResolveRequestSport(HttpRequest request) {
+        var origin = request.Headers.Origin.FirstOrDefault();
+        if (origin is not null && Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
+            return HostIsCfb(originUri.Host) ? LeagueType.Cfb : LeagueType.Nfl;
+
+        var referer = request.Headers.Referer.FirstOrDefault();
+        if (referer is not null && Uri.TryCreate(referer, UriKind.Absolute, out var refererUri))
+            return HostIsCfb(refererUri.Host) ? LeagueType.Cfb : LeagueType.Nfl;
+
+        return HostIsCfb(request.Host.Host) ? LeagueType.Cfb : LeagueType.Nfl;
+    }
+
+    private static bool HostIsCfb(string host) => host.StartsWith("cfb.", StringComparison.OrdinalIgnoreCase);
 
     [HttpPut("{leagueId:int}/owner/{newOwnerUserId}")]
     [Authorize(Roles = AppRoles.Administrator)]
@@ -764,6 +795,30 @@ public class LeagueController(
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
             return Forbid();
         await repo.RemoveLeagueUserMappingAsync(leagueId, userId);
+        return NoContent();
+    }
+
+    // Every FK off LeagueInfo is DB-level Cascade (see LeagueRepository.DeleteLeagueAsync) — this
+    // permanently removes the league's members, juice settings, picks (NFL + CFB), and
+    // invitations along with it. The UI requires typing the league name to confirm.
+    [HttpDelete("{leagueId:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteLeague(int leagueId) {
+        LeagueInfo league;
+        try {
+            league = await repo.GetLeagueInfoAsync(leagueId);
+        } catch (InvalidOperationException) {
+            // GetLeagueInfoAsync's real implementation throws (FirstAsync) rather than returning
+            // null for a missing league — realistic here specifically: a double-submitted delete
+            // (slow network, already-deleted league) should 404, not 500.
+            return NotFound();
+        }
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return Forbid();
+        await repo.DeleteLeagueAsync(leagueId);
         return NoContent();
     }
 
