@@ -93,7 +93,7 @@ export default function GameCard({
       return <Button color="success" variant="contained" disabled startIcon={<CheckIcon />} aria-label={`${team} locked in`} sx={pickButtonSx}>Picked</Button>;
     if (pickState !== 'none')
       return <Button color="success" variant="contained" onClick={onPick} aria-label={`${team} picked`} sx={pickButtonSx}>Picked</Button>;
-    return <Button color="warning" variant="contained" disabled={locked} onClick={onPick} aria-label={`Pick ${team}`} sx={pickButtonSx}>Pick</Button>;
+    return <Button color="info" variant="contained" disabled={locked} onClick={onPick} aria-label={`Pick ${team}`} sx={pickButtonSx}>Pick</Button>;
   };
 
   const renderTeamLogo = (abbr: string, jerseyUrl: string | undefined) => (
@@ -188,7 +188,7 @@ export default function GameCard({
               <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ gap: 1 }}>
                 <Button
                   variant="contained"
-                  color={overPickState !== 'none' ? 'success' : 'warning'}
+                  color={overPickState !== 'none' ? 'success' : 'info'}
                   sx={pickButtonSx}
                   disabled={overUnderLocked && overPickState === 'none'}
                   onClick={onPickOver}
@@ -200,7 +200,7 @@ export default function GameCard({
                 </Typography>
                 <Button
                   variant="contained"
-                  color={underPickState !== 'none' ? 'success' : 'warning'}
+                  color={underPickState !== 'none' ? 'success' : 'info'}
                   sx={pickButtonSx}
                   disabled={overUnderLocked && underPickState === 'none'}
                   onClick={onPickUnder}
