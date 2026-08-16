@@ -804,8 +804,17 @@ public class LeagueController(
     [HttpDelete("{leagueId:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteLeague(int leagueId) {
-        var league = await repo.GetLeagueInfoAsync(leagueId);
+        LeagueInfo league;
+        try {
+            league = await repo.GetLeagueInfoAsync(leagueId);
+        } catch (InvalidOperationException) {
+            // GetLeagueInfoAsync's real implementation throws (FirstAsync) rather than returning
+            // null for a missing league — realistic here specifically: a double-submitted delete
+            // (slow network, already-deleted league) should 404, not 500.
+            return NotFound();
+        }
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
             return Forbid();

@@ -137,6 +137,26 @@ public class DemoDataSeeder(
         Log.Information("DemoDataSeeder: purged {Count} stray league(s) not created by the seeder", strayLeagueIds.Count);
     }
 
+    // frizat: this class's own doc comment promises "Idempotent — safe to call on every startup."
+    // Before soft-delete, a removed member's row was hard-deleted, so a bare AnyAsync-then-Add
+    // self-healed on reseed. Now the row persists with IsActive=false, so every "ensure this demo
+    // member exists" call site must reactivate an existing inactive row (not just skip-if-any-row)
+    // to keep that promise once someone exercises the Remove Member feature against the demo
+    // stack — mirrors LeagueRepository.AddLeagueUserMappingAsync's reactivate-not-duplicate logic.
+    public async Task EnsureActiveLeagueMemberAsync(int leagueId, string userId)
+    {
+        var existing = await db.LeagueUserMapping
+            .FirstOrDefaultAsync(m => m.LeagueId == leagueId && m.UserId == userId);
+        if (existing is null) {
+            db.LeagueUserMapping.Add(new LeagueUserMapping { LeagueId = leagueId, UserId = userId });
+            await db.SaveChangesAsync();
+        } else if (!existing.IsActive) {
+            existing.IsActive = true;
+            existing.RemovedAt = null;
+            await db.SaveChangesAsync();
+        }
+    }
+
     private async Task SeedLeagueJuiceMappingAsync(LeagueInfo? league)
     {
         if (league == null) return;
@@ -344,11 +364,7 @@ public class DemoDataSeeder(
         var adminUser = await userManager.FindByEmailAsync(adminEmail);
         if (adminUser == null) return;
 
-        if (await db.LeagueUserMapping.AnyAsync(m => m.LeagueId == league.Id && m.UserId == adminUser.Id))
-            return;
-
-        db.LeagueUserMapping.Add(new LeagueUserMapping { LeagueId = league.Id, UserId = adminUser.Id });
-        await db.SaveChangesAsync();
+        await EnsureActiveLeagueMemberAsync(league.Id, adminUser.Id);
         Log.Information("DemoDataSeeder: added admin to Demo League");
     }
 
@@ -420,11 +436,7 @@ public class DemoDataSeeder(
         }
 
         // Ensure league membership
-        if (!await db.LeagueUserMapping.AnyAsync(m => m.LeagueId == league.Id && m.UserId == user.Id))
-        {
-            db.LeagueUserMapping.Add(new LeagueUserMapping { LeagueId = league.Id, UserId = user.Id });
-            await db.SaveChangesAsync();
-        }
+        await EnsureActiveLeagueMemberAsync(league.Id, user.Id);
 
         return user;
     }
@@ -970,21 +982,14 @@ public class DemoDataSeeder(
 
         var adminEmail = configuration["ADMIN_EMAIL"] ?? throw new InvalidOperationException("ADMIN_EMAIL required");
         var adminUser = await userManager.FindByEmailAsync(adminEmail);
-        if (adminUser != null && !await db.LeagueUserMapping.AnyAsync(m => m.LeagueId == league.Id && m.UserId == adminUser.Id))
-        {
-            db.LeagueUserMapping.Add(new LeagueUserMapping { LeagueId = league.Id, UserId = adminUser.Id });
-            await db.SaveChangesAsync();
-        }
+        if (adminUser != null)
+            await EnsureActiveLeagueMemberAsync(league.Id, adminUser.Id);
 
         foreach (var (_, email) in DemoUsers)
         {
             var user = await userManager.FindByEmailAsync(email);
             if (user == null) continue;
-            if (!await db.LeagueUserMapping.AnyAsync(m => m.LeagueId == league.Id && m.UserId == user.Id))
-            {
-                db.LeagueUserMapping.Add(new LeagueUserMapping { LeagueId = league.Id, UserId = user.Id });
-                await db.SaveChangesAsync();
-            }
+            await EnsureActiveLeagueMemberAsync(league.Id, user.Id);
         }
         Log.Information("DemoDataSeeder: added all demo users to CFB Demo League");
     }
