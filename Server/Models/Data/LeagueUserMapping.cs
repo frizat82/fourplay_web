@@ -9,4 +9,9 @@ public class LeagueUserMapping {
     public string UserId { get; set; }
     public ApplicationUser User { get; set; } // Navigation property
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
+    // Soft-delete: a removed member keeps their row (and their pick history stays intact for
+    // audit purposes) — they're just excluded from active-membership reads. See
+    // LeagueRepository.RemoveLeagueUserMappingAsync / AddLeagueUserMappingAsync.
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset? RemovedAt { get; set; }
 }
