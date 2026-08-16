@@ -39,7 +39,10 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
                 EnableSsl = true
             };
 
-            await smtpClient.SendMailAsync(message);
+            // Railway's HTTP proxy kills connections after ~2 min; cap SMTP at 15s so we return
+            // a proper error response instead of hanging until the proxy tears the connection.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await smtpClient.SendMailAsync(message, cts.Token);
             logger.LogInformation("\u2705 Email sent to {Email} ({Subject})", toEmail, subject);
         }
         catch (Exception ex) {
