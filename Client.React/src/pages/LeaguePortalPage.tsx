@@ -585,16 +585,20 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
 
   const inviteUrl = inviteLink ? `${window.location.origin}/join/${inviteLink.token}` : '';
 
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(inviteUrl);
-    toast.push('Link copied', 'info');
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      toast.push('Link copied', 'info');
+    } catch {
+      toast.push('Failed to copy link', 'error');
+    }
   };
 
   const handleShare = () => {
     if (navigator.share) {
       void navigator.share({ title: 'Join my league', url: inviteUrl });
     } else {
-      handleCopy();
+      void handleCopy();
     }
   };
 
@@ -632,7 +636,7 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
               {inviteUrl}
             </Typography>
             <Stack direction="row" spacing={1} flexWrap="wrap">
-              <Button size="small" startIcon={<ContentCopyIcon />} variant="outlined" onClick={handleCopy}>
+              <Button size="small" startIcon={<ContentCopyIcon />} variant="outlined" onClick={() => void handleCopy()}>
                 Copy
               </Button>
               <Button size="small" startIcon={<IosShareIcon />} variant="contained" color="secondary" onClick={handleShare}>

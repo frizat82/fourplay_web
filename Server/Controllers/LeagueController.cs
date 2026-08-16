@@ -13,6 +13,7 @@ using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Net.Mime;
 using System.Security.Claims;
@@ -755,7 +756,9 @@ public class LeagueController(
     [ProducesResponseType(typeof(LeagueInviteLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<LeagueInviteLinkDto>> GenerateInviteLink(int leagueId) {
-        var league = await repo.GetLeagueInfoAsync(leagueId);
+        LeagueInfo league;
+        try { league = await repo.GetLeagueInfoAsync(leagueId); }
+        catch (InvalidOperationException) { return NotFound(); }
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
             return Forbid();
@@ -783,11 +786,15 @@ public class LeagueController(
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (await repo.UserExistsInLeagueAsync(userId, link.LeagueId))
             return Conflict("You are already a member of this league.");
-        await repo.AddLeagueUserMappingAsync(new LeagueUserMapping {
-            LeagueId = link.LeagueId,
-            UserId = userId,
-            DateCreated = DateTimeOffset.UtcNow,
-        });
+        try {
+            await repo.AddLeagueUserMappingAsync(new LeagueUserMapping {
+                LeagueId = link.LeagueId,
+                UserId = userId,
+                DateCreated = DateTimeOffset.UtcNow,
+            });
+        } catch (DbUpdateException) {
+            return Conflict("You are already a member of this league.");
+        }
         return NoContent();
     }
 

@@ -45,8 +45,14 @@ export default function JoinLeaguePage() {
       await joinViaLink(token!);
       await reloadLeagues();
       navigate('/dashboard');
-    } catch {
-      setError('Failed to join league. The link may have expired.');
+    } catch (err) {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      if (status === 409) {
+        await reloadLeagues();
+        navigate('/dashboard');
+      } else {
+        setError('Failed to join league. The link may have expired.');
+      }
     } finally {
       setJoining(false);
     }
