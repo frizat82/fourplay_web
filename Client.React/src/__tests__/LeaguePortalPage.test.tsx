@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
@@ -29,11 +29,12 @@ const ADMIN_USER: UserInfo = { userId: 'admin-1', name: 'Admin', claims: [{ type
 
 const authState = { user: OWNER_USER as UserInfo | null };
 const sportContext = { sport: 'NFL' as 'NFL' | 'CFB', isCfb: false, isNfl: true };
+const toastPush = vi.fn();
 
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/sport', () => ({ useSportContext: () => sportContext }));
 vi.mock('../services/auth', () => ({ useAuth: () => authState }));
-vi.mock('../services/toast', () => ({ useToast: () => ({ push: vi.fn() }) }));
+vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 
 vi.mock('../api/league', () => ({
   getLeagueUserMappings: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock('../api/league', () => ({
   createLeague: vi.fn(),
   addLeagueUserMapping: vi.fn(),
   assignLeagueOwner: vi.fn(),
+  deleteLeague: vi.fn(),
 }));
 import {
   getLeagueUserMappings,
@@ -56,6 +58,8 @@ import {
   getAllLeagues,
   getUsers,
   createLeague,
+  addLeagueUserMapping,
+  deleteLeague,
 } from '../api/league';
 
 const mockedGetMappings = vi.mocked(getLeagueUserMappings);
@@ -64,6 +68,8 @@ const mockedGetCost = vi.mocked(getLeagueCost);
 const mockedGetAllLeagues = vi.mocked(getAllLeagues);
 const mockedGetUsers = vi.mocked(getUsers);
 const mockedCreateLeague = vi.mocked(createLeague);
+const mockedAddLeagueUserMapping = vi.mocked(addLeagueUserMapping);
+const mockedDeleteLeague = vi.mocked(deleteLeague);
 
 const CURRENT_SEASON = new Date().getFullYear();
 
@@ -122,7 +128,10 @@ beforeEach(() => {
   mockedGetAllLeagues.mockResolvedValue([]);
   mockedGetUsers.mockResolvedValue([makeUser()]);
   mockedCreateLeague.mockResolvedValue(makeLeague({ id: 99, leagueName: 'New League' }));
+  mockedAddLeagueUserMapping.mockResolvedValue(undefined);
+  mockedDeleteLeague.mockResolvedValue(undefined);
   sessionState.reloadLeagues.mockClear();
+  toastPush.mockClear();
 });
 
 describe('LeaguePortalPage (owner, non-admin)', () => {
@@ -134,7 +143,7 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
 
   it('locks juice fields for a past season and keeps them editable for the current season', async () => {
     renderPage();
-    await userEvent.click(await screen.findByRole('tab', { name: 'Juice Settings' }));
+    await userEvent.click(await screen.findByRole('tab', { name: 'League Payouts' }));
 
     const seasonSelect = screen.getAllByRole('combobox')[0];
     await userEvent.click(seasonSelect);
@@ -149,6 +158,16 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
 
     await waitFor(() => expect(screen.getByLabelText(/Tease Pts \(Regular Season\)/i)).not.toBeDisabled());
     expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
+  });
+
+  // frizat: "Juice Settings"/"Weekly Cost" read as gambling jargon to a general audience —
+  // renamed to plain language. Locking in the new copy so this doesn't silently regress.
+  it('shows the League Payouts tab and Cost Per Week field with plain-language labels', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'League Payouts' }));
+    expect(await screen.findByLabelText(/cost per week/i)).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /juice settings/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/weekly cost/i)).not.toBeInTheDocument();
   });
 
   it('does not show a raw owner id on the Info tab', async () => {
@@ -190,6 +209,42 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
       expect.objectContaining({ leagueName: 'New League', ownerUserId: 'owner-1' })
     ));
     expect(sessionState.reloadLeagues).toHaveBeenCalled();
+  });
+
+  // frizat: Remove Member is now a soft-delete (kept for audit/history, can be re-added) — the
+  // dialog copy must say so, not "cannot be undone", which stopped being true.
+  it('tells the admin a removed member can be re-added, not that it cannot be undone', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /remove/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/re-added/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/cannot be undone/i)).not.toBeInTheDocument();
+  });
+
+  // frizat: deleting an entire league (all picks, members, payout history) is a much bigger
+  // blast radius than removing one member, so a plain Cancel/Confirm click is too easy to
+  // mis-click — the confirm button stays disabled until the league name is typed exactly.
+  it('gates Delete League behind typing the exact league name, then deletes it', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Info' }));
+    await userEvent.click(await screen.findByRole('button', { name: /delete league/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const confirmButton = within(dialog).getByRole('button', { name: /^delete league$/i });
+    expect(confirmButton).toBeDisabled();
+
+    const confirmInput = within(dialog).getByLabelText(/league name/i);
+    await userEvent.type(confirmInput, 'Demo Leagu');
+    expect(confirmButton).toBeDisabled();
+
+    await userEvent.type(confirmInput, 'e');
+    expect(confirmButton).not.toBeDisabled();
+
+    await userEvent.click(confirmButton);
+
+    await waitFor(() => expect(mockedDeleteLeague).toHaveBeenCalledWith(1));
+    expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/deleted/i), 'success');
   });
 });
 
@@ -298,5 +353,55 @@ describe('LeaguePortalPage (site admin)', () => {
     expect(screen.getByRole('button', { name: /add user/i })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: 'Info' }));
     expect(screen.getByRole('button', { name: /change owner/i })).toBeInTheDocument();
+  });
+
+  // frizat: getUsers() backs Add User, Create League's owner picker, and Assign Owner —
+  // a failed fetch previously left all three silently empty forever (no catch, no toast,
+  // no retry). This proves the failure is now surfaced instead of invisible.
+  it('shows an error toast when the platform user list fails to load', async () => {
+    mockedGetUsers.mockRejectedValue(new Error('network down'));
+    renderPage();
+    await screen.findByText('frizat@example.com');
+    await waitFor(() => expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/failed to load users/i), 'error'));
+  });
+
+  it('adds a selected user to the league via the Add User dialog', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /add user/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const userSelect = within(dialog).getByLabelText(/^user$/i);
+    await userEvent.selectOptions(userSelect, 'bob@example.com');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^add user$/i }));
+
+    await waitFor(() => expect(mockedAddLeagueUserMapping).toHaveBeenCalledWith(1, 'user-2'));
+    expect(toastPush).toHaveBeenCalledWith('bob@example.com added to league', 'success');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  // frizat: Create League's Sport field used to be a free-choice dropdown regardless of which
+  // subdomain the admin was on — an admin browsing cfb.* could create an NFL league and vice
+  // versa. The site you're on IS the sport you're creating for, so the field should show the
+  // current sport and not offer the other one at all.
+  it('locks the Create League sport field to the current subdomain, not an editable choice', async () => {
+    sportContext.sport = 'CFB';
+    sportContext.isCfb = true;
+    sportContext.isNfl = false;
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /create league/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const sportField = within(dialog).getByLabelText(/^sport$/i);
+    expect(sportField).toHaveValue('CFB');
+    expect(sportField).toBeDisabled();
+    expect(within(dialog).queryByRole('option', { name: /^nfl$/i })).not.toBeInTheDocument();
+  });
+
+  it('locks the Create League sport field to NFL on the NFL subdomain', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /create league/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText(/^sport$/i)).toHaveValue('NFL');
   });
 });
