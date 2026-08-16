@@ -143,7 +143,7 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
 
   it('locks juice fields for a past season and keeps them editable for the current season', async () => {
     renderPage();
-    await userEvent.click(await screen.findByRole('tab', { name: 'League Payouts' }));
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
 
     const seasonSelect = screen.getAllByRole('combobox')[0];
     await userEvent.click(seasonSelect);
@@ -162,9 +162,9 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
 
   // frizat: "Juice Settings"/"Weekly Cost" read as gambling jargon to a general audience —
   // renamed to plain language. Locking in the new copy so this doesn't silently regress.
-  it('shows the League Payouts tab and Cost Per Week field with plain-language labels', async () => {
+  it('shows the Settings tab with plain-language labels (no gambling jargon)', async () => {
     renderPage();
-    await userEvent.click(await screen.findByRole('tab', { name: 'League Payouts' }));
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
     expect(await screen.findByLabelText(/cost per week/i)).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /juice settings/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/weekly cost/i)).not.toBeInTheDocument();
