@@ -49,6 +49,7 @@ vi.mock('../api/league', () => ({
   createLeague: vi.fn(),
   addLeagueUserMapping: vi.fn(),
   assignLeagueOwner: vi.fn(),
+  deleteLeague: vi.fn(),
 }));
 import {
   getLeagueUserMappings,
@@ -58,6 +59,7 @@ import {
   getUsers,
   createLeague,
   addLeagueUserMapping,
+  deleteLeague,
 } from '../api/league';
 
 const mockedGetMappings = vi.mocked(getLeagueUserMappings);
@@ -67,6 +69,7 @@ const mockedGetAllLeagues = vi.mocked(getAllLeagues);
 const mockedGetUsers = vi.mocked(getUsers);
 const mockedCreateLeague = vi.mocked(createLeague);
 const mockedAddLeagueUserMapping = vi.mocked(addLeagueUserMapping);
+const mockedDeleteLeague = vi.mocked(deleteLeague);
 
 const CURRENT_SEASON = new Date().getFullYear();
 
@@ -126,6 +129,7 @@ beforeEach(() => {
   mockedGetUsers.mockResolvedValue([makeUser()]);
   mockedCreateLeague.mockResolvedValue(makeLeague({ id: 99, leagueName: 'New League' }));
   mockedAddLeagueUserMapping.mockResolvedValue(undefined);
+  mockedDeleteLeague.mockResolvedValue(undefined);
   sessionState.reloadLeagues.mockClear();
   toastPush.mockClear();
 });
@@ -139,7 +143,7 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
 
   it('locks juice fields for a past season and keeps them editable for the current season', async () => {
     renderPage();
-    await userEvent.click(await screen.findByRole('tab', { name: 'Juice Settings' }));
+    await userEvent.click(await screen.findByRole('tab', { name: 'League Payouts' }));
 
     const seasonSelect = screen.getAllByRole('combobox')[0];
     await userEvent.click(seasonSelect);
@@ -154,6 +158,16 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
 
     await waitFor(() => expect(screen.getByLabelText(/Tease Pts \(Regular Season\)/i)).not.toBeDisabled());
     expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
+  });
+
+  // frizat: "Juice Settings"/"Weekly Cost" read as gambling jargon to a general audience —
+  // renamed to plain language. Locking in the new copy so this doesn't silently regress.
+  it('shows the League Payouts tab and Cost Per Week field with plain-language labels', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'League Payouts' }));
+    expect(await screen.findByLabelText(/cost per week/i)).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /juice settings/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/weekly cost/i)).not.toBeInTheDocument();
   });
 
   it('does not show a raw owner id on the Info tab', async () => {
@@ -195,6 +209,42 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
       expect.objectContaining({ leagueName: 'New League', ownerUserId: 'owner-1' })
     ));
     expect(sessionState.reloadLeagues).toHaveBeenCalled();
+  });
+
+  // frizat: Remove Member is now a soft-delete (kept for audit/history, can be re-added) — the
+  // dialog copy must say so, not "cannot be undone", which stopped being true.
+  it('tells the admin a removed member can be re-added, not that it cannot be undone', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /remove/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/re-added/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/cannot be undone/i)).not.toBeInTheDocument();
+  });
+
+  // frizat: deleting an entire league (all picks, members, payout history) is a much bigger
+  // blast radius than removing one member, so a plain Cancel/Confirm click is too easy to
+  // mis-click — the confirm button stays disabled until the league name is typed exactly.
+  it('gates Delete League behind typing the exact league name, then deletes it', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Info' }));
+    await userEvent.click(await screen.findByRole('button', { name: /delete league/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const confirmButton = within(dialog).getByRole('button', { name: /^delete league$/i });
+    expect(confirmButton).toBeDisabled();
+
+    const confirmInput = within(dialog).getByLabelText(/league name/i);
+    await userEvent.type(confirmInput, 'Demo Leagu');
+    expect(confirmButton).toBeDisabled();
+
+    await userEvent.type(confirmInput, 'e');
+    expect(confirmButton).not.toBeDisabled();
+
+    await userEvent.click(confirmButton);
+
+    await waitFor(() => expect(mockedDeleteLeague).toHaveBeenCalledWith(1));
+    expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/deleted/i), 'success');
   });
 });
 

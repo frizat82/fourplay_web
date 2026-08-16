@@ -45,11 +45,11 @@ test.describe('Commissioner portal (/league/manage)', () => {
     await expect(page.getByText(/members.*\$100\/season/)).toBeVisible({ timeout: 5000 });
   });
 
-  test('Juice Settings tab loads existing juice values', async ({ page }) => {
+  test('League Payouts tab loads existing juice values', async ({ page }) => {
     await ownerAuth(page);
     await waitForSpinner(page);
 
-    await page.getByRole('tab', { name: /juice settings/i }).click();
+    await page.getByRole('tab', { name: /league payouts/i }).click();
     await waitForSpinner(page);
 
     // Mocked juice: 13 pts tease — "Tease Pts (Regular Season)" label should be visible

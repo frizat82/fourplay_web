@@ -798,6 +798,30 @@ public class LeagueController(
         return NoContent();
     }
 
+    // Every FK off LeagueInfo is DB-level Cascade (see LeagueRepository.DeleteLeagueAsync) — this
+    // permanently removes the league's members, juice settings, picks (NFL + CFB), and
+    // invitations along with it. The UI requires typing the league name to confirm.
+    [HttpDelete("{leagueId:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteLeague(int leagueId) {
+        LeagueInfo league;
+        try {
+            league = await repo.GetLeagueInfoAsync(leagueId);
+        } catch (InvalidOperationException) {
+            // GetLeagueInfoAsync's real implementation throws (FirstAsync) rather than returning
+            // null for a missing league — realistic here specifically: a double-submitted delete
+            // (slow network, already-deleted league) should 404, not 500.
+            return NotFound();
+        }
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return Forbid();
+        await repo.DeleteLeagueAsync(leagueId);
+        return NoContent();
+    }
+
     [HttpPost("{leagueId:int}/invite")]
     [ProducesResponseType(typeof(InvitationDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

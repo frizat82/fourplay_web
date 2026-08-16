@@ -38,6 +38,7 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     Task UpdateLeagueJuiceMappingAsync(LeagueJuiceMapping mapping);
     Task RemoveLeagueUserMappingAsync(int leagueId, string userId);
     Task<int> GetLeagueMemberCountAsync(int leagueId);
+    Task DeleteLeagueAsync(int leagueId);
 
     // Add operations
     Task AddLeagueUserMappingAsync(LeagueUserMapping mapping);

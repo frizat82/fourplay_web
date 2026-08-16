@@ -222,6 +222,60 @@ public class LeagueOwnershipTests
         await repo.Received(1).RemoveLeagueUserMappingAsync(1, "victim-003");
     }
 
+    // frizat: GetLeagueInfoAsync's real (non-mocked) implementation uses FirstAsync(), which
+    // throws InvalidOperationException rather than returning null for a missing league — a
+    // double-submitted delete (slow network, already-deleted league) would otherwise 500 instead
+    // of a clean 404. This is realistic specifically for a delete endpoint, unlike the read/update
+    // endpoints elsewhere in this controller that share the same GetLeagueInfoAsync-then-use
+    // pattern against a league the frontend already has loaded.
+    [Fact]
+    public async Task DeleteLeague_ReturnsNotFound_WhenLeagueDoesNotExist()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(999).Returns(Task.FromException<LeagueInfo>(new InvalidOperationException("Sequence contains no elements")));
+
+        var result = await ctrl.DeleteLeague(999);
+
+        Assert.IsType<NotFoundResult>(result);
+        await repo.DidNotReceive().DeleteLeagueAsync(Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task DeleteLeague_ReturnsForbid_WhenCallerIsNotOwnerOrAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.DeleteLeague(1);
+
+        Assert.IsType<ForbidResult>(result);
+        await repo.DidNotReceive().DeleteLeagueAsync(Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task DeleteLeague_ReturnsNoContent_WhenCallerIsOwner()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.DeleteLeague(1);
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).DeleteLeagueAsync(1);
+    }
+
+    [Fact]
+    public async Task DeleteLeague_ReturnsNoContent_WhenCallerIsAdmin()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.DeleteLeague(1);
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).DeleteLeagueAsync(1);
+    }
+
     [Fact]
     public async Task GetLeagueCost_ReturnsCorrectCostForBaseTier()
     {
