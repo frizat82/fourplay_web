@@ -379,6 +379,39 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    if (url.match(/\/api\/league\/\d+\/invite-link$/) && method === 'POST') {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          token: 'mocktokenabcdef1234567890abcdef12',
+          leagueId: 1,
+          leagueName: 'Test League',
+          expiresAt: new Date(Date.now() + 86400000).toISOString(),
+        }),
+      });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/join\/[^/]+$/) && method === 'GET') {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          token: 'mocktokenabcdef1234567890abcdef12',
+          leagueId: 1,
+          leagueName: 'Test League',
+          expiresAt: new Date(Date.now() + 86400000).toISOString(),
+        }),
+      });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/join\/[^/]+$/) && method === 'POST') {
+      void route.fulfill({ status: 204 });
+      return;
+    }
+
     if (url.match(/\/api\/league\/\d+\/owner\//) && method === 'PUT') {
       void route.fulfill({ status: 204 });
       return;

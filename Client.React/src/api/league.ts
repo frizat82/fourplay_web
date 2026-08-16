@@ -156,3 +156,28 @@ export async function createLeague(dto: LeagueCreateDto) {
   const { data } = await http.post<LeagueInfoDto>('/api/league/create', dto);
   return data;
 }
+
+export interface LeagueInviteLinkDto {
+  token: string;
+  leagueId: number;
+  leagueName: string;
+  expiresAt: string;
+}
+
+export async function generateInviteLink(leagueId: number): Promise<LeagueInviteLinkDto> {
+  const { data } = await http.post<LeagueInviteLinkDto>(`/api/league/${leagueId}/invite-link`, {});
+  return data;
+}
+
+export async function validateInviteLink(token: string): Promise<LeagueInviteLinkDto | null> {
+  try {
+    const { data } = await http.get<LeagueInviteLinkDto>(`/api/league/join/${token}`);
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export async function joinViaLink(token: string): Promise<void> {
+  await http.post(`/api/league/join/${token}`, {});
+}
