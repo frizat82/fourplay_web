@@ -186,6 +186,7 @@ export default function LeaguePortalPage() {
 
   useEffect(() => {
     if (!selectedLeague) return;
+    setInviteLink(null);
     void loadMembers(selectedLeague.id);
     void loadJuice(selectedLeague.id);
   }, [selectedLeague, loadMembers, loadJuice]);
@@ -580,18 +581,20 @@ interface MembersTabProps {
 function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, onGenerateInviteLink }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   const cost = computeLeagueCost(count);
+  const toast = useToast();
 
   const inviteUrl = inviteLink ? `${window.location.origin}/join/${inviteLink.token}` : '';
 
   const handleCopy = () => {
     void navigator.clipboard.writeText(inviteUrl);
+    toast.push('Link copied', 'info');
   };
 
   const handleShare = () => {
     if (navigator.share) {
       void navigator.share({ title: 'Join my league', url: inviteUrl });
     } else {
-      void navigator.clipboard.writeText(inviteUrl);
+      handleCopy();
     }
   };
 

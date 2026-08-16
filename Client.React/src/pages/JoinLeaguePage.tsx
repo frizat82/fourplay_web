@@ -19,15 +19,19 @@ export default function JoinLeaguePage() {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [link, setLink] = useState<LeagueInviteLinkDto | null>(null);
-  const [invalid, setInvalid] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) { setInvalid(true); setLoading(false); return; }
+    if (!token) { setLoading(false); return; }
+    const controller = new AbortController();
     validateInviteLink(token).then((result) => {
-      if (!result) setInvalid(true);
-      else setLink(result);
-    }).finally(() => setLoading(false));
+      if (!controller.signal.aborted) setLink(result);
+    }).catch(() => {
+      if (!controller.signal.aborted) setError('Failed to load invite link. Please try again.');
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
   }, [token]);
 
   const handleSignUp = () => {
@@ -35,11 +39,10 @@ export default function JoinLeaguePage() {
   };
 
   const handleJoin = async () => {
-    if (!token) return;
     setJoining(true);
     setError(null);
     try {
-      await joinViaLink(token);
+      await joinViaLink(token!);
       await reloadLeagues();
       navigate('/dashboard');
     } catch {
@@ -57,14 +60,18 @@ export default function JoinLeaguePage() {
     );
   }
 
-  if (invalid) {
+  if (!link) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8, px: 2 }}>
         <Card sx={{ maxWidth: 400, width: '100%' }}>
           <CardContent sx={{ textAlign: 'center', py: 4 }}>
-            <Typography variant="h6" gutterBottom>Link expired or invalid</Typography>
+            <Typography variant="h6" gutterBottom>
+              {error ?? 'Link expired or invalid'}
+            </Typography>
             <Typography variant="body2" color="text.secondary">
-              This invite link has expired or is no longer valid. Ask the league owner to generate a new one.
+              {error
+                ? 'Check your connection and try again.'
+                : 'This invite link has expired or is no longer valid. Ask the league owner to generate a new one.'}
             </Typography>
           </CardContent>
         </Card>
@@ -77,7 +84,7 @@ export default function JoinLeaguePage() {
       <Card sx={{ maxWidth: 400, width: '100%' }}>
         <CardContent sx={{ textAlign: 'center', py: 4 }}>
           <Typography variant="overline" color="text.secondary">You&apos;re invited to join</Typography>
-          <Typography variant="h5" fontWeight={600} gutterBottom>{link?.leagueName}</Typography>
+          <Typography variant="h5" fontWeight={600} gutterBottom>{link.leagueName}</Typography>
           {error && (
             <Typography variant="body2" color="error" sx={{ mb: 2 }}>{error}</Typography>
           )}

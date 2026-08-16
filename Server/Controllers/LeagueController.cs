@@ -759,7 +759,7 @@ public class LeagueController(
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
             return Forbid();
-        var link = await leagueInviteLinkService.GenerateAsync(leagueId, callerId);
+        var link = await leagueInviteLinkService.GenerateAsync(leagueId, callerId, league);
         return Ok(new LeagueInviteLinkDto(link.Token, link.LeagueId, link.League.LeagueName, link.ExpiresAt));
     }
 

@@ -5,6 +5,13 @@ import type { LeagueUserMappingDto } from '../../src/types/league';
 import type { LeaderboardDto } from '../../src/types/leaderboard';
 import { createScores, createSpreadResponse } from '../../src/test/fixtures';
 
+const mockInviteLink = () => ({
+  token: 'mocktokenabcdef1234567890abcdef12',
+  leagueId: 1,
+  leagueName: 'Test League',
+  expiresAt: new Date(Date.now() + 86400000).toISOString(),
+});
+
 export const TEST_USER: UserInfo = {
   userId: 'test-user-id-001',
   name: 'TestUser',
@@ -380,30 +387,12 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
     }
 
     if (url.match(/\/api\/league\/\d+\/invite-link$/) && method === 'POST') {
-      void route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          token: 'mocktokenabcdef1234567890abcdef12',
-          leagueId: 1,
-          leagueName: 'Test League',
-          expiresAt: new Date(Date.now() + 86400000).toISOString(),
-        }),
-      });
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockInviteLink()) });
       return;
     }
 
     if (url.match(/\/api\/league\/join\/[^/]+$/) && method === 'GET') {
-      void route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          token: 'mocktokenabcdef1234567890abcdef12',
-          leagueId: 1,
-          leagueName: 'Test League',
-          expiresAt: new Date(Date.now() + 86400000).toISOString(),
-        }),
-      });
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockInviteLink()) });
       return;
     }
 

@@ -173,8 +173,10 @@ export async function validateInviteLink(token: string): Promise<LeagueInviteLin
   try {
     const { data } = await http.get<LeagueInviteLinkDto>(`/api/league/join/${token}`);
     return data;
-  } catch {
-    return null;
+  } catch (err) {
+    const status = (err as { response?: { status?: number } }).response?.status;
+    if (status === 404) return null;
+    throw err;
   }
 }
 
