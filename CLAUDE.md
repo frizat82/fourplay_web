@@ -57,6 +57,27 @@ When fixing a bug: grep existing tests for old wrong values before shipping. Whe
 
 ---
 
+## CRITICAL: API Surface — DTOs and Strongly Typed Objects
+
+**Every API boundary must use an explicit DTO or strongly typed record/class — no anonymous objects, no `dynamic`, no raw `Dictionary<string,object>`, no `object` return types.**
+
+- **Backend**: all controller endpoints return and accept named records or classes from `Shared/Models/Data/Dtos/` or `Shared/Models/`. Never serialize anonymous `new { }` objects — create a DTO.
+- **Frontend**: all API functions in `src/api/` must declare and export a TypeScript `interface` or `type` for every request and response shape. Never use `any`; avoid `unknown` except at boundaries where you immediately narrow the type.
+- When adding a new endpoint, add the corresponding DTO to `Shared/Models/Data/Dtos/` first, then wire it in.
+
+---
+
+## CRITICAL: NFL/CFB Code Sharing — No Duplicated Logic Between Sport Paths
+
+**One implementation, two sport call sites — never two implementations.**
+
+- Business logic (status derivation, pick validation, security guards, leaderboard scoring, spread formatting) lives in **one shared function/service** that both NFL and CFB call. Never copy-paste and modify.
+- `PicksPage`, `ScoresPage`, `LeaderboardPage` are sport-agnostic via `adapter: SportAdapter` — keep them that way. Put sport-specific logic in the adapter, not the page.
+- When fixing a bug on one sport's path, **always check the other sport's equivalent** before shipping — open the CFB controller/adapter/service when you fix the NFL one, and vice versa.
+- Duplicated logic between NFL and CFB paths is a P0 bug magnet — it has repeatedly caused diverging guards and status-parsing bugs.
+
+---
+
 ## CRITICAL: Branch Rules
 - **NEVER push or commit directly to `main`** — all changes go through a PR
 - Branch flow: `feature/*` → PR → `dev` → PR → `main`

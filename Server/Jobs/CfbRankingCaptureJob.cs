@@ -19,7 +19,7 @@ namespace FourPlayWebApp.Server.Jobs;
 // week is more complete history, not redundant noise.
 [DisallowConcurrentExecution]
 public class CfbRankingCaptureJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, TimeProvider timeProvider) : IJob {
-    private const int Season = 2026;
+    private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;
 
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("CfbRankingCaptureJob: capturing CFB rankings at {Time}", DateTime.UtcNow);

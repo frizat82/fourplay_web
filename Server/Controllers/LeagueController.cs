@@ -14,6 +14,7 @@ using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Net.Mime;
 using System.Security.Claims;
@@ -34,7 +35,8 @@ public class LeagueController(
     UserManager<ApplicationUser> userManager,
     ISpreadCalculatorBuilder spreadCalculatorBuilder,
     IEspnCacheService espnCacheService,
-    IInvitationService invitationService) : ControllerBase {
+    IInvitationService invitationService,
+    ILeagueInviteLinkService leagueInviteLinkService) : ControllerBase {
     // Mirrors CfbPicksController.GetCurrentSlate's role for CFB — exposes NflCurrentWeekService's
     // existing off-season/pre-season fallback (already used internally by NflSpreadJob and
     // EspnCacheService) to the frontend, so nflAdapter.ts no longer falls back to
@@ -502,6 +504,9 @@ public class LeagueController(
     public async Task<ActionResult<BatchSpreadResponse>> GetSpreadBatch(
         int leagueId, int season, int week,
         [FromBody] BatchSpreadRequest request) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId, leagueId))
+            return Forbid();
         var calculator = await spreadCalculatorBuilder
             .WithLeagueId(leagueId)
             .WithWeek(week)
@@ -533,6 +538,9 @@ public class LeagueController(
     public async Task<ActionResult<BatchSpreadCalculationResponse>> CalculateSpreadBatch(
         int leagueId, int season, int week,
         [FromBody] BatchSpreadCalculationRequest request) {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId, leagueId))
+            return Forbid();
         var calculator = await spreadCalculatorBuilder
             .WithLeagueId(leagueId)
             .WithWeek(week)
@@ -819,6 +827,54 @@ public class LeagueController(
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
             return Forbid();
         await repo.DeleteLeagueAsync(leagueId);
+        return NoContent();
+    }
+
+    // ── Shareable invite link ─────────────────────────────────────────────────
+
+    [HttpPost("{leagueId:int}/invite-link")]
+    [ProducesResponseType(typeof(LeagueInviteLinkDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<LeagueInviteLinkDto>> GenerateInviteLink(int leagueId) {
+        LeagueInfo league;
+        try { league = await repo.GetLeagueInfoAsync(leagueId); }
+        catch (InvalidOperationException) { return NotFound(); }
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return Forbid();
+        var link = await leagueInviteLinkService.GenerateAsync(leagueId, callerId, league);
+        return Ok(new LeagueInviteLinkDto(link.Token, link.LeagueId, link.League.LeagueName, link.ExpiresAt));
+    }
+
+    [HttpGet("join/{token}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(LeagueInviteLinkDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<LeagueInviteLinkDto>> ValidateInviteLink(string token) {
+        var link = await leagueInviteLinkService.ValidateAsync(token);
+        if (link is null) return NotFound();
+        return Ok(new LeagueInviteLinkDto(link.Token, link.LeagueId, link.League.LeagueName, link.ExpiresAt));
+    }
+
+    [HttpPost("join/{token}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> JoinViaLink(string token) {
+        var link = await leagueInviteLinkService.ValidateAsync(token);
+        if (link is null) return NotFound();
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (await repo.UserExistsInLeagueAsync(userId, link.LeagueId))
+            return Conflict("You are already a member of this league.");
+        try {
+            await repo.AddLeagueUserMappingAsync(new LeagueUserMapping {
+                LeagueId = link.LeagueId,
+                UserId = userId,
+                DateCreated = DateTimeOffset.UtcNow,
+            });
+        } catch (DbUpdateException) {
+            return Conflict("You are already a member of this league.");
+        }
         return NoContent();
     }
 
