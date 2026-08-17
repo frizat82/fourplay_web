@@ -83,11 +83,10 @@ public class LeagueInviteLinkTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
 
         var linkService = Substitute.For<ILeagueInviteLinkService>();
-        linkService.GenerateAsync(1, OwnerId, Arg.Any<LeagueInfo>()).Returns(new LeagueInviteLink
+        linkService.GenerateAsync(1, OwnerId).Returns(new LeagueInviteLink
         {
             Token = "abc123",
             LeagueId = 1,
-            League = new LeagueInfo { Id = 1, LeagueName = "TestLeague" },
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(24),
         });
 
@@ -108,11 +107,10 @@ public class LeagueInviteLinkTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
 
         var linkService = Substitute.For<ILeagueInviteLinkService>();
-        linkService.GenerateAsync(1, Arg.Any<string>(), Arg.Any<LeagueInfo>()).Returns(new LeagueInviteLink
+        linkService.GenerateAsync(1, Arg.Any<string>()).Returns(new LeagueInviteLink
         {
             Token = "xyz789",
             LeagueId = 1,
-            League = new LeagueInfo { Id = 1, LeagueName = "TestLeague" },
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(24),
         });
 
