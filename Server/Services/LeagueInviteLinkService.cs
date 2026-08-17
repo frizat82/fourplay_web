@@ -8,7 +8,7 @@ namespace FourPlayWebApp.Server.Services;
 public class LeagueInviteLinkService(IDbContextFactory<ApplicationDbContext> dbContextFactory)
     : ILeagueInviteLinkService
 {
-    public async Task<LeagueInviteLink> GenerateAsync(int leagueId, string createdByUserId, LeagueInfo league)
+    public async Task<LeagueInviteLink> GenerateAsync(int leagueId, string createdByUserId)
     {
         await using var db = await dbContextFactory.CreateDbContextAsync();
 
@@ -21,7 +21,6 @@ public class LeagueInviteLinkService(IDbContextFactory<ApplicationDbContext> dbC
             LeagueId = leagueId,
             CreatedByUserId = createdByUserId,
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(24),
-            League = league,
         };
         db.LeagueInviteLinks.Add(link);
         await db.SaveChangesAsync();
@@ -36,5 +35,14 @@ public class LeagueInviteLinkService(IDbContextFactory<ApplicationDbContext> dbC
             .Include(l => l.League)
             .Where(l => !l.IsRevoked && l.ExpiresAt > DateTimeOffset.UtcNow)
             .FirstOrDefaultAsync(l => l.Token == token);
+    }
+
+    public async Task<LeagueInviteLink?> GetCurrentAsync(int leagueId)
+    {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.LeagueInviteLinks
+            .Where(l => l.LeagueId == leagueId && !l.IsRevoked)
+            .OrderByDescending(l => l.Id)
+            .FirstOrDefaultAsync();
     }
 }
