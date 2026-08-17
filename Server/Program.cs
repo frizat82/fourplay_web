@@ -247,6 +247,7 @@ builder.Services.AddCors(options =>
 });
 // Add Invitation Service
 builder.Services.AddScoped<IInvitationService, InvitationService>();
+builder.Services.AddScoped<ILeagueInviteLinkService, LeagueInviteLinkService>();
 
 builder.Services.AddScoped<ISpreadCalculatorBuilder, SpreadCalculatorBuilder>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
