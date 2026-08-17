@@ -594,7 +594,7 @@ public class DemoDataSeeder(
     private async Task SeedHistoricalWeeksAsync(LeagueInfo? league)
     {
         if (league == null) return;
-        if (await db.NflSpreads.AnyAsync(s => s.Season == DemoSeason && s.NflWeek == 1))
+        if (await db.NflPicks.AnyAsync(p => p.Season == DemoSeason && p.NflWeek == 1))
             return;
 
         var adminEmail = configuration["ADMIN_EMAIL"] ?? throw new InvalidOperationException("ADMIN_EMAIL required");

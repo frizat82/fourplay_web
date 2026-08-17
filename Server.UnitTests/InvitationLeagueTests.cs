@@ -215,7 +215,8 @@ public class InvitationLeagueTests
             Substitute.For<IRefreshTokenService>(),
             Substitute.For<IJwtTokenService>(),
             BuildDevEnv(),
-            db
+            db,
+            Substitute.For<ILeagueInviteLinkService>()
         );
 
         controller.ControllerContext = new ControllerContext

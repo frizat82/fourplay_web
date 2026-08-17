@@ -53,7 +53,8 @@ public class ChangePasswordTests
             Substitute.For<IRefreshTokenService>(),
             Substitute.For<IJwtTokenService>(),
             Substitute.For<IWebHostEnvironment>(),
-            db
+            db,
+            Substitute.For<ILeagueInviteLinkService>()
         );
 
         controller.ControllerContext = new ControllerContext

@@ -30,6 +30,7 @@ export interface CreateUserRequest {
   email: string;
   password: string;
   code: string;
+  inviteLinkToken?: string;
 }
 
 export interface CreateUserResponse {

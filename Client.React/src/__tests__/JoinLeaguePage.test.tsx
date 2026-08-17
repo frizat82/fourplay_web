@@ -76,7 +76,7 @@ describe('JoinLeaguePage', () => {
     await waitFor(() => screen.getByRole('button', { name: /create an account/i }));
     await userEvent.click(screen.getByRole('button', { name: /create an account/i }));
     expect(navigateMock).toHaveBeenCalledWith(
-      expect.stringContaining('/account/register'),
+      expect.stringMatching(/\/account\/register\?inviteLinkToken=tok123&returnUrl=.*join.*tok123/),
     );
   });
 

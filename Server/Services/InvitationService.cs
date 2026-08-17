@@ -172,4 +172,14 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync();
     }
+
+    public async Task<List<Invitation>> GetInvitationsByLeagueAsync(int leagueId)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+        return await dbContext.Invitations
+            .Where(i => i.LeagueId == leagueId)
+            .OrderByDescending(i => i.CreatedAt)
+            .ToListAsync();
+    }
 }

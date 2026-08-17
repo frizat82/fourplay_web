@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Controllers;
+using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
@@ -26,7 +27,8 @@ public class LeagueInviteLinkTests
     private static LeagueController BuildController(
         ClaimsPrincipal principal,
         ILeagueRepository? repo = null,
-        ILeagueInviteLinkService? linkService = null)
+        ILeagueInviteLinkService? linkService = null,
+        IInvitationService? invitationService = null)
     {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var userManager = Substitute.For<UserManager<ApplicationUser>>(
@@ -39,7 +41,7 @@ public class LeagueInviteLinkTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(),
+            invitationService ?? Substitute.For<IInvitationService>(),
             linkService ?? Substitute.For<ILeagueInviteLinkService>());
 
         controller.ControllerContext = new ControllerContext
@@ -83,11 +85,10 @@ public class LeagueInviteLinkTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
 
         var linkService = Substitute.For<ILeagueInviteLinkService>();
-        linkService.GenerateAsync(1, OwnerId, Arg.Any<LeagueInfo>()).Returns(new LeagueInviteLink
+        linkService.GenerateAsync(1, OwnerId).Returns(new LeagueInviteLink
         {
             Token = "abc123",
             LeagueId = 1,
-            League = new LeagueInfo { Id = 1, LeagueName = "TestLeague" },
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(24),
         });
 
@@ -108,11 +109,10 @@ public class LeagueInviteLinkTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
 
         var linkService = Substitute.For<ILeagueInviteLinkService>();
-        linkService.GenerateAsync(1, Arg.Any<string>(), Arg.Any<LeagueInfo>()).Returns(new LeagueInviteLink
+        linkService.GenerateAsync(1, Arg.Any<string>()).Returns(new LeagueInviteLink
         {
             Token = "xyz789",
             LeagueId = 1,
-            League = new LeagueInfo { Id = 1, LeagueName = "TestLeague" },
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(24),
         });
 
@@ -159,6 +159,130 @@ public class LeagueInviteLinkTests
         var dto = Assert.IsType<LeagueInviteLinkDto>(ok.Value);
         Assert.Equal(5, dto.LeagueId);
         Assert.Equal("MyLeague", dto.LeagueName);
+    }
+
+    // ── GetCurrentInviteLink ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetCurrentInviteLink_ReturnsForbid_WhenCallerIsNotOwnerOrAdmin()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
+
+        var controller = BuildController(BuildPrincipal(StrangerId), repo: repo);
+
+        var result = await controller.GetCurrentInviteLink(1);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetCurrentInviteLink_ReturnsNotFound_WhenNoLinkExists()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
+
+        var linkService = Substitute.For<ILeagueInviteLinkService>();
+        linkService.GetCurrentAsync(1).Returns((LeagueInviteLink?)null);
+
+        var controller = BuildController(BuildPrincipal(OwnerId), repo: repo, linkService: linkService);
+
+        var result = await controller.GetCurrentInviteLink(1);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetCurrentInviteLink_ReturnsOk_WithDto_WhenLinkExists()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
+
+        var linkService = Substitute.For<ILeagueInviteLinkService>();
+        var expires = DateTimeOffset.UtcNow.AddHours(20);
+        linkService.GetCurrentAsync(1).Returns(new LeagueInviteLink { Token = "abc", LeagueId = 1, ExpiresAt = expires });
+
+        var controller = BuildController(BuildPrincipal(OwnerId), repo: repo, linkService: linkService);
+
+        var result = await controller.GetCurrentInviteLink(1);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<LeagueInviteLinkDto>(ok.Value);
+        Assert.Equal("abc", dto.Token);
+        Assert.Equal("TestLeague", dto.LeagueName);
+        Assert.Equal(expires, dto.ExpiresAt);
+    }
+
+    [Fact]
+    public async Task GetCurrentInviteLink_ReturnsOk_WhenCallerIsAdmin()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
+
+        var linkService = Substitute.For<ILeagueInviteLinkService>();
+        linkService.GetCurrentAsync(1).Returns(new LeagueInviteLink { Token = "tok", LeagueId = 1, ExpiresAt = DateTimeOffset.UtcNow.AddHours(1) });
+
+        var controller = BuildController(BuildPrincipal("admin-user", isAdmin: true), repo: repo, linkService: linkService);
+
+        var result = await controller.GetCurrentInviteLink(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // ── GetLeagueInvitations ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetLeagueInvitations_ReturnsForbid_WhenCallerIsNotOwnerOrAdmin()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
+
+        var controller = BuildController(BuildPrincipal(StrangerId), repo: repo);
+
+        var result = await controller.GetLeagueInvitations(1);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueInvitations_ReturnsOk_WithMappedDtos()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
+
+        var invSvc = Substitute.For<IInvitationService>();
+        invSvc.GetInvitationsByLeagueAsync(1).Returns(new List<Invitation>
+        {
+            new() { Id = 10, Email = "alice@test.com", LeagueId = 1,
+                    CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddDays(7),
+                    IsUsed = false }
+        });
+
+        var controller = BuildController(BuildPrincipal(OwnerId), repo: repo, invitationService: invSvc);
+
+        var result = await controller.GetLeagueInvitations(1);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var list = Assert.IsAssignableFrom<IEnumerable<InvitationDto>>(ok.Value);
+        var item = Assert.Single(list);
+        Assert.Equal("alice@test.com", item.Email);
+        Assert.Equal(10, item.Id);
+    }
+
+    [Fact]
+    public async Task GetLeagueInvitations_ReturnsOk_WhenCallerIsAdmin()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
+
+        var invSvc = Substitute.For<IInvitationService>();
+        invSvc.GetInvitationsByLeagueAsync(1).Returns(new List<Invitation>());
+
+        var controller = BuildController(BuildPrincipal("admin-user", isAdmin: true), repo: repo, invitationService: invSvc);
+
+        var result = await controller.GetLeagueInvitations(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
     }
 
     // ── JoinViaLink ─────────────────────────────────────────────────────────

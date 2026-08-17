@@ -8,25 +8,20 @@ import { createUser } from '../../api/auth';
 import { validateInvitation } from '../../api/invitations';
 import { useToast } from '../../services/toast';
 
-const schema = z
-  .object({
-    invitationCode: z.string().min(1, 'Invitation code is required'),
-    userName: z.string().min(1, 'User name is required'),
-    email: z.string().email('Invalid email'),
-    password: z
-      .string()
-      .min(6, 'Password must be at least 6 characters')
-      .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/, {
-        message: 'Password must contain lowercase, uppercase, digit, and special character',
-      }),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match',
-    path: ['confirmPassword'],
-  });
+const baseSchema = z.object({
+  invitationCode: z.string(),
+  userName: z.string().min(1, 'User name is required'),
+  email: z.string().email('Invalid email'),
+  password: z
+    .string()
+    .min(6, 'Password must be at least 6 characters')
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$/, {
+      message: 'Password must contain lowercase, uppercase, digit, and special character',
+    }),
+  confirmPassword: z.string(),
+});
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = z.infer<typeof baseSchema>;
 
 export default function RegisterPage() {
   const toast = useToast();
@@ -34,8 +29,25 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const inviteCode = params.get('inviteCode') ?? '';
+  const inviteLinkToken = params.get('inviteLinkToken') ?? '';
+  const isLinkFlow = Boolean(inviteLinkToken);
   const returnUrl = params.get('returnUrl') ?? '/';
   const [leagueName, setLeagueName] = useState<string | null>(null);
+
+  const schema = useMemo(
+    () =>
+      baseSchema
+        .superRefine((data, ctx) => {
+          if (!isLinkFlow && !data.invitationCode) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invitation code is required', path: ['invitationCode'] });
+          }
+        })
+        .refine((data) => data.password === data.confirmPassword, {
+          message: 'Passwords do not match',
+          path: ['confirmPassword'],
+        }),
+    [isLinkFlow],
+  );
 
   const {
     register,
@@ -67,6 +79,7 @@ export default function RegisterPage() {
       code: values.invitationCode,
       password: values.password,
       username: values.userName,
+      ...(inviteLinkToken ? { inviteLinkToken } : {}),
     });
 
     if (!result.isSuccess) {
@@ -89,12 +102,14 @@ export default function RegisterPage() {
       <Card>
         <CardContent>
           <Stack spacing={2} component="form" onSubmit={handleSubmit(onSubmit)}>
-            <TextField
-              label="Invitation Code"
-              helperText={errors.invitationCode?.message ?? 'Enter your invitation code'}
-              {...register('invitationCode')}
-              error={Boolean(errors.invitationCode)}
-            />
+            {!isLinkFlow && (
+              <TextField
+                label="Invitation Code"
+                helperText={errors.invitationCode?.message ?? 'Enter your invitation code'}
+                {...register('invitationCode')}
+                error={Boolean(errors.invitationCode)}
+              />
+            )}
             <TextField
               label="Username"
               {...register('userName')}
