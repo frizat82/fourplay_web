@@ -40,7 +40,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>());
+            Substitute.For<IInvitationService>(),
+            Substitute.For<ILeagueInviteLinkService>());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -96,7 +97,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>());
+            Substitute.For<IInvitationService>(),
+            Substitute.For<ILeagueInviteLinkService>());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -128,7 +130,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>());
+            Substitute.For<IInvitationService>(),
+            Substitute.For<ILeagueInviteLinkService>());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -155,7 +158,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>());
+            Substitute.For<IInvitationService>(),
+            Substitute.For<ILeagueInviteLinkService>());
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = principal }
@@ -592,7 +596,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            invSvc);
+            invSvc,
+            Substitute.For<ILeagueInviteLinkService>());
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }
@@ -623,7 +628,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            invSvc);
+            invSvc,
+            Substitute.For<ILeagueInviteLinkService>());
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }

@@ -53,7 +53,8 @@ public class PicksTests
             BuildUserManager(),
             Substitute.For<ISpreadCalculatorBuilder>(),
             espnCacheService,
-            Substitute.For<IInvitationService>());
+            Substitute.For<IInvitationService>(),
+            Substitute.For<ILeagueInviteLinkService>());
 
         var httpContext = new DefaultHttpContext();
         if (principal is not null)
