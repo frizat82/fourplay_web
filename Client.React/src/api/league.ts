@@ -197,3 +197,30 @@ export async function validateInviteLink(token: string): Promise<LeagueInviteLin
 export async function joinViaLink(token: string): Promise<void> {
   await http.post(`/api/league/join/${token}`, {});
 }
+
+export interface InvitationDto {
+  id: number;
+  email: string;
+  createdAt: string;
+  expiresAt: string | null;
+  isUsed: boolean;
+  isExpired: boolean;
+  isValid: boolean;
+  usedAt: string | null;
+}
+
+export async function getCurrentInviteLink(leagueId: number): Promise<LeagueInviteLinkDto | null> {
+  try {
+    const { data } = await http.get<LeagueInviteLinkDto>(`/api/league/${leagueId}/invite-link`);
+    return data;
+  } catch (err) {
+    const status = (err as { response?: { status?: number } }).response?.status;
+    if (status === 404) return null;
+    throw err;
+  }
+}
+
+export async function getLeagueInvitations(leagueId: number): Promise<InvitationDto[]> {
+  const { data } = await http.get<InvitationDto[]>(`/api/league/${leagueId}/invitations`);
+  return data;
+}
