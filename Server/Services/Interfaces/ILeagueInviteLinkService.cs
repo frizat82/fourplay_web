@@ -4,6 +4,7 @@ namespace FourPlayWebApp.Server.Services.Interfaces;
 
 public interface ILeagueInviteLinkService
 {
-    Task<LeagueInviteLink> GenerateAsync(int leagueId, string createdByUserId, LeagueInfo league);
+    Task<LeagueInviteLink> GenerateAsync(int leagueId, string createdByUserId);
     Task<LeagueInviteLink?> ValidateAsync(string token);
+    Task<LeagueInviteLink?> GetCurrentAsync(int leagueId);
 }

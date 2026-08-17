@@ -591,15 +591,21 @@ public class DemoDataSeeder(
         ["Eve"]    = false,  // SEA (wins)
     };
 
-    private async Task SeedHistoricalWeeksAsync(LeagueInfo? league)
+    internal async Task SeedHistoricalWeeksAsync(LeagueInfo? league)
     {
         if (league == null) return;
-        if (await db.NflSpreads.AnyAsync(s => s.Season == DemoSeason && s.NflWeek == 1))
-            return;
 
         var adminEmail = configuration["ADMIN_EMAIL"] ?? throw new InvalidOperationException("ADMIN_EMAIL required");
         var adminUser = await userManager.FindByEmailAsync(adminEmail);
         if (adminUser == null) return;
+
+        // Wipe all historical weeks so every deploy starts from a clean slate.
+        // Delete in FK order: picks → scores → spreads → weeks.
+        int[] historicalWeekNums = [.. Enumerable.Range(1, 17), .. Enumerable.Range(19, 4)];
+        await db.NflPicks.Where(p => p.Season == DemoSeason && historicalWeekNums.Contains(p.NflWeek)).ExecuteDeleteAsync();
+        await db.NflScores.Where(s => s.Season == DemoSeason && historicalWeekNums.Contains(s.NflWeek)).ExecuteDeleteAsync();
+        await db.NflSpreads.Where(s => s.Season == DemoSeason && historicalWeekNums.Contains(s.NflWeek)).ExecuteDeleteAsync();
+        await db.NflWeeks.Where(w => w.Season == DemoSeason && historicalWeekNums.Contains(w.NflWeek)).ExecuteDeleteAsync();
 
         // Admin (frizat) win pattern for weeks 1-17: W W L W W W W W W L W W W W W W W
         bool[] adminWins = [true, true, false, true, true, true, true, true, true, false, true, true, true, true, true, true, true];
@@ -619,12 +625,9 @@ public class DemoDataSeeder(
             var weekGameTime = new DateTimeOffset(2025, 9, 4, 17, 0, 0, TimeSpan.Zero).AddDays((week - 1) * 7 + 3);
 
             // NflWeeks
-            if (!await db.NflWeeks.AnyAsync(w => w.Season == DemoSeason && w.NflWeek == week))
-            {
-                var weekStart = new DateTimeOffset(2025, 9, 4, 0, 0, 0, TimeSpan.Zero).AddDays((week - 1) * 7);
-                db.NflWeeks.Add(new NflWeeks { Season = DemoSeason, NflWeek = week, StartDate = weekStart, EndDate = weekStart.AddDays(6) });
-                await db.SaveChangesAsync();
-            }
+            var weekStart = new DateTimeOffset(2025, 9, 4, 0, 0, 0, TimeSpan.Zero).AddDays((week - 1) * 7);
+            db.NflWeeks.Add(new NflWeeks { Season = DemoSeason, NflWeek = week, StartDate = weekStart, EndDate = weekStart.AddDays(6) });
+            await db.SaveChangesAsync();
             var nflWeek = await db.NflWeeks.FirstAsync(w => w.Season == DemoSeason && w.NflWeek == week);
 
             // NflSpreads (16 games, all 32 NFL teams, home teams favored)
@@ -703,11 +706,8 @@ public class DemoDataSeeder(
         Dictionary<string, bool[]> pickPatterns)
     {
         // NflWeeks row
-        if (!await db.NflWeeks.AnyAsync(w => w.Season == DemoSeason && w.NflWeek == week))
-        {
-            db.NflWeeks.Add(new NflWeeks { Season = DemoSeason, NflWeek = week, StartDate = startDate, EndDate = endDate });
-            await db.SaveChangesAsync();
-        }
+        db.NflWeeks.Add(new NflWeeks { Season = DemoSeason, NflWeek = week, StartDate = startDate, EndDate = endDate });
+        await db.SaveChangesAsync();
         var nflWeek = await db.NflWeeks.FirstAsync(w => w.Season == DemoSeason && w.NflWeek == week);
 
         // Spreads
