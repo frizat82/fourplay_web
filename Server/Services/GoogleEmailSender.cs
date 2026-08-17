@@ -3,127 +3,136 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.Extensions.Logging;
 using System.Net;
-using System.Net.Mail;
+using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender<ApplicationUser>, IEmailSender {
-    private const string _smtpHost = "smtp.gmail.com";
-    private const int _smtpPort = 587;
-    // Require environment variables with no hardcoded fallbacks
-    private readonly string? _userName = Environment.GetEnvironmentVariable("FOURPLAY_EMAIL_USER");
-    private readonly string? _password = Environment.GetEnvironmentVariable("FOURPLAY_EMAIL_PASS");
+public class GoogleEmailSender(ILogger<GoogleEmailSender> logger, IHttpClientFactory httpClientFactory)
+    : IEmailSender<ApplicationUser>, IEmailSender {
+
+    private readonly string? _fromEmail    = Environment.GetEnvironmentVariable("FOURPLAY_EMAIL_USER");
+    private readonly string? _clientId     = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
+    private readonly string? _clientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET");
+    private readonly string? _refreshToken = Environment.GetEnvironmentVariable("GOOGLE_REFRESH_TOKEN");
 
     #region Public Email Sender Methods
 
     public async Task SendEmailAsync(string toEmail, string subject, string htmlBody) {
-        // Guard: fail fast and log if credentials aren't configured
-        if (string.IsNullOrWhiteSpace(_userName) || string.IsNullOrWhiteSpace(_password)) {
-            logger.LogError("Email credentials are not configured. Please set FOURPLAY_EMAIL_USER and FOURPLAY_EMAIL_PASS environment variables.");
-            return; // don't throw here; startup validation will enforce presence earlier
+        if (string.IsNullOrWhiteSpace(_fromEmail) || string.IsNullOrWhiteSpace(_clientId)
+            || string.IsNullOrWhiteSpace(_clientSecret) || string.IsNullOrWhiteSpace(_refreshToken)) {
+            logger.LogError("Gmail API credentials not configured. Set FOURPLAY_EMAIL_USER, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN.");
+            return;
         }
 
         try {
-            using var message = new MailMessage {
-                From = new MailAddress(_userName, "IV League"),
-                Subject = subject,
-                Body = htmlBody,
-                IsBodyHtml = true
-            };
-
-            message.To.Add(toEmail);
-
-            using var smtpClient = new SmtpClient(_smtpHost, _smtpPort) {
-                Credentials = new NetworkCredential(_userName, _password),
-                EnableSsl = true
-            };
-
-            // Railway's HTTP proxy kills connections after ~2 min; cap SMTP at 15s so we return
-            // a proper error response instead of hanging until the proxy tears the connection.
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            await smtpClient.SendMailAsync(message, cts.Token);
-            logger.LogInformation("\u2705 Email sent to {Email} ({Subject})", toEmail, subject);
-        }
-        catch (Exception ex) {
-            logger.LogError(ex, "\u274c Failed to send email to {Email} ({Subject})", toEmail, subject);
+            var accessToken = await GetAccessTokenAsync();
+            await SendViaGmailApiAsync(toEmail, subject, htmlBody, accessToken);
+            logger.LogInformation("✅ Email sent to {Email} ({Subject})", toEmail, subject);
+        } catch (Exception ex) {
+            logger.LogError(ex, "❌ Failed to send email to {Email} ({Subject})", toEmail, subject);
         }
     }
 
-    public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink) {
-        var body = BuildEmailTemplate(
-            title: "Confirm Your Email",
-            message: $"""
-                      <p>Hello <strong>{user.UserName}</strong>,</p>
-                      <p>Thanks for signing up! Please confirm your email address by clicking the button below.</p>
-                      <div style="text-align:center;margin:24px 0;">
-                        <a href="{confirmationLink}" style="display:inline-block;background-color:#4f46e5;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
-                          Confirm Email
-                        </a>
-                      </div>
-                      <p>If you didn\u2019t create an account, you can safely ignore this message.</p>
-                      """);
+    public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink) =>
+        SendEmailAsync(email, "Confirm your IV League email", BuildEmailTemplate(
+            "Confirm Your Email",
+            $"""
+             <p>Hello <strong>{user.UserName}</strong>,</p>
+             <p>Thanks for signing up! Please confirm your email address by clicking the button below.</p>
+             <div style="text-align:center;margin:24px 0;">
+               <a href="{confirmationLink}" style="display:inline-block;background-color:#4f46e5;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
+                 Confirm Email
+               </a>
+             </div>
+             <p>If you didn't create an account, you can safely ignore this message.</p>
+             """));
 
-        return SendEmailAsync(email, "Confirm your IV League email", body);
-    }
+    public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink) =>
+        SendEmailAsync(email, "Reset your IV League password", BuildEmailTemplate(
+            "Reset Your Password",
+            $"""
+             <p>Hello <strong>{user.UserName}</strong>,</p>
+             <p>You recently requested to reset your password.</p>
+             <p>Click the button below to create a new password:</p>
+             <div style="text-align:center;margin:24px 0;">
+               <a href="{resetLink}" style="display:inline-block;background-color:#4f46e5;color:#ffffff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
+                 Reset Password
+               </a>
+             </div>
+             <p>If you didn't request this change, you can safely ignore this email.</p>
+             """));
 
-    public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink) {
-        var body = BuildEmailTemplate(
-            title: "Reset Your Password",
-            message: $"""
-                      <p>Hello <strong>{user.UserName}</strong>,</p>
-                      <p>You recently requested to reset your password.</p>
-                      <p>Click the button below to create a new password:</p>
-                      <div style="text-align:center;margin:24px 0;">
-                        <a href="{resetLink}" style="display:inline-block;background-color:#4f46e5;color:#ffffff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
-                          Reset Password
-                        </a>
-                      </div>
-                      <p>If you didn’t request this change, you can safely ignore this email.</p>
-                      """);
+    public async Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode) =>
+        await SendEmailAsync(email, "Your IV League password reset code", BuildEmailTemplate(
+            "Your Password Reset Code",
+            $"""
+             <p>Hello <strong>{user.UserName}</strong>,</p>
+             <p>You recently requested to reset your password.</p>
+             <p>Use the following code to complete your password reset:</p>
+             <div style="text-align:center;margin:30px 0;">
+               <div style="display:inline-block;background-color:#4f46e5;color:#ffffff;font-size:24px;font-weight:bold;letter-spacing:3px;padding:14px 28px;border-radius:6px;">
+                 {WebUtility.HtmlEncode(resetCode)}
+               </div>
+             </div>
+             <p>If you didn't request this change, you can safely ignore this email.</p>
+             """));
 
-        return SendEmailAsync(email, "Reset your IV League password", body);
-    }
-
-    public async Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode) {
-        var body = BuildEmailTemplate(
-            title: "Your Password Reset Code",
-            message: $"""
-                      <p>Hello <strong>{user.UserName}</strong>,</p>
-                      <p>You recently requested to reset your password.</p>
-                      <p>Use the following code to complete your password reset:</p>
-                      <div style="text-align:center;margin:30px 0;">
-                        <div style="display:inline-block;background-color:#4f46e5;color:#ffffff;font-size:24px;font-weight:bold;letter-spacing:3px;padding:14px 28px;border-radius:6px;">
-                          {WebUtility.HtmlEncode(resetCode)}
-                        </div>
-                      </div>
-                      <p>If you didn’t request this change, you can safely ignore this email.</p>
-                      """);
-
-        await SendEmailAsync(email, "Your IV League password reset code", body);
-    }
-
-    /// <summary>
-    /// Send a simple templated notification using the IV League template.
-    /// Accepts an optional ApplicationUser to personalize the message, but is not required.
-    /// </summary>
     public Task SendTemplatedMessageAsync(ApplicationUser? user, string email, string title, string message) {
-        // If we have a user, personalize the message with their username where applicable
-        var personalizedMessage = user is null ? message : $"<p>Hello <strong>{WebUtility.HtmlEncode(user.UserName)}</strong>,</p>\n" + message;
-        var body = BuildEmailTemplate(title: title, message: personalizedMessage);
-        return SendEmailAsync(email, title, body);
+        var personalizedMessage = user is null ? message
+            : $"<p>Hello <strong>{WebUtility.HtmlEncode(user.UserName)}</strong>,</p>\n" + message;
+        return SendEmailAsync(email, title, BuildEmailTemplate(title, personalizedMessage));
     }
 
     #endregion
 
-    #region Private Template Helpers
+    #region Gmail API
 
-    /// <summary>
-    /// Builds a unified IV League email layout with consistent design.
-    /// </summary>
-    private static string BuildEmailTemplate(string title, string message) {
-        var sb = new StringBuilder();
-        sb.Append($"""
+    private async Task<string> GetAccessTokenAsync() {
+        var http = httpClientFactory.CreateClient();
+        var resp = await http.PostAsync("https://oauth2.googleapis.com/token",
+            new FormUrlEncodedContent(new Dictionary<string, string> {
+                ["client_id"]     = _clientId!,
+                ["client_secret"] = _clientSecret!,
+                ["refresh_token"] = _refreshToken!,
+                ["grant_type"]    = "refresh_token",
+            }));
+        resp.EnsureSuccessStatusCode();
+        var json = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        return json.RootElement.GetProperty("access_token").GetString()
+            ?? throw new InvalidOperationException("No access_token in response");
+    }
+
+    private async Task SendViaGmailApiAsync(string toEmail, string subject, string htmlBody, string accessToken) {
+        // RFC 2822 MIME message — Gmail API requires base64url encoding of the raw message
+        var mime = new StringBuilder();
+        mime.AppendLine($"From: IV League <{_fromEmail}>");
+        mime.AppendLine($"To: {toEmail}");
+        mime.AppendLine($"Subject: {subject}");
+        mime.AppendLine("MIME-Version: 1.0");
+        mime.AppendLine("Content-Type: text/html; charset=utf-8");
+        mime.AppendLine();
+        mime.Append(htmlBody);
+
+        var raw = Convert.ToBase64String(Encoding.UTF8.GetBytes(mime.ToString()))
+            .Replace('+', '-').Replace('/', '_').TrimEnd('='); // base64url
+
+        var http = httpClientFactory.CreateClient();
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var payload = JsonSerializer.Serialize(new { raw });
+        var resp = await http.PostAsync(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        resp.EnsureSuccessStatusCode();
+    }
+
+    #endregion
+
+    #region Template
+
+    private static string BuildEmailTemplate(string title, string message) => $"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -158,14 +167,8 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger) : IEmailSender
           </table>
         </body>
         </html>
-        """);
+        """;
 
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// Public wrapper for external callers that want the IV League HTML-wrapped body.
-    /// </summary>
     public static string CreateTemplatedBody(string title, string message) => BuildEmailTemplate(title, message);
 
     #endregion
