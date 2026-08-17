@@ -1,5 +1,7 @@
 using FourPlayWebApp.Server.Controllers;
 using FourPlayWebApp.Server.Data;
+using FourPlayWebApp.Server.Models;
+using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Account;
@@ -59,20 +61,25 @@ public class AuthControllerTests
     /// Optionally attaches a ClaimsPrincipal to the context.
     /// </summary>
     private static AuthController BuildController(
-        UserManager<ApplicationUser>? userManager   = null,
-        SignInManager<ApplicationUser>? signInManager = null,
-        IJwtTokenService? jwtTokenService           = null,
-        IRefreshTokenService? refreshTokenService   = null,
-        ClaimsPrincipal? principal                  = null,
-        IWebHostEnvironment? environment            = null)
+        UserManager<ApplicationUser>? userManager       = null,
+        SignInManager<ApplicationUser>? signInManager   = null,
+        IJwtTokenService? jwtTokenService               = null,
+        IRefreshTokenService? refreshTokenService       = null,
+        ClaimsPrincipal? principal                      = null,
+        IWebHostEnvironment? environment                = null,
+        IInvitationService? invitationService           = null,
+        ILeagueInviteLinkService? leagueInviteLinkService = null,
+        ApplicationDbContext? db                        = null)
     {
         userManager     ??= BuildUserManager();
         signInManager   ??= BuildSignInManager(userManager);
         jwtTokenService ??= Substitute.For<IJwtTokenService>();
         refreshTokenService ??= Substitute.For<IRefreshTokenService>();
         environment     ??= BuildDevEnvironment();
+        invitationService ??= Substitute.For<IInvitationService>();
+        leagueInviteLinkService ??= Substitute.For<ILeagueInviteLinkService>();
 
-        var db = new ApplicationDbContext(
+        db ??= new ApplicationDbContext(
             new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase("AuthControllerTests_" + Guid.NewGuid())
                 .Options);
@@ -82,13 +89,14 @@ public class AuthControllerTests
             signInManager,
             Substitute.For<IEmailSender>(),
             Substitute.For<IEmailSender<ApplicationUser>>(),
-            Substitute.For<IInvitationService>(),
+            invitationService,
             NullLogger<AuthController>.Instance,
             Substitute.For<IConfiguration>(),
             refreshTokenService,
             jwtTokenService,
             environment,
-            db
+            db,
+            leagueInviteLinkService
         );
 
         var httpContext = new DefaultHttpContext();
@@ -654,5 +662,106 @@ public class AuthControllerTests
         var result = await BuildController(userManager: userManager).DeleteUser(user.Id);
 
         Assert.IsType<OkResult>(result.Result);
+    }
+
+    // ── CreateUser — invite-link path ────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateUser_WithInviteLinkToken_InvalidLink_ReturnsBadRequest()
+    {
+        var linkService = Substitute.For<ILeagueInviteLinkService>();
+        linkService.ValidateAsync("bad-token").Returns((LeagueInviteLink?)null);
+
+        var controller = BuildController(leagueInviteLinkService: linkService);
+        var result = await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "newuser", Email = "new@test.com", Password = "Pass1!", Code = "",
+            InviteLinkToken = "bad-token",
+        });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var dto = Assert.IsType<CreateUserResponse>(bad.Value);
+        Assert.False(dto.IsSuccess);
+        Assert.Contains("Invalid or expired invite link", dto.Errors.First());
+    }
+
+    [Fact]
+    public async Task CreateUser_WithInviteLinkToken_UserAlreadyExists_ReturnsBadRequest()
+    {
+        var existingUser = BuildUser("existing-1", "existinguser");
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("existing@test.com").Returns(existingUser);
+
+        var link = new LeagueInviteLink { Token = "valid-token", LeagueId = 1, ExpiresAt = DateTimeOffset.UtcNow.AddHours(1) };
+        var linkService = Substitute.For<ILeagueInviteLinkService>();
+        linkService.ValidateAsync("valid-token").Returns(link);
+
+        var controller = BuildController(userManager: userManager, leagueInviteLinkService: linkService);
+        var result = await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "existinguser", Email = "existing@test.com", Password = "Pass1!", Code = "",
+            InviteLinkToken = "valid-token",
+        });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var dto = Assert.IsType<CreateUserResponse>(bad.Value);
+        Assert.False(dto.IsSuccess);
+        Assert.Contains("User already exists", dto.Errors.First());
+    }
+
+    [Fact]
+    public async Task CreateUser_WithInviteLinkToken_ValidLink_CreatesUser_AndJoinsLeague()
+    {
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("brand-new@test.com").Returns((ApplicationUser?)null);
+        userManager.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>())
+            .Returns(IdentityResult.Success);
+        userManager.GenerateEmailConfirmationTokenAsync(Arg.Any<ApplicationUser>())
+            .Returns("confirm-token");
+
+        var link = new LeagueInviteLink { Token = "valid-token", LeagueId = 7, ExpiresAt = DateTimeOffset.UtcNow.AddHours(1) };
+        var linkService = Substitute.For<ILeagueInviteLinkService>();
+        linkService.ValidateAsync("valid-token").Returns(link);
+
+        var db = new ApplicationDbContext(
+            new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseInMemoryDatabase("CreateUser_LinkFlow_" + Guid.NewGuid())
+                .Options);
+
+        var controller = BuildController(userManager: userManager, leagueInviteLinkService: linkService, db: db);
+        var result = await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "brandnew", Email = "brand-new@test.com", Password = "Pass1!", Code = "",
+            InviteLinkToken = "valid-token",
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<CreateUserResponse>(ok.Value);
+        Assert.True(dto.IsSuccess);
+
+        // User was auto-joined to the league the link belongs to
+        Assert.Equal(1, await db.LeagueUserMapping.CountAsync(m => m.LeagueId == 7));
+    }
+
+    [Fact]
+    public async Task CreateUser_WithCode_NoInviteLinkToken_UsesExistingCodePath()
+    {
+        // Regression: the original invitation-code path must still work after adding the link path
+        var linkService = Substitute.For<ILeagueInviteLinkService>();
+        // ValidateAsync should NOT be called when InviteLinkToken is absent
+        var invSvc = Substitute.For<IInvitationService>();
+        invSvc.ValidateInvitationAsync(Arg.Any<string>()).Returns((Invitation?)null);
+
+        var controller = BuildController(invitationService: invSvc, leagueInviteLinkService: linkService);
+        var result = await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "user", Email = "user@test.com", Password = "Pass1!", Code = "bad-code",
+        });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var dto = Assert.IsType<CreateUserResponse>(bad.Value);
+        Assert.False(dto.IsSuccess);
+        // Link service was never touched
+        await linkService.DidNotReceive().ValidateAsync(Arg.Any<string>());
     }
 }
