@@ -878,6 +878,45 @@ public class LeagueController(
         return NoContent();
     }
 
+    [HttpGet("{leagueId:int}/invite-link")]
+    [ProducesResponseType(typeof(LeagueInviteLinkDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<LeagueInviteLinkDto>> GetCurrentInviteLink(int leagueId) {
+        LeagueInfo league;
+        try { league = await repo.GetLeagueInfoAsync(leagueId); }
+        catch (InvalidOperationException) { return NotFound(); }
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return Forbid();
+        var link = await leagueInviteLinkService.GetCurrentAsync(leagueId);
+        if (link is null) return NotFound();
+        return Ok(new LeagueInviteLinkDto(link.Token, link.LeagueId, league.LeagueName, link.ExpiresAt));
+    }
+
+    [HttpGet("{leagueId:int}/invitations")]
+    [ProducesResponseType(typeof(IReadOnlyList<InvitationDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IReadOnlyList<InvitationDto>>> GetLeagueInvitations(int leagueId) {
+        LeagueInfo league;
+        try { league = await repo.GetLeagueInfoAsync(leagueId); }
+        catch (InvalidOperationException) { return NotFound(); }
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return Forbid();
+        var invitations = await invitationService.GetInvitationsByLeagueAsync(leagueId);
+        return Ok(invitations.Select(i => new InvitationDto {
+            Id = i.Id,
+            Email = i.Email,
+            CreatedAt = i.CreatedAt,
+            ExpiresAt = i.ExpiresAt,
+            IsUsed = i.IsUsed,
+            IsExpired = i.IsExpired,
+            IsValid = i.IsValid,
+            UsedAt = i.UsedAt,
+        }).ToList());
+    }
+
     [HttpPost("{leagueId:int}/invite")]
     [ProducesResponseType(typeof(InvitationDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

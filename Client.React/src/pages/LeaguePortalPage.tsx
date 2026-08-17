@@ -46,6 +46,8 @@ import {
   removeLeagueMember,
   inviteToLeague,
   generateInviteLink,
+  getCurrentInviteLink,
+  getLeagueInvitations,
   getAllLeagues,
   getUsers,
   createLeague,
@@ -53,6 +55,7 @@ import {
   assignLeagueOwner,
   deleteLeague,
   type LeagueInviteLinkDto,
+  type InvitationDto,
 } from '../api/league';
 import type { LeagueInfoDto, LeagueJuiceMappingDto, LeagueCostDto, UserSummaryDto } from '../types/admin';
 import type { LeagueUserMappingDto } from '../types/league';
@@ -114,6 +117,9 @@ export default function LeaguePortalPage() {
   // Shareable invite link
   const [generatingLink, setGeneratingLink] = useState(false);
   const [inviteLink, setInviteLink] = useState<LeagueInviteLinkDto | null>(null);
+
+  // Email invitations sent to this league
+  const [invitations, setInvitations] = useState<InvitationDto[]>([]);
 
   // Juice settings
   const [juiceMappings, setJuiceMappings] = useState<LeagueJuiceMappingDto[]>([]);
@@ -216,9 +222,10 @@ export default function LeaguePortalPage() {
 
   useEffect(() => {
     if (!selectedLeague) return;
-    setInviteLink(null);
     void loadMembers(selectedLeague.id);
     void loadJuice(selectedLeague.id);
+    getCurrentInviteLink(selectedLeague.id).then(setInviteLink).catch(() => setInviteLink(null));
+    getLeagueInvitations(selectedLeague.id).then(setInvitations).catch(() => setInvitations([]));
   }, [selectedLeague, loadMembers, loadJuice]);
 
   const handleRemove = async () => {
@@ -244,6 +251,7 @@ export default function LeaguePortalPage() {
       toast.push(`Invitation sent to ${inviteEmail}`, 'success');
       setInviteEmail('');
       setInviteOpen(false);
+      getLeagueInvitations(selectedLeague.id).then(setInvitations).catch(() => {});
     } catch {
       toast.push('Failed to send invitation', 'error');
     } finally {
@@ -457,6 +465,7 @@ export default function LeaguePortalPage() {
               inviteLink={inviteLink}
               generatingLink={generatingLink}
               onGenerateInviteLink={() => void handleGenerateInviteLink()}
+              invitations={invitations}
             />
           )}
           {tab === 1 && (
@@ -663,9 +672,10 @@ interface MembersTabProps {
   inviteLink: LeagueInviteLinkDto | null;
   generatingLink: boolean;
   onGenerateInviteLink: () => void;
+  invitations: InvitationDto[];
 }
 
-function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, onGenerateInviteLink }: MembersTabProps) {
+function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, onGenerateInviteLink, invitations }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   const cost = computeLeagueCost(count);
   const toast = useToast();
@@ -689,8 +699,11 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
     }
   };
 
+  const linkExpired = inviteLink ? new Date(inviteLink.expiresAt) < new Date() : false;
   const expiresLabel = inviteLink
-    ? `Expires ${new Date(inviteLink.expiresAt).toLocaleString()}`
+    ? linkExpired
+      ? `Expired ${new Date(inviteLink.expiresAt).toLocaleString()}`
+      : `Expires ${new Date(inviteLink.expiresAt).toLocaleString()}`
     : '';
 
   return (
@@ -717,20 +730,26 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
       </Stack>
 
       {inviteLink && (
-        <Box sx={{ mb: 3, p: 2, border: 1, borderColor: 'divider', borderRadius: 1, maxWidth: 520 }}>
+        <Box sx={{ mb: 3, p: 2, border: 1, borderColor: linkExpired ? 'warning.main' : 'divider', borderRadius: 1, maxWidth: 520 }}>
           <Stack spacing={1}>
-            <Typography variant="body2" sx={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.78rem' }}>
-              {inviteUrl}
-            </Typography>
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              <Button size="small" startIcon={<ContentCopyIcon />} variant="outlined" onClick={() => void handleCopy()}>
-                Copy
-              </Button>
-              <Button size="small" startIcon={<IosShareIcon />} variant="contained" color="secondary" onClick={handleShare}>
-                Share
-              </Button>
-            </Stack>
-            <Typography variant="caption" color="text.secondary">{expiresLabel}</Typography>
+            {linkExpired ? (
+              <Typography variant="caption" color="warning.main" fontWeight="bold">Link expired — regenerate to share a new one</Typography>
+            ) : (
+              <Typography variant="body2" sx={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.78rem' }}>
+                {inviteUrl}
+              </Typography>
+            )}
+            {!linkExpired && (
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                <Button size="small" startIcon={<ContentCopyIcon />} variant="outlined" onClick={() => void handleCopy()}>
+                  Copy
+                </Button>
+                <Button size="small" startIcon={<IosShareIcon />} variant="contained" color="secondary" onClick={handleShare}>
+                  Share
+                </Button>
+              </Stack>
+            )}
+            <Typography variant="caption" color={linkExpired ? 'warning.main' : 'text.secondary'}>{expiresLabel}</Typography>
           </Stack>
         </Box>
       )}
@@ -775,6 +794,40 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
               ))}
             </TableBody>
           </Table>
+        </Box>
+      )}
+
+      {invitations.length > 0 && (
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Sent Invitations</Typography>
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Sent</TableCell>
+                  <TableCell>Status</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {invitations.map((inv) => (
+                  <TableRow key={inv.id}>
+                    <TableCell>{inv.email}</TableCell>
+                    <TableCell>{new Date(inv.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {inv.isUsed ? (
+                        <Chip label="Accepted" color="success" size="small" />
+                      ) : inv.isExpired ? (
+                        <Chip label="Expired" color="default" size="small" />
+                      ) : (
+                        <Chip label="Pending" color="warning" size="small" />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
         </Box>
       )}
     </Box>

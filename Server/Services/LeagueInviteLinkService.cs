@@ -36,4 +36,13 @@ public class LeagueInviteLinkService(IDbContextFactory<ApplicationDbContext> dbC
             .Where(l => !l.IsRevoked && l.ExpiresAt > DateTimeOffset.UtcNow)
             .FirstOrDefaultAsync(l => l.Token == token);
     }
+
+    public async Task<LeagueInviteLink?> GetCurrentAsync(int leagueId)
+    {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.LeagueInviteLinks
+            .Where(l => l.LeagueId == leagueId && !l.IsRevoked)
+            .OrderByDescending(l => l.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
 }
