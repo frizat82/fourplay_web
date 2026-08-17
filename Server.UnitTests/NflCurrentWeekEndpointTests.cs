@@ -34,7 +34,8 @@ public class NflCurrentWeekEndpointTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>());
+            Substitute.For<IInvitationService>(),
+            Substitute.For<ILeagueInviteLinkService>());
 
         controller.ControllerContext = new ControllerContext
         {
