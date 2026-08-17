@@ -50,6 +50,9 @@ vi.mock('../api/league', () => ({
   addLeagueUserMapping: vi.fn(),
   assignLeagueOwner: vi.fn(),
   deleteLeague: vi.fn(),
+  generateInviteLink: vi.fn(),
+  getCurrentInviteLink: vi.fn().mockResolvedValue(null),
+  getLeagueInvitations: vi.fn().mockResolvedValue([]),
 }));
 import {
   getLeagueUserMappings,
