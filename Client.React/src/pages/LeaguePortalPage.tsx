@@ -441,7 +441,7 @@ export default function LeaguePortalPage() {
         <>
           <Tabs value={tab} onChange={(_, v: number) => setTab(v)} sx={{ mb: 2 }}>
             <Tab label="Members" />
-            <Tab label="League Payouts" />
+            <Tab label="Settings" />
             <Tab label="Info" />
           </Tabs>
 
