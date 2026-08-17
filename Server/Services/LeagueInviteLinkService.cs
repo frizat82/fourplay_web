@@ -42,7 +42,7 @@ public class LeagueInviteLinkService(IDbContextFactory<ApplicationDbContext> dbC
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.LeagueInviteLinks
             .Where(l => l.LeagueId == leagueId && !l.IsRevoked)
-            .OrderByDescending(l => l.CreatedAt)
+            .OrderByDescending(l => l.Id)
             .FirstOrDefaultAsync();
     }
 }

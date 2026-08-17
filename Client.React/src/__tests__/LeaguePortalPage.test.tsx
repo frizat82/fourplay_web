@@ -63,12 +63,22 @@ import {
   createLeague,
   addLeagueUserMapping,
   deleteLeague,
+  getCurrentInviteLink,
+  getLeagueInvitations,
+  generateInviteLink,
+  inviteToLeague,
+  type LeagueInviteLinkDto,
+  type InvitationDto,
 } from '../api/league';
 
 const mockedGetMappings = vi.mocked(getLeagueUserMappings);
 const mockedGetJuice = vi.mocked(getLeagueJuice);
 const mockedGetCost = vi.mocked(getLeagueCost);
 const mockedGetAllLeagues = vi.mocked(getAllLeagues);
+const mockedGetCurrentInviteLink = vi.mocked(getCurrentInviteLink);
+const mockedGetLeagueInvitations = vi.mocked(getLeagueInvitations);
+const mockedGenerateInviteLink = vi.mocked(generateInviteLink);
+const mockedInviteToLeague = vi.mocked(inviteToLeague);
 const mockedGetUsers = vi.mocked(getUsers);
 const mockedCreateLeague = vi.mocked(createLeague);
 const mockedAddLeagueUserMapping = vi.mocked(addLeagueUserMapping);
@@ -406,5 +416,128 @@ describe('LeaguePortalPage (site admin)', () => {
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByLabelText(/^sport$/i)).toHaveValue('NFL');
+  });
+});
+
+describe('LeaguePortalPage — invite link and sent invitations', () => {
+  function makeInviteLink(overrides: Partial<LeagueInviteLinkDto> = {}): LeagueInviteLinkDto {
+    return {
+      token: 'abc123',
+      leagueId: 1,
+      leagueName: 'Demo League',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      ...overrides,
+    };
+  }
+
+  function makeInvitation(overrides: Partial<InvitationDto> = {}): InvitationDto {
+    return {
+      id: 1,
+      email: 'alice@example.com',
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      isUsed: false,
+      isExpired: false,
+      isValid: true,
+      usedAt: null,
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    authState.user = OWNER_USER;
+    sessionState.ownedLeagues = [makeLeague()];
+    mockedGetMappings.mockResolvedValue([makeMember()]);
+    mockedGetCost.mockResolvedValue(cost);
+    mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON - 1)]);
+    // Default: no existing invite link, no sent invitations
+    mockedGetCurrentInviteLink.mockResolvedValue(null);
+    mockedGetLeagueInvitations.mockResolvedValue([]);
+    sessionState.reloadLeagues.mockClear();
+    toastPush.mockClear();
+  });
+
+  it('fetches the current invite link and invitations when a league is selected', async () => {
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(mockedGetCurrentInviteLink).toHaveBeenCalledWith(1);
+    expect(mockedGetLeagueInvitations).toHaveBeenCalledWith(1);
+  });
+
+  it('shows the active invite link panel with copy and share buttons when a link exists', async () => {
+    mockedGetCurrentInviteLink.mockResolvedValue(makeInviteLink());
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(await screen.findByRole('button', { name: /^copy$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^share$/i })).toBeInTheDocument();
+  });
+
+  it('shows the expired-link warning and no copy/share buttons when the link is expired', async () => {
+    mockedGetCurrentInviteLink.mockResolvedValue(makeInviteLink({
+      expiresAt: new Date(Date.now() - 1000).toISOString(),
+    }));
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(await screen.findByText(/link expired/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /copy link/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the Sent Invitations table when there are pending invitations', async () => {
+    mockedGetLeagueInvitations.mockResolvedValue([makeInvitation()]);
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(await screen.findByText('Sent Invitations')).toBeInTheDocument();
+    expect(await screen.findByText('alice@example.com')).toBeInTheDocument();
+    expect(await screen.findByText(/pending/i)).toBeInTheDocument();
+  });
+
+  it('shows Accepted chip for a used invitation', async () => {
+    mockedGetLeagueInvitations.mockResolvedValue([makeInvitation({ isUsed: true, isValid: false })]);
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(await screen.findByText(/accepted/i)).toBeInTheDocument();
+  });
+
+  it('shows Expired chip for an expired, unused invitation', async () => {
+    mockedGetLeagueInvitations.mockResolvedValue([makeInvitation({ isExpired: true, isValid: false })]);
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(await screen.findByText(/expired/i)).toBeInTheDocument();
+  });
+
+  it('refreshes the invitations list after sending an email invite', async () => {
+    const refreshedInvitation = makeInvitation({ email: 'bob@example.com' });
+    mockedInviteToLeague.mockResolvedValue(undefined);
+    mockedGetLeagueInvitations
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([refreshedInvitation]);
+
+    renderPage();
+    await screen.findByText('frizat@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /invite player/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText(/email/i), 'bob@example.com');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^send invite$/i }));
+
+    await waitFor(() => expect(mockedGetLeagueInvitations).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('bob@example.com')).toBeInTheDocument();
+  });
+
+  it('updates the invite link state after generating a new link', async () => {
+    const newLink = makeInviteLink({ token: 'newtoken' });
+    mockedGenerateInviteLink.mockResolvedValue(newLink);
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    await userEvent.click(screen.getByRole('button', { name: /generate invite link/i }));
+
+    await waitFor(() => expect(mockedGenerateInviteLink).toHaveBeenCalledWith(1));
+    expect(await screen.findByRole('button', { name: /^copy$/i })).toBeInTheDocument();
   });
 });
