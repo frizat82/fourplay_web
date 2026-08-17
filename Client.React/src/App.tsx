@@ -35,6 +35,7 @@ function LeaderboardRoute() {
   return <LeaderboardPage adapter={isCfb ? cfbAdapter : nflAdapter} />;
 }
 
+import JoinLeaguePage from './pages/JoinLeaguePage';
 import LeaguePickerPage from './pages/LeaguePickerPage';
 import PicksPage from './pages/PicksPage';
 import ScoresPage from './pages/ScoresPage';
@@ -71,6 +72,7 @@ export default function App() {
       <Route path="/register" caseSensitive={false} element={<Navigate to="/account/register" replace />} />
       <Route path="/account/login" caseSensitive={false} element={<LoginPage />} />
       <Route path="/account/register" caseSensitive={false} element={<RegisterPage />} />
+      <Route path="/join/:token" caseSensitive={false} element={<JoinLeaguePage />} />
       <Route path="/account/registerconfirmation" caseSensitive={false} element={<RegisterConfirmationPage />} />
       <Route path="/account/forgotpassword" caseSensitive={false} element={<ForgotPasswordPage />} />
       <Route path="/account/forgotpasswordconfirmation" caseSensitive={false} element={<ForgotPasswordConfirmationPage />} />

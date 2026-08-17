@@ -3,6 +3,7 @@ using System;
 using FourPlayWebApp.Server.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FourPlayWebApp.Server.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260816153828_AddLeagueInviteLinks")]
+    partial class AddLeagueInviteLinks
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,40 +24,6 @@ namespace FourPlayWebApp.Server.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.CfbRanking", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CapturedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("CuratedRank")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("EspnEventId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("EspnWeekNumber")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Season")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TeamAbbreviation")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Season", "EspnWeekNumber", "EspnEventId", "TeamAbbreviation");
-
-                    b.ToTable("CfbRankings");
-                });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.CfbSeasonWeekConfig", b =>
                 {
@@ -83,9 +52,6 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<int>("Season")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime>("SpreadLockDatetime")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateOnly>("WeekEndDate")
                         .HasColumnType("date");
 
@@ -101,10 +67,6 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("Season", "EspnWeekNumber")
                         .IsUnique();
 
-                    b.HasIndex("Season", "IvLeagueWeekNumber")
-                        .IsUnique()
-                        .HasFilter("\"IvLeagueWeekNumber\" <> 99");
-
                     b.ToTable("CfbSeasonWeekConfigs");
                 });
 
@@ -117,9 +79,7 @@ namespace FourPlayWebApp.Server.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTimeOffset>("DateCreated")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamptz")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateOnly>("EndDate")
                         .HasColumnType("date");
@@ -151,9 +111,6 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("date");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Season", "SlateNumber")
-                        .IsUnique();
 
                     b.ToTable("CfbSlates");
                 });
@@ -294,14 +251,8 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("timestamptz")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("LeagueId")
                         .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("RemovedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UserId")
                         .IsRequired()
@@ -315,6 +266,26 @@ namespace FourPlayWebApp.Server.Migrations
                         .IsUnique();
 
                     b.ToTable("LeagueUserMapping");
+                });
+
+            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueUsers", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("LeagueUsers");
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.NflPicks", b =>
@@ -382,9 +353,6 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.Property<int>("Season")
                         .HasColumnType("integer");
-
-                    b.Property<DateTime>("SpreadLockDatetime")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("WeekEndDatetime")
                         .HasColumnType("timestamp with time zone");
@@ -587,17 +555,13 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
-                        .IsUnique()
-                        .HasFilter("\"LeagueId\" IS NULL");
+                        .IsUnique();
 
                     b.HasIndex("InvitedByUserId");
 
                     b.HasIndex("LeagueId");
 
                     b.HasIndex("RegisteredUserId");
-
-                    b.HasIndex("Email", "LeagueId")
-                        .IsUnique();
 
                     b.ToTable("Invitations");
                 });
@@ -614,9 +578,10 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("DateCreated")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamptz")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EspnEventId")
+                        .HasColumnType("integer");
 
                     b.Property<int>("LeagueId")
                         .HasColumnType("integer");
@@ -637,13 +602,6 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CfbSlateId");
-
-                    b.HasIndex("LeagueId");
-
-                    b.HasIndex("UserId", "LeagueId", "CfbSlateId", "Season", "Team", "PickType")
-                        .IsUnique();
 
                     b.ToTable("CfbPicks");
                 });
@@ -667,9 +625,10 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("DateCreated")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamptz")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EspnEventId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("GameStatus")
                         .IsRequired()
@@ -696,9 +655,6 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CfbSlateId", "HomeTeam")
-                        .IsUnique();
-
                     b.ToTable("CfbScores");
                 });
 
@@ -721,9 +677,10 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("DateCreated")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamptz")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EspnEventId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("GameTime")
                         .HasColumnType("timestamp with time zone");
@@ -735,16 +692,10 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<double>("HomeTeamSpread")
                         .HasColumnType("double precision");
 
-                    b.Property<bool>("IsLeagueEligible")
-                        .HasColumnType("boolean");
-
                     b.Property<double>("OverUnder")
                         .HasColumnType("double precision");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CfbSlateId", "HomeTeam")
-                        .IsUnique();
 
                     b.ToTable("CfbSpreads");
                 });
@@ -1016,7 +967,7 @@ namespace FourPlayWebApp.Server.Migrations
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueUserMapping", b =>
                 {
                     b.HasOne("FourPlayWebApp.Server.Models.Data.LeagueInfo", "League")
-                        .WithMany("LeagueUserMappings")
+                        .WithMany("LeagueUsers")
                         .HasForeignKey("LeagueId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1074,63 +1025,21 @@ namespace FourPlayWebApp.Server.Migrations
                 {
                     b.HasOne("FourPlayWebApp.Server.Models.Identity.ApplicationUser", "InvitedByUser")
                         .WithMany()
-                        .HasForeignKey("InvitedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("InvitedByUserId");
 
                     b.HasOne("FourPlayWebApp.Server.Models.Data.LeagueInfo", "League")
                         .WithMany()
-                        .HasForeignKey("LeagueId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .HasForeignKey("LeagueId");
 
                     b.HasOne("FourPlayWebApp.Server.Models.Identity.ApplicationUser", "RegisteredUser")
                         .WithMany()
-                        .HasForeignKey("RegisteredUserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .HasForeignKey("RegisteredUserId");
 
                     b.Navigation("InvitedByUser");
 
                     b.Navigation("League");
 
                     b.Navigation("RegisteredUser");
-                });
-
-            modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbPicks", b =>
-                {
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSlates", null)
-                        .WithMany()
-                        .HasForeignKey("CfbSlateId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.LeagueInfo", null)
-                        .WithMany()
-                        .HasForeignKey("LeagueId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("FourPlayWebApp.Server.Models.Identity.ApplicationUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbScores", b =>
-                {
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSlates", null)
-                        .WithMany()
-                        .HasForeignKey("CfbSlateId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbSpreads", b =>
-                {
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSlates", null)
-                        .WithMany()
-                        .HasForeignKey("CfbSlateId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -1188,7 +1097,7 @@ namespace FourPlayWebApp.Server.Migrations
                 {
                     b.Navigation("LeagueJuiceMappings");
 
-                    b.Navigation("LeagueUserMappings");
+                    b.Navigation("LeagueUsers");
 
                     b.Navigation("NflPicks");
                 });
