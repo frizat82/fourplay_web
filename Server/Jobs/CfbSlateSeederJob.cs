@@ -10,7 +10,7 @@ namespace FourPlayWebApp.Server.Jobs;
 // cadence, not fused into this job).
 [DisallowConcurrentExecution]
 public class CfbSlateSeederJob(ICfbRepository repo) : IJob {
-    private const int Season = 2026;
+    private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;
 
     // IvLeagueWeekNumber is the canonical source for SlateType within FBS Playoff weeks
     // because both CFP First Round (IV=15) and Quarterfinals (IV=16) share ScoringFormat="NFLDivisional"

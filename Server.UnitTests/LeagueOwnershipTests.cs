@@ -40,7 +40,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>());
+            Substitute.For<IInvitationService>(),
+            Substitute.For<ILeagueInviteLinkService>());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -96,7 +97,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>());
+            Substitute.For<IInvitationService>(),
+            Substitute.For<ILeagueInviteLinkService>());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -128,7 +130,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>());
+            Substitute.For<IInvitationService>(),
+            Substitute.For<ILeagueInviteLinkService>());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -155,7 +158,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>());
+            Substitute.For<IInvitationService>(),
+            Substitute.For<ILeagueInviteLinkService>());
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = principal }
@@ -592,7 +596,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            invSvc);
+            invSvc,
+            Substitute.For<ILeagueInviteLinkService>());
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }
@@ -623,7 +628,8 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            invSvc);
+            invSvc,
+            Substitute.For<ILeagueInviteLinkService>());
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }
@@ -806,5 +812,51 @@ public class LeagueOwnershipTests
         var result = await ctrl.UserExistsInLeague(OwnerId, 1);
 
         Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // ─── frizat-dcz: IDOR on spread batch endpoints ──────────────────────────
+
+    [Fact]
+    public async Task GetSpreadBatch_ReturnsForbid_WhenUserNotInLeague()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
+
+        var result = await ctrl.GetSpreadBatch(1, 2025, 1,
+            new FourPlayWebApp.Shared.Models.BatchSpreadRequest());
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetSpreadBatch_ReturnsOk_WhenAdminNotInLeague()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
+        var calcBuilder = Substitute.For<ISpreadCalculatorBuilder>();
+        var calc = Substitute.For<FourPlayWebApp.Server.Services.Interfaces.ISpreadCalculator>();
+        calc.DoOddsExist().Returns(false);
+        calcBuilder.WithLeagueId(Arg.Any<int>()).Returns(calcBuilder);
+        calcBuilder.WithWeek(Arg.Any<int>()).Returns(calcBuilder);
+        calcBuilder.WithSeason(Arg.Any<int>()).Returns(calcBuilder);
+        calcBuilder.BuildAsync().Returns(calc);
+
+        // Admin bypass — result is NotFound (no odds), not Forbid
+        var result = await ctrl.GetSpreadBatch(1, 2025, 1,
+            new FourPlayWebApp.Shared.Models.BatchSpreadRequest());
+
+        Assert.IsNotType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CalculateSpreadBatch_ReturnsForbid_WhenUserNotInLeague()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
+        repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
+
+        var result = await ctrl.CalculateSpreadBatch(1, 2025, 1,
+            new FourPlayWebApp.Shared.Models.BatchSpreadCalculationRequest());
+
+        Assert.IsType<ForbidResult>(result.Result);
     }
 }

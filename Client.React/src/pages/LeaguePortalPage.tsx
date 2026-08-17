@@ -25,7 +25,10 @@ import {
   Typography,
 } from '@mui/material';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
+import IosShareIcon from '@mui/icons-material/IosShare';
+import LinkIcon from '@mui/icons-material/Link';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import PageHeader from '../components/PageHeader';
 import OwnerCostSummary from '../components/OwnerCostSummary';
@@ -42,12 +45,14 @@ import {
   rollForwardJuice,
   removeLeagueMember,
   inviteToLeague,
+  generateInviteLink,
   getAllLeagues,
   getUsers,
   createLeague,
   addLeagueUserMapping,
   assignLeagueOwner,
   deleteLeague,
+  type LeagueInviteLinkDto,
 } from '../api/league';
 import type { LeagueInfoDto, LeagueJuiceMappingDto, LeagueCostDto, UserSummaryDto } from '../types/admin';
 import type { LeagueUserMappingDto } from '../types/league';
@@ -101,10 +106,14 @@ export default function LeaguePortalPage() {
   const [removeTarget, setRemoveTarget] = useState<LeagueUserMappingDto | null>(null);
   const [removing, setRemoving] = useState(false);
 
-  // Invite dialog
+  // Email invite dialog
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
+
+  // Shareable invite link
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [inviteLink, setInviteLink] = useState<LeagueInviteLinkDto | null>(null);
 
   // Juice settings
   const [juiceMappings, setJuiceMappings] = useState<LeagueJuiceMappingDto[]>([]);
@@ -207,6 +216,7 @@ export default function LeaguePortalPage() {
 
   useEffect(() => {
     if (!selectedLeague) return;
+    setInviteLink(null);
     void loadMembers(selectedLeague.id);
     void loadJuice(selectedLeague.id);
   }, [selectedLeague, loadMembers, loadJuice]);
@@ -252,6 +262,19 @@ export default function LeaguePortalPage() {
       toast.push('Failed to save juice settings', 'error');
     } finally {
       setSavingJuice(false);
+    }
+  };
+
+  const handleGenerateInviteLink = async () => {
+    if (!selectedLeague) return;
+    setGeneratingLink(true);
+    try {
+      const link = await generateInviteLink(selectedLeague.id);
+      setInviteLink(link);
+    } catch {
+      toast.push('Failed to generate invite link', 'error');
+    } finally {
+      setGeneratingLink(false);
     }
   };
 
@@ -418,7 +441,7 @@ export default function LeaguePortalPage() {
         <>
           <Tabs value={tab} onChange={(_, v: number) => setTab(v)} sx={{ mb: 2 }}>
             <Tab label="Members" />
-            <Tab label="League Payouts" />
+            <Tab label="Settings" />
             <Tab label="Info" />
           </Tabs>
 
@@ -431,6 +454,9 @@ export default function LeaguePortalPage() {
               onRemove={setRemoveTarget}
               onInvite={() => setInviteOpen(true)}
               onAddUser={openAddUser}
+              inviteLink={inviteLink}
+              generatingLink={generatingLink}
+              onGenerateInviteLink={() => void handleGenerateInviteLink()}
             />
           )}
           {tab === 1 && (
@@ -634,11 +660,38 @@ interface MembersTabProps {
   onRemove: (m: LeagueUserMappingDto) => void;
   onInvite: () => void;
   onAddUser: () => void;
+  inviteLink: LeagueInviteLinkDto | null;
+  generatingLink: boolean;
+  onGenerateInviteLink: () => void;
 }
 
-function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser }: MembersTabProps) {
+function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, onGenerateInviteLink }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   const cost = computeLeagueCost(count);
+  const toast = useToast();
+
+  const inviteUrl = inviteLink ? `${window.location.origin}/join/${inviteLink.token}` : '';
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      toast.push('Link copied', 'info');
+    } catch {
+      toast.push('Failed to copy link', 'error');
+    }
+  };
+
+  const handleShare = () => {
+    if (navigator.share) {
+      void navigator.share({ title: 'Join my league', url: inviteUrl });
+    } else {
+      void handleCopy();
+    }
+  };
+
+  const expiresLabel = inviteLink
+    ? `Expires ${new Date(inviteLink.expiresAt).toLocaleString()}`
+    : '';
 
   return (
     <Box>
@@ -647,12 +700,41 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
         <Button startIcon={<PersonAddIcon />} variant="outlined" size="small" onClick={onInvite}>
           Invite Player
         </Button>
+        <Button
+          startIcon={generatingLink ? <CircularProgress size={14} /> : <LinkIcon />}
+          variant="outlined"
+          size="small"
+          onClick={onGenerateInviteLink}
+          disabled={generatingLink}
+        >
+          {inviteLink ? 'Regenerate Link' : 'Generate Invite Link'}
+        </Button>
         {admin && (
           <Button startIcon={<AddCircleIcon />} variant="outlined" size="small" onClick={onAddUser}>
             Add User
           </Button>
         )}
       </Stack>
+
+      {inviteLink && (
+        <Box sx={{ mb: 3, p: 2, border: 1, borderColor: 'divider', borderRadius: 1, maxWidth: 520 }}>
+          <Stack spacing={1}>
+            <Typography variant="body2" sx={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.78rem' }}>
+              {inviteUrl}
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Button size="small" startIcon={<ContentCopyIcon />} variant="outlined" onClick={() => void handleCopy()}>
+                Copy
+              </Button>
+              <Button size="small" startIcon={<IosShareIcon />} variant="contained" color="secondary" onClick={handleShare}>
+                Share
+              </Button>
+            </Stack>
+            <Typography variant="caption" color="text.secondary">{expiresLabel}</Typography>
+          </Stack>
+        </Box>
+      )}
+
       {loading ? (
         <CircularProgress />
       ) : (

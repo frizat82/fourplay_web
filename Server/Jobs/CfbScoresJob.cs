@@ -10,7 +10,8 @@ namespace FourPlayWebApp.Server.Jobs;
 
 [DisallowConcurrentExecution]
 public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo) : IJob {
-    private const int Season = 2026;
+    // CFB seasons run Aug–Jan; the season year is the calendar year the fall games start.
+    private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;
 
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("CfbScoresJob: fetching CFB scores at {Time}", DateTime.UtcNow);
