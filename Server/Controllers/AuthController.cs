@@ -26,7 +26,8 @@ public class AuthController(
     IEmailSender emailSender, IEmailSender<ApplicationUser> emailSenderApplication,
     IInvitationService invitationService, ILogger<AuthController> logger,
     IConfiguration config, IRefreshTokenService refreshTokenService, IJwtTokenService jwtTokenService,
-    IWebHostEnvironment environment, ApplicationDbContext db)
+    IWebHostEnvironment environment, ApplicationDbContext db,
+    ILeagueInviteLinkService leagueInviteLinkService)
     : ControllerBase {
     private readonly TimeSpan _refreshTokenLifetime = TimeSpan.FromDays(14); // 14 days
     private bool UseSecureCookies => !environment.IsDevelopment() || Request.IsHttps;
@@ -258,8 +259,47 @@ public class AuthController(
     [HttpPost("create-user")]
     [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("register")]
     public async Task<ActionResult<string>> CreateUser([FromBody] CreateUserRequest user) {
-        // Validate invitation code
         var response = new CreateUserResponse();
+
+        // Invite-link registration path (shareable link, no per-email code required)
+        if (!string.IsNullOrWhiteSpace(user.InviteLinkToken)) {
+            var link = await leagueInviteLinkService.ValidateAsync(user.InviteLinkToken);
+            if (link == null) {
+                response.IsSuccess = false;
+                response.Errors = new List<string> { "Invalid or expired invite link." };
+                return BadRequest(response);
+            }
+            var existingUser = await userManager.FindByEmailAsync(user.Email);
+            if (existingUser != null) {
+                response.IsSuccess = false;
+                response.Errors.Add("User already exists.");
+                return BadRequest(response);
+            }
+            var linkUser = new ApplicationUser { UserName = user.Username, Email = user.Email };
+            var createResult = await userManager.CreateAsync(linkUser, user.Password);
+            if (createResult.Errors.Any()) {
+                response.IsSuccess = false;
+                response.Errors = createResult.Errors.Select(x => x.Description).ToList();
+                return BadRequest(response);
+            }
+            response.IsSuccess = true;
+            response.UserId = linkUser.Id;
+            db.LeagueUserMapping.Add(new LeagueUserMapping { LeagueId = link.LeagueId, UserId = linkUser.Id });
+            await db.SaveChangesAsync();
+            try {
+                var token = await userManager.GenerateEmailConfirmationTokenAsync(linkUser);
+                var code = System.Text.Encoding.UTF8.GetBytes(token);
+                var encodedCode = WebEncoders.Base64UrlEncode(code);
+                var confirmationUrl = $"{config["App:BaseUrl"]?.TrimEnd('/') ?? string.Empty}/account/confirmemail";
+                var callbackUrl = $"{confirmationUrl}?userId={linkUser.Id}&code={encodedCode}";
+                await emailSenderApplication.SendConfirmationLinkAsync(linkUser, linkUser.Email!, HtmlEncoder.Default.Encode(callbackUrl));
+            } catch (Exception ex) {
+                logger.LogError(ex, "Failed to send confirmation email to {Email} after invite-link registration", linkUser.Email);
+            }
+            return Ok(response);
+        }
+
+        // Invitation-code registration path
         var invitation = await invitationService.ValidateInvitationAsync(user.Code);
         if (invitation == null) {
             response.IsSuccess = false;
