@@ -191,6 +191,103 @@ test.describe('Register page: invite link token flow', () => {
   });
 });
 
+// ── Group 4b: Join page — already-a-member (409) ─────────────────────────────
+
+test.describe('Join page: already-a-member (409)', () => {
+  test('409 from joinViaLink still navigates to /dashboard — already-member is a no-op', async ({ page }) => {
+    // Override the join POST to return 409 (already a member) — the handler in
+    // setupRoutes returns 204; registering this before setupRoutes wins because
+    // Playwright calls route handlers in registration order (LIFO).
+    await page.route(/\/api\/league\/join\/[^/]+$/, (route) => {
+      if (route.request().method() === 'POST') {
+        void route.fulfill({ status: 409 });
+        return;
+      }
+      void route.continue();
+    });
+
+    await setupRoutes(page, { authUser: TEST_USER });
+    await page.goto('/');
+    await page.context().addCookies([
+      { name: 'AuthToken', value: 'fake-jwt', domain: 'localhost', path: '/', httpOnly: false, secure: false, sameSite: 'Lax' },
+    ]);
+    await page.goto(`/join/${MOCK_TOKEN}`);
+
+    await page.getByRole('button', { name: /join league/i }).click();
+
+    // 409 should be treated as "already a member" — user lands on dashboard, not an error
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 8000 });
+    await expect(page.getByText(/expired|invalid|failed/i)).not.toBeVisible();
+  });
+});
+
+// ── Group 4c: Invite Player (email invite) dialog ─────────────────────────────
+
+test.describe('League portal: Invite Player (email) dialog', () => {
+  async function setupWithInviteRoute(page: Page, succeed = true): Promise<void> {
+    // Mock POST /api/league/{id}/invite before setupRoutes so it wins
+    await page.route(/\/api\/league\/\d+\/invite$/, (route) => {
+      if (route.request().method() === 'POST') {
+        void route.fulfill({ status: succeed ? 204 : 500 });
+        return;
+      }
+      void route.continue();
+    });
+    await mockAuth(page, { authUser: TEST_USER, navigateTo: '/league/manage' });
+    await waitForSpinner(page);
+  }
+
+  test('clicking Invite Player opens a dialog with an email field', async ({ page }) => {
+    await setupWithInviteRoute(page);
+
+    await page.getByRole('button', { name: /invite player/i }).click();
+
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByLabel(/email/i)).toBeVisible({ timeout: 3000 });
+  });
+
+  test('Invite Player submit button is disabled when email is empty', async ({ page }) => {
+    await setupWithInviteRoute(page);
+
+    await page.getByRole('button', { name: /invite player/i }).click();
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+
+    // Submit inside the dialog (not the outer form) — button is disabled with empty email
+    const sendBtn = page.getByRole('dialog').getByRole('button', { name: /send invite|invite/i });
+    await expect(sendBtn).toBeDisabled({ timeout: 3000 });
+  });
+
+  test('filling email and submitting sends invite and closes dialog', async ({ page }) => {
+    await setupWithInviteRoute(page, true);
+
+    await page.getByRole('button', { name: /invite player/i }).click();
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+
+    await page.getByLabel(/email/i).fill('friend@example.com');
+    await page.getByRole('dialog').getByRole('button', { name: /send invite|invite/i }).click();
+
+    // Dialog closes and a success toast appears
+    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('alert')).toContainText(/invitation sent/i, { timeout: 5000 });
+  });
+});
+
+// ── Group 4d: Registration confirmation — always shows Go to login ────────────
+
+test.describe('Registration confirmation page', () => {
+  test('shows Go to login button (not returnUrl redirect) — email confirmation step is required first', async ({ page }) => {
+    await setupUnauthRoutes(page);
+
+    // Navigate directly to the confirmation page with a returnUrl (as RegisterPage would)
+    await page.goto(`/account/registerconfirmation?email=newplayer%40example.com&returnUrl=${encodeURIComponent('/join/' + MOCK_TOKEN)}`);
+
+    await expect(page.getByRole('heading', { name: /register confirmation/i })).toBeVisible({ timeout: 5000 });
+    // Confirmation page intentionally ignores returnUrl — user must confirm email first
+    await expect(page.getByRole('button', { name: /go to login/i })).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText('newplayer@example.com')).toBeVisible();
+  });
+});
+
 // ── Group 5: Full journey ─────────────────────────────────────────────────────
 
 test.describe('Full invite link journey', () => {
