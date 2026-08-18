@@ -610,6 +610,20 @@ public class DemoDataSeeder(
         await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"NflSpreads\" WHERE \"Season\" = {DemoSeason} AND \"NflWeek\" IN ({weekIn})");
         await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"NflWeeks\" WHERE \"Season\" = {DemoSeason} AND \"NflWeek\" IN ({weekIn})");
 
+        // After deleting, reset the NflWeeks sequence so the next auto-generated Id
+        // is above the current max Id in the table. Without this, crash-loop cycles
+        // that insert-then-wipe rows exhaust sequence values into the range already
+        // held by rows from other seasons (e.g. Season 2026 rows with Ids 126-150
+        // inserted by NflScoresJob before DEMO_MODE was enabled), causing PK_NflWeeks
+        // violations on the very next insert.
+        await db.Database.ExecuteSqlRawAsync(
+            "SELECT setval('\"NflWeeks_Id_seq\"', GREATEST((SELECT MAX(\"Id\") FROM \"NflWeeks\"), 1))");
+
+        // Clear the change tracker so stale tracked entities from earlier in SeedAsync
+        // (e.g. the NflWeeks week-18 entity loaded in SeedDemoUsersAsync) don't
+        // interfere with the raw-SQL-deleted state.
+        db.ChangeTracker.Clear();
+
         // Admin (frizat) win pattern for weeks 1-17: W W L W W W W W W L W W W W W W W
         bool[] adminWins = [true, true, false, true, true, true, true, true, true, false, true, true, true, true, true, true, true];
 
