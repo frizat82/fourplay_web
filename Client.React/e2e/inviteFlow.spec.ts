@@ -40,7 +40,7 @@ async function setupUnauthRoutes(page: Page): Promise<void> {
         contentType: 'application/json',
         body: JSON.stringify({
           token: MOCK_TOKEN,
-          leagueId: 1,
+          leagueId: 99,
           leagueName: MOCK_LEAGUE_NAME,
           expiresAt: new Date(Date.now() + 86400000).toISOString(),
         }),
