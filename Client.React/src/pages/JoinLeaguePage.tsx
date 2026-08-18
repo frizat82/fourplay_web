@@ -9,12 +9,13 @@ import Typography from '@mui/material/Typography';
 import { validateInviteLink, joinViaLink, type LeagueInviteLinkDto } from '../api/league';
 import { useAuth } from '../services/auth';
 import { useSession } from '../services/session';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 
 export default function JoinLeaguePage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { reloadLeagues } = useSession();
+  const { reloadLeagues, availableLeagues } = useSession();
 
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -94,7 +95,17 @@ export default function JoinLeaguePage() {
           {error && (
             <Typography variant="body2" color="error" sx={{ mb: 2 }}>{error}</Typography>
           )}
-          {user ? (
+          {user && availableLeagues.some((l) => l.leagueId === link.leagueId) ? (
+            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+              <CheckCircleOutlineIcon color="success" sx={{ fontSize: 36 }} />
+              <Typography variant="body1" color="text.secondary">
+                You&apos;re already a member of this league.
+              </Typography>
+              <Button variant="outlined" fullWidth onClick={() => navigate('/dashboard')} sx={{ mt: 1 }}>
+                Go to Dashboard
+              </Button>
+            </Box>
+          ) : user ? (
             <Button
               variant="contained"
               color="secondary"
