@@ -25,8 +25,15 @@ Short version: NFL regular season = 4 picks; postseason decreases 3→3→2→1.
 2. A test asserting the wrong value is WORSE than no test — false confidence hides bugs
 3. Tests must assert THE RULE, not the current (possibly broken) implementation
 
+### EF Core Bulk Operations — Provider Gotcha
+**Never use `ExecuteDeleteAsync` / `ExecuteUpdateAsync` with a local `int[]` / `List<T>` `.Contains(...)` filter.** It translates correctly in SELECT queries and SQLite, but silently no-ops on Npgsql (PostgreSQL), leaving rows in place. Use `ToListAsync` + `RemoveRange` + `SaveChangesAsync` instead.
+
+**Any test covering a bulk EF Core operation MUST use real PostgreSQL (Testcontainers), not SQLite.** A SQLite-passing test gives false confidence — it will not catch Npgsql translation failures that crash Railway deploys.
+
 ### The Seeder Is Production-Critical
 `DemoDataSeeder` seeds the demo DB that Playwright e2e tests run against. After any pick logic change: re-verify seeder counts AND run `npm run test:e2e:demo`. Never fudge `ExpectedPickCount`.
+
+**After merging any seeder change to `dev`:** check Railway dev deploy status before opening the `dev → main` PR. A crashed Railway dev is a blocker.
 
 ### Test Rot Prevention
 When fixing a bug: grep existing tests for old wrong values before shipping. When changing `GetRequiredPicks`/`GetCfbRequiredPicks`: read ALL test files that reference the function, update expected values first, then fix the implementation.
