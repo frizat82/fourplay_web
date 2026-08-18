@@ -601,11 +601,15 @@ public class DemoDataSeeder(
 
         // Wipe all historical weeks so every deploy starts from a clean slate.
         // Delete in FK order: picks → scores → spreads → weeks.
+        // Use ToList+RemoveRange instead of ExecuteDeleteAsync — int[] Contains translates
+        // correctly in SELECT but not reliably in bulk-delete on Npgsql, causing silent no-ops
+        // that leave rows behind and crash unconditional re-inserts with PK violations.
         int[] historicalWeekNums = [.. Enumerable.Range(1, 17), .. Enumerable.Range(19, 4)];
-        await db.NflPicks.Where(p => p.Season == DemoSeason && historicalWeekNums.Contains(p.NflWeek)).ExecuteDeleteAsync();
-        await db.NflScores.Where(s => s.Season == DemoSeason && historicalWeekNums.Contains(s.NflWeek)).ExecuteDeleteAsync();
-        await db.NflSpreads.Where(s => s.Season == DemoSeason && historicalWeekNums.Contains(s.NflWeek)).ExecuteDeleteAsync();
-        await db.NflWeeks.Where(w => w.Season == DemoSeason && historicalWeekNums.Contains(w.NflWeek)).ExecuteDeleteAsync();
+        db.NflPicks.RemoveRange(await db.NflPicks.Where(p => p.Season == DemoSeason && historicalWeekNums.Contains(p.NflWeek)).ToListAsync());
+        db.NflScores.RemoveRange(await db.NflScores.Where(s => s.Season == DemoSeason && historicalWeekNums.Contains(s.NflWeek)).ToListAsync());
+        db.NflSpreads.RemoveRange(await db.NflSpreads.Where(s => s.Season == DemoSeason && historicalWeekNums.Contains(s.NflWeek)).ToListAsync());
+        db.NflWeeks.RemoveRange(await db.NflWeeks.Where(w => w.Season == DemoSeason && historicalWeekNums.Contains(w.NflWeek)).ToListAsync());
+        await db.SaveChangesAsync();
 
         // Admin (frizat) win pattern for weeks 1-17: W W L W W W W W W L W W W W W W W
         bool[] adminWins = [true, true, false, true, true, true, true, true, true, false, true, true, true, true, true, true, true];
