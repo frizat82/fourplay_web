@@ -51,7 +51,7 @@ jobs:
 
       - name: Test
         # Category=Contract tests hit the real ESPN/odds APIs over the network — excluded here,
-        # run weekly + on-demand via espn-contract.yml instead (frizat-703.5).
+        # run weekly + on-demand via espn-contract.yml instead.
         run: dotnet test --no-build -c Release --filter "Category!=Contract" --logger "console;verbosity=minimal"
 
   frontend:
@@ -235,7 +235,7 @@ jobs:
           retention-days: 7
 
   demo-replay-e2e:
-    name: Demo replay e2e tests (frizat-703.6)
+    name: Demo replay e2e tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
