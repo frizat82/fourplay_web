@@ -600,16 +600,15 @@ public class DemoDataSeeder(
         if (adminUser == null) return;
 
         // Wipe all historical weeks so every deploy starts from a clean slate.
-        // Delete in FK order: picks → scores → spreads → weeks.
-        // Use ToList+RemoveRange instead of ExecuteDeleteAsync — int[] Contains translates
-        // correctly in SELECT but not reliably in bulk-delete on Npgsql, causing silent no-ops
-        // that leave rows behind and crash unconditional re-inserts with PK violations.
-        int[] historicalWeekNums = [.. Enumerable.Range(1, 17), .. Enumerable.Range(19, 4)];
-        db.NflPicks.RemoveRange(await db.NflPicks.Where(p => p.Season == DemoSeason && historicalWeekNums.Contains(p.NflWeek)).ToListAsync());
-        db.NflScores.RemoveRange(await db.NflScores.Where(s => s.Season == DemoSeason && historicalWeekNums.Contains(s.NflWeek)).ToListAsync());
-        db.NflSpreads.RemoveRange(await db.NflSpreads.Where(s => s.Season == DemoSeason && historicalWeekNums.Contains(s.NflWeek)).ToListAsync());
-        db.NflWeeks.RemoveRange(await db.NflWeeks.Where(w => w.Season == DemoSeason && historicalWeekNums.Contains(w.NflWeek)).ToListAsync());
-        await db.SaveChangesAsync();
+        // Raw SQL bypasses EF Core ORM entirely — neither ExecuteDeleteAsync (silent no-op with
+        // int[] Contains on Npgsql) nor RemoveRange+SaveChangesAsync (cascade-FK confusion causes
+        // EF Core to skip the DELETE entirely) produce reliable results on the Neon dev PostgreSQL.
+        // DemoSeason is a compile-time constant; weekIn is a literal — no injection risk.
+        const string weekIn = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,19,20,21,22";
+        await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"NflPicks\" WHERE \"Season\" = {DemoSeason} AND \"NflWeek\" IN ({weekIn})");
+        await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"NflScores\" WHERE \"Season\" = {DemoSeason} AND \"NflWeek\" IN ({weekIn})");
+        await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"NflSpreads\" WHERE \"Season\" = {DemoSeason} AND \"NflWeek\" IN ({weekIn})");
+        await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"NflWeeks\" WHERE \"Season\" = {DemoSeason} AND \"NflWeek\" IN ({weekIn})");
 
         // Admin (frizat) win pattern for weeks 1-17: W W L W W W W W W L W W W W W W W
         bool[] adminWins = [true, true, false, true, true, true, true, true, true, false, true, true, true, true, true, true, true];
