@@ -89,19 +89,13 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
-        id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('Client.React/package-lock.json') }}
 
       - name: Install Playwright browsers
         working-directory: Client.React
-        run: |
-          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
-            npx playwright install-deps chromium
-          else
-            npx playwright install chromium --with-deps
-          fi
+        run: npx playwright install chromium
 
       - name: Playwright (mock-based tests)
         # webServer in playwright.config.ts auto-starts Vite when CI=true.
@@ -221,19 +215,13 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
-        id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('Client.React/package-lock.json') }}
 
       - name: Install Playwright browsers
         working-directory: Client.React
-        run: |
-          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
-            npx playwright install-deps chromium
-          else
-            npx playwright install chromium --with-deps
-          fi
+        run: npx playwright install chromium
 
       - name: Playwright (demo integration tests)
         working-directory: Client.React
@@ -369,19 +357,13 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
-        id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('Client.React/package-lock.json') }}
 
       - name: Install Playwright browsers
         working-directory: Client.React
-        run: |
-          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
-            npx playwright install-deps chromium
-          else
-            npx playwright install chromium --with-deps
-          fi
+        run: npx playwright install chromium
 
       - name: Playwright (replay tests)
         working-directory: Client.React
