@@ -98,6 +98,7 @@ jobs:
   demo-e2e:
     name: Demo backend e2e tests
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -205,6 +206,12 @@ jobs:
           echo "=== BACKEND LOG ==="
           cat /tmp/backend.log || echo "(no log)"
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('Client.React/package-lock.json') }}
+
       - name: Install Playwright browsers
         working-directory: Client.React
         run: npx playwright install chromium --with-deps
@@ -230,6 +237,7 @@ jobs:
   demo-replay-e2e:
     name: Demo replay e2e tests (frizat-703.6)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     # Job-level so both the backend-startup step and the Playwright step (which logs in as admin
     # via ADMIN_EMAIL/ADMIN_PASSWORD to drive /api/replay/advance and /api/replay/reset) see them.
@@ -339,6 +347,12 @@ jobs:
         run: |
           echo "=== BACKEND LOG ==="
           cat /tmp/backend-replay.log || echo "(no log)"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('Client.React/package-lock.json') }}
 
       - name: Install Playwright browsers
         working-directory: Client.React
