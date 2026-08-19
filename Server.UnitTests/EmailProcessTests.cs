@@ -205,7 +205,8 @@ public class EmailProcessTests
             Email = email,
             Username = username,
             Password = "Test@12345",
-            Code = inviteCode
+            Code = inviteCode,
+            ConfirmationUrl = "https://example.com/account/confirmemail",
         };
 
         // Act
@@ -267,7 +268,8 @@ public class EmailProcessTests
             Email = email,
             Username = "newuser2",
             Password = "Test@12345",
-            Code = inviteCode
+            Code = inviteCode,
+            ConfirmationUrl = "https://example.com/account/confirmemail",
         };
 
         // Act
