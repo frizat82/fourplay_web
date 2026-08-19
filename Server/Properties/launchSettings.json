@@ -26,8 +26,7 @@
           "Jwt__Audience": "FourPlayWebAppClient",
           "Jwt__ExpiresMinutes": "1000",
           "Jwt__Issuer": "FourPlayWebApp",
-          "Jwt__Key": "",
-          "APP_URL": ""
+          "Jwt__Key": ""
         }
       },
       "IIS Express": {

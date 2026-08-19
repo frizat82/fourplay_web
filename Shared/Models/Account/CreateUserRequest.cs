@@ -6,4 +6,5 @@ public class CreateUserRequest {
     public string Email { get; set; }
     public string Code { get; set; }
     public string? InviteLinkToken { get; set; }
+    public string ConfirmationUrl { get; set; }
 }
