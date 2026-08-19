@@ -62,6 +62,33 @@ test.describe('Registration flow', () => {
     await expect(page.getByText('newuser@example.com')).toBeVisible({ timeout: 5000 });
   });
 
+  test('sends an absolute confirmationUrl built from the page origin', async ({ page }) => {
+    // Regression guard: AuthController.CreateUser used to build the confirmation-email link
+    // from a server config value (App:BaseUrl) that was never set on Railway, so every
+    // confirmation link was a dead relative path. The link is now built entirely from this
+    // client-supplied absolute URL — if this drifts back to a relative path, new users will
+    // be unable to confirm their email and will be locked out with "not allowed to sign in".
+    let capturedBody: Record<string, unknown> | undefined;
+    await page.route('**/api/auth/create-user', (route) => {
+      capturedBody = route.request().postDataJSON();
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ isSuccess: true, errors: [] }),
+      });
+    });
+    await page.goto(`/account/register?inviteCode=${INVITE_CODE}`);
+
+    await page.getByLabel(/username/i).fill('newuser');
+    await page.getByLabel(/^email/i).fill('newuser@example.com');
+    await page.getByLabel(/^password$/i).fill('Test@1234');
+    await page.getByLabel(/confirm password/i).fill('Test@1234');
+    await page.getByRole('button', { name: /^register$/i }).click();
+
+    await page.waitForURL('**/account/registerconfirmation**', { timeout: 10000 });
+    expect(capturedBody?.confirmationUrl).toBe(`${new URL(page.url()).origin}/account/confirmemail`);
+  });
+
   test('error path: invalid invite code shows error toast', async ({ page }) => {
     await setupRegistrationRoutes(page, false);
     await page.goto('/account/register?inviteCode=bad-code');

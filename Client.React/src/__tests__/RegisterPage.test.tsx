@@ -72,4 +72,24 @@ describe('RegisterPage — invite link flow', () => {
     const callArg = vi.mocked(createUser).mock.calls[0][0];
     expect(callArg.inviteLinkToken).toBeUndefined();
   });
+
+  it('sends an absolute confirmationUrl built from window.location.origin — not a bare relative path', async () => {
+    // frizat: the server no longer has a working App:BaseUrl config; the confirmation-email
+    // link is now built entirely from this client-supplied absolute URL. A relative path here
+    // silently breaks every new user's ability to confirm their email and log in.
+    renderWithSearch('?inviteCode=MYCODE');
+
+    await userEvent.type(screen.getByLabelText(/invitation code/i), 'MYCODE');
+    await userEvent.type(screen.getByLabelText(/username/i), 'newuser');
+    await userEvent.type(screen.getByLabelText(/^email$/i), 'new@test.com');
+    await userEvent.type(screen.getByLabelText(/^password$/i), VALID_PASSWORD);
+    await userEvent.type(screen.getByLabelText(/confirm password/i), VALID_PASSWORD);
+    await userEvent.click(screen.getByRole('button', { name: /register/i }));
+
+    await waitFor(() =>
+      expect(createUser).toHaveBeenCalledWith(
+        expect.objectContaining({ confirmationUrl: `${window.location.origin}/account/confirmemail` }),
+      ),
+    );
+  });
 });

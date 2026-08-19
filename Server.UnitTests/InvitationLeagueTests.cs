@@ -128,8 +128,6 @@ public class InvitationLeagueTests
         userManager.GenerateEmailConfirmationTokenAsync(Arg.Any<ApplicationUser>())
             .Returns("token");
 
-        config["App:BaseUrl"].Returns("http://localhost");
-
         var controller = BuildAuthController(userManager, invitationService, config, db);
 
         // Act
@@ -139,6 +137,7 @@ public class InvitationLeagueTests
             Email = "newuser@example.com",
             Password = "Pass@123",
             Code = "code-abc",
+            ConfirmationUrl = "http://localhost/account/confirmemail",
         });
 
         // Assert — LeagueUserMapping must exist for the new user in league 5
@@ -173,8 +172,6 @@ public class InvitationLeagueTests
         userManager.GenerateEmailConfirmationTokenAsync(Arg.Any<ApplicationUser>())
             .Returns("token");
 
-        config["App:BaseUrl"].Returns("http://localhost");
-
         var controller = BuildAuthController(userManager, invitationService, config, db);
 
         // Act
@@ -184,6 +181,7 @@ public class InvitationLeagueTests
             Email = "user2@example.com",
             Password = "Pass@123",
             Code = "code-xyz",
+            ConfirmationUrl = "http://localhost/account/confirmemail",
         });
 
         // Assert — no LeagueUserMapping should be created

@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { createUser } from '../../api/auth';
 import { validateInvitation } from '../../api/invitations';
 import { useToast } from '../../services/toast';
+import { buildAbsoluteUrl } from '../../utils/url';
 
 const baseSchema = z.object({
   invitationCode: z.string(),
@@ -79,6 +80,7 @@ export default function RegisterPage() {
       code: values.invitationCode,
       password: values.password,
       username: values.userName,
+      confirmationUrl: buildAbsoluteUrl('/account/confirmemail'),
       ...(inviteLinkToken ? { inviteLinkToken } : {}),
     });
 
