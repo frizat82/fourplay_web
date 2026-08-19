@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { requestConfirmEmail } from '../../api/auth';
 import StatusMessage from '../../components/StatusMessage';
 import { buildAbsoluteUrl } from '../../utils/url';
+import { extractApiErrorMessage } from '../../utils/apiError';
 
 const schema = z.object({
   email: z.string().email('Invalid email'),
@@ -24,21 +25,30 @@ export default function ResendEmailConfirmationPage() {
     defaultValues: { email: '' },
   });
   const [message, setMessage] = useState<string | null>(null);
+  const [severity, setSeverity] = useState<'info' | 'error'>('info');
 
   const onSubmit = async (values: FormValues) => {
-    const result = await requestConfirmEmail({
-      confirmationUrl: buildAbsoluteUrl('/account/confirmemail'),
-      email: values.email,
-    });
-    setMessage(result);
-    setValue('email', '');
+    try {
+      const result = await requestConfirmEmail({
+        confirmationUrl: buildAbsoluteUrl('/account/confirmemail'),
+        email: values.email,
+      });
+      setMessage(result);
+      setSeverity('info');
+      setValue('email', '');
+    } catch (error) {
+      // This endpoint is rate-limited (Program.cs "forgot" policy), so a 429 with no body is a
+      // real response the caller must handle, not just the always-200 "if registered" response.
+      setMessage(extractApiErrorMessage(error, 'Something went wrong. Please try again.'));
+      setSeverity('error');
+    }
   };
 
   return (
     <Stack spacing={3} sx={{ maxWidth: 520, margin: '0 auto', paddingTop: 6 }}>
       <Typography variant="h4">Resend email confirmation</Typography>
       <Typography variant="body1">Enter your email.</Typography>
-      <StatusMessage message={message} />
+      <StatusMessage message={message} severity={severity} />
       <Card>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)}>
