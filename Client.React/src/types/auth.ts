@@ -31,6 +31,7 @@ export interface CreateUserRequest {
   password: string;
   code: string;
   inviteLinkToken?: string;
+  confirmationUrl: string;
 }
 
 export interface CreateUserResponse {

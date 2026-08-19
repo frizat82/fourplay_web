@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { requestConfirmEmail } from '../../api/auth';
 import StatusMessage from '../../components/StatusMessage';
+import { buildAbsoluteUrl } from '../../utils/url';
 
 const schema = z.object({
   email: z.string().email('Invalid email'),
@@ -26,7 +27,7 @@ export default function ResendEmailConfirmationPage() {
 
   const onSubmit = async (values: FormValues) => {
     const result = await requestConfirmEmail({
-      confirmationUrl: 'Account/ConfirmEmail',
+      confirmationUrl: buildAbsoluteUrl('/account/confirmemail'),
       email: values.email,
     });
     setMessage(result);
