@@ -827,11 +827,15 @@ public class AuthControllerTests
     }
 
     [Fact]
-    public async Task CreateUser_WithMissingConfirmationUrl_DoesNotSendConfirmationEmail_ButStillCreatesAccount()
+    public async Task CreateUser_WhenAllowedOriginsUnconfigured_MissingConfirmationUrl_DoesNotSendConfirmationEmail_ButStillCreatesAccount()
     {
-        // Guard against a caller that omits ConfirmationUrl (stale client, direct API call):
-        // must not silently build a dead relative link (the exact bug this PR fixes) — skip
-        // the send and log, but the account itself must still be created successfully.
+        // This exercises the ALLOWED_ORIGINS-unset case only (Development/local — Program.cs
+        // fails startup otherwise), where IsAllowedConfirmationOrigin lets everything through
+        // and SendEmailConfirmationLinkAsync's own guard is what catches the empty URL: skip
+        // the send and log, but the account itself must still be created successfully. In any
+        // environment where ALLOWED_ORIGINS *is* configured (i.e. every real deploy), an empty
+        // ConfirmationUrl is instead rejected earlier with BadRequest — see
+        // CreateUser_WhenAllowedOriginsConfigured_RejectsConfirmationUrlOnUntrustedDomain.
         var userManager = BuildUserManager();
         userManager.FindByEmailAsync("invited@test.com").Returns((ApplicationUser?)null);
         userManager.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>())
