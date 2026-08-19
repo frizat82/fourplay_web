@@ -6,6 +6,7 @@ vi.mock('../api/auth', () => ({ requestConfirmEmail: vi.fn() }));
 
 import ResendEmailConfirmationPage from '../pages/account/ResendEmailConfirmationPage';
 import { requestConfirmEmail } from '../api/auth';
+import { buildAxiosError } from './testUtils/axiosError';
 
 describe('ResendEmailConfirmationPage', () => {
   beforeEach(() => {
@@ -26,5 +27,32 @@ describe('ResendEmailConfirmationPage', () => {
         confirmationUrl: `${window.location.origin}/account/confirmemail`,
       }),
     );
+  });
+
+  it('shows a friendly rate-limit message on a bare 429 instead of leaving an unhandled rejection', async () => {
+    // This endpoint is rate-limited (Program.cs "forgot" policy) and returns a bare 429 with no
+    // body — must not silently swallow the failure or render a blank/undefined message.
+    vi.mocked(requestConfirmEmail).mockRejectedValue(buildAxiosError(429, ''));
+    render(<ResendEmailConfirmationPage />);
+
+    await userEvent.type(screen.getByLabelText(/email/i), 'user@test.com');
+    await userEvent.click(screen.getByRole('button', { name: /resend/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Too many attempts. Please wait a few minutes and try again.')).toBeInTheDocument(),
+    );
+    // Not just present — must render as an error, not the neutral "info" styling used for the
+    // always-200 success response (StatusMessage previously hardcoded severity="info").
+    expect(screen.getByRole('alert')).toHaveClass('MuiAlert-outlinedError');
+  });
+
+  it('shows the success message with info (not error) styling on the normal 200 response', async () => {
+    render(<ResendEmailConfirmationPage />);
+
+    await userEvent.type(screen.getByLabelText(/email/i), 'user@test.com');
+    await userEvent.click(screen.getByRole('button', { name: /resend/i }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(screen.getByRole('alert')).toHaveClass('MuiAlert-outlinedInfo');
   });
 });

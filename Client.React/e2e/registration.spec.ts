@@ -24,8 +24,12 @@ async function setupRegistrationRoutes(page: Page, succeed = true) {
           body: JSON.stringify({ isSuccess: true, errors: [] }),
         });
       } else {
+        // The real backend (AuthController.CreateUser) returns BadRequest — 400 — for a bad
+        // invite code, never 200 with isSuccess:false. Mocking 200 here let RegisterPage ship
+        // with no try/catch around createUser() for months: the error path silently did nothing
+        // on the real site (confirmed live — 3 unhandled AxiosErrors, no toast at all).
         void route.fulfill({
-          status: 200,
+          status: 400,
           contentType: 'application/json',
           body: JSON.stringify({ isSuccess: false, errors: ['Invalid invitation code'] }),
         });
