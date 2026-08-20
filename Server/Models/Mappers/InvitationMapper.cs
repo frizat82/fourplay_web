@@ -19,6 +19,7 @@ public static class InvitationMapper
             UsedAt = invitation.UsedAt,
             RegisteredUserId = invitation.RegisteredUserId,
             RegisteredUserName = invitation.RegisteredUser?.UserName, // from ApplicationUser
+            RegisteredUserEmailConfirmed = invitation.RegisteredUser?.EmailConfirmed,
             IsExpired = invitation.IsExpired,
             IsValid = invitation.IsValid,
             LeagueId = invitation.LeagueId,

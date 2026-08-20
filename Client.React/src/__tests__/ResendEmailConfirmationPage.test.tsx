@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 
 vi.mock('../api/auth', () => ({ requestConfirmEmail: vi.fn() }));
@@ -7,6 +8,14 @@ vi.mock('../api/auth', () => ({ requestConfirmEmail: vi.fn() }));
 import ResendEmailConfirmationPage from '../pages/account/ResendEmailConfirmationPage';
 import { requestConfirmEmail } from '../api/auth';
 import { buildAxiosError } from './testUtils/axiosError';
+
+function renderResend(search = '') {
+  return render(
+    <MemoryRouter initialEntries={[`/account/resendemailconfirmation${search}`]}>
+      <ResendEmailConfirmationPage />
+    </MemoryRouter>,
+  );
+}
 
 describe('ResendEmailConfirmationPage', () => {
   beforeEach(() => {
@@ -16,7 +25,7 @@ describe('ResendEmailConfirmationPage', () => {
   it('sends an absolute confirmationUrl built from window.location.origin — not a hardcoded relative path', async () => {
     // frizat: this previously sent the literal string 'Account/ConfirmEmail' — no domain, wrong
     // case vs the real /account/confirmemail route — so every resend request produced a dead link.
-    render(<ResendEmailConfirmationPage />);
+    renderResend();
 
     await userEvent.type(screen.getByLabelText(/email/i), 'user@test.com');
     await userEvent.click(screen.getByRole('button', { name: /resend/i }));
@@ -33,7 +42,7 @@ describe('ResendEmailConfirmationPage', () => {
     // This endpoint is rate-limited (Program.cs "forgot" policy) and returns a bare 429 with no
     // body — must not silently swallow the failure or render a blank/undefined message.
     vi.mocked(requestConfirmEmail).mockRejectedValue(buildAxiosError(429, ''));
-    render(<ResendEmailConfirmationPage />);
+    renderResend();
 
     await userEvent.type(screen.getByLabelText(/email/i), 'user@test.com');
     await userEvent.click(screen.getByRole('button', { name: /resend/i }));
@@ -47,12 +56,18 @@ describe('ResendEmailConfirmationPage', () => {
   });
 
   it('shows the success message with info (not error) styling on the normal 200 response', async () => {
-    render(<ResendEmailConfirmationPage />);
+    renderResend();
 
     await userEvent.type(screen.getByLabelText(/email/i), 'user@test.com');
     await userEvent.click(screen.getByRole('button', { name: /resend/i }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.getByRole('alert')).toHaveClass('MuiAlert-outlinedInfo');
+  });
+
+  it('pre-fills the email field from a ?email= query param (arriving here from LoginPage)', async () => {
+    renderResend('?email=blocked%40test.com');
+
+    expect(screen.getByLabelText(/email/i)).toHaveValue('blocked@test.com');
   });
 });

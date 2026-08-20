@@ -495,12 +495,26 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
     expect(await screen.findByText(/pending/i)).toBeInTheDocument();
   });
 
-  it('shows Accepted chip for a used invitation', async () => {
-    mockedGetLeagueInvitations.mockResolvedValue([makeInvitation({ isUsed: true, isValid: false })]);
+  it('shows Confirmed chip for a used invitation whose registered user has confirmed their email', async () => {
+    mockedGetLeagueInvitations.mockResolvedValue([
+      makeInvitation({ isUsed: true, isValid: false, registeredUserEmailConfirmed: true }),
+    ]);
     renderPage();
     await screen.findByText('frizat@example.com');
 
-    expect(await screen.findByText(/accepted/i)).toBeInTheDocument();
+    expect(await screen.findByText(/^confirmed$/i)).toBeInTheDocument();
+  });
+
+  it('shows Pending Confirmation chip for a used invitation whose registered user has not confirmed yet', async () => {
+    // Same confusion the admin Invitations page fix resolves — a plain "Accepted" here would
+    // hide that the registered user is still stuck unable to log in.
+    mockedGetLeagueInvitations.mockResolvedValue([
+      makeInvitation({ isUsed: true, isValid: false, registeredUserEmailConfirmed: false }),
+    ]);
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(await screen.findByText(/pending confirmation/i)).toBeInTheDocument();
   });
 
   it('shows Expired chip for an expired, unused invitation', async () => {
@@ -513,7 +527,7 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
 
   it('refreshes the invitations list after sending an email invite', async () => {
     const refreshedInvitation = makeInvitation({ email: 'bob@example.com' });
-    mockedInviteToLeague.mockResolvedValue(undefined);
+    mockedInviteToLeague.mockResolvedValue({ email: 'bob@example.com', addedExistingUser: false });
     mockedGetLeagueInvitations
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([refreshedInvitation]);
@@ -527,6 +541,44 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
 
     await waitFor(() => expect(mockedGetLeagueInvitations).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('bob@example.com')).toBeInTheDocument();
+  });
+
+  it('inviting an already-registered email refreshes members, not invitations, with a distinct message', async () => {
+    // Someone who already has an account gets added to the league immediately — no dead
+    // "register again" invitation that can never be redeemed because the email is taken.
+    mockedInviteToLeague.mockResolvedValue({ email: 'bob@example.com', addedExistingUser: true });
+    mockedGetMappings.mockResolvedValue([makeMember()]);
+
+    renderPage();
+    await screen.findByText('frizat@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /invite player/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText(/email/i), 'bob@example.com');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^send invite$/i }));
+
+    await waitFor(() => expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/added to the league/i), 'success'));
+    expect(mockedGetLeagueInvitations).toHaveBeenCalledTimes(1); // only the initial load, no refresh
+    await waitFor(() => expect(mockedGetMappings).toHaveBeenCalledTimes(2)); // initial load + refresh
+  });
+
+  it('shows the server\'s specific conflict message when inviting someone already on the league', async () => {
+    mockedInviteToLeague.mockRejectedValue(
+      Object.assign(new Error('Conflict'), {
+        isAxiosError: true,
+        response: { status: 409, data: 'bob@example.com is already a member of this league.' },
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('frizat@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /invite player/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText(/email/i), 'bob@example.com');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^send invite$/i }));
+
+    await waitFor(() =>
+      expect(toastPush).toHaveBeenCalledWith('bob@example.com is already a member of this league.', 'error'),
+    );
   });
 
   it('updates the invite link state after generating a new link', async () => {

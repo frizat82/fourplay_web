@@ -396,6 +396,11 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    if (url.match(/\/api\/league\/\d+\/invite-link$/) && method === 'DELETE') {
+      void route.fulfill({ status: 204 });
+      return;
+    }
+
     if (url.match(/\/api\/league\/\d+\/invitations$/) && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
       return;
