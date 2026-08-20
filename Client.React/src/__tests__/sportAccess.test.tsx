@@ -26,6 +26,8 @@ const sessionState = {
   hasCfbAccess: true,
   leaguesLoaded: true,
   ownedLeagues: [] as { id: number; leagueName: string; leagueType: string; ownerUserId: string; dateCreated: string }[],
+  pendingMembershipInvites: [] as { id: number; leagueId: number; leagueName: string; invitedByUserName: string | null; createdAt: string }[],
+  refreshPendingInvites: vi.fn(),
 };
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 

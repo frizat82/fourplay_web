@@ -112,7 +112,7 @@ export default function RegisterPage() {
       <Typography variant="h4">Register</Typography>
       {leagueName && (
         <Alert severity="info">
-          You've been invited to join <strong>{leagueName}</strong>
+          You're registering for IV League and joining <strong>{leagueName}</strong>.
         </Alert>
       )}
       <Card>

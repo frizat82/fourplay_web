@@ -5,6 +5,7 @@ using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -28,7 +29,8 @@ public class LeagueInviteLinkTests
         ClaimsPrincipal principal,
         ILeagueRepository? repo = null,
         ILeagueInviteLinkService? linkService = null,
-        IInvitationService? invitationService = null)
+        IInvitationService? invitationService = null,
+        ILeagueMembershipInviteService? membershipInviteService = null)
     {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var userManager = Substitute.For<UserManager<ApplicationUser>>(
@@ -42,7 +44,8 @@ public class LeagueInviteLinkTests
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
             invitationService ?? Substitute.For<IInvitationService>(),
-            linkService ?? Substitute.For<ILeagueInviteLinkService>());
+            linkService ?? Substitute.For<ILeagueInviteLinkService>(),
+            membershipInviteService ?? Substitute.For<ILeagueMembershipInviteService>());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -366,6 +369,64 @@ public class LeagueInviteLinkTests
         var controller = BuildController(BuildPrincipal("admin-user", isAdmin: true), repo: repo, invitationService: invSvc);
 
         var result = await controller.GetLeagueInvitations(1);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // ── GetLeagueMembershipInvites ────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetLeagueMembershipInvites_ReturnsForbid_WhenCallerIsNotOwnerOrAdmin()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
+
+        var controller = BuildController(BuildPrincipal(StrangerId), repo: repo);
+
+        var result = await controller.GetLeagueMembershipInvites(1);
+
+        Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetLeagueMembershipInvites_ReturnsOk_WithMappedDtos()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
+
+        var membershipSvc = Substitute.For<ILeagueMembershipInviteService>();
+        membershipSvc.GetByLeagueAsync(1).Returns(new List<LeagueMembershipInvite>
+        {
+            new() {
+                Id = 5, LeagueId = 1, InvitedUserId = "invitee-1",
+                InvitedUser = new ApplicationUser { UserName = "bob", Email = "bob@test.com" },
+                Status = MembershipInviteStatus.Pending,
+            }
+        });
+
+        var controller = BuildController(BuildPrincipal(OwnerId), repo: repo, membershipInviteService: membershipSvc);
+
+        var result = await controller.GetLeagueMembershipInvites(1);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var list = Assert.IsAssignableFrom<IEnumerable<MembershipInviteStatusDto>>(ok.Value);
+        var item = Assert.Single(list);
+        Assert.Equal("bob@test.com", item.InvitedUserEmail);
+        Assert.Equal(MembershipInviteStatus.Pending, item.Status);
+    }
+
+    [Fact]
+    public async Task GetLeagueMembershipInvites_ReturnsOk_WhenCallerIsAdmin()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "TestLeague" });
+
+        var membershipSvc = Substitute.For<ILeagueMembershipInviteService>();
+        membershipSvc.GetByLeagueAsync(1).Returns(new List<LeagueMembershipInvite>());
+
+        var controller = BuildController(BuildPrincipal("admin-user", isAdmin: true), repo: repo, membershipInviteService: membershipSvc);
+
+        var result = await controller.GetLeagueMembershipInvites(1);
 
         Assert.IsType<OkObjectResult>(result.Result);
     }

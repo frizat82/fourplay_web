@@ -15,9 +15,9 @@ vi.mock('../services/toast', () => ({ useToast: () => ({ push: pushMock }) }));
 
 import LoginPage from '../pages/account/LoginPage';
 
-function renderLogin() {
+function renderLogin(search = '') {
   return render(
-    <MemoryRouter initialEntries={['/account/login']}>
+    <MemoryRouter initialEntries={[`/account/login${search}`]}>
       <LoginPage />
     </MemoryRouter>,
   );
@@ -39,6 +39,15 @@ describe('LoginPage', () => {
   it('navigates to returnUrl on success', async () => {
     loginMock.mockResolvedValue({ succeeded: true, isLockedOut: false, requiresTwoFactor: false, isNotAllowed: false, accessFailedCount: 0 });
     renderLogin();
+
+    await submitLoginForm();
+
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/dashboard', { replace: true }));
+  });
+
+  it('ignores a crafted returnUrl=/logout — /logout is public and would immediately sign the user back out', async () => {
+    loginMock.mockResolvedValue({ succeeded: true, isLockedOut: false, requiresTwoFactor: false, isNotAllowed: false, accessFailedCount: 0 });
+    renderLogin('?returnUrl=%2Flogout');
 
     await submitLoginForm();
 

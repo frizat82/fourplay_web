@@ -406,6 +406,26 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    if (url.match(/\/api\/league\/\d+\/membership-invites$/) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/membership-invites\/mine$/) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/membership-invites\/\d+\/(accept|decline)$/) && method === 'POST') {
+      void route.fulfill({ status: 204 });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/membership-invites\/\d+$/) && method === 'DELETE') {
+      void route.fulfill({ status: 204 });
+      return;
+    }
+
     if (url.match(/\/api\/league\/join\/[^/]+$/) && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockInviteLink()) });
       return;
