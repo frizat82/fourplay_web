@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   Box,
   Button,
@@ -51,6 +51,8 @@ import {
   revokeInviteLink,
   getCurrentInviteLink,
   getLeagueInvitations,
+  getLeagueMembershipInvites,
+  cancelMembershipInvite,
   getAllLeagues,
   getUsers,
   createLeague,
@@ -59,6 +61,7 @@ import {
   deleteLeague,
   type LeagueInviteLinkDto,
   type InvitationDto,
+  type MembershipInviteStatusDto,
 } from '../api/league';
 import type { LeagueInfoDto, LeagueJuiceMappingDto, LeagueCostDto, UserSummaryDto } from '../types/admin';
 import type { LeagueUserMappingDto } from '../types/league';
@@ -124,6 +127,9 @@ export default function LeaguePortalPage() {
 
   // Email invitations sent to this league
   const [invitations, setInvitations] = useState<InvitationDto[]>([]);
+  // Pending/accepted/declined invites sent to already-registered users for this league
+  const [membershipInvites, setMembershipInvites] = useState<MembershipInviteStatusDto[]>([]);
+  const [cancelingMembershipInviteId, setCancelingMembershipInviteId] = useState<number | null>(null);
 
   // Juice settings
   const [juiceMappings, setJuiceMappings] = useState<LeagueJuiceMappingDto[]>([]);
@@ -230,6 +236,7 @@ export default function LeaguePortalPage() {
     void loadJuice(selectedLeague.id);
     getCurrentInviteLink(selectedLeague.id).then(setInviteLink).catch(() => setInviteLink(null));
     getLeagueInvitations(selectedLeague.id).then(setInvitations).catch(() => setInvitations([]));
+    getLeagueMembershipInvites(selectedLeague.id).then(setMembershipInvites).catch(() => setMembershipInvites([]));
   }, [selectedLeague, loadMembers, loadJuice]);
 
   const handleRemove = async () => {
@@ -252,9 +259,9 @@ export default function LeaguePortalPage() {
     setInviting(true);
     try {
       const result = await inviteToLeague(selectedLeague.id, inviteEmail.trim());
-      if (result.addedExistingUser) {
-        toast.push(`${inviteEmail} added to the league`, 'success');
-        loadMembers(selectedLeague.id).catch(() => {});
+      if (result.outcome === 'ExistingUserInvitePending') {
+        toast.push(`Invite sent to ${inviteEmail} — pending their acceptance`, 'success');
+        getLeagueMembershipInvites(selectedLeague.id).then(setMembershipInvites).catch(() => {});
       } else {
         toast.push(`Invitation sent to ${inviteEmail}`, 'success');
         getLeagueInvitations(selectedLeague.id).then(setInvitations).catch(() => {});
@@ -265,6 +272,20 @@ export default function LeaguePortalPage() {
       toast.push(extractApiErrorMessage(error, 'Failed to send invitation'), 'error');
     } finally {
       setInviting(false);
+    }
+  };
+
+  const handleCancelMembershipInvite = async (id: number) => {
+    if (!selectedLeague) return;
+    setCancelingMembershipInviteId(id);
+    try {
+      await cancelMembershipInvite(id);
+      toast.push('Invite canceled', 'success');
+      getLeagueMembershipInvites(selectedLeague.id).then(setMembershipInvites).catch(() => {});
+    } catch (error) {
+      toast.push(extractApiErrorMessage(error, 'Failed to cancel invite'), 'error');
+    } finally {
+      setCancelingMembershipInviteId(null);
     }
   };
 
@@ -491,6 +512,9 @@ export default function LeaguePortalPage() {
               onGenerateInviteLink={() => void handleGenerateInviteLink()}
               onRevokeInviteLink={() => void handleRevokeInviteLink()}
               invitations={invitations}
+              membershipInvites={membershipInvites}
+              cancelingMembershipInviteId={cancelingMembershipInviteId}
+              onCancelMembershipInvite={(id) => void handleCancelMembershipInvite(id)}
             />
           )}
           {tab === 1 && (
@@ -700,9 +724,12 @@ interface MembersTabProps {
   onGenerateInviteLink: () => void;
   onRevokeInviteLink: () => void;
   invitations: InvitationDto[];
+  membershipInvites: MembershipInviteStatusDto[];
+  cancelingMembershipInviteId: number | null;
+  onCancelMembershipInvite: (id: number) => void;
 }
 
-function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations }: MembersTabProps) {
+function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   const cost = computeLeagueCost(count);
   const toast = useToast();
@@ -834,43 +861,87 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
         </Box>
       )}
 
-      {invitations.length > 0 && (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Sent Invitations</Typography>
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Sent</TableCell>
-                  <TableCell>Status</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {invitations.map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell>{inv.email}</TableCell>
-                    <TableCell>{new Date(inv.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      {inv.isUsed ? (
-                        inv.registeredUserEmailConfirmed ? (
-                          <Chip label="Confirmed" color="success" size="small" />
-                        ) : (
-                          <Chip label="Pending Confirmation" color="warning" size="small" />
-                        )
-                      ) : inv.isExpired ? (
-                        <Chip label="Expired" color="default" size="small" />
-                      ) : (
-                        <Chip label="Pending" color="warning" size="small" />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
-        </Box>
-      )}
+      <InviteStatusTable
+        title="Sent Invitations"
+        rows={invitations.map((inv) => ({
+          id: inv.id,
+          email: inv.email,
+          createdAt: inv.createdAt,
+          chip: inv.isUsed
+            ? (inv.registeredUserEmailConfirmed
+              ? { label: 'Confirmed', color: 'success' as const }
+              : { label: 'Pending Confirmation', color: 'warning' as const })
+            : inv.isExpired
+              ? { label: 'Expired', color: 'default' as const }
+              : { label: 'Pending', color: 'warning' as const },
+        }))}
+      />
+
+      <InviteStatusTable
+        title="Invites to Existing Users"
+        rows={membershipInvites.map((inv) => ({
+          id: inv.id,
+          email: inv.invitedUserEmail,
+          createdAt: inv.createdAt,
+          chip: inv.status === 'Accepted'
+            ? { label: 'Accepted', color: 'success' as const }
+            : inv.status === 'Declined'
+              ? { label: 'Declined', color: 'error' as const }
+              : { label: 'Pending', color: 'warning' as const },
+          action: inv.status === 'Pending' ? (
+            <Button
+              size="small"
+              color="error"
+              disabled={cancelingMembershipInviteId === inv.id}
+              onClick={() => onCancelMembershipInvite(inv.id)}
+            >
+              Cancel
+            </Button>
+          ) : null,
+        }))}
+        showActions
+      />
+    </Box>
+  );
+}
+
+interface InviteStatusRow {
+  id: number;
+  email: string;
+  createdAt: string;
+  chip: { label: string; color: 'success' | 'warning' | 'error' | 'default' };
+  action?: ReactNode;
+}
+
+/** Shared "Email / Sent / Status[ / Actions]" table for both the Sent Invitations (email invites
+ * to new users) and Invites to Existing Users (membership invites) sections of the Members tab. */
+function InviteStatusTable({ title, rows, showActions = false }: { title: string; rows: InviteStatusRow[]; showActions?: boolean }) {
+  if (rows.length === 0) return null;
+  return (
+    <Box sx={{ mt: 3 }}>
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>{title}</Typography>
+      <Box sx={{ overflowX: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Email</TableCell>
+              <TableCell>Sent</TableCell>
+              <TableCell>Status</TableCell>
+              {showActions && <TableCell align="right">Actions</TableCell>}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.id}>
+                <TableCell>{row.email}</TableCell>
+                <TableCell>{new Date(row.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell><Chip label={row.chip.label} color={row.chip.color} size="small" /></TableCell>
+                {showActions && <TableCell align="right">{row.action}</TableCell>}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
     </Box>
   );
 }

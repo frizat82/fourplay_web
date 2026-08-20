@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { getLeagueUserMappingsForUser, getMyLeagues } from '../api/league';
+import { getLeagueUserMappingsForUser, getMyLeagues, getMyPendingMembershipInvites } from '../api/league';
+import type { PendingMembershipInviteDto } from '../api/league';
 import type { LeagueUserMappingDto } from '../types/league';
 import type { LeagueInfoDto } from '../types/admin';
 import { useAuth } from './auth';
@@ -15,6 +16,8 @@ interface SessionContextValue {
   hasCfbAccess: boolean;
   leaguesLoaded: boolean;
   ownedLeagues: LeagueInfoDto[];
+  pendingMembershipInvites: PendingMembershipInviteDto[];
+  refreshPendingInvites: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
@@ -35,6 +38,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [hasCfbAccess, setHasCfbAccess] = useState(false);
   const [leaguesLoaded, setLeaguesLoaded] = useState(false);
   const [ownedLeagues, setOwnedLeagues] = useState<LeagueInfoDto[]>([]);
+  const [pendingMembershipInvites, setPendingMembershipInvites] = useState<PendingMembershipInviteDto[]>([]);
 
   const persistLeague = useCallback((leagueId: number | null) => {
     if (leagueId === null) {
@@ -81,6 +85,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setLeaguesLoaded(true);
   }, [persistLeague, user, sport]);
 
+  const refreshPendingInvites = useCallback(async () => {
+    if (!user?.userId) {
+      setPendingMembershipInvites([]);
+      return;
+    }
+    try {
+      setPendingMembershipInvites(await getMyPendingMembershipInvites());
+    } catch {
+      setPendingMembershipInvites([]);
+    }
+  }, [user]);
+
   const selectLeague = useCallback(
     (leagueId: number) => {
       setCurrentLeague(leagueId);
@@ -93,6 +109,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setAvailableLeagues([]);
     setCurrentLeague(null);
     persistLeague(null);
+    setPendingMembershipInvites([]);
   }, [persistLeague]);
 
   useEffect(() => {
@@ -101,9 +118,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     });
   }, [reloadLeagues]);
 
+  useEffect(() => {
+    void refreshPendingInvites();
+  }, [refreshPendingInvites]);
+
   const value = useMemo(
-    () => ({ availableLeagues, currentLeague, selectLeague, reloadLeagues, clearSession, hasNflAccess, hasCfbAccess, leaguesLoaded, ownedLeagues }),
-    [availableLeagues, clearSession, currentLeague, reloadLeagues, selectLeague, hasNflAccess, hasCfbAccess, leaguesLoaded, ownedLeagues]
+    () => ({
+      availableLeagues, currentLeague, selectLeague, reloadLeagues, clearSession,
+      hasNflAccess, hasCfbAccess, leaguesLoaded, ownedLeagues,
+      pendingMembershipInvites, refreshPendingInvites,
+    }),
+    [
+      availableLeagues, clearSession, currentLeague, reloadLeagues, selectLeague,
+      hasNflAccess, hasCfbAccess, leaguesLoaded, ownedLeagues,
+      pendingMembershipInvites, refreshPendingInvites,
+    ]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

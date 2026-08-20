@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Button, Stack, Typography } from '@mui/material';
+import { Alert, Button, Stack, Typography } from '@mui/material';
 
 export default function RegisterConfirmationPage() {
   const location = useLocation();
@@ -11,9 +11,9 @@ export default function RegisterConfirmationPage() {
   return (
     <Stack spacing={2} sx={{ maxWidth: 520, margin: '0 auto', paddingTop: 6 }}>
       <Typography variant="h4">Register confirmation</Typography>
-      <Typography variant="body1">
+      <Alert severity="info">
         {email ? `Check ${email} to confirm your account.` : 'Please check your email to confirm your account.'}
-      </Typography>
+      </Alert>
       <Button variant="contained" onClick={() => navigate('/account/login')}>
         Go to login
       </Button>

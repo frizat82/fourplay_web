@@ -42,7 +42,8 @@ public class LeagueOwnershipTests
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
             Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>());
+            Substitute.For<ILeagueInviteLinkService>(),
+            Substitute.For<ILeagueMembershipInviteService>());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -99,7 +100,8 @@ public class LeagueOwnershipTests
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
             Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>());
+            Substitute.For<ILeagueInviteLinkService>(),
+            Substitute.For<ILeagueMembershipInviteService>());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -132,7 +134,8 @@ public class LeagueOwnershipTests
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
             Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>());
+            Substitute.For<ILeagueInviteLinkService>(),
+            Substitute.For<ILeagueMembershipInviteService>());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -146,11 +149,12 @@ public class LeagueOwnershipTests
 
     // ─── Commissioner Portal: owner-scoped endpoint tests ───────────────────
 
-    private static (LeagueController ctrl, ILeagueRepository repo, UserManager<ApplicationUser> userManager, IInvitationService invitationService)
+    private static (LeagueController ctrl, ILeagueRepository repo, UserManager<ApplicationUser> userManager, IInvitationService invitationService, ILeagueMembershipInviteService membershipInviteService)
         BuildFullController(ClaimsPrincipal principal)
     {
         var repo = Substitute.For<ILeagueRepository>();
         var invSvc = Substitute.For<IInvitationService>();
+        var membershipInviteSvc = Substitute.For<ILeagueMembershipInviteService>();
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var userManager = Substitute.For<UserManager<ApplicationUser>>(
             store, null, null, null, null, null, null, null, null);
@@ -162,17 +166,18 @@ public class LeagueOwnershipTests
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
             invSvc,
-            Substitute.For<ILeagueInviteLinkService>());
+            Substitute.For<ILeagueInviteLinkService>(),
+            membershipInviteSvc);
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
-        return (ctrl, repo, userManager, invSvc);
+        return (ctrl, repo, userManager, invSvc, membershipInviteSvc);
     }
 
     private static (LeagueController ctrl, ILeagueRepository repo) BuildControllerWithRepo(ClaimsPrincipal principal)
     {
-        var (ctrl, repo, _, _) = BuildFullController(principal);
+        var (ctrl, repo, _, _, _) = BuildFullController(principal);
         return (ctrl, repo);
     }
 
@@ -620,7 +625,8 @@ public class LeagueOwnershipTests
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
             invSvc,
-            Substitute.For<ILeagueInviteLinkService>());
+            Substitute.For<ILeagueInviteLinkService>(),
+            Substitute.For<ILeagueMembershipInviteService>());
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }
@@ -652,7 +658,8 @@ public class LeagueOwnershipTests
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
             invSvc,
-            Substitute.For<ILeagueInviteLinkService>());
+            Substitute.For<ILeagueInviteLinkService>(),
+            Substitute.For<ILeagueMembershipInviteService>());
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }
@@ -663,17 +670,17 @@ public class LeagueOwnershipTests
         await invSvc.Received(1).CreateInvitationAsync("target@example.com", OwnerId, 1, baseUrl: "https://ivleague.com");
     }
 
-    private static (LeagueController ctrl, ILeagueRepository repo, UserManager<ApplicationUser> userManager, IInvitationService invitationService)
+    private static (LeagueController ctrl, ILeagueRepository repo, UserManager<ApplicationUser> userManager, IInvitationService invitationService, ILeagueMembershipInviteService membershipInviteService)
         BuildControllerWithUserManager(ClaimsPrincipal principal) => BuildFullController(principal);
 
     [Fact]
-    public async Task InviteToLeague_ExistingUser_NotYetMember_AddsDirectly_WithoutCreatingInvitation()
+    public async Task InviteToLeague_ExistingUser_NotYetMember_CreatesPendingMembershipInvite_NoEmailNoDirectAdd()
     {
         // The whole point: someone who already has an IV League account (whether they own a
-        // league or belong to one) must be addable to a NEW league without re-registering —
-        // previously InviteToLeague always created an Invitation, and re-registering with an
-        // email that already exists fails with "User already exists", leaving a dead invite.
-        var (ctrl, repo, userManager, invSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        // league or belong to one) must be addable to a NEW league without re-registering — but
+        // unlike a brand-new user (registering IS joining), an existing user must explicitly
+        // accept a pending invite rather than being added instantly with no consent.
+        var (ctrl, repo, userManager, invSvc, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
         var existingUser = new ApplicationUser { Id = "existing-user-1", Email = "already-registered@example.com" };
         userManager.FindByEmailAsync("already-registered@example.com").Returns(existingUser);
@@ -683,16 +690,16 @@ public class LeagueOwnershipTests
 
         var ok = Assert.IsType<OkObjectResult>(result);
         var dto = Assert.IsType<LeagueInviteResultDto>(ok.Value);
-        Assert.True(dto.AddedExistingUser);
-        await repo.Received(1).AddLeagueUserMappingAsync(
-            Arg.Is<LeagueUserMapping>(m => m.UserId == "existing-user-1" && m.LeagueId == 1));
+        Assert.Equal(LeagueInviteOutcome.ExistingUserInvitePending, dto.Outcome);
+        await membershipSvc.Received(1).CreateOrReopenAsync(1, "existing-user-1", OwnerId);
+        await repo.DidNotReceiveWithAnyArgs().AddLeagueUserMappingAsync(default!);
         await invSvc.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
     }
 
     [Fact]
-    public async Task InviteToLeague_ExistingUser_AlreadyMember_ReturnsConflict_WithoutDuplicateMapping()
+    public async Task InviteToLeague_ExistingUser_AlreadyMember_ReturnsConflict_WithoutCreatingInvite()
     {
-        var (ctrl, repo, userManager, invSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        var (ctrl, repo, userManager, invSvc, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
         var existingUser = new ApplicationUser { Id = "existing-user-1", Email = "already-member@example.com" };
         userManager.FindByEmailAsync("already-member@example.com").Returns(existingUser);
@@ -701,27 +708,172 @@ public class LeagueOwnershipTests
         var result = await ctrl.InviteToLeague(1, new LeagueInviteDto("already-member@example.com"));
 
         Assert.IsType<ConflictObjectResult>(result);
+        await membershipSvc.DidNotReceiveWithAnyArgs().CreateOrReopenAsync(default, default!, default!);
         await repo.DidNotReceiveWithAnyArgs().AddLeagueUserMappingAsync(default!);
         await invSvc.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
     }
 
-    [Fact]
-    public async Task InviteToLeague_ExistingUser_ConcurrentAddRace_ReturnsConflict_NotUnhandledException()
-    {
-        // TOCTOU: UserExistsInLeagueAsync says "not yet a member", but a concurrent request wins
-        // the insert first — the unique-constraint violation must surface as a 409, same as
-        // JoinViaLink already guards against, not an unhandled 500.
-        var (ctrl, repo, userManager, _) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
-        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
-        var existingUser = new ApplicationUser { Id = "existing-user-1", Email = "race@example.com" };
-        userManager.FindByEmailAsync("race@example.com").Returns(existingUser);
-        repo.UserExistsInLeagueAsync("existing-user-1", 1).Returns(false);
-        repo.AddLeagueUserMappingAsync(Arg.Any<LeagueUserMapping>())
-            .Returns(Task.FromException(new DbUpdateException("unique constraint", new Exception("inner"))));
+    // ── GET membership-invites/mine ─────────────────────────────────────────
 
-        var result = await ctrl.InviteToLeague(1, new LeagueInviteDto("race@example.com"));
+    [Fact]
+    public async Task GetMyPendingMembershipInvites_ReturnsWhatTheServiceProvidesForCaller()
+    {
+        var (ctrl, _, _, _, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        var invite = new LeagueMembershipInvite {
+            Id = 5,
+            LeagueId = 1,
+            League = new LeagueInfo { Id = 1, OwnerUserId = "someone-else", LeagueName = "L" },
+            InvitedUserId = OwnerId,
+            InvitedByUser = new ApplicationUser { UserName = "commish" },
+        };
+        membershipSvc.GetPendingForUserAsync(OwnerId).Returns([invite]);
+
+        var result = await ctrl.GetMyPendingMembershipInvites();
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dtos = Assert.IsAssignableFrom<IReadOnlyList<PendingMembershipInviteDto>>(ok.Value);
+        Assert.Single(dtos);
+        Assert.Equal(5, dtos[0].Id);
+        Assert.Equal("L", dtos[0].LeagueName);
+        Assert.Equal("commish", dtos[0].InvitedByUserName);
+    }
+
+    // ── POST membership-invites/{id}/accept ─────────────────────────────────
+
+    [Fact]
+    public async Task AcceptMembershipInvite_ReturnsNotFound_WhenInviteDoesNotExist()
+    {
+        var (ctrl, _, _, _, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        membershipSvc.GetByIdAsync(999).Returns((LeagueMembershipInvite?)null);
+
+        var result = await ctrl.AcceptMembershipInvite(999);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task AcceptMembershipInvite_ReturnsForbid_WhenCallerIsNotTheInvitedUser()
+    {
+        var (ctrl, _, _, _, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(AttackerId));
+        membershipSvc.GetByIdAsync(5).Returns(new LeagueMembershipInvite {
+            Id = 5, LeagueId = 1, InvitedUserId = OwnerId, Status = MembershipInviteStatus.Pending,
+        });
+
+        var result = await ctrl.AcceptMembershipInvite(5);
+
+        Assert.IsType<ForbidResult>(result);
+    }
+
+    [Fact]
+    public async Task AcceptMembershipInvite_ReturnsConflict_WhenAlreadyResponded()
+    {
+        var (ctrl, _, _, _, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        membershipSvc.GetByIdAsync(5).Returns(new LeagueMembershipInvite {
+            Id = 5, LeagueId = 1, InvitedUserId = OwnerId, Status = MembershipInviteStatus.Declined,
+        });
+
+        var result = await ctrl.AcceptMembershipInvite(5);
 
         Assert.IsType<ConflictObjectResult>(result);
+        await membershipSvc.DidNotReceiveWithAnyArgs().MarkAcceptedAsync(default);
+    }
+
+    [Fact]
+    public async Task AcceptMembershipInvite_AddsMembershipAndMarksAccepted_WhenPendingAndOwnedByCaller()
+    {
+        var (ctrl, repo, _, _, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        membershipSvc.GetByIdAsync(5).Returns(new LeagueMembershipInvite {
+            Id = 5, LeagueId = 1, InvitedUserId = OwnerId, Status = MembershipInviteStatus.Pending,
+        });
+        repo.UserExistsInLeagueAsync(OwnerId, 1).Returns(false);
+
+        var result = await ctrl.AcceptMembershipInvite(5);
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).AddLeagueUserMappingAsync(
+            Arg.Is<LeagueUserMapping>(m => m.UserId == OwnerId && m.LeagueId == 1));
+        await membershipSvc.Received(1).MarkAcceptedAsync(5);
+    }
+
+    [Fact]
+    public async Task AcceptMembershipInvite_AlreadyAMemberViaAnotherPath_StillMarksAccepted_NotStuckPending()
+    {
+        // The invite's goal state (membership) is already achieved if the invitee joined via a
+        // share link or a second concurrent accept — it must resolve, not stay Pending forever.
+        var (ctrl, repo, _, _, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        membershipSvc.GetByIdAsync(5).Returns(new LeagueMembershipInvite {
+            Id = 5, LeagueId = 1, InvitedUserId = OwnerId, Status = MembershipInviteStatus.Pending,
+        });
+        repo.UserExistsInLeagueAsync(OwnerId, 1).Returns(true);
+
+        var result = await ctrl.AcceptMembershipInvite(5);
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.DidNotReceiveWithAnyArgs().AddLeagueUserMappingAsync(default!);
+        await membershipSvc.Received(1).MarkAcceptedAsync(5);
+    }
+
+    // ── POST membership-invites/{id}/decline ────────────────────────────────
+
+    [Fact]
+    public async Task DeclineMembershipInvite_ReturnsForbid_WhenCallerIsNotTheInvitedUser()
+    {
+        var (ctrl, _, _, _, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(AttackerId));
+        membershipSvc.GetByIdAsync(5).Returns(new LeagueMembershipInvite {
+            Id = 5, LeagueId = 1, InvitedUserId = OwnerId, Status = MembershipInviteStatus.Pending,
+        });
+
+        var result = await ctrl.DeclineMembershipInvite(5);
+
+        Assert.IsType<ForbidResult>(result);
+        await membershipSvc.DidNotReceiveWithAnyArgs().MarkDeclinedAsync(default);
+    }
+
+    [Fact]
+    public async Task DeclineMembershipInvite_MarksDeclined_WithoutAddingMembership_WhenPendingAndOwnedByCaller()
+    {
+        var (ctrl, repo, _, _, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        membershipSvc.GetByIdAsync(5).Returns(new LeagueMembershipInvite {
+            Id = 5, LeagueId = 1, InvitedUserId = OwnerId, Status = MembershipInviteStatus.Pending,
+        });
+
+        var result = await ctrl.DeclineMembershipInvite(5);
+
+        Assert.IsType<NoContentResult>(result);
+        await membershipSvc.Received(1).MarkDeclinedAsync(5);
+        await repo.DidNotReceiveWithAnyArgs().AddLeagueUserMappingAsync(default!);
+    }
+
+    // ── DELETE membership-invites/{id} (commissioner cancel) ────────────────
+
+    [Fact]
+    public async Task CancelMembershipInvite_ReturnsForbid_WhenCallerIsNotOwnerOrAdmin()
+    {
+        var (ctrl, repo, _, _, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(AttackerId));
+        membershipSvc.GetByIdAsync(5).Returns(new LeagueMembershipInvite {
+            Id = 5, LeagueId = 1, InvitedUserId = "someone-invited",
+        });
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.CancelMembershipInvite(5);
+
+        Assert.IsType<ForbidResult>(result);
+        await membershipSvc.DidNotReceiveWithAnyArgs().DeleteAsync(default);
+    }
+
+    [Fact]
+    public async Task CancelMembershipInvite_DeletesInvite_WhenCallerIsOwner()
+    {
+        var (ctrl, repo, _, _, membershipSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        membershipSvc.GetByIdAsync(5).Returns(new LeagueMembershipInvite {
+            Id = 5, LeagueId = 1, InvitedUserId = "someone-invited",
+        });
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+
+        var result = await ctrl.CancelMembershipInvite(5);
+
+        Assert.IsType<NoContentResult>(result);
+        await membershipSvc.Received(1).DeleteAsync(5);
     }
 
     [Fact]

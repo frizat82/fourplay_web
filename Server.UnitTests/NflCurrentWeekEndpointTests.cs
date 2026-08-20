@@ -35,7 +35,8 @@ public class NflCurrentWeekEndpointTests
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
             Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>());
+            Substitute.For<ILeagueInviteLinkService>(),
+            Substitute.For<ILeagueMembershipInviteService>());
 
         controller.ControllerContext = new ControllerContext
         {
