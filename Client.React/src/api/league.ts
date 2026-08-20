@@ -158,8 +158,14 @@ export async function deleteLeague(leagueId: number) {
   await http.delete(`/api/league/${leagueId}`);
 }
 
-export async function inviteToLeague(leagueId: number, email: string) {
-  await http.post(`/api/league/${leagueId}/invite`, { email, baseUrl: window.location.origin });
+export interface LeagueInviteResultDto {
+  email: string;
+  addedExistingUser: boolean;
+}
+
+export async function inviteToLeague(leagueId: number, email: string): Promise<LeagueInviteResultDto> {
+  const { data } = await http.post<LeagueInviteResultDto>(`/api/league/${leagueId}/invite`, { email, baseUrl: window.location.origin });
+  return data;
 }
 
 export async function assignLeagueOwner(leagueId: number, newOwnerUserId: string) {
@@ -207,6 +213,7 @@ export interface InvitationDto {
   isExpired: boolean;
   isValid: boolean;
   usedAt: string | null;
+  registeredUserEmailConfirmed?: boolean | null;
 }
 
 export async function getCurrentInviteLink(leagueId: number): Promise<LeagueInviteLinkDto | null> {
@@ -223,4 +230,8 @@ export async function getCurrentInviteLink(leagueId: number): Promise<LeagueInvi
 export async function getLeagueInvitations(leagueId: number): Promise<InvitationDto[]> {
   const { data } = await http.get<InvitationDto[]>(`/api/league/${leagueId}/invitations`);
   return data;
+}
+
+export async function revokeInviteLink(leagueId: number): Promise<void> {
+  await http.delete(`/api/league/${leagueId}/invite-link`);
 }

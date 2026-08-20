@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -15,6 +16,9 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function ResendEmailConfirmationPage() {
+  const location = useLocation();
+  const prefilledEmail = useMemo(() => new URLSearchParams(location.search).get('email') ?? '', [location.search]);
+
   const {
     register,
     handleSubmit,
@@ -22,7 +26,7 @@ export default function ResendEmailConfirmationPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: '' },
+    defaultValues: { email: prefilledEmail },
   });
   const [message, setMessage] = useState<string | null>(null);
   const [severity, setSeverity] = useState<'info' | 'error'>('info');

@@ -226,4 +226,76 @@ public class LeagueInviteLinkServiceTests
             Assert.Equal("expired", result!.Token);
         });
     }
+
+    // ── RevokeAsync ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RevokeAsync_ActiveLink_MarksItRevoked_WithoutCreatingAReplacement()
+    {
+        // Unlike GenerateAsync, revoking must shut off signups without immediately producing
+        // a new link a commissioner would have to reshare.
+        var db = nameof(RevokeAsync_ActiveLink_MarksItRevoked_WithoutCreatingAReplacement);
+        await WithDb(db, async factory =>
+        {
+            await using (var seed = OpenDb(db))
+            {
+                await SeedUser(seed, "owner");
+                seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
+                seed.LeagueInviteLinks.Add(new LeagueInviteLink
+                {
+                    Token = "live-token", LeagueId = 1, CreatedByUserId = "owner",
+                    ExpiresAt = DateTimeOffset.UtcNow.AddHours(12), IsRevoked = false,
+                });
+                await seed.SaveChangesAsync();
+            }
+
+            var service = new LeagueInviteLinkService(factory);
+            await service.RevokeAsync(1);
+
+            await using var verify = OpenDb(db);
+            Assert.True((await verify.LeagueInviteLinks.SingleAsync(l => l.Token == "live-token")).IsRevoked);
+            Assert.Equal(1, await verify.LeagueInviteLinks.CountAsync());
+            // Not asserting ValidateAsync here — its ExpiresAt > DateTimeOffset.UtcNow filter
+            // doesn't translate under this file's SQLite in-memory provider (pre-existing,
+            // unrelated to this change: no other test in this file calls it either).
+            Assert.Null(await service.GetCurrentAsync(1));
+        });
+    }
+
+    [Fact]
+    public async Task RevokeAsync_NoActiveLink_DoesNotThrow()
+    {
+        await WithDb(nameof(RevokeAsync_NoActiveLink_DoesNotThrow), async factory =>
+        {
+            await new LeagueInviteLinkService(factory).RevokeAsync(999);
+        });
+    }
+
+    [Fact]
+    public async Task RevokeAsync_DoesNotAffectOtherLeaguesLinks()
+    {
+        var db = nameof(RevokeAsync_DoesNotAffectOtherLeaguesLinks);
+        await WithDb(db, async factory =>
+        {
+            await using (var seed = OpenDb(db))
+            {
+                await SeedUser(seed, "owner");
+                seed.LeagueInfo.AddRange(
+                    new LeagueInfo { Id = 1, LeagueName = "League One", OwnerUserId = "owner" },
+                    new LeagueInfo { Id = 2, LeagueName = "League Two", OwnerUserId = "owner" });
+                seed.LeagueInviteLinks.AddRange(
+                    new LeagueInviteLink { Token = "league-1-token", LeagueId = 1, CreatedByUserId = "owner",
+                        ExpiresAt = DateTimeOffset.UtcNow.AddHours(12), IsRevoked = false },
+                    new LeagueInviteLink { Token = "league-2-token", LeagueId = 2, CreatedByUserId = "owner",
+                        ExpiresAt = DateTimeOffset.UtcNow.AddHours(12), IsRevoked = false });
+                await seed.SaveChangesAsync();
+            }
+
+            await new LeagueInviteLinkService(factory).RevokeAsync(1);
+
+            await using var verify = OpenDb(db);
+            Assert.True((await verify.LeagueInviteLinks.SingleAsync(l => l.Token == "league-1-token")).IsRevoked);
+            Assert.False((await verify.LeagueInviteLinks.SingleAsync(l => l.Token == "league-2-token")).IsRevoked);
+        });
+    }
 }

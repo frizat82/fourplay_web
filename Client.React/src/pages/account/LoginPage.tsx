@@ -55,6 +55,11 @@ export default function LoginPage() {
       rememberMe: values.rememberMe ?? false,
     });
     if (!result.succeeded) {
+      if (result.isNotAllowed) {
+        toast.push('Please confirm your email before logging in. Sending you to resend it…', 'warning');
+        navigate(`/account/resendemailconfirmation?email=${encodeURIComponent(values.email)}`);
+        return;
+      }
       toast.push(result.message ?? 'Login failed', 'error');
       return;
     }

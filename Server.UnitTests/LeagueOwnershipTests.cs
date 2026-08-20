@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -145,9 +146,11 @@ public class LeagueOwnershipTests
 
     // ─── Commissioner Portal: owner-scoped endpoint tests ───────────────────
 
-    private static (LeagueController ctrl, ILeagueRepository repo) BuildControllerWithRepo(ClaimsPrincipal principal)
+    private static (LeagueController ctrl, ILeagueRepository repo, UserManager<ApplicationUser> userManager, IInvitationService invitationService)
+        BuildFullController(ClaimsPrincipal principal)
     {
         var repo = Substitute.For<ILeagueRepository>();
+        var invSvc = Substitute.For<IInvitationService>();
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var userManager = Substitute.For<UserManager<ApplicationUser>>(
             store, null, null, null, null, null, null, null, null);
@@ -158,12 +161,18 @@ public class LeagueOwnershipTests
             userManager,
             Substitute.For<ISpreadCalculatorBuilder>(),
             Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(),
+            invSvc,
             Substitute.For<ILeagueInviteLinkService>());
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
+        return (ctrl, repo, userManager, invSvc);
+    }
+
+    private static (LeagueController ctrl, ILeagueRepository repo) BuildControllerWithRepo(ClaimsPrincipal principal)
+    {
+        var (ctrl, repo, _, _) = BuildFullController(principal);
         return (ctrl, repo);
     }
 
@@ -577,6 +586,20 @@ public class LeagueOwnershipTests
     }
 
     [Fact]
+    public async Task InviteToLeague_ReturnsNotFound_WhenLeagueDoesNotExist()
+    {
+        // Matches every sibling owner-scoped endpoint in this controller (including
+        // RevokeInviteLink, added alongside this fix) — GetLeagueInfoAsync's real
+        // implementation throws InvalidOperationException, not null, for a missing league.
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(999).Returns(Task.FromException<LeagueInfo>(new InvalidOperationException("Sequence contains no elements")));
+
+        var result = await ctrl.InviteToLeague(999, new LeagueInviteDto("target@example.com"));
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
     public async Task InviteToLeague_ReturnsOk_WhenCallerIsOwner()
     {
         var invSvc = Substitute.For<IInvitationService>();
@@ -638,6 +661,67 @@ public class LeagueOwnershipTests
         await ctrl.InviteToLeague(1, new LeagueInviteDto("target@example.com", "https://ivleague.com"));
 
         await invSvc.Received(1).CreateInvitationAsync("target@example.com", OwnerId, 1, baseUrl: "https://ivleague.com");
+    }
+
+    private static (LeagueController ctrl, ILeagueRepository repo, UserManager<ApplicationUser> userManager, IInvitationService invitationService)
+        BuildControllerWithUserManager(ClaimsPrincipal principal) => BuildFullController(principal);
+
+    [Fact]
+    public async Task InviteToLeague_ExistingUser_NotYetMember_AddsDirectly_WithoutCreatingInvitation()
+    {
+        // The whole point: someone who already has an IV League account (whether they own a
+        // league or belong to one) must be addable to a NEW league without re-registering —
+        // previously InviteToLeague always created an Invitation, and re-registering with an
+        // email that already exists fails with "User already exists", leaving a dead invite.
+        var (ctrl, repo, userManager, invSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+        var existingUser = new ApplicationUser { Id = "existing-user-1", Email = "already-registered@example.com" };
+        userManager.FindByEmailAsync("already-registered@example.com").Returns(existingUser);
+        repo.UserExistsInLeagueAsync("existing-user-1", 1).Returns(false);
+
+        var result = await ctrl.InviteToLeague(1, new LeagueInviteDto("already-registered@example.com"));
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.IsType<LeagueInviteResultDto>(ok.Value);
+        Assert.True(dto.AddedExistingUser);
+        await repo.Received(1).AddLeagueUserMappingAsync(
+            Arg.Is<LeagueUserMapping>(m => m.UserId == "existing-user-1" && m.LeagueId == 1));
+        await invSvc.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
+    }
+
+    [Fact]
+    public async Task InviteToLeague_ExistingUser_AlreadyMember_ReturnsConflict_WithoutDuplicateMapping()
+    {
+        var (ctrl, repo, userManager, invSvc) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+        var existingUser = new ApplicationUser { Id = "existing-user-1", Email = "already-member@example.com" };
+        userManager.FindByEmailAsync("already-member@example.com").Returns(existingUser);
+        repo.UserExistsInLeagueAsync("existing-user-1", 1).Returns(true);
+
+        var result = await ctrl.InviteToLeague(1, new LeagueInviteDto("already-member@example.com"));
+
+        Assert.IsType<ConflictObjectResult>(result);
+        await repo.DidNotReceiveWithAnyArgs().AddLeagueUserMappingAsync(default!);
+        await invSvc.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
+    }
+
+    [Fact]
+    public async Task InviteToLeague_ExistingUser_ConcurrentAddRace_ReturnsConflict_NotUnhandledException()
+    {
+        // TOCTOU: UserExistsInLeagueAsync says "not yet a member", but a concurrent request wins
+        // the insert first — the unique-constraint violation must surface as a 409, same as
+        // JoinViaLink already guards against, not an unhandled 500.
+        var (ctrl, repo, userManager, _) = BuildControllerWithUserManager(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+        var existingUser = new ApplicationUser { Id = "existing-user-1", Email = "race@example.com" };
+        userManager.FindByEmailAsync("race@example.com").Returns(existingUser);
+        repo.UserExistsInLeagueAsync("existing-user-1", 1).Returns(false);
+        repo.AddLeagueUserMappingAsync(Arg.Any<LeagueUserMapping>())
+            .Returns(Task.FromException(new DbUpdateException("unique constraint", new Exception("inner"))));
+
+        var result = await ctrl.InviteToLeague(1, new LeagueInviteDto("race@example.com"));
+
+        Assert.IsType<ConflictObjectResult>(result);
     }
 
     [Fact]
