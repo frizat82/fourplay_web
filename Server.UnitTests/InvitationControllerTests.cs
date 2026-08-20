@@ -4,6 +4,7 @@ using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
+using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Xunit;
 
@@ -37,5 +38,17 @@ public class InvitationControllerTests
         await controller.Resend(7, "https://ivleague.com");
 
         await invitationService.Received(1).ResendInvitationEmailAsync(7, "https://ivleague.com");
+    }
+
+    [Fact]
+    public async Task Delete_CallsDeleteInvitationAsync_ReturnsNoContent()
+    {
+        var invitationService = Substitute.For<IInvitationService>();
+        var controller = BuildController(invitationService);
+
+        var result = await controller.Delete(7);
+
+        await invitationService.Received(1).DeleteInvitationAsync(7);
+        Assert.IsType<NoContentResult>(result);
     }
 }

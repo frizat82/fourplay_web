@@ -31,6 +31,16 @@ import { createInvitation, deleteInvitation, getAllInvitations, resendInvitation
 import { getAllLeagues } from '../../api/league';
 import type { InvitationDto, LeagueInfoDto } from '../../types/admin';
 
+function getInvitationStatusChip(invitation: InvitationDto): { label: string; color: 'success' | 'warning' | 'error' | 'info' } {
+  if (invitation.isUsed) {
+    return invitation.registeredUserEmailConfirmed
+      ? { label: 'Confirmed', color: 'success' }
+      : { label: 'Pending Confirmation', color: 'warning' };
+  }
+  if (invitation.isExpired) return { label: 'Expired', color: 'error' };
+  return { label: 'Active', color: 'info' };
+}
+
 export default function AdminInvitationsPage() {
   const [invitations, setInvitations] = useState<InvitationDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,13 +226,7 @@ export default function AdminInvitationsPage() {
                   <TableCell>{invitation.email}</TableCell>
                   <TableCell>{invitation.leagueName ?? '-'}</TableCell>
                   <TableCell>
-                    {invitation.isUsed ? (
-                      <Chip size="small" label="Used" color="success" />
-                    ) : invitation.isExpired ? (
-                      <Chip size="small" label="Expired" color="error" />
-                    ) : (
-                      <Chip size="small" label="Active" color="info" />
-                    )}
+                    <Chip size="small" {...getInvitationStatusChip(invitation)} />
                   </TableCell>
                   <TableCell>
                     {invitation.expiresAt ? new Date(invitation.expiresAt).toLocaleString() : 'Never'}

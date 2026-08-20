@@ -84,6 +84,21 @@ test.describe('League portal: Generate Invite Link', () => {
 
     await expect(page.getByRole('button', { name: /regenerate link/i })).toBeVisible({ timeout: 5000 });
   });
+
+  test('Revoke Link shuts off the current link without generating a replacement', async ({ page }) => {
+    // Unlike Regenerate, a commissioner should be able to just stop accepting new signups
+    // without immediately producing a new link they'd have to reshare.
+    await mockAuth(page, { authUser: TEST_USER, navigateTo: '/league/manage' });
+    await waitForSpinner(page);
+
+    await page.getByRole('button', { name: /generate invite link/i }).click();
+    await expect(page.getByText(new RegExp(`/join/${MOCK_TOKEN}`))).toBeVisible({ timeout: 5000 });
+
+    await page.getByRole('button', { name: /revoke link/i }).click();
+
+    await expect(page.getByText(new RegExp(`/join/${MOCK_TOKEN}`))).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: /generate invite link/i })).toBeVisible({ timeout: 5000 });
+  });
 });
 
 // ── Group 2: Join page — unauthenticated user ─────────────────────────────────
@@ -224,16 +239,39 @@ test.describe('Join page: already-a-member (409)', () => {
 // ── Group 4c: Invite Player (email invite) dialog ─────────────────────────────
 
 test.describe('League portal: Invite Player (email) dialog', () => {
-  async function setupWithInviteRoute(page: Page, succeed = true): Promise<void> {
-    // Mock POST /api/league/{id}/invite before setupRoutes so it wins
+  async function setupWithInviteRoute(
+    page: Page,
+    outcome: 'invited' | 'addedExisting' | 'conflict' | 'error' = 'invited',
+  ): Promise<void> {
+    await mockAuth(page, { authUser: TEST_USER, navigateTo: '/league/manage' });
+
+    // Registered after mockAuth/setupRoutes so it wins — Playwright runs the most-recently
+    // registered route handler first. setupRoutes' own POST /invite mock always fulfills (never
+    // calls route.fallback()), so registering this before mockAuth was silently a no-op: every
+    // outcome here was masked by that generic {} success body.
     await page.route(/\/api\/league\/\d+\/invite$/, (route) => {
       if (route.request().method() === 'POST') {
-        void route.fulfill({ status: succeed ? 204 : 500 });
+        if (outcome === 'error') {
+          void route.fulfill({ status: 500 });
+          return;
+        }
+        if (outcome === 'conflict') {
+          void route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify('friend@example.com is already a member of this league.'),
+          });
+          return;
+        }
+        void route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ email: 'friend@example.com', addedExistingUser: outcome === 'addedExisting' }),
+        });
         return;
       }
       void route.continue();
     });
-    await mockAuth(page, { authUser: TEST_USER, navigateTo: '/league/manage' });
     await waitForSpinner(page);
   }
 
@@ -258,7 +296,7 @@ test.describe('League portal: Invite Player (email) dialog', () => {
   });
 
   test('filling email and submitting sends invite and closes dialog', async ({ page }) => {
-    await setupWithInviteRoute(page, true);
+    await setupWithInviteRoute(page, 'invited');
 
     await page.getByRole('button', { name: /invite player/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
@@ -269,6 +307,34 @@ test.describe('League portal: Invite Player (email) dialog', () => {
     // Dialog closes and a success toast appears
     await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 });
     await expect(page.getByRole('alert')).toContainText(/invitation sent/i, { timeout: 5000 });
+  });
+
+  test('inviting an already-registered email adds them directly, with a distinct success message', async ({ page }) => {
+    // The whole point of this feature: someone with an existing account (owns a league or
+    // belongs to one) gets added to the new league immediately — no dead "register again"
+    // invitation that can never be redeemed because the email is already taken.
+    await setupWithInviteRoute(page, 'addedExisting');
+
+    await page.getByRole('button', { name: /invite player/i }).click();
+    await page.getByLabel(/email/i).fill('friend@example.com');
+    await page.getByRole('dialog').getByRole('button', { name: /send invite|invite/i }).click();
+
+    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('alert')).toContainText(/added to the league/i, { timeout: 5000 });
+    await expect(page.getByRole('alert')).not.toContainText(/invitation sent/i);
+  });
+
+  test('inviting an email already on the league shows the server\'s specific conflict message', async ({ page }) => {
+    await setupWithInviteRoute(page, 'conflict');
+
+    await page.getByRole('button', { name: /invite player/i }).click();
+    await page.getByLabel(/email/i).fill('friend@example.com');
+    await page.getByRole('dialog').getByRole('button', { name: /send invite|invite/i }).click();
+
+    // Not getByRole('alert') here: on this error path the Dialog stays open (only success
+    // closes it), and MUI applies aria-hidden to background siblings — including the toast —
+    // while a modal is open, so a role-based query finds nothing even though it's rendered.
+    await expect(page.locator('.MuiAlert-root')).toContainText(/already a member of this league/i, { timeout: 5000 });
   });
 });
 
