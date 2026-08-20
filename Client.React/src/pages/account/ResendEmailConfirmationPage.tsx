@@ -51,7 +51,9 @@ export default function ResendEmailConfirmationPage() {
   return (
     <Stack spacing={3} sx={{ maxWidth: 520, margin: '0 auto', paddingTop: 6 }}>
       <Typography variant="h4">Resend email confirmation</Typography>
-      <Typography variant="body1">Enter your email.</Typography>
+      <Typography variant="body1">
+        Your account isn't confirmed yet. Enter your email to get a new confirmation link.
+      </Typography>
       <StatusMessage message={message} severity={severity} />
       <Card>
         <CardContent>

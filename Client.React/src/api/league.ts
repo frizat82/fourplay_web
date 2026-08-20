@@ -158,9 +158,11 @@ export async function deleteLeague(leagueId: number) {
   await http.delete(`/api/league/${leagueId}`);
 }
 
+export type LeagueInviteOutcome = 'NewUserInvitationSent' | 'ExistingUserInvitePending';
+
 export interface LeagueInviteResultDto {
   email: string;
-  addedExistingUser: boolean;
+  outcome: LeagueInviteOutcome;
 }
 
 export async function inviteToLeague(leagueId: number, email: string): Promise<LeagueInviteResultDto> {
@@ -234,4 +236,46 @@ export async function getLeagueInvitations(leagueId: number): Promise<Invitation
 
 export async function revokeInviteLink(leagueId: number): Promise<void> {
   await http.delete(`/api/league/${leagueId}/invite-link`);
+}
+
+export interface PendingMembershipInviteDto {
+  id: number;
+  leagueId: number;
+  leagueName: string;
+  invitedByUserName: string | null;
+  createdAt: string;
+}
+
+export async function getMyPendingMembershipInvites(): Promise<PendingMembershipInviteDto[]> {
+  const { data } = await http.get<PendingMembershipInviteDto[]>('/api/league/membership-invites/mine');
+  return data;
+}
+
+export async function acceptMembershipInvite(id: number): Promise<void> {
+  await http.post(`/api/league/membership-invites/${id}/accept`, {});
+}
+
+export async function declineMembershipInvite(id: number): Promise<void> {
+  await http.post(`/api/league/membership-invites/${id}/decline`, {});
+}
+
+export async function cancelMembershipInvite(id: number): Promise<void> {
+  await http.delete(`/api/league/membership-invites/${id}`);
+}
+
+export type MembershipInviteStatus = 'Pending' | 'Accepted' | 'Declined';
+
+export interface MembershipInviteStatusDto {
+  id: number;
+  leagueId: number;
+  invitedUserEmail: string;
+  invitedUserName: string | null;
+  status: MembershipInviteStatus;
+  createdAt: string;
+  respondedAt: string | null;
+}
+
+export async function getLeagueMembershipInvites(leagueId: number): Promise<MembershipInviteStatusDto[]> {
+  const { data } = await http.get<MembershipInviteStatusDto[]>(`/api/league/${leagueId}/membership-invites`);
+  return data;
 }

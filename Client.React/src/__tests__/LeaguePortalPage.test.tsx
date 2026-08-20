@@ -53,6 +53,8 @@ vi.mock('../api/league', () => ({
   generateInviteLink: vi.fn(),
   getCurrentInviteLink: vi.fn().mockResolvedValue(null),
   getLeagueInvitations: vi.fn().mockResolvedValue([]),
+  getLeagueMembershipInvites: vi.fn().mockResolvedValue([]),
+  cancelMembershipInvite: vi.fn(),
 }));
 import {
   getLeagueUserMappings,
@@ -65,10 +67,13 @@ import {
   deleteLeague,
   getCurrentInviteLink,
   getLeagueInvitations,
+  getLeagueMembershipInvites,
+  cancelMembershipInvite,
   generateInviteLink,
   inviteToLeague,
   type LeagueInviteLinkDto,
   type InvitationDto,
+  type MembershipInviteStatusDto,
 } from '../api/league';
 
 const mockedGetMappings = vi.mocked(getLeagueUserMappings);
@@ -77,6 +82,8 @@ const mockedGetCost = vi.mocked(getLeagueCost);
 const mockedGetAllLeagues = vi.mocked(getAllLeagues);
 const mockedGetCurrentInviteLink = vi.mocked(getCurrentInviteLink);
 const mockedGetLeagueInvitations = vi.mocked(getLeagueInvitations);
+const mockedGetLeagueMembershipInvites = vi.mocked(getLeagueMembershipInvites);
+const mockedCancelMembershipInvite = vi.mocked(cancelMembershipInvite);
 const mockedGenerateInviteLink = vi.mocked(generateInviteLink);
 const mockedInviteToLeague = vi.mocked(inviteToLeague);
 const mockedGetUsers = vi.mocked(getUsers);
@@ -444,6 +451,19 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
     };
   }
 
+  function makeMembershipInvite(overrides: Partial<MembershipInviteStatusDto> = {}): MembershipInviteStatusDto {
+    return {
+      id: 1,
+      leagueId: 1,
+      invitedUserEmail: 'bob@example.com',
+      invitedUserName: 'bob',
+      status: 'Pending',
+      createdAt: new Date().toISOString(),
+      respondedAt: null,
+      ...overrides,
+    };
+  }
+
   beforeEach(() => {
     authState.user = OWNER_USER;
     sessionState.ownedLeagues = [makeLeague()];
@@ -453,6 +473,7 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
     // Default: no existing invite link, no sent invitations
     mockedGetCurrentInviteLink.mockResolvedValue(null);
     mockedGetLeagueInvitations.mockResolvedValue([]);
+    mockedGetLeagueMembershipInvites.mockResolvedValue([]);
     sessionState.reloadLeagues.mockClear();
     toastPush.mockClear();
   });
@@ -527,7 +548,7 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
 
   it('refreshes the invitations list after sending an email invite', async () => {
     const refreshedInvitation = makeInvitation({ email: 'bob@example.com' });
-    mockedInviteToLeague.mockResolvedValue({ email: 'bob@example.com', addedExistingUser: false });
+    mockedInviteToLeague.mockResolvedValue({ email: 'bob@example.com', outcome: 'NewUserInvitationSent' });
     mockedGetLeagueInvitations
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([refreshedInvitation]);
@@ -543,11 +564,10 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
     expect(await screen.findByText('bob@example.com')).toBeInTheDocument();
   });
 
-  it('inviting an already-registered email refreshes members, not invitations, with a distinct message', async () => {
-    // Someone who already has an account gets added to the league immediately — no dead
-    // "register again" invitation that can never be redeemed because the email is taken.
-    mockedInviteToLeague.mockResolvedValue({ email: 'bob@example.com', addedExistingUser: true });
-    mockedGetMappings.mockResolvedValue([makeMember()]);
+  it('inviting an already-registered email shows a pending-acceptance message, not an instant add', async () => {
+    // Someone who already has an account gets a pending invite they must explicitly accept —
+    // not added instantly with no consent. No members-list refresh: nobody was added yet.
+    mockedInviteToLeague.mockResolvedValue({ email: 'bob@example.com', outcome: 'ExistingUserInvitePending' });
 
     renderPage();
     await screen.findByText('frizat@example.com');
@@ -556,9 +576,8 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
     await userEvent.type(within(dialog).getByLabelText(/email/i), 'bob@example.com');
     await userEvent.click(within(dialog).getByRole('button', { name: /^send invite$/i }));
 
-    await waitFor(() => expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/added to the league/i), 'success'));
-    expect(mockedGetLeagueInvitations).toHaveBeenCalledTimes(1); // only the initial load, no refresh
-    await waitFor(() => expect(mockedGetMappings).toHaveBeenCalledTimes(2)); // initial load + refresh
+    await waitFor(() => expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/pending their acceptance/i), 'success'));
+    expect(mockedGetMappings).toHaveBeenCalledTimes(1); // only the initial load, no refresh
   });
 
   it('shows the server\'s specific conflict message when inviting someone already on the league', async () => {
@@ -591,5 +610,35 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
 
     await waitFor(() => expect(mockedGenerateInviteLink).toHaveBeenCalledWith(1));
     expect(await screen.findByRole('button', { name: /^copy$/i })).toBeInTheDocument();
+  });
+
+  it('shows a pending membership invite with a Cancel button, and cancels it', async () => {
+    mockedGetLeagueMembershipInvites
+      .mockResolvedValueOnce([makeMembershipInvite()])
+      .mockResolvedValueOnce([]);
+    mockedCancelMembershipInvite.mockResolvedValue(undefined);
+
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(await screen.findByText('bob@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Pending')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+    await waitFor(() => expect(mockedCancelMembershipInvite).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mockedGetLeagueMembershipInvites).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not show a Cancel button for an already-accepted or declined membership invite', async () => {
+    mockedGetLeagueMembershipInvites.mockResolvedValue([
+      makeMembershipInvite({ id: 2, status: 'Accepted' }),
+    ]);
+
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(await screen.findByText('Accepted')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^cancel$/i })).not.toBeInTheDocument();
   });
 });

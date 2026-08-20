@@ -148,6 +148,18 @@ describe('RegisterPage — invite link flow', () => {
     await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toHaveValue('invited@test.com'));
   });
 
+  it('shows a registering-and-joining banner (not a bare "invited" message) when the invite resolves to a league', async () => {
+    // New-user registration IS joining, in one step — the copy should say so explicitly rather
+    // than leaving the "what happens when I register" question unanswered.
+    vi.mocked(validateInvitation).mockResolvedValueOnce({
+      email: 'invited@test.com',
+      leagueName: 'Demo League',
+    } as Awaited<ReturnType<typeof validateInvitation>>);
+    renderWithSearch('?inviteCode=MYCODE');
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/registering for iv league and joining.*demo league/i));
+  });
+
   it('does not leave an unhandled rejection when the invitation preview lookup fails', async () => {
     // Same bug class this file's other tests guard against, in the same component: a 404 for
     // a stale/expired invite code must not become an unhandled promise rejection.
@@ -156,6 +168,6 @@ describe('RegisterPage — invite link flow', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: /^register$/i })).toBeInTheDocument());
     // No league-name preview banner, and no unhandled rejection (vitest fails the test on one).
-    expect(screen.queryByText(/you've been invited to join/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/registering for iv league and joining/i)).not.toBeInTheDocument();
   });
 });

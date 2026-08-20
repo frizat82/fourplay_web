@@ -70,4 +70,12 @@ describe('ResendEmailConfirmationPage', () => {
 
     expect(screen.getByLabelText(/email/i)).toHaveValue('blocked@test.com');
   });
+
+  it('explains why the user landed here instead of just saying "Enter your email"', () => {
+    // frizat: this page gave zero context — a user redirected here from a failed login had
+    // no idea why, which read as part of the "gross, unexplained" flow the user flagged.
+    renderResend();
+
+    expect(screen.getByText(/your account isn't confirmed yet/i)).toBeInTheDocument();
+  });
 });

@@ -83,6 +83,10 @@ export default function App() {
       <Route path="/account/resendemailconfirmation" caseSensitive={false} element={<ResendEmailConfirmationPage />} />
       <Route path="/account/invaliduser" caseSensitive={false} element={<InvalidUserPage />} />
       <Route path="/account/lockout" caseSensitive={false} element={<LockoutPage />} />
+      {/* Not RequireAuth-guarded on purpose: logout clears auth state as part of its own
+          flow, which would otherwise race against RequireAuth's own reactive redirect to
+          login and strand the user there instead of on home. See App.logout.test.tsx. */}
+      <Route path="/logout" element={<LogoutPage />} />
 
       <Route
         element={
@@ -97,7 +101,6 @@ export default function App() {
         <Route path="/scores" element={<ScoresRoute />} />
         <Route path="/leaderboard" element={<LeaderboardRoute />} />
         <Route path="/auth" element={<AuthPage />} />
-        <Route path="/logout" element={<LogoutPage />} />
 
         <Route
           path="/admin"

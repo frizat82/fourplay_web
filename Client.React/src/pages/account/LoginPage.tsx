@@ -26,6 +26,9 @@ export default function LoginPage() {
     const raw = params.get('returnUrl') ?? '/dashboard';
     if (!raw.startsWith('/')) return '/dashboard';
     if (raw.startsWith('//')) return '/dashboard';
+    // /logout is a public route (not RequireAuth-guarded — see App.tsx) that clears auth state
+    // as soon as it mounts. A crafted ?returnUrl=/logout would otherwise log a freshly
+    // authenticated user straight back out.
     if (raw === '/logout') return '/dashboard';
     return raw;
   }, [params]);

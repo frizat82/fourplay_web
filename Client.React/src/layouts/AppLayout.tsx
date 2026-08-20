@@ -43,6 +43,7 @@ import { useAuth } from '../services/auth';
 import { useSportContext } from '../services/sport';
 import { useThemeMode } from '../services/theme';
 import { isAdmin } from '../utils/auth';
+import PendingInviteBanner from '../components/PendingInviteBanner';
 
 const drawerWidth = 260;
 
@@ -363,6 +364,7 @@ export default function AppLayout() {
       >
         <Toolbar />
         <Box className="page-shell" sx={{ flex: 1 }}>
+          <PendingInviteBanner />
           {noAccessContent ?? <Outlet />}
         </Box>
       </Box>

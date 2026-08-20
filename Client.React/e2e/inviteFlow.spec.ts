@@ -241,7 +241,7 @@ test.describe('Join page: already-a-member (409)', () => {
 test.describe('League portal: Invite Player (email) dialog', () => {
   async function setupWithInviteRoute(
     page: Page,
-    outcome: 'invited' | 'addedExisting' | 'conflict' | 'error' = 'invited',
+    outcome: 'invited' | 'existingUserPending' | 'conflict' | 'error' = 'invited',
   ): Promise<void> {
     await mockAuth(page, { authUser: TEST_USER, navigateTo: '/league/manage' });
 
@@ -266,7 +266,10 @@ test.describe('League portal: Invite Player (email) dialog', () => {
         void route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ email: 'friend@example.com', addedExistingUser: outcome === 'addedExisting' }),
+          body: JSON.stringify({
+            email: 'friend@example.com',
+            outcome: outcome === 'existingUserPending' ? 'ExistingUserInvitePending' : 'NewUserInvitationSent',
+          }),
         });
         return;
       }
@@ -309,19 +312,19 @@ test.describe('League portal: Invite Player (email) dialog', () => {
     await expect(page.getByRole('alert')).toContainText(/invitation sent/i, { timeout: 5000 });
   });
 
-  test('inviting an already-registered email adds them directly, with a distinct success message', async ({ page }) => {
+  test('inviting an already-registered email creates a pending invite, with a distinct message', async ({ page }) => {
     // The whole point of this feature: someone with an existing account (owns a league or
-    // belongs to one) gets added to the new league immediately — no dead "register again"
-    // invitation that can never be redeemed because the email is already taken.
-    await setupWithInviteRoute(page, 'addedExisting');
+    // belongs to one) doesn't need to re-register — but unlike a brand-new user, they get a
+    // pending invite they must explicitly accept, not instant membership with no consent.
+    await setupWithInviteRoute(page, 'existingUserPending');
 
     await page.getByRole('button', { name: /invite player/i }).click();
     await page.getByLabel(/email/i).fill('friend@example.com');
     await page.getByRole('dialog').getByRole('button', { name: /send invite|invite/i }).click();
 
     await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 });
-    await expect(page.getByRole('alert')).toContainText(/added to the league/i, { timeout: 5000 });
-    await expect(page.getByRole('alert')).not.toContainText(/invitation sent/i);
+    await expect(page.getByRole('alert')).toContainText(/pending their acceptance/i, { timeout: 5000 });
+    await expect(page.getByRole('alert')).not.toContainText(/^invitation sent/i);
   });
 
   test('inviting an email already on the league shows the server\'s specific conflict message', async ({ page }) => {
@@ -338,7 +341,80 @@ test.describe('League portal: Invite Player (email) dialog', () => {
   });
 });
 
-// ── Group 4d: Registration confirmation — always shows Go to login ────────────
+// ── Group 4d: Pending membership invite banner (invitee-facing) ───────────────
+
+test.describe('Pending membership invite banner', () => {
+  test('shows on any authenticated page; Accept clears it', async ({ page }) => {
+    await mockAuth(page, { authUser: TEST_USER, navigateTo: '/picks' });
+
+    let resolved = false;
+    // Registered after mockAuth so it wins over setupRoutes' default empty-array response.
+    await page.route(/\/api\/league\/membership-invites\/mine$/, (route) => {
+      if (route.request().method() !== 'GET') return void route.continue();
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(resolved ? [] : [{
+          id: 9, leagueId: 1, leagueName: 'Rival League', invitedByUserName: 'commish',
+          createdAt: new Date().toISOString(),
+        }]),
+      });
+    });
+    await page.route(/\/api\/league\/membership-invites\/\d+\/accept$/, (route) => {
+      if (route.request().method() !== 'POST') return void route.continue();
+      resolved = true;
+      void route.fulfill({ status: 204 });
+    });
+
+    await page.reload();
+    await waitForSpinner(page);
+
+    const banner = page.getByRole('alert').filter({ hasText: /rival league/i });
+    await expect(banner).toBeVisible({ timeout: 5000 });
+    await expect(banner).toContainText(/you're being asked to join/i);
+
+    await page.getByRole('button', { name: /^accept$/i }).click();
+
+    await expect(banner).not.toBeVisible({ timeout: 5000 });
+  });
+
+  test('Decline clears the banner without adding the league', async ({ page }) => {
+    await mockAuth(page, { authUser: TEST_USER, navigateTo: '/picks' });
+
+    let resolved = false;
+    let declineCalled = false;
+    await page.route(/\/api\/league\/membership-invites\/mine$/, (route) => {
+      if (route.request().method() !== 'GET') return void route.continue();
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(resolved ? [] : [{
+          id: 9, leagueId: 1, leagueName: 'Rival League', invitedByUserName: 'commish',
+          createdAt: new Date().toISOString(),
+        }]),
+      });
+    });
+    await page.route(/\/api\/league\/membership-invites\/\d+\/decline$/, (route) => {
+      if (route.request().method() !== 'POST') return void route.continue();
+      resolved = true;
+      declineCalled = true;
+      void route.fulfill({ status: 204 });
+    });
+
+    await page.reload();
+    await waitForSpinner(page);
+
+    const banner = page.getByRole('alert').filter({ hasText: /rival league/i });
+    await expect(banner).toBeVisible({ timeout: 5000 });
+
+    await page.getByRole('button', { name: /^decline$/i }).click();
+
+    await expect(banner).not.toBeVisible({ timeout: 5000 });
+    expect(declineCalled).toBe(true);
+  });
+});
+
+// ── Group 4e: Registration confirmation — always shows Go to login ────────────
 
 test.describe('Registration confirmation page', () => {
   test('shows Go to login button (not returnUrl redirect) — email confirmation step is required first', async ({ page }) => {
