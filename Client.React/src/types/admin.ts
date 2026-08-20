@@ -59,6 +59,7 @@ export interface InvitationDto {
   usedAt?: string | null;
   registeredUserId?: string | null;
   registeredUserName?: string | null;
+  registeredUserEmailConfirmed?: boolean | null;
   isExpired: boolean;
   isValid: boolean;
   leagueId?: number | null;

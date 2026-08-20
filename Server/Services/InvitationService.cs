@@ -179,6 +179,7 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
 
         return await dbContext.Invitations
             .Where(i => i.LeagueId == leagueId)
+            .Include(i => i.RegisteredUser)
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync();
     }

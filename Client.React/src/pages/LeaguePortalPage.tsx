@@ -29,6 +29,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import IosShareIcon from '@mui/icons-material/IosShare';
 import LinkIcon from '@mui/icons-material/Link';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import PageHeader from '../components/PageHeader';
 import OwnerCostSummary from '../components/OwnerCostSummary';
@@ -37,6 +38,7 @@ import { useSportContext } from '../services/sport';
 import { useAuth } from '../services/auth';
 import { useToast } from '../services/toast';
 import { isAdmin } from '../utils/auth';
+import { extractApiErrorMessage } from '../utils/apiError';
 import {
   getLeagueUserMappings,
   getLeagueJuice,
@@ -46,6 +48,7 @@ import {
   removeLeagueMember,
   inviteToLeague,
   generateInviteLink,
+  revokeInviteLink,
   getCurrentInviteLink,
   getLeagueInvitations,
   getAllLeagues,
@@ -116,6 +119,7 @@ export default function LeaguePortalPage() {
 
   // Shareable invite link
   const [generatingLink, setGeneratingLink] = useState(false);
+  const [revokingLink, setRevokingLink] = useState(false);
   const [inviteLink, setInviteLink] = useState<LeagueInviteLinkDto | null>(null);
 
   // Email invitations sent to this league
@@ -247,13 +251,18 @@ export default function LeaguePortalPage() {
     if (!selectedLeague || !inviteEmail.trim()) return;
     setInviting(true);
     try {
-      await inviteToLeague(selectedLeague.id, inviteEmail.trim());
-      toast.push(`Invitation sent to ${inviteEmail}`, 'success');
+      const result = await inviteToLeague(selectedLeague.id, inviteEmail.trim());
+      if (result.addedExistingUser) {
+        toast.push(`${inviteEmail} added to the league`, 'success');
+        loadMembers(selectedLeague.id).catch(() => {});
+      } else {
+        toast.push(`Invitation sent to ${inviteEmail}`, 'success');
+        getLeagueInvitations(selectedLeague.id).then(setInvitations).catch(() => {});
+      }
       setInviteEmail('');
       setInviteOpen(false);
-      getLeagueInvitations(selectedLeague.id).then(setInvitations).catch(() => {});
-    } catch {
-      toast.push('Failed to send invitation', 'error');
+    } catch (error) {
+      toast.push(extractApiErrorMessage(error, 'Failed to send invitation'), 'error');
     } finally {
       setInviting(false);
     }
@@ -283,6 +292,20 @@ export default function LeaguePortalPage() {
       toast.push('Failed to generate invite link', 'error');
     } finally {
       setGeneratingLink(false);
+    }
+  };
+
+  const handleRevokeInviteLink = async () => {
+    if (!selectedLeague) return;
+    setRevokingLink(true);
+    try {
+      await revokeInviteLink(selectedLeague.id);
+      setInviteLink(null);
+      toast.push('Invite link revoked', 'success');
+    } catch (error) {
+      toast.push(extractApiErrorMessage(error, 'Failed to revoke invite link'), 'error');
+    } finally {
+      setRevokingLink(false);
     }
   };
 
@@ -464,7 +487,9 @@ export default function LeaguePortalPage() {
               onAddUser={openAddUser}
               inviteLink={inviteLink}
               generatingLink={generatingLink}
+              revokingLink={revokingLink}
               onGenerateInviteLink={() => void handleGenerateInviteLink()}
+              onRevokeInviteLink={() => void handleRevokeInviteLink()}
               invitations={invitations}
             />
           )}
@@ -671,11 +696,13 @@ interface MembersTabProps {
   onAddUser: () => void;
   inviteLink: LeagueInviteLinkDto | null;
   generatingLink: boolean;
+  revokingLink: boolean;
   onGenerateInviteLink: () => void;
+  onRevokeInviteLink: () => void;
   invitations: InvitationDto[];
 }
 
-function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, onGenerateInviteLink, invitations }: MembersTabProps) {
+function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   const cost = computeLeagueCost(count);
   const toast = useToast();
@@ -747,6 +774,16 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
                 <Button size="small" startIcon={<IosShareIcon />} variant="contained" color="secondary" onClick={handleShare}>
                   Share
                 </Button>
+                <Button
+                  size="small"
+                  startIcon={revokingLink ? <CircularProgress size={14} /> : <LinkOffIcon />}
+                  variant="outlined"
+                  color="error"
+                  onClick={onRevokeInviteLink}
+                  disabled={revokingLink}
+                >
+                  Revoke Link
+                </Button>
               </Stack>
             )}
             <Typography variant="caption" color={linkExpired ? 'warning.main' : 'text.secondary'}>{expiresLabel}</Typography>
@@ -816,7 +853,11 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
                     <TableCell>{new Date(inv.createdAt).toLocaleDateString()}</TableCell>
                     <TableCell>
                       {inv.isUsed ? (
-                        <Chip label="Accepted" color="success" size="small" />
+                        inv.registeredUserEmailConfirmed ? (
+                          <Chip label="Confirmed" color="success" size="small" />
+                        ) : (
+                          <Chip label="Pending Confirmation" color="warning" size="small" />
+                        )
                       ) : inv.isExpired ? (
                         <Chip label="Expired" color="default" size="small" />
                       ) : (
