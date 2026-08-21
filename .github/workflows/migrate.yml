@@ -1,11 +1,14 @@
 name: DB Migrate
 
 on:
+  # No paths filter, deliberately: `dotnet ef database update` is idempotent (a ~5s no-op when
+  # nothing's pending), and path-filtered push events have proven unreliable on this repo — a
+  # squash-merged PR that added a migration didn't fire this workflow at all, leaving Railway
+  # crash-looping against a stale schema until the miss was caught and fixed manually. Running
+  # unconditionally on every push to main/dev costs one extra minute of CI per merge and removes
+  # that failure mode entirely.
   push:
     branches: [main, dev]
-    paths:
-      - 'Server/Migrations/**'
-      - 'Server/Data/**'
   workflow_dispatch: {}
 
 jobs:
