@@ -131,10 +131,14 @@ describe('Sport access control', () => {
       expect(screen.queryByRole('link', { name: /switch to cfb/i })).not.toBeInTheDocument();
     });
 
-    it('does not dead-end: the toolbar quick-switch never appears alongside "no CFB access" for a user without CFB access', () => {
+    it('does not duplicate: hidden when the empty-state "Go to {sport} site" button is already showing for the same link', () => {
+      // hasOther=true (empty state offers a switch) AND hasCurrent=false (empty state actually
+      // renders) is exactly the scenario where the toolbar chip and the empty-state button would
+      // otherwise both point at the same URL with different wording.
       Object.assign(sportContext, { sport: 'CFB', isCfb: true, isNfl: false });
-      Object.assign(sessionState, { hasNflAccess: false, hasCfbAccess: true, currentLeague: 2 });
+      Object.assign(sessionState, { hasNflAccess: true, hasCfbAccess: false, currentLeague: null });
       renderLayout();
+      expect(screen.getByRole('link', { name: /go to nfl/i })).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /switch to nfl/i })).not.toBeInTheDocument();
     });
   });
