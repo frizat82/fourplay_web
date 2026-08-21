@@ -3,6 +3,7 @@ using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.EntityFrameworkCore;
 
 namespace FourPlayWebApp.Server.Services.Repositories;
@@ -284,6 +285,51 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     public async Task<int> GetLeagueMemberCountAsync(int leagueId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.LeagueUserMapping.CountAsync(m => m.LeagueId == leagueId && m.IsActive);
+    }
+
+    public async Task<int> GetLeagueMemberCountAsync(int leagueId, int season, LeagueType leagueType) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        var range = await GetSeasonDateRangeAsync(db, season, leagueType);
+        if (range is null) return 0;
+        var (start, end) = range.Value;
+        return await db.LeagueUserMapping.CountAsync(m =>
+            m.LeagueId == leagueId && m.DateCreated <= end && (m.RemovedAt == null || m.RemovedAt >= start));
+    }
+
+    public async Task<Dictionary<int, int>> GetLeagueMemberCountsAsync(int season) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        var result = new Dictionary<int, int>();
+        foreach (var sport in new[] { LeagueType.Nfl, LeagueType.Cfb }) {
+            var range = await GetSeasonDateRangeAsync(db, season, sport);
+            if (range is null) continue;
+            var (start, end) = range.Value;
+            var leagueIds = await db.LeagueInfo.Where(l => l.LeagueType == sport).Select(l => l.Id).ToListAsync();
+            var counts = await db.LeagueUserMapping
+                .Where(m => leagueIds.Contains(m.LeagueId) && m.DateCreated <= end && (m.RemovedAt == null || m.RemovedAt >= start))
+                .GroupBy(m => m.LeagueId)
+                .Select(g => new { LeagueId = g.Key, Count = g.Count() })
+                .ToListAsync();
+            foreach (var c in counts) result[c.LeagueId] = c.Count;
+        }
+        return result;
+    }
+
+    // Computed client-side (not ORDER BY in SQL) — avoids the SQLite/EF DateTimeOffset ORDER BY
+    // translation gap that bit LeagueMembershipInviteService; MIN/MAX over an already-materialized
+    // list sidesteps it entirely and this table is small (one row per week per season).
+    private static async Task<(DateTimeOffset Start, DateTimeOffset End)?> GetSeasonDateRangeAsync(
+        ApplicationDbContext db, int season, LeagueType leagueType) {
+        if (leagueType == LeagueType.Cfb) {
+            var weeks = await db.CfbSeasonWeekConfigs.Where(c => c.Season == season).ToListAsync();
+            if (weeks.Count == 0) return null;
+            var start = weeks.Min(w => w.WeekStartDate).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            var end = weeks.Max(w => w.WeekEndDate).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            return (start, end);
+        } else {
+            var weeks = await db.NflSeasonWeekConfigs.Where(c => c.Season == season).ToListAsync();
+            if (weeks.Count == 0) return null;
+            return (weeks.Min(w => w.WeekStartDatetime), weeks.Max(w => w.WeekEndDatetime));
+        }
     }
 
     // Add operations

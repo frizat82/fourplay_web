@@ -350,6 +350,17 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    if (url.includes('/api/league/all-leagues-cost') && method === 'GET') {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { leagueId: TEST_LEAGUE_ID, leagueName: 'Test League', ownerUserName: 'commish', leagueType: 'Nfl', memberCount: 12, cost: 120 },
+        ]),
+      });
+      return;
+    }
+
     if (url.includes('/api/league/all-leagues') && method === 'GET') {
       void route.fulfill({
         status: 200,

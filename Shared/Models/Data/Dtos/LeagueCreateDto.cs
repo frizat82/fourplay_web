@@ -16,4 +16,13 @@ public record LeagueCreateDto(
 
 public record LeagueCostDto(int MemberCount, decimal Cost);
 
+public record AdminLeagueCostDto(
+    int LeagueId,
+    string LeagueName,
+    string OwnerUserName,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] LeagueType LeagueType,
+    int MemberCount,
+    decimal Cost
+);
+
 public record LeagueJuiceUpdateDto(int Juice, int JuiceDivisional, int JuiceConference, int WeeklyCost);
