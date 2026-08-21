@@ -57,8 +57,11 @@ describe('useShareImage', () => {
     expect(onUnhandledRejection).not.toHaveBeenCalled();
   });
 
-  it('falls back to downloading the image when the browser cannot share files', async () => {
-    Object.defineProperty(navigator, 'canShare', { value: () => false, configurable: true });
+  it.each([
+    ['browser reports it cannot share files', () => false],
+    ['navigator.canShare is entirely unavailable (older browsers)', undefined],
+  ])('falls back to downloading the image when %s', async (_label, canShare) => {
+    Object.defineProperty(navigator, 'canShare', { value: canShare, configurable: true });
     Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
     const createObjectURL = vi.fn().mockReturnValue('blob:fake-url');
     const revokeObjectURL = vi.fn();
@@ -77,20 +80,6 @@ describe('useShareImage', () => {
     clickSpy.mockRestore();
   });
 
-  it('falls back to downloading when navigator.canShare is entirely unavailable (older browsers)', async () => {
-    Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true });
-    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
-    Object.defineProperty(URL, 'createObjectURL', { value: vi.fn().mockReturnValue('blob:fake-url'), configurable: true });
-    Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true });
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-
-    const { result } = renderHook(() => useShareImage());
-    await result.current.shareImage(node, 'My Standings', 'standings.png');
-
-    expect(clickSpy).toHaveBeenCalled();
-    clickSpy.mockRestore();
-  });
-
   it('shows an error toast and does not throw when image generation fails', async () => {
     mockedToBlob.mockResolvedValue(null);
 
@@ -98,5 +87,13 @@ describe('useShareImage', () => {
     await result.current.shareImage(node, 'My Standings', 'standings.png');
 
     expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/failed/i), 'error');
+  });
+
+  it('shows an error toast and does not throw when the node is not mounted yet', async () => {
+    const { result } = renderHook(() => useShareImage());
+    await result.current.shareImage(null, 'My Standings', 'standings.png');
+
+    expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/nothing to share/i), 'error');
+    expect(mockedToBlob).not.toHaveBeenCalled();
   });
 });
