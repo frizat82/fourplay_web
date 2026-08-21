@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Controllers;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
@@ -320,6 +321,95 @@ public class LeagueOwnershipTests
 
         var dto = Assert.IsType<LeagueCostDto>(result!.Value);
         Assert.Equal(120m, dto.Cost);  // $100 + 2 * $10
+    }
+
+    [Fact]
+    public async Task GetLeagueCost_WithSeason_UsesSeasonAwareMemberCount()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueMemberCountAsync(1, 2024, LeagueType.Nfl).Returns(15);
+
+        var result = await ctrl.GetLeagueCost(1, season: 2024) as OkObjectResult;
+
+        var dto = Assert.IsType<LeagueCostDto>(result!.Value);
+        Assert.Equal(15, dto.MemberCount);
+        Assert.Equal(150m, dto.Cost); // $100 + 5 * $10
+        await repo.DidNotReceive().GetLeagueMemberCountAsync(1);
+    }
+
+    [Fact]
+    public async Task GetLeagueCost_WithoutSeason_PreservesCurrentMemberCountBehavior()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueMemberCountAsync(1).Returns(8);
+
+        var result = await ctrl.GetLeagueCost(1, season: null) as OkObjectResult;
+
+        var dto = Assert.IsType<LeagueCostDto>(result!.Value);
+        Assert.Equal(8, dto.MemberCount);
+        await repo.DidNotReceive().GetLeagueMemberCountAsync(1, Arg.Any<int>(), Arg.Any<LeagueType>());
+    }
+
+    // ── GetAllLeaguesCost (admin platform-wide cost dashboard, frizat-fug) ──────
+
+    [Fact]
+    public async Task GetAllLeaguesCost_ReturnsForbid_WhenCallerIsNotAdmin()
+    {
+        var method = typeof(LeagueController).GetMethod(nameof(LeagueController.GetAllLeaguesCost));
+        Assert.NotNull(method);
+        var roleAttr = method!.GetCustomAttributes<AuthorizeAttribute>().FirstOrDefault(a => a.Roles is not null);
+        Assert.Equal(AppRoles.Administrator, roleAttr?.Roles);
+    }
+
+    [Fact]
+    public async Task GetAllLeaguesCost_ReturnsCostPerLeague_WithOwnerNamesAndCorrectAggregation()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetAllLeaguesAsync().Returns(
+        [
+            new LeagueInfo { Id = 1, LeagueName = "NFL League", OwnerUserId = "owner-nfl", LeagueType = LeagueType.Nfl },
+            new LeagueInfo { Id = 2, LeagueName = "CFB League", OwnerUserId = "owner-cfb", LeagueType = LeagueType.Cfb },
+        ]);
+        repo.GetLeagueMemberCountsAsync(2024).Returns(new Dictionary<int, int> { [1] = 15, [2] = 8 });
+        repo.GetUsersAsync().Returns([
+            new ApplicationUser { Id = "owner-nfl", UserName = "nfl-owner" },
+            new ApplicationUser { Id = "owner-cfb", UserName = "cfb-owner" },
+        ]);
+
+        var result = await ctrl.GetAllLeaguesCost(2024) as OkObjectResult;
+
+        var dtos = Assert.IsAssignableFrom<IEnumerable<AdminLeagueCostDto>>(result!.Value).ToList();
+        Assert.Equal(2, dtos.Count);
+        var nfl = dtos.Single(d => d.LeagueId == 1);
+        Assert.Equal("nfl-owner", nfl.OwnerUserName);
+        Assert.Equal(15, nfl.MemberCount);
+        Assert.Equal(150m, nfl.Cost); // $100 + 5 * $10
+        var cfb = dtos.Single(d => d.LeagueId == 2);
+        Assert.Equal("cfb-owner", cfb.OwnerUserName);
+        Assert.Equal(8, cfb.MemberCount);
+        Assert.Equal(100m, cfb.Cost); // base tier, no overage
+    }
+
+    [Fact]
+    public async Task GetAllLeaguesCost_DefaultsMemberCountToZero_ForLeagueMissingFromCountsMap()
+    {
+        // A league whose sport has no season-week-config rows for the requested season (e.g. a
+        // future season not seeded yet) — GetLeagueMemberCountsAsync omits it entirely rather than
+        // guessing; the endpoint must show $0/0 members, not throw a KeyNotFoundException.
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetAllLeaguesAsync().Returns([
+            new LeagueInfo { Id = 1, LeagueName = "L", OwnerUserId = "owner-1", LeagueType = LeagueType.Nfl },
+        ]);
+        repo.GetLeagueMemberCountsAsync(2099).Returns(new Dictionary<int, int>());
+        repo.GetUsersAsync().Returns([new ApplicationUser { Id = "owner-1", UserName = "owner" }]);
+
+        var result = await ctrl.GetAllLeaguesCost(2099) as OkObjectResult;
+
+        var dtos = Assert.IsAssignableFrom<IEnumerable<AdminLeagueCostDto>>(result!.Value).ToList();
+        Assert.Equal(0, dtos[0].MemberCount);
+        Assert.Equal(100m, dtos[0].Cost);
     }
 
     [Fact]

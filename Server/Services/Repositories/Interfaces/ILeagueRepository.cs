@@ -1,6 +1,7 @@
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Shared.Models.Data;
+using FourPlayWebApp.Shared.Models.Enum;
 
 namespace FourPlayWebApp.Server.Services.Repositories.Interfaces;
 public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
@@ -38,6 +39,10 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     Task UpdateLeagueJuiceMappingAsync(LeagueJuiceMapping mapping);
     Task RemoveLeagueUserMappingAsync(int leagueId, string userId);
     Task<int> GetLeagueMemberCountAsync(int leagueId);
+    // Season-aware: counts members whose (DateCreated, RemovedAt) membership window overlapped
+    // the given season's date range for that league's sport — not just currently-active members.
+    Task<int> GetLeagueMemberCountAsync(int leagueId, int season, LeagueType leagueType);
+    Task<Dictionary<int, int>> GetLeagueMemberCountsAsync(int season);
     Task DeleteLeagueAsync(int leagueId);
 
     // Add operations
