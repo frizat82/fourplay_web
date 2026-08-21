@@ -237,7 +237,11 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
             size="small"
             variant="outlined"
             startIcon={<IosShareIcon />}
-            onClick={() => share(`Week ${data.week} Scores`, window.location.href)}
+            onClick={() => {
+              const weekLabel = adapter.weekSelectorConfig.weekLabelFn?.(data.week, isPostSeason)
+                ?? `Week ${data.week}`;
+              share(`${weekLabel} Scores`, window.location.href);
+            }}
           >
             Share
           </Button>

@@ -50,6 +50,21 @@ describe('useShareLink', () => {
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
   });
 
+  it('share() does not throw an unhandled rejection when the user cancels the native share sheet', async () => {
+    const shareMock = vi.fn().mockRejectedValue(new DOMException('Abort', 'AbortError'));
+    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
+    const onUnhandledRejection = vi.fn();
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+
+    const { result } = renderHook(() => useShareLink());
+    result.current.share('Week 5 scores', 'https://ivleague.com/scores');
+
+    await waitFor(() => expect(shareMock).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 0));
+    window.removeEventListener('unhandledrejection', onUnhandledRejection);
+    expect(onUnhandledRejection).not.toHaveBeenCalled();
+  });
+
   it('share() falls back to copy() when navigator.share is unavailable', async () => {
     Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
 
