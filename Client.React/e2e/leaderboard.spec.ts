@@ -53,8 +53,8 @@ test.describe('Leaderboard page (authenticated)', () => {
 
   test('shows standings table with user rows', async ({ page }) => {
     await gotoLeaderboard(page, sampleLeaderboard);
-    await expect(page.getByText(TEST_USER.name)).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('Alice')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('cell', { name: TEST_USER.name })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('cell', { name: 'Alice' })).toBeVisible({ timeout: 5000 });
   });
 
   test('shows rank and total columns', async ({ page }) => {

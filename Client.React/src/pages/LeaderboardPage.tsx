@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
   alpha,
@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import IosShareIcon from '@mui/icons-material/IosShare';
 import PageHeader from '../components/PageHeader';
+import ShareableStandingsCard from '../components/ShareableStandingsCard';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { getLeaderboard } from '../api/leaderboard';
@@ -25,6 +26,7 @@ import type { LeaderboardDto } from '../types/leaderboard';
 import type { SportAdapter } from '../services/sportAdapter';
 import { stickyColumnSx } from '../utils/tableStyles';
 import { useShareLink } from '../utils/useShareLink';
+import { useShareImage } from '../utils/useShareImage';
 
 interface LeaderboardPageProps {
   adapter: SportAdapter;
@@ -32,9 +34,11 @@ interface LeaderboardPageProps {
 
 export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
   const theme = useTheme();
-  const { currentLeague, leaguesLoaded } = useSession();
+  const { currentLeague, availableLeagues, leaguesLoaded } = useSession();
   const { user } = useAuth();
   const { share } = useShareLink();
+  const { shareImage } = useShareImage();
+  const cardRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardDto[]>([]);
 
@@ -108,6 +112,17 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
       : {};
   };
 
+  const myRow = leaderboard.find((row) => row.userName === user?.name);
+  const leagueName = availableLeagues.find((l) => l.leagueId === currentLeague)?.leagueName ?? 'IV League';
+
+  const handleShare = () => {
+    if (!myRow || !cardRef.current) {
+      share('IV League Standings', window.location.href);
+      return;
+    }
+    void shareImage(cardRef.current, `${myRow.userName}'s IV League Standings`, 'iv-league-standings.png');
+  };
+
   if (loading) {
     return (
       <Box>
@@ -130,12 +145,23 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
             size="small"
             variant="outlined"
             startIcon={<IosShareIcon />}
-            onClick={() => share('IV League Standings', window.location.href)}
+            onClick={handleShare}
           >
             Share
           </Button>
         }
       />
+      {myRow && (
+        <Box sx={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none' }} aria-hidden="true">
+          <ShareableStandingsCard
+            ref={cardRef}
+            leagueName={leagueName}
+            userName={myRow.userName}
+            rank={myRow.rank}
+            total={myRow.total}
+          />
+        </Box>
+      )}
       {leaderboard.length === 0 && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 4, textAlign: 'center' }}>
           No leaderboard data yet for this season.
