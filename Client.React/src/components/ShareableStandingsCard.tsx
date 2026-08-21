@@ -13,8 +13,9 @@ interface ShareableStandingsCardProps {
 // the same way an Instagram story template doesn't follow the poster's OS theme.
 const ShareableStandingsCard = forwardRef<HTMLDivElement, ShareableStandingsCardProps>(
   ({ leagueName, userName, rank, total }, ref) => {
-    const totalColor = total > 0 ? '#10b981' : total < 0 ? '#ef4444' : '#ffffff';
-    const totalLabel = total > 0 ? `+${total}` : `${total}`;
+    const sign = Math.sign(total);
+    const totalColor = sign > 0 ? '#10b981' : sign < 0 ? '#ef4444' : '#ffffff';
+    const totalLabel = sign > 0 ? `+${total}` : `${total}`;
 
     return (
       <Box

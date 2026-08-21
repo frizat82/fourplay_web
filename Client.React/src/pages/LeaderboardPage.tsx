@@ -112,11 +112,17 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
       : {};
   };
 
-  const myRow = leaderboard.find((row) => row.userName === user?.name);
-  const leagueName = availableLeagues.find((l) => l.leagueId === currentLeague)?.leagueName ?? 'IV League';
+  const myRow = useMemo(
+    () => leaderboard.find((row) => row.userName === user?.name),
+    [leaderboard, user?.name]
+  );
+  const leagueName = useMemo(
+    () => availableLeagues.find((l) => l.leagueId === currentLeague)?.leagueName ?? 'IV League',
+    [availableLeagues, currentLeague]
+  );
 
   const handleShare = () => {
-    if (!myRow || !cardRef.current) {
+    if (!myRow) {
       share('IV League Standings', window.location.href);
       return;
     }
