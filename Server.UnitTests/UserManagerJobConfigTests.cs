@@ -90,6 +90,34 @@ public class UserManagerJobConfigTests
         Assert.NotEqual("frizat", capturedUser.UserName); // belt-and-suspenders
     }
 
+    // frizat: SyncAdminPassword used to call RemovePasswordAsync then AddPasswordAsync — two
+    // separate SaveChanges against the same row, racing against any other concurrent write to
+    // that user (real incident: a redeploy's own concurrent request hit this exact window and
+    // left the admin account passwordless when the second write lost an EF optimistic-concurrency
+    // check). Setting PasswordHash directly and calling UpdateAsync once is atomic — no window.
+    [Fact]
+    public async Task SyncAdminPassword_UpdatesPasswordHashInASingleAtomicWrite_NotRemoveThenAdd()
+    {
+        var (userManager, roleManager) = BuildMocks();
+        var adminUser = new ApplicationUser { Email = "admin@example.com", UserName = "admin" };
+        userManager.FindByEmailAsync("admin@example.com").Returns(adminUser);
+        var hasher = Substitute.For<IPasswordHasher<ApplicationUser>>();
+        hasher.HashPassword(adminUser, "NewPass!123").Returns("hashed-value");
+        userManager.PasswordHasher = hasher;
+        userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+
+        var config = BuildConfig("admin@example.com", "admin", "NewPass!123");
+        var services = Substitute.For<IServiceProvider>();
+        var job = new UserManagerJob(roleManager, userManager, config, services);
+
+        await job.SyncAdminPassword("admin@example.com");
+
+        Assert.Equal("hashed-value", adminUser.PasswordHash);
+        await userManager.Received(1).UpdateAsync(adminUser);
+        await userManager.DidNotReceive().RemovePasswordAsync(Arg.Any<ApplicationUser>());
+        await userManager.DidNotReceive().AddPasswordAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>());
+    }
+
     /// <summary>
     /// frizat-uvi: AddUserToRole must not silently succeed when the user is not found.
     /// Previously logged "Admin User Found" with a null value — now logs an error.
