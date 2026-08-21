@@ -18,7 +18,8 @@ export function useShareLink() {
 
   const share = (title: string, url: string) => {
     if (navigator.share) {
-      void navigator.share({ title, url });
+      // Cancelling the native share sheet rejects with AbortError — routine, not an error.
+      navigator.share({ title, url }).catch(() => {});
     } else {
       void copy(url);
     }

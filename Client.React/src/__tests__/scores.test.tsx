@@ -150,6 +150,19 @@ describe('ScoresPage', () => {
     ));
   });
 
+  it('Share button uses the postseason round name, not "Week N", during the playoffs', async () => {
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
+    await setupDefaults({ week: 1, postSeason: true });
+    await renderPage();
+
+    await userEvent.click(screen.getByRole('button', { name: /^share$/i }));
+
+    await waitFor(() => expect(shareMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: expect.stringMatching(/wild card/i), url: window.location.href })
+    ));
+  });
+
   it('shows postseason wild card title', async () => {
     await setupDefaults({ week: 1, postSeason: true });
     await renderPage();
