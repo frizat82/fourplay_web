@@ -9,6 +9,7 @@ import GppBadIcon from '@mui/icons-material/GppBad';
 import GppMaybeIcon from '@mui/icons-material/GppMaybe';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
+import IosShareIcon from '@mui/icons-material/IosShare';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import PageHeader from '../components/PageHeader';
 import WeekYearSelector from '../components/WeekYearSelector';
@@ -21,6 +22,7 @@ import FieldPosition from '../components/FieldPosition';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { spreadLabel } from '../utils/gameHelpers';
+import { useShareLink } from '../utils/useShareLink';
 import type { SportAdapter, GameView, WeekState } from '../services/sportAdapter';
 
 // GameView.gameStatus is canonical GameStatusValue — use === directly, no string parsing
@@ -63,6 +65,7 @@ interface ScoresPageProps {
 export default function ScoresPage({ adapter }: ScoresPageProps) {
   const { currentLeague, leaguesLoaded } = useSession();
   const { user } = useAuth();
+  const { share } = useShareLink();
 
   // null = live current week (polls in background); non-null = historical navigation
   const [weekState, setWeekState] = useState<WeekState | null>(null);
@@ -227,7 +230,23 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
   return (
     <Box>
-      <PageHeader title="Scores" />
+      <PageHeader
+        title="Scores"
+        action={
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<IosShareIcon />}
+            onClick={() => {
+              const weekLabel = adapter.weekSelectorConfig.weekLabelFn?.(data.week, isPostSeason)
+                ?? `Week ${data.week}`;
+              share(`${weekLabel} Scores`, window.location.href);
+            }}
+          >
+            Share
+          </Button>
+        }
+      />
 
       <Box sx={{ mb: 3 }}>
         <WeekYearSelector
