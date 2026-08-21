@@ -752,9 +752,13 @@ public class LeagueController(
     [Authorize(Roles = AppRoles.Administrator)]
     [ProducesResponseType(typeof(List<AdminLeagueCostDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllLeaguesCost(int season) {
-        var leagues = await repo.GetAllLeaguesAsync();
-        var counts = await repo.GetLeagueMemberCountsAsync(season);
-        var owners = (await repo.GetUsersAsync()).ToDictionary(u => u.Id, u => u.UserName ?? u.Id);
+        var leaguesTask = repo.GetAllLeaguesAsync();
+        var countsTask = repo.GetLeagueMemberCountsAsync(season);
+        var usersTask = repo.GetUsersAsync();
+        await Task.WhenAll(leaguesTask, countsTask, usersTask);
+        var leagues = leaguesTask.Result;
+        var counts = countsTask.Result;
+        var owners = usersTask.Result.ToDictionary(u => u.Id, u => u.UserName ?? u.Id);
         return Ok(leagues.Select(l => {
             var count = counts.GetValueOrDefault(l.Id, 0);
             return new AdminLeagueCostDto(
