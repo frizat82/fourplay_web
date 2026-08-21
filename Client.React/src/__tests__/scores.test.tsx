@@ -45,6 +45,8 @@ vi.mock('../api/cfb', () => ({
   addCfbPicks: vi.fn(), deleteCfbPicks: vi.fn(),
 }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn().mockResolvedValue(null) }));
+const toastPush = vi.fn();
+vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 
 import { loadScoresWithRetry, getLiveGames, getWeekScores, loadCfbScoresWithRetry, getCfbLiveGames } from '../api/espn';
 import { doOddsExist, getLeaguePicks, spreadBatch } from '../api/league';
@@ -133,6 +135,19 @@ describe('ScoresPage', () => {
     await setupDefaults({ week: 5 });
     await renderPage();
     expect(screen.getAllByText(/Week 5/i).length).toBeGreaterThan(0);
+  });
+
+  it('Share button calls navigator.share with the week in the title and the page url', async () => {
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
+    await setupDefaults({ week: 5 });
+    await renderPage();
+
+    await userEvent.click(screen.getByRole('button', { name: /^share$/i }));
+
+    await waitFor(() => expect(shareMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: expect.stringMatching(/week 5/i), url: window.location.href })
+    ));
   });
 
   it('shows postseason wild card title', async () => {
