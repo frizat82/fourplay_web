@@ -107,4 +107,35 @@ describe('Sport access control', () => {
     renderLayout();
     expect(screen.getByRole('link', { name: /my leagues/i })).toBeInTheDocument();
   });
+
+  // Top-level NFL/CFB quick-switch (frizat: previously only reachable via the buried
+  // no-access empty-state button) — always visible in the toolbar when the user has access
+  // to the other sport, distinct from the empty-state "Go to {sport} site" wording so both
+  // can coexist without ambiguous accessible names.
+  describe('Top-level sport quick-switch', () => {
+    it('shows a Switch-to-CFB toolbar link on the NFL site when the user has CFB access too', () => {
+      renderLayout();
+      expect(screen.getByRole('link', { name: /switch to cfb/i })).toBeInTheDocument();
+    });
+
+    it('shows a Switch-to-NFL toolbar link on the CFB site when the user has NFL access too', () => {
+      Object.assign(sportContext, { sport: 'CFB', isCfb: true, isNfl: false });
+      sessionState.currentLeague = 2;
+      renderLayout();
+      expect(screen.getByRole('link', { name: /switch to nfl/i })).toBeInTheDocument();
+    });
+
+    it('hides the toolbar quick-switch when the user has no access to the other sport', () => {
+      sessionState.hasCfbAccess = false;
+      renderLayout();
+      expect(screen.queryByRole('link', { name: /switch to cfb/i })).not.toBeInTheDocument();
+    });
+
+    it('does not dead-end: the toolbar quick-switch never appears alongside "no CFB access" for a user without CFB access', () => {
+      Object.assign(sportContext, { sport: 'CFB', isCfb: true, isNfl: false });
+      Object.assign(sessionState, { hasNflAccess: false, hasCfbAccess: true, currentLeague: 2 });
+      renderLayout();
+      expect(screen.queryByRole('link', { name: /switch to nfl/i })).not.toBeInTheDocument();
+    });
+  });
 });

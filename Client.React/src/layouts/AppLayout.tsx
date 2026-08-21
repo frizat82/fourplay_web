@@ -22,6 +22,7 @@ import {
   useTheme,
 } from '@mui/material';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -125,6 +126,23 @@ export default function AppLayout() {
             IV League
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
+            {hasOther && (
+              <Chip
+                component="a"
+                href={getOtherSportUrl()}
+                icon={<SwapHorizIcon sx={{ color: 'inherit !important' }} />}
+                label={isCfb ? 'NFL' : 'CFB'}
+                aria-label={`Switch to ${isCfb ? 'NFL' : 'CFB'} site`}
+                clickable
+                variant="outlined"
+                sx={{
+                  color: 'inherit',
+                  borderColor: 'rgba(255,255,255,0.4)',
+                  height: 44,
+                  '&:hover': { borderColor: 'rgba(255,255,255,0.8)', bgcolor: 'rgba(255,255,255,0.08)' },
+                }}
+              />
+            )}
             <Chip
               label={leagueLabel}
               onClick={(e) => setMenuAnchor(e.currentTarget)}
