@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import AdminLeagueCostsPage from '../pages/admin/LeagueCostsPage';
 import type { AdminLeagueCostDto } from '../types/admin';
@@ -8,6 +9,15 @@ vi.mock('../api/league', () => ({ getAllLeaguesCost: vi.fn() }));
 import { getAllLeaguesCost } from '../api/league';
 
 const mockedGetAllLeaguesCost = vi.mocked(getAllLeaguesCost);
+
+function renderPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AdminLeagueCostsPage />
+    </QueryClientProvider>
+  );
+}
 
 function makeCost(overrides: Partial<AdminLeagueCostDto> = {}): AdminLeagueCostDto {
   return {
@@ -32,7 +42,7 @@ describe('AdminLeagueCostsPage', () => {
       makeCost({ leagueId: 2, leagueName: 'CFB League', leagueType: 'Cfb', ownerUserName: 'bob', memberCount: 8, cost: 100 }),
     ]);
 
-    render(<AdminLeagueCostsPage />);
+    renderPage();
 
     expect(await screen.findByText('NFL League')).toBeInTheDocument();
     expect(screen.getByText('CFB League')).toBeInTheDocument();
@@ -44,7 +54,7 @@ describe('AdminLeagueCostsPage', () => {
   it('shows an empty state when there are no leagues', async () => {
     mockedGetAllLeaguesCost.mockResolvedValue([]);
 
-    render(<AdminLeagueCostsPage />);
+    renderPage();
 
     expect(await screen.findByText(/no leagues/i)).toBeInTheDocument();
   });
@@ -52,7 +62,7 @@ describe('AdminLeagueCostsPage', () => {
   it('shows an error state with a retry button when the request fails', async () => {
     mockedGetAllLeaguesCost.mockRejectedValue(new Error('network error'));
 
-    render(<AdminLeagueCostsPage />);
+    renderPage();
 
     expect(await screen.findByText(/couldn.t load/i)).toBeInTheDocument();
     const retryButton = screen.getByRole('button', { name: /retry/i });
@@ -65,7 +75,7 @@ describe('AdminLeagueCostsPage', () => {
 
   it('refetches with the newly selected season when the season selector changes', async () => {
     mockedGetAllLeaguesCost.mockResolvedValue([makeCost()]);
-    render(<AdminLeagueCostsPage />);
+    renderPage();
     await screen.findByText('Demo League');
 
     const currentYear = new Date().getFullYear();

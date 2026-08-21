@@ -5,6 +5,7 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
 namespace FourPlayWebApp.Server.Services.Repositories;
 
@@ -292,8 +293,10 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         var range = await GetSeasonDateRangeAsync(db, season, leagueType);
         if (range is null) return 0;
         var (start, end) = range.Value;
-        return await db.LeagueUserMapping.CountAsync(m =>
-            m.LeagueId == leagueId && m.DateCreated <= end && (m.RemovedAt == null || m.RemovedAt >= start));
+        return await db.LeagueUserMapping
+            .Where(m => m.LeagueId == leagueId)
+            .Where(ActiveDuringWindow(start, end))
+            .CountAsync();
     }
 
     public async Task<Dictionary<int, int>> GetLeagueMemberCountsAsync(int season) {
@@ -303,9 +306,9 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             var range = await GetSeasonDateRangeAsync(db, season, sport);
             if (range is null) continue;
             var (start, end) = range.Value;
-            var leagueIds = await db.LeagueInfo.Where(l => l.LeagueType == sport).Select(l => l.Id).ToListAsync();
             var counts = await db.LeagueUserMapping
-                .Where(m => leagueIds.Contains(m.LeagueId) && m.DateCreated <= end && (m.RemovedAt == null || m.RemovedAt >= start))
+                .Where(m => m.League.LeagueType == sport)
+                .Where(ActiveDuringWindow(start, end))
                 .GroupBy(m => m.LeagueId)
                 .Select(g => new { LeagueId = g.Key, Count = g.Count() })
                 .ToListAsync();
@@ -313,6 +316,9 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         }
         return result;
     }
+
+    private static Expression<Func<LeagueUserMapping, bool>> ActiveDuringWindow(DateTimeOffset start, DateTimeOffset end) =>
+        m => m.DateCreated <= end && (m.RemovedAt == null || m.RemovedAt >= start);
 
     // Computed client-side (not ORDER BY in SQL) — avoids the SQLite/EF DateTimeOffset ORDER BY
     // translation gap that bit LeagueMembershipInviteService; MIN/MAX over an already-materialized
