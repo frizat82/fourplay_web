@@ -3,6 +3,7 @@ using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Repositories;
 using FourPlayWebApp.Shared.Models.Data;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -186,6 +187,130 @@ public class LeagueRepositoryTests
         var count = await repo.GetLeagueMemberCountAsync(1);
 
         Assert.Equal(1, count);
+    }
+
+    // ── Season-aware member count (admin cost dashboard, frizat-fug) ────────────
+    // frizat: "cost owed for season Y" must count members whose membership WINDOW overlapped
+    // season Y's date range — not just currently-active members — so a past season's cost isn't
+    // silently zeroed out by members who have since left. Window = [DateCreated, RemovedAt ?? now).
+
+    private static async Task SeedNflSeasonAsync(DbContextFactoryStub factory, int season, DateTime start, DateTime end)
+    {
+        var db = factory.CreateDbContext();
+        db.NflSeasonWeekConfigs.Add(new NflSeasonWeekConfig {
+            Season = season, WeekId = 1, WeekLabel = "Week 1",
+            WeekStartDatetime = start, WeekEndDatetime = end,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task GetLeagueMemberCountAsync_SeasonAware_CountsMemberActiveDuringThatSeason_ExcludingLaterRemoval()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetLeagueMemberCountAsync_SeasonAware_CountsMemberActiveDuringThatSeason_ExcludingLaterRemoval));
+        await SeedNflSeasonAsync(factory, 2024, new DateTime(2024, 9, 1), new DateTime(2025, 2, 1));
+        var seedDb = factory.CreateDbContext();
+        // Joined before the 2024 season and removed after it ended — was present the whole season.
+        seedDb.LeagueUserMapping.Add(new LeagueUserMapping {
+            LeagueId = 1, UserId = "still-counted",
+            DateCreated = new DateTimeOffset(2024, 8, 1, 0, 0, 0, TimeSpan.Zero),
+            RemovedAt = new DateTimeOffset(2025, 3, 1, 0, 0, 0, TimeSpan.Zero), IsActive = false,
+        });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        var count = await repo.GetLeagueMemberCountAsync(1, 2024, LeagueType.Nfl);
+
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public async Task GetLeagueMemberCountAsync_SeasonAware_ExcludesMemberWhoLeftEntirelyBeforeTheSeasonStarted()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetLeagueMemberCountAsync_SeasonAware_ExcludesMemberWhoLeftEntirelyBeforeTheSeasonStarted));
+        await SeedNflSeasonAsync(factory, 2024, new DateTime(2024, 9, 1), new DateTime(2025, 2, 1));
+        var seedDb = factory.CreateDbContext();
+        // Joined and left in 2023, well before the 2024 season window — must not count toward 2024.
+        seedDb.LeagueUserMapping.Add(new LeagueUserMapping {
+            LeagueId = 1, UserId = "left-before-season",
+            DateCreated = new DateTimeOffset(2023, 8, 1, 0, 0, 0, TimeSpan.Zero),
+            RemovedAt = new DateTimeOffset(2023, 12, 1, 0, 0, 0, TimeSpan.Zero), IsActive = false,
+        });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        var count = await repo.GetLeagueMemberCountAsync(1, 2024, LeagueType.Nfl);
+
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public async Task GetLeagueMemberCountAsync_SeasonAware_ExcludesMemberWhoJoinedAfterTheSeasonEnded()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetLeagueMemberCountAsync_SeasonAware_ExcludesMemberWhoJoinedAfterTheSeasonEnded));
+        await SeedNflSeasonAsync(factory, 2024, new DateTime(2024, 9, 1), new DateTime(2025, 2, 1));
+        var seedDb = factory.CreateDbContext();
+        // Joined in the 2025 season, after the 2024 window ended — must not count toward 2024.
+        seedDb.LeagueUserMapping.Add(new LeagueUserMapping {
+            LeagueId = 1, UserId = "joined-next-season",
+            DateCreated = new DateTimeOffset(2025, 6, 1, 0, 0, 0, TimeSpan.Zero),
+        });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        var count = await repo.GetLeagueMemberCountAsync(1, 2024, LeagueType.Nfl);
+
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public async Task GetLeagueMemberCountAsync_SeasonAware_CountsCurrentlyActiveMemberWhoJoinedMidSeason()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetLeagueMemberCountAsync_SeasonAware_CountsCurrentlyActiveMemberWhoJoinedMidSeason));
+        await SeedNflSeasonAsync(factory, 2024, new DateTime(2024, 9, 1), new DateTime(2025, 2, 1));
+        var seedDb = factory.CreateDbContext();
+        // Joined mid-2024-season and never left — still active today.
+        seedDb.LeagueUserMapping.Add(new LeagueUserMapping {
+            LeagueId = 1, UserId = "joined-mid-season",
+            DateCreated = new DateTimeOffset(2024, 10, 1, 0, 0, 0, TimeSpan.Zero),
+        });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        var count = await repo.GetLeagueMemberCountAsync(1, 2024, LeagueType.Nfl);
+
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public async Task GetLeagueMemberCountsAsync_ReturnsCountsPerLeague_AcrossBothSports()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetLeagueMemberCountsAsync_ReturnsCountsPerLeague_AcrossBothSports));
+        await SeedNflSeasonAsync(factory, 2024, new DateTime(2024, 9, 1), new DateTime(2025, 2, 1));
+        var seedDb = factory.CreateDbContext();
+        seedDb.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
+            Season = 2024, EspnWeekNumber = 1, IvLeagueWeekNumber = 1,
+            WeekStartDate = new DateOnly(2024, 8, 20), WeekEndDate = new DateOnly(2025, 1, 15),
+        });
+        seedDb.LeagueInfo.AddRange(
+            new LeagueInfo { Id = 1, LeagueName = "NFL League", OwnerUserId = "owner-1", LeagueType = LeagueType.Nfl },
+            new LeagueInfo { Id = 2, LeagueName = "CFB League", OwnerUserId = "owner-2", LeagueType = LeagueType.Cfb });
+        seedDb.LeagueUserMapping.Add(new LeagueUserMapping {
+            LeagueId = 1, UserId = "nfl-member", DateCreated = new DateTimeOffset(2024, 9, 15, 0, 0, 0, TimeSpan.Zero),
+        });
+        seedDb.LeagueUserMapping.Add(new LeagueUserMapping {
+            LeagueId = 2, UserId = "cfb-member-1", DateCreated = new DateTimeOffset(2024, 9, 1, 0, 0, 0, TimeSpan.Zero),
+        });
+        seedDb.LeagueUserMapping.Add(new LeagueUserMapping {
+            LeagueId = 2, UserId = "cfb-member-2", DateCreated = new DateTimeOffset(2024, 9, 1, 0, 0, 0, TimeSpan.Zero),
+        });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        var counts = await repo.GetLeagueMemberCountsAsync(2024);
+
+        Assert.Equal(1, counts[1]);
+        Assert.Equal(2, counts[2]);
     }
 
     [Fact]
