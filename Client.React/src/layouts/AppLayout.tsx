@@ -22,6 +22,7 @@ import {
   useTheme,
 } from '@mui/material';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -91,6 +92,7 @@ export default function AppLayout() {
 
   const hasCurrent = isCfb ? hasCfbAccess : hasNflAccess;
   const hasOther = isCfb ? hasNflAccess : hasCfbAccess;
+  const otherSport = isCfb ? 'NFL' : 'CFB';
   const noAccessContent = leaguesLoaded && currentLeague === null && !hasCurrent ? (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', textAlign: 'center', p: 4 }}>
       <Typography variant="h5" fontWeight={700} gutterBottom>
@@ -121,10 +123,28 @@ export default function AppLayout() {
           <IconButton color="inherit" edge="start" onClick={() => setOpen(!open)}>
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
             IV League
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
+            {hasOther && !noAccessContent && (
+              <Chip
+                component="a"
+                href={getOtherSportUrl()}
+                icon={<SwapHorizIcon />}
+                label={otherSport}
+                aria-label={`Switch to ${otherSport} site`}
+                clickable
+                variant="outlined"
+                sx={{
+                  color: 'inherit',
+                  borderColor: 'rgba(255,255,255,0.4)',
+                  height: 44,
+                  '& .MuiChip-icon': { color: 'inherit', opacity: 0.7 },
+                  '&:hover': { borderColor: 'rgba(255,255,255,0.8)', bgcolor: 'rgba(255,255,255,0.08)' },
+                }}
+              />
+            )}
             <Chip
               label={leagueLabel}
               onClick={(e) => setMenuAnchor(e.currentTarget)}
