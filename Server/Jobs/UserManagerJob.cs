@@ -42,12 +42,17 @@ public class UserManagerJob(
     /// <summary>
     /// Sync admin password from configuration on every startup so env var changes take effect on redeploy.
     /// </summary>
+    // frizat: RemovePasswordAsync then AddPasswordAsync used to do this as two separate writes to
+    // the same row — a real incident hit an EF optimistic-concurrency conflict on the second write
+    // (something else touched the row between the two SaveChanges) and left the admin account
+    // passwordless until the next redeploy. Hashing directly and writing PasswordHash via a single
+    // UpdateAsync closes that window entirely — one write, nothing in between to race against.
     internal async Task SyncAdminPassword(string emailAddress) {
         var adminPassword = configuration["ADMIN_PASSWORD"] ?? throw new InvalidOperationException("ADMIN_PASSWORD not set");
         var adminUser = await userManager.FindByEmailAsync(emailAddress);
         if (adminUser == null) return;
-        await userManager.RemovePasswordAsync(adminUser);
-        var result = await userManager.AddPasswordAsync(adminUser, adminPassword);
+        adminUser.PasswordHash = userManager.PasswordHasher.HashPassword(adminUser, adminPassword);
+        var result = await userManager.UpdateAsync(adminUser);
         if (result.Succeeded)
             Log.Information("Admin password synced for {Email}", emailAddress);
         else
