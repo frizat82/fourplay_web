@@ -134,6 +134,7 @@ feature/* → PR → dev → PR → main
 
 - No direct pushes to `main` or `dev`
 - PRs require passing CI (lint, type-check, unit tests, build)
+- **Merge with a regular merge, never squash** — squash merges have been observed to not reliably trigger the Railway/Vercel deploy webhooks on this repo; squash merging is disabled repo-wide as a result
 
 ## Contributing
 
