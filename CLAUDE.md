@@ -35,6 +35,9 @@ Short version: NFL regular season = 4 picks; postseason decreases 3→3→2→1.
 
 **After merging any seeder change to `dev`:** check Railway dev deploy status before opening the `dev → main` PR. A crashed Railway dev is a blocker.
 
+### Migrations Crash-Loop the App On Purpose — This Is Intentional
+`Server/Program.cs` checks `GetPendingMigrations()` at startup outside Development and **throws, crash-looping the deployment**, rather than serve traffic against a stale schema. This has already caught a real incident (a migration that was never applied reached prod code that assumed the new table existed) — don't "fix" this guard by relaxing it. The `DB Migrate` GitHub Actions job (`.github/workflows/migrate.yml`) runs `dotnet ef database update` **unconditionally on every push to `dev`/`main`** (no `paths:` filter) for the same reason: a path-filtered trigger missed a migration once already, because the push that added it never fired the filtered workflow (see Branch Rules below). `dotnet ef database update` is idempotent — a ~5s no-op when nothing's pending — so this costs nothing on pushes with no migration changes.
+
 ### Test Rot Prevention
 When fixing a bug: grep existing tests for old wrong values before shipping. When changing `GetRequiredPicks`/`GetCfbRequiredPicks`: read ALL test files that reference the function, update expected values first, then fix the implementation.
 
@@ -88,7 +91,9 @@ When fixing a bug: grep existing tests for old wrong values before shipping. Whe
 ## CRITICAL: Branch Rules
 - **NEVER push or commit directly to `main`** — all changes go through a PR
 - Branch flow: `feature/*` → PR → `dev` → PR → `main`
+- **Always merge PRs with a regular merge, never squash.** Squash merges have been observed to not reliably fire GitHub Actions push-triggered workflows or the Railway/Vercel deploy webhooks on this repo — a squash-merged PR sat un-deployed with zero error for 30+ minutes before the gap was found. `allow_squash_merge` is disabled repo-wide as a hard guard; don't re-enable it. To diagnose a deploy that isn't showing up: `gh api repos/<owner>/<repo>/deployments?sha=<sha>` — a missing record means the trigger never fired (not "slow" or "failed"); compare against a commit that's known to have deployed.
 - Before a `dev`→`main` cutover (season launch or major release), run `/prod-live-test` — the full live E2E prod-readiness gate (real users, real ESPN data, real emails, real job schedule on staging)
+- **Destructive git/branch cleanup must use the specifically-approved criterion** (e.g. "merged into `dev`/`main`", checked via the safe `git branch -d`, which refuses on unmerged commits) — never substitute a looser heuristic (e.g. remote-tracking `[gone]` status + force `-D`) because it's more convenient, and never let a second agent re-derive scope from an ambiguous instruction. If a subagent needs to continue prior work, resume that same agent via SendMessage — spawning a fresh agent loses its context and it will re-infer (and can get wrong) what was already approved.
 
 ## Task Tracking
 - Use `bd` (beads) — `LD_LIBRARY_PATH=~/.local/lib BEADS_DIR=~/.beads ~/.local/bin/bd`
@@ -216,3 +221,6 @@ The login endpoint is rate-limited to 5 requests/minute per IP (`Program.cs`). E
 
 ### Chrome DevTools MCP
 `mcp__plugin_chrome-devtools-mcp_chrome-devtools__*` tools. Browser emulates iPhone (390×844) by default. Use `list_network_requests` to diagnose API failures before reading code.
+
+### Claude-in-Chrome / Browser Automation
+`mcp__claude-in-chrome__*`'s `computer` tool (coordinate-based `left_click`/`type`) can **silently no-op** on this app's React-controlled inputs and buttons — it reports success, no error is thrown, but no state actually changes and no network request fires. This has burned real verification time (a login form and Accept/Decline buttons both appeared to "work" while doing nothing). Prefer `form_input` to set field values, and/or `javascript_tool` to set values via the native property setter + dispatch `input`/`change` events, then call `element.click()` directly — both are reliable where coordinate clicks aren't. Always confirm the expected request actually fired with `read_network_requests` before trusting a UI state change; don't infer success from a screenshot or `get_page_text` alone.
