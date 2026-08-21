@@ -69,4 +69,17 @@ test.describe('Leaderboard page (authenticated)', () => {
     await expect(page.getByRole('heading', { name: 'Leaderboard' })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Standings')).not.toBeVisible();
   });
+
+  test('Share button renders the standings card and shares it (falls back to download when the browser cannot share files)', async ({ page }) => {
+    // Force the download-fallback branch deterministically, rather than relying on whatever
+    // Web Share API support this Chromium build happens to have.
+    await page.addInitScript(() => {
+      Object.defineProperty(window.navigator, 'canShare', { value: () => false, configurable: true });
+    });
+
+    await gotoLeaderboard(page, sampleLeaderboard);
+    await page.getByRole('button', { name: /^share$/i }).click();
+
+    await expect(page.getByRole('alert')).toContainText(/downloaded/i, { timeout: 5000 });
+  });
 });

@@ -15,7 +15,12 @@ export function useShareImage() {
       toast.push('Nothing to share yet', 'error');
       return;
     }
-    const blob = await toBlob(node, { pixelRatio: 2 });
+    let blob: Blob | null;
+    try {
+      blob = await toBlob(node, { pixelRatio: 2 });
+    } catch {
+      blob = null;
+    }
     if (!blob) {
       toast.push('Failed to generate image', 'error');
       return;
@@ -32,7 +37,9 @@ export function useShareImage() {
     a.href = url;
     a.download = fileName;
     a.click();
-    URL.revokeObjectURL(url);
+    // Revoking immediately after click() can race with the browser actually starting to read
+    // the blob (observed in Firefox), silently truncating the download — defer the revoke.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast.push('Image downloaded — share it from your Photos/Downloads', 'info');
   };
 
