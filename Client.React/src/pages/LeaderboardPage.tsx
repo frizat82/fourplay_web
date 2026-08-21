@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import {
   alpha,
   Box,
+  Button,
   Card,
   CardContent,
   CircularProgress,
@@ -15,6 +16,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
+import IosShareIcon from '@mui/icons-material/IosShare';
 import PageHeader from '../components/PageHeader';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
@@ -22,6 +24,7 @@ import { getLeaderboard } from '../api/leaderboard';
 import type { LeaderboardDto } from '../types/leaderboard';
 import type { SportAdapter } from '../services/sportAdapter';
 import { stickyColumnSx } from '../utils/tableStyles';
+import { useShareLink } from '../utils/useShareLink';
 
 interface LeaderboardPageProps {
   adapter: SportAdapter;
@@ -31,6 +34,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
   const theme = useTheme();
   const { currentLeague, leaguesLoaded } = useSession();
   const { user } = useAuth();
+  const { share } = useShareLink();
   const [loading, setLoading] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardDto[]>([]);
 
@@ -119,7 +123,19 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
 
   return (
     <Box>
-      <PageHeader title="Leaderboard" />
+      <PageHeader
+        title="Leaderboard"
+        action={
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<IosShareIcon />}
+            onClick={() => share('IV League Standings', window.location.href)}
+          >
+            Share
+          </Button>
+        }
+      />
       {leaderboard.length === 0 && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 4, textAlign: 'center' }}>
           No leaderboard data yet for this season.

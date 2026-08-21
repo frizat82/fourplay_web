@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { alpha, ThemeProvider } from '@mui/material';
 import LeaderboardPage from '../pages/LeaderboardPage';
 import { vi } from 'vitest';
@@ -6,6 +7,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { createLeaderboardEntry, createLeaderboardWeekResult } from '../test/fixtures';
 import type { SportAdapter } from '../services/sportAdapter';
 import { createAppTheme } from '../app/theme';
+
+const toastPush = vi.fn();
+vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 
 const sessionState = {
   currentLeague: 1 as number | null,
@@ -74,6 +78,22 @@ describe('LeaderboardPage', () => {
     await screen.findByText(/TestUser/i);
     expect(screen.getByText(/TestUser/i)).toBeInTheDocument();
     expect(screen.getByText('25')).toBeInTheDocument();
+  });
+
+  it('Share button calls navigator.share with a standings title and the page url', async () => {
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
+    mockedGetLeaderboard.mockResolvedValue([
+      createLeaderboardEntry({ userId: '123', userName: 'TestUser', rank: '1', total: 5, weekResults: [] }),
+    ]);
+
+    renderPage();
+    await screen.findByText(/TestUser/i);
+    await userEvent.click(screen.getByRole('button', { name: /^share$/i }));
+
+    await waitFor(() => expect(shareMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: expect.stringMatching(/standings/i), url: window.location.href })
+    ));
   });
 
   it('renders without crash when users have ragged weekResults', async () => {

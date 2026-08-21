@@ -39,6 +39,7 @@ import { useAuth } from '../services/auth';
 import { useToast } from '../services/toast';
 import { isAdmin } from '../utils/auth';
 import { extractApiErrorMessage } from '../utils/apiError';
+import { useShareLink } from '../utils/useShareLink';
 import {
   getLeagueUserMappings,
   getLeagueJuice,
@@ -732,26 +733,9 @@ interface MembersTabProps {
 function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   const cost = computeLeagueCost(count);
-  const toast = useToast();
+  const { share, copy } = useShareLink();
 
   const inviteUrl = inviteLink ? `${window.location.origin}/join/${inviteLink.token}` : '';
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      toast.push('Link copied', 'info');
-    } catch {
-      toast.push('Failed to copy link', 'error');
-    }
-  };
-
-  const handleShare = () => {
-    if (navigator.share) {
-      void navigator.share({ title: 'Join my league', url: inviteUrl });
-    } else {
-      void handleCopy();
-    }
-  };
 
   const linkExpired = inviteLink ? new Date(inviteLink.expiresAt) < new Date() : false;
   const expiresLabel = inviteLink
@@ -795,10 +779,10 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
             )}
             {!linkExpired && (
               <Stack direction="row" spacing={1} flexWrap="wrap">
-                <Button size="small" startIcon={<ContentCopyIcon />} variant="outlined" onClick={() => void handleCopy()}>
+                <Button size="small" startIcon={<ContentCopyIcon />} variant="outlined" onClick={() => void copy(inviteUrl)}>
                   Copy
                 </Button>
-                <Button size="small" startIcon={<IosShareIcon />} variant="contained" color="secondary" onClick={handleShare}>
+                <Button size="small" startIcon={<IosShareIcon />} variant="contained" color="secondary" onClick={() => share('Join my league', inviteUrl)}>
                   Share
                 </Button>
                 <Button
