@@ -11,6 +11,7 @@ import type {
   LeagueInfoDto,
   LeagueJuiceMappingDto,
   LeagueCostDto,
+  AdminLeagueCostDto,
   LeagueJuiceUpdateDto,
   LeagueCreateDto,
   UserSummaryDto,
@@ -140,6 +141,11 @@ export async function getAllLeagues() {
 export async function getLeagueCost(leagueId: number) {
   const { data } = await http.get<LeagueCostDto>(`/api/league/${leagueId}/cost`);
   return data;
+}
+
+export async function getAllLeaguesCost(season: number) {
+  const { data } = await http.get<AdminLeagueCostDto[]>('/api/league/all-leagues-cost', { params: { season } });
+  return data ?? [];
 }
 
 export async function updateLeagueJuice(leagueId: number, season: number, dto: LeagueJuiceUpdateDto) {

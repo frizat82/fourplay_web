@@ -737,15 +737,39 @@ public class LeagueController(
 
     [HttpGet("{leagueId:int}/cost")]
     [ProducesResponseType(typeof(LeagueCostDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetLeagueCost(int leagueId) {
+    public async Task<IActionResult> GetLeagueCost(int leagueId, int? season = null) {
         var league = await repo.GetLeagueInfoAsync(leagueId);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != userId)
             return Forbid();
-        var count = await repo.GetLeagueMemberCountAsync(leagueId);
+        var count = season.HasValue
+            ? await repo.GetLeagueMemberCountAsync(leagueId, season.Value, league.LeagueType)
+            : await repo.GetLeagueMemberCountAsync(leagueId);
+        return Ok(new LeagueCostDto(count, ComputeLeagueCost(count)));
+    }
+
+    [HttpGet("all-leagues-cost")]
+    [Authorize(Roles = AppRoles.Administrator)]
+    [ProducesResponseType(typeof(List<AdminLeagueCostDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllLeaguesCost(int season) {
+        var leaguesTask = repo.GetAllLeaguesAsync();
+        var countsTask = repo.GetLeagueMemberCountsAsync(season);
+        var usersTask = repo.GetUsersAsync();
+        await Task.WhenAll(leaguesTask, countsTask, usersTask);
+        var leagues = leaguesTask.Result;
+        var counts = countsTask.Result;
+        var owners = usersTask.Result.ToDictionary(u => u.Id, u => u.UserName ?? u.Id);
+        return Ok(leagues.Select(l => {
+            var count = counts.GetValueOrDefault(l.Id, 0);
+            return new AdminLeagueCostDto(
+                l.Id, l.LeagueName, owners.GetValueOrDefault(l.OwnerUserId, l.OwnerUserId),
+                l.LeagueType, count, ComputeLeagueCost(count));
+        }).ToList());
+    }
+
+    private static decimal ComputeLeagueCost(int memberCount) {
         const int baseCost = 100, baseMembers = 10, perHead = 10;
-        var cost = baseCost + Math.Max(0, count - baseMembers) * perHead;
-        return Ok(new LeagueCostDto(count, cost));
+        return baseCost + Math.Max(0, memberCount - baseMembers) * perHead;
     }
 
     [HttpPut("{leagueId:int}/juice/{season:int}")]

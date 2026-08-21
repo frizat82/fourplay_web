@@ -71,6 +71,15 @@ export interface LeagueCostDto {
   cost: number;
 }
 
+export interface AdminLeagueCostDto {
+  leagueId: number;
+  leagueName: string;
+  ownerUserName: string;
+  leagueType: string;
+  memberCount: number;
+  cost: number;
+}
+
 export interface LeagueJuiceUpdateDto {
   juice: number;
   juiceDivisional: number;
