@@ -106,15 +106,15 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
   };
 
   const rowClass = (row: LeaderboardDto) => {
-    if (!user?.name) return {};
-    return row.userName === user.name
+    if (!user?.userId) return {};
+    return row.userId === user.userId
       ? { backgroundColor: 'action.hover', fontWeight: 600 }
       : {};
   };
 
   const myRow = useMemo(
-    () => leaderboard.find((row) => row.userName === user?.name),
-    [leaderboard, user?.name]
+    () => leaderboard.find((row) => row.userId === user?.userId),
+    [leaderboard, user?.userId]
   );
   const leagueName = useMemo(
     () => availableLeagues.find((l) => l.leagueId === currentLeague)?.leagueName ?? 'IV League',
@@ -158,7 +158,11 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
         }
       />
       {myRow && (
-        <Box sx={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none' }} aria-hidden="true">
+        // Positioned in normal flow (0,0) inside a zero-size overflow:hidden wrapper, not at a
+        // large negative offset — WebKit's foreignObject-based canvas capture (what html-to-image
+        // uses) can render blank when the source node sits outside the viewport's coordinate
+        // space, which matters here since iOS Safari is this app's primary audience (CLAUDE.md).
+        <Box sx={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }} aria-hidden="true">
           <ShareableStandingsCard
             ref={cardRef}
             leagueName={leagueName}

@@ -74,14 +74,25 @@ describe('useShareImage', () => {
 
     expect(createObjectURL).toHaveBeenCalledWith(fakeBlob);
     expect(clickSpy).toHaveBeenCalled();
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake-url');
     expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/downloaded/i), 'info');
+    // Revoke is deliberately deferred (see useShareImage.ts) so the browser has time to start
+    // reading the blob before the URL is invalidated.
+    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake-url'), { timeout: 1500 });
 
     clickSpy.mockRestore();
   });
 
   it('shows an error toast and does not throw when image generation fails', async () => {
     mockedToBlob.mockResolvedValue(null);
+
+    const { result } = renderHook(() => useShareImage());
+    await result.current.shareImage(node, 'My Standings', 'standings.png');
+
+    expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/failed/i), 'error');
+  });
+
+  it('shows an error toast and does not throw when toBlob rejects (e.g. a blocked font fetch)', async () => {
+    mockedToBlob.mockRejectedValue(new Error('network error'));
 
     const { result } = renderHook(() => useShareImage());
     await result.current.shareImage(node, 'My Standings', 'standings.png');
