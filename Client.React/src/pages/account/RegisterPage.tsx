@@ -7,6 +7,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { createUser } from '../../api/auth';
 import { validateInvitation } from '../../api/invitations';
 import { useToast } from '../../services/toast';
+import { buildAbsoluteUrl } from '../../utils/url';
+import { extractApiErrorMessage } from '../../utils/apiError';
 
 const baseSchema = z.object({
   invitationCode: z.string(),
@@ -52,6 +54,7 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -67,28 +70,41 @@ export default function RegisterPage() {
   useEffect(() => {
     document.title = 'Register';
     if (inviteCode) {
-      void validateInvitation(inviteCode).then((inv) => {
-        if (inv?.leagueName) setLeagueName(inv.leagueName);
-      });
+      void validateInvitation(inviteCode)
+        .then((inv) => {
+          if (inv?.leagueName) setLeagueName(inv.leagueName);
+          if (inv?.email) setValue('email', inv.email);
+        })
+        .catch(() => {
+          // Preview lookup failure (e.g. a stale/expired invite code) is non-fatal — the
+          // real validation happens server-side on submit; just skip the league-name preview.
+        });
     }
-  }, [inviteCode]);
+  }, [inviteCode, setValue]);
 
   const onSubmit = async (values: FormValues) => {
-    const result = await createUser({
-      email: values.email,
-      code: values.invitationCode,
-      password: values.password,
-      username: values.userName,
-      ...(inviteLinkToken ? { inviteLinkToken } : {}),
-    });
+    try {
+      const result = await createUser({
+        email: values.email,
+        code: values.invitationCode,
+        password: values.password,
+        username: values.userName,
+        confirmationUrl: buildAbsoluteUrl('/account/confirmemail'),
+        ...(inviteLinkToken ? { inviteLinkToken } : {}),
+      });
 
-    if (!result.isSuccess) {
-      toast.push(result.errors.join('\n') || 'Registration failed', 'error');
-      return;
+      if (!result.isSuccess) {
+        toast.push(result.errors.join('\n') || 'Registration failed', 'error');
+        return;
+      }
+
+      toast.push('User created successfully, check email for confirmation', 'success');
+      navigate(`/account/registerconfirmation?email=${encodeURIComponent(values.email)}&returnUrl=${encodeURIComponent(returnUrl)}`);
+    } catch (error) {
+      // The real backend returns a non-2xx status (400 for a bad invite code, 429 when
+      // rate-limited) rather than 200 with isSuccess:false, so createUser() rejects here.
+      toast.push(extractApiErrorMessage(error, 'Registration failed'), 'error');
     }
-
-    toast.push('User created successfully, check email for confirmation', 'success');
-    navigate(`/account/registerconfirmation?email=${encodeURIComponent(values.email)}&returnUrl=${encodeURIComponent(returnUrl)}`);
   };
 
   return (
@@ -96,7 +112,7 @@ export default function RegisterPage() {
       <Typography variant="h4">Register</Typography>
       {leagueName && (
         <Alert severity="info">
-          You've been invited to join <strong>{leagueName}</strong>
+          You're registering for IV League and joining <strong>{leagueName}</strong>.
         </Alert>
       )}
       <Card>

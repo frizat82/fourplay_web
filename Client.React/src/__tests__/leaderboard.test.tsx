@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { alpha, ThemeProvider } from '@mui/material';
 import LeaderboardPage from '../pages/LeaderboardPage';
 import { vi } from 'vitest';
@@ -7,9 +8,15 @@ import { createLeaderboardEntry, createLeaderboardWeekResult } from '../test/fix
 import type { SportAdapter } from '../services/sportAdapter';
 import { createAppTheme } from '../app/theme';
 
+const toastPush = vi.fn();
+vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
+
+const mockedToBlob = vi.fn();
+vi.mock('html-to-image', () => ({ toBlob: (...args: unknown[]) => mockedToBlob(...args) }));
+
 const sessionState = {
   currentLeague: 1 as number | null,
-  availableLeagues: [],
+  availableLeagues: [{ leagueId: 1, leagueName: 'Demo League' }] as { leagueId: number; leagueName: string }[],
   selectLeague: vi.fn(),
   reloadLeagues: vi.fn(),
   clearSession: vi.fn(),
@@ -71,9 +78,47 @@ describe('LeaderboardPage', () => {
     ]);
 
     renderPage();
-    await screen.findByText(/TestUser/i);
-    expect(screen.getByText(/TestUser/i)).toBeInTheDocument();
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('TestUser')).toBeInTheDocument();
     expect(screen.getByText('25')).toBeInTheDocument();
+  });
+
+  it('Share button shares a rendered standings-card image, not a link', async () => {
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
+    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
+    mockedToBlob.mockResolvedValue(new Blob(['fake-png'], { type: 'image/png' }));
+    mockedGetLeaderboard.mockResolvedValue([
+      createLeaderboardEntry({ userId: '123', userName: 'TestUser', rank: '1', total: 5, weekResults: [] }),
+    ]);
+
+    renderPage();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: /^share$/i }));
+
+    await waitFor(() => expect(shareMock).toHaveBeenCalled());
+    const call = shareMock.mock.calls[0][0];
+    expect(call.files).toHaveLength(1);
+    expect(call.files[0].type).toBe('image/png');
+    expect(call.url).toBeUndefined();
+  });
+
+  it('Share button falls back to link-share when the viewer is not on the leaderboard', async () => {
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
+    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
+    mockedGetLeaderboard.mockResolvedValue([
+      createLeaderboardEntry({ userId: '999', userName: 'SomeoneElse', rank: '1', total: 5, weekResults: [] }),
+    ]);
+
+    renderPage();
+    await screen.findByText(/SomeoneElse/i);
+    await userEvent.click(screen.getByRole('button', { name: /^share$/i }));
+
+    await waitFor(() => expect(shareMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: expect.stringMatching(/standings/i), url: window.location.href })
+    ));
+    expect(mockedToBlob).not.toHaveBeenCalled();
   });
 
   it('renders without crash when users have ragged weekResults', async () => {
@@ -90,7 +135,7 @@ describe('LeaderboardPage', () => {
     ]);
 
     renderPage();
-    await screen.findByText(/TestUser/i);
+    await screen.findByRole('table');
     expect(screen.getByText(/NewUser/i)).toBeInTheDocument();
   });
 

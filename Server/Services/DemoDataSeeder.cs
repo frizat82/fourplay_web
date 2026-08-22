@@ -600,12 +600,29 @@ public class DemoDataSeeder(
         if (adminUser == null) return;
 
         // Wipe all historical weeks so every deploy starts from a clean slate.
-        // Delete in FK order: picks → scores → spreads → weeks.
-        int[] historicalWeekNums = [.. Enumerable.Range(1, 17), .. Enumerable.Range(19, 4)];
-        await db.NflPicks.Where(p => p.Season == DemoSeason && historicalWeekNums.Contains(p.NflWeek)).ExecuteDeleteAsync();
-        await db.NflScores.Where(s => s.Season == DemoSeason && historicalWeekNums.Contains(s.NflWeek)).ExecuteDeleteAsync();
-        await db.NflSpreads.Where(s => s.Season == DemoSeason && historicalWeekNums.Contains(s.NflWeek)).ExecuteDeleteAsync();
-        await db.NflWeeks.Where(w => w.Season == DemoSeason && historicalWeekNums.Contains(w.NflWeek)).ExecuteDeleteAsync();
+        // Raw SQL bypasses EF Core ORM entirely — neither ExecuteDeleteAsync (silent no-op with
+        // int[] Contains on Npgsql) nor RemoveRange+SaveChangesAsync (cascade-FK confusion causes
+        // EF Core to skip the DELETE entirely) produce reliable results on the Neon dev PostgreSQL.
+        // DemoSeason is a compile-time constant; weekIn is a literal — no injection risk.
+        const string weekIn = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,19,20,21,22";
+        await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"NflPicks\" WHERE \"Season\" = {DemoSeason} AND \"NflWeek\" IN ({weekIn})");
+        await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"NflScores\" WHERE \"Season\" = {DemoSeason} AND \"NflWeek\" IN ({weekIn})");
+        await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"NflSpreads\" WHERE \"Season\" = {DemoSeason} AND \"NflWeek\" IN ({weekIn})");
+        await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"NflWeeks\" WHERE \"Season\" = {DemoSeason} AND \"NflWeek\" IN ({weekIn})");
+
+        // After deleting, reset the NflWeeks sequence so the next auto-generated Id
+        // is above the current max Id in the table. Without this, crash-loop cycles
+        // that insert-then-wipe rows exhaust sequence values into the range already
+        // held by rows from other seasons (e.g. Season 2026 rows with Ids 126-150
+        // inserted by NflScoresJob before DEMO_MODE was enabled), causing PK_NflWeeks
+        // violations on the very next insert.
+        await db.Database.ExecuteSqlRawAsync(
+            "SELECT setval('\"NflWeeks_Id_seq\"', GREATEST((SELECT MAX(\"Id\") FROM \"NflWeeks\"), 1))");
+
+        // Clear the change tracker so stale tracked entities from earlier in SeedAsync
+        // (e.g. the NflWeeks week-18 entity loaded in SeedDemoUsersAsync) don't
+        // interfere with the raw-SQL-deleted state.
+        db.ChangeTracker.Clear();
 
         // Admin (frizat) win pattern for weeks 1-17: W W L W W W W W W L W W W W W W W
         bool[] adminWins = [true, true, false, true, true, true, true, true, true, false, true, true, true, true, true, true, true];

@@ -7,7 +7,7 @@ import { createScores, createSpreadResponse } from '../../src/test/fixtures';
 
 const mockInviteLink = () => ({
   token: 'mocktokenabcdef1234567890abcdef12',
-  leagueId: 1,
+  leagueId: 99,
   leagueName: 'Test League',
   expiresAt: new Date(Date.now() + 86400000).toISOString(),
 });
@@ -350,6 +350,17 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    if (url.includes('/api/league/all-leagues-cost') && method === 'GET') {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { leagueId: TEST_LEAGUE_ID, leagueName: 'Test League', ownerUserName: 'commish', leagueType: 'Nfl', memberCount: 12, cost: 120 },
+        ]),
+      });
+      return;
+    }
+
     if (url.includes('/api/league/all-leagues') && method === 'GET') {
       void route.fulfill({
         status: 200,
@@ -396,8 +407,33 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    if (url.match(/\/api\/league\/\d+\/invite-link$/) && method === 'DELETE') {
+      void route.fulfill({ status: 204 });
+      return;
+    }
+
     if (url.match(/\/api\/league\/\d+\/invitations$/) && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/\d+\/membership-invites$/) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/membership-invites\/mine$/) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/membership-invites\/\d+\/(accept|decline)$/) && method === 'POST') {
+      void route.fulfill({ status: 204 });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/membership-invites\/\d+$/) && method === 'DELETE') {
+      void route.fulfill({ status: 204 });
       return;
     }
 

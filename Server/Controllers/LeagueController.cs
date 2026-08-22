@@ -36,7 +36,8 @@ public class LeagueController(
     ISpreadCalculatorBuilder spreadCalculatorBuilder,
     IEspnCacheService espnCacheService,
     IInvitationService invitationService,
-    ILeagueInviteLinkService leagueInviteLinkService) : ControllerBase {
+    ILeagueInviteLinkService leagueInviteLinkService,
+    ILeagueMembershipInviteService membershipInviteService) : ControllerBase {
     // Mirrors CfbPicksController.GetCurrentSlate's role for CFB — exposes NflCurrentWeekService's
     // existing off-season/pre-season fallback (already used internally by NflSpreadJob and
     // EspnCacheService) to the frontend, so nflAdapter.ts no longer falls back to
@@ -736,15 +737,39 @@ public class LeagueController(
 
     [HttpGet("{leagueId:int}/cost")]
     [ProducesResponseType(typeof(LeagueCostDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetLeagueCost(int leagueId) {
+    public async Task<IActionResult> GetLeagueCost(int leagueId, int? season = null) {
         var league = await repo.GetLeagueInfoAsync(leagueId);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != userId)
             return Forbid();
-        var count = await repo.GetLeagueMemberCountAsync(leagueId);
+        var count = season.HasValue
+            ? await repo.GetLeagueMemberCountAsync(leagueId, season.Value, league.LeagueType)
+            : await repo.GetLeagueMemberCountAsync(leagueId);
+        return Ok(new LeagueCostDto(count, ComputeLeagueCost(count)));
+    }
+
+    [HttpGet("all-leagues-cost")]
+    [Authorize(Roles = AppRoles.Administrator)]
+    [ProducesResponseType(typeof(List<AdminLeagueCostDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllLeaguesCost(int season) {
+        var leaguesTask = repo.GetAllLeaguesAsync();
+        var countsTask = repo.GetLeagueMemberCountsAsync(season);
+        var usersTask = repo.GetUsersAsync();
+        await Task.WhenAll(leaguesTask, countsTask, usersTask);
+        var leagues = leaguesTask.Result;
+        var counts = countsTask.Result;
+        var owners = usersTask.Result.ToDictionary(u => u.Id, u => u.UserName ?? u.Id);
+        return Ok(leagues.Select(l => {
+            var count = counts.GetValueOrDefault(l.Id, 0);
+            return new AdminLeagueCostDto(
+                l.Id, l.LeagueName, owners.GetValueOrDefault(l.OwnerUserId, l.OwnerUserId),
+                l.LeagueType, count, ComputeLeagueCost(count));
+        }).ToList());
+    }
+
+    private static decimal ComputeLeagueCost(int memberCount) {
         const int baseCost = 100, baseMembers = 10, perHead = 10;
-        var cost = baseCost + Math.Max(0, count - baseMembers) * perHead;
-        return Ok(new LeagueCostDto(count, cost));
+        return baseCost + Math.Max(0, memberCount - baseMembers) * perHead;
     }
 
     [HttpPut("{leagueId:int}/juice/{season:int}")]
@@ -864,18 +889,29 @@ public class LeagueController(
         var link = await leagueInviteLinkService.ValidateAsync(token);
         if (link is null) return NotFound();
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        if (await repo.UserExistsInLeagueAsync(userId, link.LeagueId))
+        if (!await TryAddUserToLeagueAsync(userId, link.LeagueId))
             return Conflict("You are already a member of this league.");
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Adds userId to leagueId. Returns false (no-op) if they're already a member — checked up
+    /// front, and again via the DbUpdateException race guard in case a concurrent request adds
+    /// them between the check and the insert.
+    /// </summary>
+    private async Task<bool> TryAddUserToLeagueAsync(string userId, int leagueId) {
+        if (await repo.UserExistsInLeagueAsync(userId, leagueId))
+            return false;
         try {
             await repo.AddLeagueUserMappingAsync(new LeagueUserMapping {
-                LeagueId = link.LeagueId,
+                LeagueId = leagueId,
                 UserId = userId,
                 DateCreated = DateTimeOffset.UtcNow,
             });
+            return true;
         } catch (DbUpdateException) {
-            return Conflict("You are already a member of this league.");
+            return false;
         }
-        return NoContent();
     }
 
     [HttpGet("{leagueId:int}/invite-link")]
@@ -894,6 +930,20 @@ public class LeagueController(
         return Ok(new LeagueInviteLinkDto(link.Token, link.LeagueId, league.LeagueName, link.ExpiresAt));
     }
 
+    [HttpDelete("{leagueId:int}/invite-link")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RevokeInviteLink(int leagueId) {
+        LeagueInfo league;
+        try { league = await repo.GetLeagueInfoAsync(leagueId); }
+        catch (InvalidOperationException) { return NotFound(); }
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return Forbid();
+        await leagueInviteLinkService.RevokeAsync(leagueId);
+        return NoContent();
+    }
+
     [HttpGet("{leagueId:int}/invitations")]
     [ProducesResponseType(typeof(IReadOnlyList<InvitationDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -905,38 +955,122 @@ public class LeagueController(
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
             return Forbid();
         var invitations = await invitationService.GetInvitationsByLeagueAsync(leagueId);
-        return Ok(invitations.Select(i => new InvitationDto {
-            Id = i.Id,
-            Email = i.Email,
-            CreatedAt = i.CreatedAt,
-            ExpiresAt = i.ExpiresAt,
-            IsUsed = i.IsUsed,
-            IsExpired = i.IsExpired,
-            IsValid = i.IsValid,
-            UsedAt = i.UsedAt,
-        }).ToList());
+        return Ok(invitations.ToDtoList());
     }
 
-    [HttpPost("{leagueId:int}/invite")]
-    [ProducesResponseType(typeof(InvitationDto), StatusCodes.Status200OK)]
+    [HttpGet("{leagueId:int}/membership-invites")]
+    [ProducesResponseType(typeof(IReadOnlyList<MembershipInviteStatusDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> InviteToLeague(int leagueId, [FromBody] LeagueInviteDto dto) {
-        var league = await repo.GetLeagueInfoAsync(leagueId);
+    public async Task<ActionResult<IReadOnlyList<MembershipInviteStatusDto>>> GetLeagueMembershipInvites(int leagueId) {
+        LeagueInfo league;
+        try { league = await repo.GetLeagueInfoAsync(leagueId); }
+        catch (InvalidOperationException) { return NotFound(); }
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
             return Forbid();
-        var invitation = await invitationService.CreateInvitationAsync(dto.Email, callerId, leagueId, baseUrl: dto.BaseUrl);
-        return Ok(new InvitationDto {
-            Id = invitation.Id,
-            InvitationCode = invitation.InvitationCode,
-            Email = invitation.Email,
-            LeagueId = invitation.LeagueId,
-            IsUsed = invitation.IsUsed,
-            IsExpired = invitation.IsExpired,
-            IsValid = invitation.IsValid,
-            CreatedAt = invitation.CreatedAt,
-            ExpiresAt = invitation.ExpiresAt,
-        });
+        var invites = await membershipInviteService.GetByLeagueAsync(leagueId);
+        return Ok(invites.ToStatusDtoList());
+    }
+
+    [HttpPost("{leagueId:int}/invite")]
+    [ProducesResponseType(typeof(LeagueInviteResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> InviteToLeague(int leagueId, [FromBody] LeagueInviteDto dto) {
+        LeagueInfo league;
+        try { league = await repo.GetLeagueInfoAsync(leagueId); }
+        catch (InvalidOperationException) { return NotFound(); }
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return Forbid();
+
+        // Someone who already has an account (owns a league or belongs to one) must be
+        // addable to a NEW league directly — routing them through CreateInvitationAsync would
+        // require them to "register" with an email that already exists, which always fails.
+        // Unlike a brand-new user (registering IS joining, one step), an existing user gets a
+        // pending invite they must explicitly accept — no email; it surfaces as a banner on
+        // their next login. See LeagueMembershipInvite.
+        var existingUser = await userManager.FindByEmailAsync(dto.Email);
+        if (existingUser != null) {
+            if (await repo.UserExistsInLeagueAsync(existingUser.Id, leagueId))
+                return Conflict($"{dto.Email} is already a member of this league.");
+            await membershipInviteService.CreateOrReopenAsync(leagueId, existingUser.Id, callerId);
+            return Ok(new LeagueInviteResultDto(dto.Email, LeagueInviteOutcome.ExistingUserInvitePending));
+        }
+
+        await invitationService.CreateInvitationAsync(dto.Email, callerId, leagueId, baseUrl: dto.BaseUrl);
+        return Ok(new LeagueInviteResultDto(dto.Email, LeagueInviteOutcome.NewUserInvitationSent));
+    }
+
+    [HttpGet("membership-invites/mine")]
+    [ProducesResponseType(typeof(IReadOnlyList<PendingMembershipInviteDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<PendingMembershipInviteDto>>> GetMyPendingMembershipInvites() {
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var invites = await membershipInviteService.GetPendingForUserAsync(callerId);
+        return Ok(invites.ToPendingDtoList());
+    }
+
+    [HttpPost("membership-invites/{id:int}/accept")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AcceptMembershipInvite(int id) {
+        var (invite, error) = await LoadOwnPendingMembershipInviteAsync(id);
+        if (error is not null) return error;
+
+        // TryAddUserToLeagueAsync no-ops (returns false) if they're already a member via another
+        // path (e.g. a share link, or a second concurrent accept) — but the invite's goal state
+        // (membership) is already achieved either way, so mark it Accepted rather than leaving it
+        // stuck Pending forever with no way to resolve it short of a commissioner cancel.
+        await TryAddUserToLeagueAsync(invite!.InvitedUserId, invite.LeagueId);
+        await membershipInviteService.MarkAcceptedAsync(id);
+        return NoContent();
+    }
+
+    [HttpPost("membership-invites/{id:int}/decline")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeclineMembershipInvite(int id) {
+        var (_, error) = await LoadOwnPendingMembershipInviteAsync(id);
+        if (error is not null) return error;
+
+        await membershipInviteService.MarkDeclinedAsync(id);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Shared Accept/Decline preamble: 404 if the invite doesn't exist, 403 if it isn't the
+    /// caller's own invite, 409 if it's already been responded to.
+    /// </summary>
+    private async Task<(LeagueMembershipInvite? invite, IActionResult? error)> LoadOwnPendingMembershipInviteAsync(int id) {
+        var invite = await membershipInviteService.GetByIdAsync(id);
+        if (invite is null) return (null, NotFound());
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (invite.InvitedUserId != callerId) return (null, Forbid());
+        if (invite.Status != MembershipInviteStatus.Pending)
+            return (null, Conflict("This invite has already been responded to."));
+        return (invite, null);
+    }
+
+    [HttpDelete("membership-invites/{id:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CancelMembershipInvite(int id) {
+        var invite = await membershipInviteService.GetByIdAsync(id);
+        if (invite is null) return NotFound();
+        LeagueInfo league;
+        try { league = await repo.GetLeagueInfoAsync(invite.LeagueId); }
+        catch (InvalidOperationException) { return NotFound(); }
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return Forbid();
+
+        await membershipInviteService.DeleteAsync(id);
+        return NoContent();
     }
 
 }

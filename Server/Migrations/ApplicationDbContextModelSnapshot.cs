@@ -281,6 +281,45 @@ namespace FourPlayWebApp.Server.Migrations
                     b.ToTable("LeagueJuiceMapping");
                 });
 
+            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueMembershipInvite", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InvitedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InvitedUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("LeagueId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvitedByUserId");
+
+                    b.HasIndex("InvitedUserId");
+
+                    b.HasIndex("LeagueId", "InvitedUserId")
+                        .IsUnique();
+
+                    b.ToTable("LeagueMembershipInvites");
+                });
+
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueUserMapping", b =>
                 {
                     b.Property<int>("Id")
@@ -1009,6 +1048,32 @@ namespace FourPlayWebApp.Server.Migrations
                         .HasForeignKey("LeagueId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("League");
+                });
+
+            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueMembershipInvite", b =>
+                {
+                    b.HasOne("FourPlayWebApp.Server.Models.Identity.ApplicationUser", "InvitedByUser")
+                        .WithMany()
+                        .HasForeignKey("InvitedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("FourPlayWebApp.Server.Models.Identity.ApplicationUser", "InvitedUser")
+                        .WithMany()
+                        .HasForeignKey("InvitedUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FourPlayWebApp.Server.Models.Data.LeagueInfo", "League")
+                        .WithMany()
+                        .HasForeignKey("LeagueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("InvitedByUser");
+
+                    b.Navigation("InvitedUser");
 
                     b.Navigation("League");
                 });

@@ -112,17 +112,19 @@ CI runs on every PR to `dev` and `main`.
 
 ### Railway (Backend)
 
-- Connects to this repo, deploys `Server/` on push to `main`
-- Set all env vars from `.env.example` in Railway service settings
+- Connects to this repo; the `development` environment auto-deploys `Server/` on push to `dev`, the `production` environment on push to `main`
+- Set all env vars from `.env.example` in Railway service settings (per environment)
 - `RAILWAY_URL` must be set in Vercel (see below)
 
 ### Vercel (Frontend)
 
-- Connects to this repo, deploys `Client.React/` on push to `main`
+- Connects to this repo; `dev.ivleague.xyz` / `cfb.dev.ivleague.xyz` track pushes to `dev`, `ivleague.xyz` / `cfb.ivleague.xyz` track pushes to `main`
 - Set `RAILWAY_URL` to your Railway service URL (e.g. `https://yourapp.up.railway.app`)
 - Do **not** set `VITE_API_BASE_URL` — leave it unset so the Vercel proxy handles `/api/*` routing
 
 The `vercel.json` rewrites `/api/*` to Railway at the CDN layer, keeping cookies same-origin (required for Safari ITP compatibility).
+
+If a push to `dev` or `main` doesn't show up on Railway/Vercel within a minute or two, check each platform's deployment history for the commit — an entry that's `SKIPPED`/`FAILED` means the platform saw the push but declined to build; no entry at all for that commit means the trigger never fired (check `gh api repos/<owner>/<repo>/deployments?sha=<sha>` — both platforms register a GitHub Deployment record when they pick up a push, so a missing record here is a fast way to tell "never triggered" from "triggered but stuck").
 
 ## Branch Flow
 
@@ -132,6 +134,7 @@ feature/* → PR → dev → PR → main
 
 - No direct pushes to `main` or `dev`
 - PRs require passing CI (lint, type-check, unit tests, build)
+- **Merge with a regular merge, never squash** — squash merges have been observed to not reliably trigger the Railway/Vercel deploy webhooks on this repo; squash merging is disabled repo-wide as a result
 
 ## Contributing
 

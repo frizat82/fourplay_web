@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { forgotPassword } from '../../api/auth';
 import { useToast } from '../../services/toast';
+import { buildAbsoluteUrl } from '../../utils/url';
 
 const schema = z.object({
   email: z.string().email('Invalid email'),
@@ -27,7 +28,7 @@ export default function ForgotPasswordPage() {
     try {
       await forgotPassword({
         email: values.email,
-        resetUrl: new URL('/account/resetpassword', window.location.origin).toString(),
+        resetUrl: buildAbsoluteUrl('/account/resetpassword'),
       });
       navigate('/account/forgotpasswordconfirmation', { replace: true });
     } catch {

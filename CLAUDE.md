@@ -25,8 +25,18 @@ Short version: NFL regular season = 4 picks; postseason decreases 3→3→2→1.
 2. A test asserting the wrong value is WORSE than no test — false confidence hides bugs
 3. Tests must assert THE RULE, not the current (possibly broken) implementation
 
+### EF Core Bulk Operations — Provider Gotcha
+**Never use `ExecuteDeleteAsync` / `ExecuteUpdateAsync` with a local `int[]` / `List<T>` `.Contains(...)` filter.** It translates correctly in SELECT queries and SQLite, but silently no-ops on Npgsql (PostgreSQL), leaving rows in place. Use `ToListAsync` + `RemoveRange` + `SaveChangesAsync` instead.
+
+**Any test covering a bulk EF Core operation MUST use real PostgreSQL (Testcontainers), not SQLite.** A SQLite-passing test gives false confidence — it will not catch Npgsql translation failures that crash Railway deploys.
+
 ### The Seeder Is Production-Critical
 `DemoDataSeeder` seeds the demo DB that Playwright e2e tests run against. After any pick logic change: re-verify seeder counts AND run `npm run test:e2e:demo`. Never fudge `ExpectedPickCount`.
+
+**After merging any seeder change to `dev`:** check Railway dev deploy status before opening the `dev → main` PR. A crashed Railway dev is a blocker.
+
+### Migrations Crash-Loop the App On Purpose — This Is Intentional
+`Server/Program.cs` checks `GetPendingMigrations()` at startup outside Development and **throws, crash-looping the deployment**, rather than serve traffic against a stale schema. This has already caught a real incident (a migration that was never applied reached prod code that assumed the new table existed) — don't "fix" this guard by relaxing it. The `DB Migrate` GitHub Actions job (`.github/workflows/migrate.yml`) runs `dotnet ef database update` **unconditionally on every push to `dev`/`main`** (no `paths:` filter) for the same reason: a path-filtered trigger missed a migration once already, because the push that added it never fired the filtered workflow (see Branch Rules below). `dotnet ef database update` is idempotent — a ~5s no-op when nothing's pending — so this costs nothing on pushes with no migration changes.
 
 ### Test Rot Prevention
 When fixing a bug: grep existing tests for old wrong values before shipping. When changing `GetRequiredPicks`/`GetCfbRequiredPicks`: read ALL test files that reference the function, update expected values first, then fix the implementation.
@@ -81,7 +91,9 @@ When fixing a bug: grep existing tests for old wrong values before shipping. Whe
 ## CRITICAL: Branch Rules
 - **NEVER push or commit directly to `main`** — all changes go through a PR
 - Branch flow: `feature/*` → PR → `dev` → PR → `main`
+- **Always merge PRs with a regular merge, never squash.** Squash merges have been observed to not reliably fire GitHub Actions push-triggered workflows or the Railway/Vercel deploy webhooks on this repo — a squash-merged PR sat un-deployed with zero error for 30+ minutes before the gap was found. `allow_squash_merge` is disabled repo-wide as a hard guard; don't re-enable it. To diagnose a deploy that isn't showing up: `gh api repos/<owner>/<repo>/deployments?sha=<sha>` — a missing record means the trigger never fired (not "slow" or "failed"); compare against a commit that's known to have deployed.
 - Before a `dev`→`main` cutover (season launch or major release), run `/prod-live-test` — the full live E2E prod-readiness gate (real users, real ESPN data, real emails, real job schedule on staging)
+- **Destructive git/branch cleanup must use the specifically-approved criterion** (e.g. "merged into `dev`/`main`", checked via the safe `git branch -d`, which refuses on unmerged commits) — never substitute a looser heuristic (e.g. remote-tracking `[gone]` status + force `-D`) because it's more convenient, and never let a second agent re-derive scope from an ambiguous instruction. If a subagent needs to continue prior work, resume that same agent via SendMessage — spawning a fresh agent loses its context and it will re-infer (and can get wrong) what was already approved.
 
 ## Task Tracking
 - Use `bd` (beads) — `LD_LIBRARY_PATH=~/.local/lib BEADS_DIR=~/.beads ~/.local/bin/bd`
@@ -209,3 +221,12 @@ The login endpoint is rate-limited to 5 requests/minute per IP (`Program.cs`). E
 
 ### Chrome DevTools MCP
 `mcp__plugin_chrome-devtools-mcp_chrome-devtools__*` tools. Browser emulates iPhone (390×844) by default. Use `list_network_requests` to diagnose API failures before reading code.
+
+### Claude-in-Chrome / Browser Automation
+`mcp__claude-in-chrome__*`'s `computer` tool (coordinate-based `left_click`/`type`) can **silently no-op** on this app's React-controlled inputs and buttons — it reports success, no error is thrown, but no state actually changes and no network request fires. This has burned real verification time (a login form and Accept/Decline buttons both appeared to "work" while doing nothing). Prefer `form_input` to set field values, and/or `javascript_tool` to set values via the native property setter + dispatch `input`/`change` events, then call `element.click()` directly — both are reliable where coordinate clicks aren't. Always confirm the expected request actually fired with `read_network_requests` before trusting a UI state change; don't infer success from a screenshot or `get_page_text` alone.
+
+### Live-verifying against `dev.ivleague.xyz` / `cfb.dev.ivleague.xyz`
+For non-admin checks (regular pages, invite flows, banners), log in as one of `DemoDataSeeder`'s seeded `@demo.local` users (Alice/Bob/Carlos/Dana/Eve) — this password is intentionally public/shared since these are fake, non-production identities; see `Server/Services/DemoDataSeeder.cs`'s `DemoUsers`/seed-password constant. For anything requiring the `Administrator` role, the real credential lives in the local (gitignored) `.env.backend` / Railway's dev environment variables — **never hardcode, guess-and-check, or write the real admin password into any file in this repo or into CLAUDE.md**, even a local one; ask the user for it if it's not already in your session context.
+
+## CRITICAL: `ADMIN_PASSWORD` — never let an example placeholder become a real deployed value
+`UserManagerJob.SyncAdminPassword` (`Server/Jobs/UserManagerJob.cs`) force-overwrites the real `Administrator` account's password to match whatever `ADMIN_PASSWORD` is configured, on **every app startup** (a one-shot Quartz trigger ~2 min after boot — it is not on-demand re-triggerable via the Job Manager API once it has fired once, since Quartz drops a non-durable one-shot job after its only trigger completes; re-running it requires a full service restart/redeploy). This already caused a real incident: `.env.backend.example`'s `ADMIN_PASSWORD` placeholder had been copy-pasted verbatim into Railway's dev environment variable, so the real admin account's live password was identical to a value published in this public repo's source/example files. Never set a real environment's `ADMIN_PASSWORD` to any value that appears anywhere in tracked source (including `.env.backend.example` and `DemoDataSeeder.cs`'s demo-user password) — always generate a unique value per real environment. To rotate: update the Railway variable for that environment, then restart/redeploy the service (not the one-shot job API) to force the sync, and verify via a login attempt with the old value (must fail) before considering it done.

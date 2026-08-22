@@ -24,8 +24,12 @@ async function setupRegistrationRoutes(page: Page, succeed = true) {
           body: JSON.stringify({ isSuccess: true, errors: [] }),
         });
       } else {
+        // The real backend (AuthController.CreateUser) returns BadRequest — 400 — for a bad
+        // invite code, never 200 with isSuccess:false. Mocking 200 here let RegisterPage ship
+        // with no try/catch around createUser() for months: the error path silently did nothing
+        // on the real site (confirmed live — 3 unhandled AxiosErrors, no toast at all).
         void route.fulfill({
-          status: 200,
+          status: 400,
           contentType: 'application/json',
           body: JSON.stringify({ isSuccess: false, errors: ['Invalid invitation code'] }),
         });
@@ -60,6 +64,33 @@ test.describe('Registration flow', () => {
     await page.waitForURL('**/account/registerconfirmation**', { timeout: 10000 });
     await expect(page.getByRole('heading', { name: /register confirmation/i })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('newuser@example.com')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('sends an absolute confirmationUrl built from the page origin', async ({ page }) => {
+    // Regression guard: AuthController.CreateUser used to build the confirmation-email link
+    // from a server config value (App:BaseUrl) that was never set on Railway, so every
+    // confirmation link was a dead relative path. The link is now built entirely from this
+    // client-supplied absolute URL — if this drifts back to a relative path, new users will
+    // be unable to confirm their email and will be locked out with "not allowed to sign in".
+    let capturedBody: Record<string, unknown> | undefined;
+    await page.route('**/api/auth/create-user', (route) => {
+      capturedBody = route.request().postDataJSON();
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ isSuccess: true, errors: [] }),
+      });
+    });
+    await page.goto(`/account/register?inviteCode=${INVITE_CODE}`);
+
+    await page.getByLabel(/username/i).fill('newuser');
+    await page.getByLabel(/^email/i).fill('newuser@example.com');
+    await page.getByLabel(/^password$/i).fill('Test@1234');
+    await page.getByLabel(/confirm password/i).fill('Test@1234');
+    await page.getByRole('button', { name: /^register$/i }).click();
+
+    await page.waitForURL('**/account/registerconfirmation**', { timeout: 10000 });
+    expect(capturedBody?.confirmationUrl).toBe(`${new URL(page.url()).origin}/account/confirmemail`);
   });
 
   test('error path: invalid invite code shows error toast', async ({ page }) => {

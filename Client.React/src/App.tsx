@@ -59,6 +59,7 @@ import { RequireAdmin, RequireAuth } from './services/auth';
 import AdminJobManagerPage from './pages/admin/JobManagerPage';
 import AdminUserManagementPage from './pages/admin/UserManagementPage';
 import AdminInvitationsPage from './pages/admin/InvitationsPage';
+import AdminLeagueCostsPage from './pages/admin/LeagueCostsPage';
 import LogoutPage from './pages/LogoutPage';
 import AuthPage from './pages/AuthPage';
 import RulesPage from './pages/RulesPage';
@@ -83,6 +84,10 @@ export default function App() {
       <Route path="/account/resendemailconfirmation" caseSensitive={false} element={<ResendEmailConfirmationPage />} />
       <Route path="/account/invaliduser" caseSensitive={false} element={<InvalidUserPage />} />
       <Route path="/account/lockout" caseSensitive={false} element={<LockoutPage />} />
+      {/* Not RequireAuth-guarded on purpose: logout clears auth state as part of its own
+          flow, which would otherwise race against RequireAuth's own reactive redirect to
+          login and strand the user there instead of on home. See App.logout.test.tsx. */}
+      <Route path="/logout" element={<LogoutPage />} />
 
       <Route
         element={
@@ -97,7 +102,6 @@ export default function App() {
         <Route path="/scores" element={<ScoresRoute />} />
         <Route path="/leaderboard" element={<LeaderboardRoute />} />
         <Route path="/auth" element={<AuthPage />} />
-        <Route path="/logout" element={<LogoutPage />} />
 
         <Route
           path="/admin"
@@ -129,6 +133,15 @@ export default function App() {
           element={
             <RequireAdmin>
               <AdminInvitationsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/leagueCosts"
+          caseSensitive={false}
+          element={
+            <RequireAdmin>
+              <AdminLeagueCostsPage />
             </RequireAdmin>
           }
         />

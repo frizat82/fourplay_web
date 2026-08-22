@@ -16,7 +16,10 @@ const authState: { user: { userId: string; name: string; claims: unknown[] } | n
 };
 vi.mock('../services/auth', () => ({ useAuth: () => authState }));
 
-const sessionMock = { reloadLeagues: vi.fn().mockResolvedValue(undefined) };
+const sessionMock = {
+  reloadLeagues: vi.fn().mockResolvedValue(undefined),
+  availableLeagues: [] as { leagueId: number }[],
+};
 vi.mock('../services/session', () => ({ useSession: () => sessionMock }));
 
 vi.mock('../api/league', () => ({
@@ -40,6 +43,7 @@ describe('JoinLeaguePage', () => {
   beforeEach(() => {
     navigateMock.mockReset();
     sessionMock.reloadLeagues.mockResolvedValue(undefined);
+    sessionMock.availableLeagues = [];
     authState.user = null;
   });
 
@@ -90,6 +94,21 @@ describe('JoinLeaguePage', () => {
     authState.user = { userId: 'user-1', name: 'Alice', claims: [] };
     renderWithToken('tok123');
     await waitFor(() => expect(screen.getByRole('button', { name: /join/i })).toBeInTheDocument());
+  });
+
+  it('shows already-a-member message and Go to Dashboard when user is already in the league', async () => {
+    vi.mocked(validateInviteLink).mockResolvedValue({
+      token: 'tok123',
+      leagueId: 1,
+      leagueName: 'My NFL League',
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    });
+    authState.user = { userId: 'user-1', name: 'Alice', claims: [] };
+    sessionMock.availableLeagues = [{ leagueId: 1 }];
+    renderWithToken('tok123');
+    await waitFor(() => expect(screen.getByText(/already a member/i)).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /join/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /go to dashboard/i })).toBeInTheDocument();
   });
 
   it('calls joinViaLink and navigates to dashboard on success', async () => {

@@ -26,6 +26,9 @@ export default function LoginPage() {
     const raw = params.get('returnUrl') ?? '/dashboard';
     if (!raw.startsWith('/')) return '/dashboard';
     if (raw.startsWith('//')) return '/dashboard';
+    // /logout is a public route (not RequireAuth-guarded — see App.tsx) that clears auth state
+    // as soon as it mounts. A crafted ?returnUrl=/logout would otherwise log a freshly
+    // authenticated user straight back out.
     if (raw === '/logout') return '/dashboard';
     return raw;
   }, [params]);
@@ -55,6 +58,11 @@ export default function LoginPage() {
       rememberMe: values.rememberMe ?? false,
     });
     if (!result.succeeded) {
+      if (result.isNotAllowed) {
+        toast.push('Please confirm your email before logging in. Sending you to resend it…', 'warning');
+        navigate(`/account/resendemailconfirmation?email=${encodeURIComponent(values.email)}`);
+        return;
+      }
       toast.push(result.message ?? 'Login failed', 'error');
       return;
     }

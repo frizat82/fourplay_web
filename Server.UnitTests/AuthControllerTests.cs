@@ -69,7 +69,9 @@ public class AuthControllerTests
         IWebHostEnvironment? environment                = null,
         IInvitationService? invitationService           = null,
         ILeagueInviteLinkService? leagueInviteLinkService = null,
-        ApplicationDbContext? db                        = null)
+        ApplicationDbContext? db                        = null,
+        IEmailSender<ApplicationUser>? emailSenderApplication = null,
+        IConfiguration? config                          = null)
     {
         userManager     ??= BuildUserManager();
         signInManager   ??= BuildSignInManager(userManager);
@@ -78,6 +80,8 @@ public class AuthControllerTests
         environment     ??= BuildDevEnvironment();
         invitationService ??= Substitute.For<IInvitationService>();
         leagueInviteLinkService ??= Substitute.For<ILeagueInviteLinkService>();
+        emailSenderApplication ??= Substitute.For<IEmailSender<ApplicationUser>>();
+        config          ??= Substitute.For<IConfiguration>();
 
         db ??= new ApplicationDbContext(
             new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -88,10 +92,10 @@ public class AuthControllerTests
             userManager,
             signInManager,
             Substitute.For<IEmailSender>(),
-            Substitute.For<IEmailSender<ApplicationUser>>(),
+            emailSenderApplication,
             invitationService,
             NullLogger<AuthController>.Instance,
-            Substitute.For<IConfiguration>(),
+            config,
             refreshTokenService,
             jwtTokenService,
             environment,
@@ -744,6 +748,36 @@ public class AuthControllerTests
     }
 
     [Fact]
+    public async Task CreateUser_WithInviteLinkToken_SendsConfirmationEmail_UsingClientSuppliedUrl()
+    {
+        // frizat: confirmation link must be built from the client-supplied ConfirmationUrl
+        // (same pattern as ForgotPassword/RequestEmailConfirmation), not server IConfiguration
+        // — App:BaseUrl is never configured on Railway, so that link was always broken.
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("brand-new@test.com").Returns((ApplicationUser?)null);
+        userManager.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>())
+            .Returns(IdentityResult.Success);
+        userManager.GenerateEmailConfirmationTokenAsync(Arg.Any<ApplicationUser>())
+            .Returns("confirm-token");
+
+        var link = new LeagueInviteLink { Token = "valid-token", LeagueId = 7, ExpiresAt = DateTimeOffset.UtcNow.AddHours(1) };
+        var linkService = Substitute.For<ILeagueInviteLinkService>();
+        linkService.ValidateAsync("valid-token").Returns(link);
+
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(
+            userManager: userManager, leagueInviteLinkService: linkService,
+            db: BuildDb("CreateUser_LinkFlow_ConfirmUrl"), emailSenderApplication: emailSender);
+
+        await AssertConfirmationEmailSentAsync(controller, emailSender, "brand-new@test.com", new CreateUserRequest
+        {
+            Username = "brandnew", Email = "brand-new@test.com", Password = "Pass1!", Code = "",
+            InviteLinkToken = "valid-token",
+            ConfirmationUrl = "https://dev.ivleague.xyz/account/confirmemail",
+        });
+    }
+
+    [Fact]
     public async Task CreateUser_WithCode_NoInviteLinkToken_UsesExistingCodePath()
     {
         // Regression: the original invitation-code path must still work after adding the link path
@@ -763,5 +797,153 @@ public class AuthControllerTests
         Assert.False(dto.IsSuccess);
         // Link service was never touched
         await linkService.DidNotReceive().ValidateAsync(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task CreateUser_WithCode_ValidInvitation_SendsConfirmationEmail_UsingClientSuppliedUrl()
+    {
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("invited@test.com").Returns((ApplicationUser?)null);
+        userManager.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>())
+            .Returns(IdentityResult.Success);
+        userManager.GenerateEmailConfirmationTokenAsync(Arg.Any<ApplicationUser>())
+            .Returns("confirm-token");
+
+        var invitation = new Invitation { InvitationCode = "good-code", Email = "invited@test.com", LeagueId = 8 };
+        var invSvc = Substitute.For<IInvitationService>();
+        invSvc.ValidateInvitationAsync("good-code").Returns(invitation);
+        invSvc.MarkInvitationAsUsedAsync("good-code", Arg.Any<string>()).Returns(true);
+
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(
+            userManager: userManager, invitationService: invSvc,
+            db: BuildDb("CreateUser_CodeFlow_ConfirmUrl"), emailSenderApplication: emailSender);
+
+        await AssertConfirmationEmailSentAsync(controller, emailSender, "invited@test.com", new CreateUserRequest
+        {
+            Username = "invited", Email = "invited@test.com", Password = "Pass1!", Code = "good-code",
+            ConfirmationUrl = "https://dev.ivleague.xyz/account/confirmemail",
+        });
+    }
+
+    [Fact]
+    public async Task CreateUser_WhenAllowedOriginsUnconfigured_MissingConfirmationUrl_DoesNotSendConfirmationEmail_ButStillCreatesAccount()
+    {
+        // This exercises the ALLOWED_ORIGINS-unset case only (Development/local — Program.cs
+        // fails startup otherwise), where IsAllowedConfirmationOrigin lets everything through
+        // and SendEmailConfirmationLinkAsync's own guard is what catches the empty URL: skip
+        // the send and log, but the account itself must still be created successfully. In any
+        // environment where ALLOWED_ORIGINS *is* configured (i.e. every real deploy), an empty
+        // ConfirmationUrl is instead rejected earlier with BadRequest — see
+        // CreateUser_WhenAllowedOriginsConfigured_RejectsConfirmationUrlOnUntrustedDomain.
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("invited@test.com").Returns((ApplicationUser?)null);
+        userManager.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>())
+            .Returns(IdentityResult.Success);
+
+        var invitation = new Invitation { InvitationCode = "good-code", Email = "invited@test.com" };
+        var invSvc = Substitute.For<IInvitationService>();
+        invSvc.ValidateInvitationAsync("good-code").Returns(invitation);
+        invSvc.MarkInvitationAsUsedAsync("good-code", Arg.Any<string>()).Returns(true);
+
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(
+            userManager: userManager, invitationService: invSvc,
+            db: BuildDb("CreateUser_MissingConfirmUrl"), emailSenderApplication: emailSender);
+
+        var result = await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "invited", Email = "invited@test.com", Password = "Pass1!", Code = "good-code",
+            ConfirmationUrl = "",
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.True(Assert.IsType<CreateUserResponse>(ok.Value).IsSuccess);
+        await emailSender.DidNotReceive().SendConfirmationLinkAsync(
+            Arg.Any<ApplicationUser>(), Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task CreateUser_WhenAllowedOriginsConfigured_RejectsConfirmationUrlOnUntrustedDomain()
+    {
+        // Security: without this check, an anonymous caller can register an account for
+        // ANY email address with an attacker-controlled ConfirmationUrl, and our server will
+        // send a real, branded "confirm your email" message pointing at a phishing domain.
+        var config = Substitute.For<IConfiguration>();
+        config["ALLOWED_ORIGINS"].Returns("https://dev.ivleague.xyz,https://ivleague.com");
+
+        var invitation = new Invitation { InvitationCode = "good-code", Email = "victim@test.com" };
+        var invSvc = Substitute.For<IInvitationService>();
+        invSvc.ValidateInvitationAsync("good-code").Returns(invitation);
+
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var userManager = BuildUserManager();
+        var controller = BuildController(
+            userManager: userManager, invitationService: invSvc, config: config,
+            db: BuildDb("CreateUser_UntrustedOrigin"), emailSenderApplication: emailSender);
+
+        var result = await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "attacker", Email = "victim@test.com", Password = "Pass1!", Code = "good-code",
+            ConfirmationUrl = "https://evil.example/steal?userId=",
+        });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.False(Assert.IsType<CreateUserResponse>(bad.Value).IsSuccess);
+        await userManager.DidNotReceive().CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>());
+        await emailSender.DidNotReceive().SendConfirmationLinkAsync(
+            Arg.Any<ApplicationUser>(), Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task CreateUser_WhenAllowedOriginsConfigured_AcceptsConfirmationUrlOnTrustedDomain()
+    {
+        var config = Substitute.For<IConfiguration>();
+        config["ALLOWED_ORIGINS"].Returns("https://dev.ivleague.xyz,https://ivleague.com");
+
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("invited@test.com").Returns((ApplicationUser?)null);
+        userManager.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>())
+            .Returns(IdentityResult.Success);
+
+        var invitation = new Invitation { InvitationCode = "good-code", Email = "invited@test.com" };
+        var invSvc = Substitute.For<IInvitationService>();
+        invSvc.ValidateInvitationAsync("good-code").Returns(invitation);
+        invSvc.MarkInvitationAsUsedAsync("good-code", Arg.Any<string>()).Returns(true);
+
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(
+            userManager: userManager, invitationService: invSvc, config: config,
+            db: BuildDb("CreateUser_TrustedOrigin"), emailSenderApplication: emailSender);
+
+        var result = await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "invited", Email = "invited@test.com", Password = "Pass1!", Code = "good-code",
+            ConfirmationUrl = "https://dev.ivleague.xyz/account/confirmemail",
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.True(Assert.IsType<CreateUserResponse>(ok.Value).IsSuccess);
+    }
+
+    // ── Shared helpers for the confirmation-email tests above ──────────────────
+
+    private static ApplicationDbContext BuildDb(string namePrefix) =>
+        new(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(namePrefix + "_" + Guid.NewGuid())
+            .Options);
+
+    private static async Task AssertConfirmationEmailSentAsync(
+        AuthController controller,
+        IEmailSender<ApplicationUser> emailSender,
+        string expectedEmail,
+        CreateUserRequest request)
+    {
+        await controller.CreateUser(request);
+
+        await emailSender.Received(1).SendConfirmationLinkAsync(
+            Arg.Any<ApplicationUser>(),
+            expectedEmail,
+            Arg.Is<string>(link => link.StartsWith($"{request.ConfirmationUrl}?")));
     }
 }
