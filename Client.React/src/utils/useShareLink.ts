@@ -1,4 +1,5 @@
 import { useToast } from '../services/toast';
+import { shareViaNavigator } from './nativeShare';
 
 /**
  * Native-share-with-clipboard-fallback, shared by every "Share"/"Copy" button in the app.
@@ -17,9 +18,8 @@ export function useShareLink() {
   };
 
   const share = (title: string, url: string) => {
-    if (navigator.share) {
-      // Cancelling the native share sheet rejects with AbortError — routine, not an error.
-      navigator.share({ title, url }).catch(() => {});
+    if (typeof navigator.share === 'function') {
+      shareViaNavigator({ title, url });
     } else {
       void copy(url);
     }
