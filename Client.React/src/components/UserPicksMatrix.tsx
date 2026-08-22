@@ -13,7 +13,6 @@ import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import type { NflPickDto, SpreadCalculationResponse } from '../types/picks';
-import TeamHelmet from './sports/TeamHelmet';
 import { stickyColumnSx } from '../utils/tableStyles';
 
 interface UserPicksMatrixProps {
@@ -75,9 +74,13 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
             color={result ? 'success' : 'error'}
           />
         )}
-        {/* frizat: the team logo alone was hard to identify at a glance against the win/loss
-            color-coded background — show the abbreviation too. */}
-        <TeamHelmet abbr={pick.team} size={36} showLabel />
+        {/* frizat: the helmet logo + 9px label was hard to read at a glance against the
+            win/loss color-coded background — text-only, much larger, reads clearly instead.
+            CFB abbreviations run up to 4 chars (UTSA, UNLV, WASH) vs NFL's 2-3 — shrink to fit
+            the fixed 60px badge width rather than overflowing it. */}
+        <Typography sx={{ fontSize: pick.team.length > 3 ? 16 : 22, fontWeight: 800, letterSpacing: '0.02em' }}>
+          {pick.team}
+        </Typography>
         {result === true && (
           <CheckCircleIcon
             fontSize="small"
