@@ -33,28 +33,56 @@ public class UserManagerJob(
         }
 
         var adminUserEmail = configuration["ADMIN_EMAIL"] ?? throw new InvalidOperationException("ADMIN_EMAIL configuration is required");
-        await CreateUser(adminUserEmail);
-        await SyncAdminPassword(adminUserEmail);
+        var wasNewlyCreated = await CreateUser(adminUserEmail);
+        await SyncAdminPassword(adminUserEmail, wasNewlyCreated);
         await AddUserToRole(adminUserEmail, adminRoleName);
         Log.Information("UserManagerJob completed successfully");
     }
 
     /// <summary>
-    /// Sync admin password from configuration on every startup so env var changes take effect on redeploy.
+    /// Sync admin password from configuration. Only overwrites the password hash when the
+    /// account was just bootstrapped this run (<paramref name="isNewAccount"/>), or when the
+    /// operator has explicitly opted into a forced resync via ADMIN_FORCE_PASSWORD_SYNC=true.
     /// </summary>
     // frizat: RemovePasswordAsync then AddPasswordAsync used to do this as two separate writes to
     // the same row — a real incident hit an EF optimistic-concurrency conflict on the second write
     // (something else touched the row between the two SaveChanges) and left the admin account
     // passwordless until the next redeploy. Hashing directly and writing PasswordHash via a single
     // UpdateAsync closes that window entirely — one write, nothing in between to race against.
-    internal async Task SyncAdminPassword(string emailAddress) {
+    //
+    // frizat-wyo: this used to run unconditionally on EVERY startup, which silently overwrote an
+    // already-existing admin's deliberately-changed password back to ADMIN_PASSWORD on every
+    // redeploy — a real incident (2026-08-22) that locked the repo owner out of their own account
+    // via Identity's failed-login lockout. Now it only fires for a brand-new account (unchanged
+    // bootstrap/recovery guarantee) or when explicitly forced via ADMIN_FORCE_PASSWORD_SYNC=true,
+    // which an operator sets for one redeploy to recover a genuinely-forgotten custom password.
+    internal async Task SyncAdminPassword(string emailAddress, bool isNewAccount) {
+        var forceResyncRequested = configuration["ADMIN_FORCE_PASSWORD_SYNC"] == "true";
+        if (!isNewAccount && !forceResyncRequested) {
+            Log.Information(
+                "Admin account {Email} already exists — skipping password sync to preserve any password the owner has since set. Set ADMIN_FORCE_PASSWORD_SYNC=true for one redeploy to force a resync to ADMIN_PASSWORD.",
+                emailAddress);
+            return;
+        }
+
+        // frizat-wyo: log the forced-override case loudly and distinctly from a routine bootstrap
+        // sync — this is the one path that still overwrites an existing admin's password, and it
+        // depends on an operator remembering to unset ADMIN_FORCE_PASSWORD_SYNC afterward. A clear
+        // "FORCED" warning here (versus a generic Information line) makes it obvious in the logs
+        // that a real password overwrite just happened, in case the flag was left on by mistake.
+        if (!isNewAccount && forceResyncRequested) {
+            Log.Warning(
+                "ADMIN_FORCE_PASSWORD_SYNC=true — forcing a password resync for existing admin {Email}. Unset this variable after this deploy or it will resync (overwrite) the password again on every subsequent restart.",
+                emailAddress);
+        }
+
         var adminPassword = configuration["ADMIN_PASSWORD"] ?? throw new InvalidOperationException("ADMIN_PASSWORD not set");
         var adminUser = await userManager.FindByEmailAsync(emailAddress);
         if (adminUser == null) return;
         adminUser.PasswordHash = userManager.PasswordHasher.HashPassword(adminUser, adminPassword);
         var result = await userManager.UpdateAsync(adminUser);
         if (result.Succeeded)
-            Log.Information("Admin password synced for {Email}", emailAddress);
+            Log.Information("Admin password synced for {Email} (newAccount={IsNewAccount}, forced={Forced})", emailAddress, isNewAccount, forceResyncRequested);
         else
             Log.Error("Failed to sync admin password: {Errors}", string.Join(", ", result.Errors.Select(e => e.Description)));
     }
@@ -76,12 +104,13 @@ public class UserManagerJob(
     /// Create a user if not exists.
     /// </summary>
     /// <param name="emailAddress">email</param>
-    internal async Task CreateUser(string emailAddress) {
+    /// <returns>true if a new account was created this call; false if it already existed.</returns>
+    internal async Task<bool> CreateUser(string emailAddress) {
         var adminPassword = configuration["ADMIN_PASSWORD"] ?? throw new InvalidOperationException("ADMIN_PASSWORD not set");
         var adminUser = await userManager.FindByEmailAsync(emailAddress);
         if (adminUser != null) {
             Log.Information("Admin user {Email} already exists — skipping create", emailAddress);
-            return;
+            return false;
         }
 
         Log.Warning("Admin user {Email} not found — creating new user. If this is unexpected, check why the user was deleted or the DB was reset.", emailAddress);
@@ -99,6 +128,8 @@ public class UserManagerJob(
                 string.Join(", ", result.Errors.Select(e => e.Description)));
             throw new InvalidOperationException("Failed to create admin user.");
         }
+
+        return true;
     }
 
 
