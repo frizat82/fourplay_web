@@ -89,7 +89,7 @@ See `.env.example` for all required variables. Key ones:
 | `Jwt__Key` | Minimum 32-char secret for JWT signing |
 | `ADMIN_EMAIL` | Seeded admin account email |
 | `ADMIN_USERNAME` | Seeded admin account username |
-| `ADMIN_PASSWORD` | Seeded admin account password (reset on every startup) |
+| `ADMIN_PASSWORD` | Seeded admin account password (set on first-ever creation only; see CLAUDE.md's `ADMIN_PASSWORD` section for the forced-resync escape hatch) |
 | `FOURPLAY_EMAIL_USER` | Gmail address for sending emails |
 | `FOURPLAY_EMAIL_PASS` | Gmail App Password |
 
