@@ -121,12 +121,24 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
     [availableLeagues, currentLeague]
   );
 
+  const [isPreparingShare, setIsPreparingShare] = useState(false);
+
+  useEffect(() => {
+    if (!isPreparingShare || !myRow) return;
+    void shareImage(cardRef.current, `${myRow.userName}'s IV League Standings`, 'iv-league-standings.png').finally(() =>
+      setIsPreparingShare(false)
+    );
+    // Only re-run when a share is actually kicked off — shareImage is a fresh function
+    // identity every render and must not retrigger a capture on its own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreparingShare]);
+
   const handleShare = () => {
     if (!myRow) {
       share('IV League Standings', window.location.href);
       return;
     }
-    void shareImage(cardRef.current, `${myRow.userName}'s IV League Standings`, 'iv-league-standings.png');
+    setIsPreparingShare(true);
   };
 
   if (loading) {
@@ -157,11 +169,15 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
           </Button>
         }
       />
-      {myRow && (
-        // Positioned in normal flow (0,0) inside a zero-size overflow:hidden wrapper, not at a
-        // large negative offset — WebKit's foreignObject-based canvas capture (what html-to-image
-        // uses) can render blank when the source node sits outside the viewport's coordinate
-        // space, which matters here since iOS Safari is this app's primary audience (CLAUDE.md).
+      {myRow && isPreparingShare && (
+        // Mounted only while actually capturing a share image — an always-mounted hidden card
+        // duplicates the user's name/rank text in the DOM, which broke a real Playwright demo
+        // test (getByText('alice') matched both the standings row and this card's own text)
+        // even though it's visually hidden. Positioned in normal flow (0,0) inside a zero-size
+        // overflow:hidden wrapper, not at a large negative offset — WebKit's foreignObject-based
+        // canvas capture (what html-to-image uses) can render blank when the source node sits
+        // outside the viewport's coordinate space, which matters here since iOS Safari is this
+        // app's primary audience (CLAUDE.md).
         <Box sx={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }} aria-hidden="true">
           <ShareableStandingsCard
             ref={cardRef}
