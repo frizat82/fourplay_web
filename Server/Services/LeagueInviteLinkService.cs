@@ -12,9 +12,7 @@ public class LeagueInviteLinkService(IDbContextFactory<ApplicationDbContext> dbC
     {
         await using var db = await dbContextFactory.CreateDbContextAsync();
 
-        await db.LeagueInviteLinks
-            .Where(l => l.LeagueId == leagueId && !l.IsRevoked)
-            .ExecuteUpdateAsync(s => s.SetProperty(l => l.IsRevoked, true));
+        await RevokeActiveLinksAsync(db, leagueId);
 
         var link = new LeagueInviteLink
         {
@@ -45,4 +43,16 @@ public class LeagueInviteLinkService(IDbContextFactory<ApplicationDbContext> dbC
             .OrderByDescending(l => l.Id)
             .FirstOrDefaultAsync();
     }
+
+    public async Task RevokeAsync(int leagueId)
+    {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+
+        await RevokeActiveLinksAsync(db, leagueId);
+    }
+
+    private static Task<int> RevokeActiveLinksAsync(ApplicationDbContext db, int leagueId) =>
+        db.LeagueInviteLinks
+            .Where(l => l.LeagueId == leagueId && !l.IsRevoked)
+            .ExecuteUpdateAsync(s => s.SetProperty(l => l.IsRevoked, true));
 }

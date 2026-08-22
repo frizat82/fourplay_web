@@ -59,6 +59,7 @@ export interface InvitationDto {
   usedAt?: string | null;
   registeredUserId?: string | null;
   registeredUserName?: string | null;
+  registeredUserEmailConfirmed?: boolean | null;
   isExpired: boolean;
   isValid: boolean;
   leagueId?: number | null;
@@ -66,6 +67,15 @@ export interface InvitationDto {
 }
 
 export interface LeagueCostDto {
+  memberCount: number;
+  cost: number;
+}
+
+export interface AdminLeagueCostDto {
+  leagueId: number;
+  leagueName: string;
+  ownerUserName: string;
+  leagueType: string;
   memberCount: number;
   cost: number;
 }

@@ -158,5 +158,41 @@ namespace FourPlayWebApp.Server.UnitTests
             Assert.Equal("the-registered-user", second.RegisteredUserId);
             await emailSender.DidNotReceiveWithAnyArgs().SendEmailAsync(default!, default!, default!);
         }
+
+        [Fact]
+        public async Task DeleteInvitationAsync_ExistingInvitation_RemovesIt()
+        {
+            var (service, _) = BuildService(nameof(DeleteInvitationAsync_ExistingInvitation_RemovesIt));
+            var invitation = await service.CreateInvitationAsync("delete-me@example.com", "user123");
+
+            await service.DeleteInvitationAsync(invitation.Id);
+
+            var remaining = await service.GetAllInvitationsAsync();
+            Assert.DoesNotContain(remaining, i => i.Id == invitation.Id);
+        }
+
+        [Fact]
+        public async Task DeleteInvitationAsync_AlreadyUsedInvitation_RemovesIt()
+        {
+            // Deleting a used invitation is allowed today (UI shows the delete button
+            // regardless of used/expired state) — it only destroys the audit trail linking a
+            // user to how they joined, nothing else references Invitation as a parent FK.
+            var (service, _) = BuildService(nameof(DeleteInvitationAsync_AlreadyUsedInvitation_RemovesIt));
+            var invitation = await service.CreateInvitationAsync("used-then-deleted@example.com", "user123");
+            await service.MarkInvitationAsUsedAsync(invitation.InvitationCode, "registered-user-1");
+
+            await service.DeleteInvitationAsync(invitation.Id);
+
+            var remaining = await service.GetAllInvitationsAsync();
+            Assert.DoesNotContain(remaining, i => i.Id == invitation.Id);
+        }
+
+        [Fact]
+        public async Task DeleteInvitationAsync_NonExistentId_DoesNotThrow()
+        {
+            var (service, _) = BuildService(nameof(DeleteInvitationAsync_NonExistentId_DoesNotThrow));
+
+            await service.DeleteInvitationAsync(999999);
+        }
     }
 }

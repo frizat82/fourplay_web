@@ -51,7 +51,7 @@ jobs:
 
       - name: Test
         # Category=Contract tests hit the real ESPN/odds APIs over the network — excluded here,
-        # run weekly + on-demand via espn-contract.yml instead (frizat-703.5).
+        # run weekly + on-demand via espn-contract.yml instead.
         run: dotnet test --no-build -c Release --filter "Category!=Contract" --logger "console;verbosity=minimal"
 
   frontend:
@@ -87,8 +87,15 @@ jobs:
         env:
           VITE_API_BASE_URL: ''
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('Client.React/package-lock.json') }}
+
       - name: Install Playwright browsers
-        run: npx playwright install chromium --with-deps
+        working-directory: Client.React
+        run: npx playwright install chromium
 
       - name: Playwright (mock-based tests)
         # webServer in playwright.config.ts auto-starts Vite when CI=true.
@@ -98,6 +105,7 @@ jobs:
   demo-e2e:
     name: Demo backend e2e tests
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -205,9 +213,15 @@ jobs:
           echo "=== BACKEND LOG ==="
           cat /tmp/backend.log || echo "(no log)"
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('Client.React/package-lock.json') }}
+
       - name: Install Playwright browsers
         working-directory: Client.React
-        run: npx playwright install chromium --with-deps
+        run: npx playwright install chromium
 
       - name: Playwright (demo integration tests)
         working-directory: Client.React
@@ -228,8 +242,9 @@ jobs:
           retention-days: 7
 
   demo-replay-e2e:
-    name: Demo replay e2e tests (frizat-703.6)
+    name: Demo replay e2e tests
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     # Job-level so both the backend-startup step and the Playwright step (which logs in as admin
     # via ADMIN_EMAIL/ADMIN_PASSWORD to drive /api/replay/advance and /api/replay/reset) see them.
@@ -340,9 +355,15 @@ jobs:
           echo "=== BACKEND LOG ==="
           cat /tmp/backend-replay.log || echo "(no log)"
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('Client.React/package-lock.json') }}
+
       - name: Install Playwright browsers
         working-directory: Client.React
-        run: npx playwright install chromium --with-deps
+        run: npx playwright install chromium
 
       - name: Playwright (replay tests)
         working-directory: Client.React

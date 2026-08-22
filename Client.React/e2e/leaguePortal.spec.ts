@@ -87,4 +87,36 @@ test.describe('Commissioner portal (/league/manage)', () => {
     await page.getByRole('dialog').getByRole('textbox').fill('newplayer@test.com');
     await expect(page.getByRole('dialog').getByRole('textbox')).toHaveValue('newplayer@test.com');
   });
+
+  test('shows a pending membership invite with a Cancel button, and canceling removes it', async ({ page }) => {
+    await ownerAuth(page);
+    await waitForSpinner(page);
+
+    // Registered after mockAuth so it wins over setupRoutes' default empty-array response.
+    let cancelCalled = false;
+    await page.route(/\/api\/league\/\d+\/membership-invites$/, (route) => {
+      if (route.request().method() !== 'GET') return void route.continue();
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(cancelCalled ? [] : [{
+          id: 1, leagueId: 1, invitedUserEmail: 'bob@example.com', invitedUserName: 'bob',
+          status: 'Pending', createdAt: new Date().toISOString(), respondedAt: null,
+        }]),
+      });
+    });
+    await page.route(/\/api\/league\/membership-invites\/\d+$/, (route) => {
+      if (route.request().method() !== 'DELETE') return void route.continue();
+      cancelCalled = true;
+      void route.fulfill({ status: 204 });
+    });
+
+    await page.reload();
+    await waitForSpinner(page);
+
+    await expect(page.getByText('bob@example.com')).toBeVisible({ timeout: 5000 });
+    await page.getByRole('button', { name: /^cancel$/i }).click();
+
+    await expect(page.getByText('bob@example.com')).not.toBeVisible({ timeout: 5000 });
+  });
 });

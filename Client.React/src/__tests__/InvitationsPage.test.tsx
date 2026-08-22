@@ -89,4 +89,28 @@ describe('AdminInvitationsPage', () => {
 
     expect(mockedResendInvitation).toHaveBeenCalledWith(1);
   });
+
+  it('shows "Pending Confirmation" for a used invitation whose registered user has not confirmed their email', async () => {
+    // This is exactly what confused an admin twice: a green "Used" chip read as "fully
+    // onboarded" when the registered user was actually still stuck unable to log in.
+    mockedGetAllInvitations.mockResolvedValue([
+      makeInvitation({ email: 'stuck@example.com', isUsed: true, registeredUserEmailConfirmed: false }),
+    ]);
+
+    render(<AdminInvitationsPage />);
+
+    expect(await screen.findByText('Pending Confirmation')).toBeInTheDocument();
+    // "Used" is also a separate stats-card label elsewhere on the page — scope to the row.
+    expect(screen.queryByRole('row', { name: /stuck@example\.com.*used/i })).not.toBeInTheDocument();
+  });
+
+  it('shows "Confirmed" for a used invitation whose registered user has confirmed their email', async () => {
+    mockedGetAllInvitations.mockResolvedValue([
+      makeInvitation({ email: 'done@example.com', isUsed: true, registeredUserEmailConfirmed: true }),
+    ]);
+
+    render(<AdminInvitationsPage />);
+
+    expect(await screen.findByText('Confirmed')).toBeInTheDocument();
+  });
 });

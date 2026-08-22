@@ -261,6 +261,15 @@ public class AuthController(
     public async Task<ActionResult<string>> CreateUser([FromBody] CreateUserRequest user) {
         var response = new CreateUserResponse();
 
+        // Reject a ConfirmationUrl on a domain we don't control — otherwise an anonymous caller
+        // could register an account for any email with a phishing domain as ConfirmationUrl,
+        // and our server would send a real, branded "confirm your email" message pointing there.
+        if (!IsAllowedConfirmationOrigin(user.ConfirmationUrl)) {
+            response.IsSuccess = false;
+            response.Errors = new List<string> { "Invalid confirmation URL." };
+            return BadRequest(response);
+        }
+
         // Invite-link registration path (shareable link, no per-email code required)
         if (!string.IsNullOrWhiteSpace(user.InviteLinkToken)) {
             var link = await leagueInviteLinkService.ValidateAsync(user.InviteLinkToken);
@@ -286,16 +295,7 @@ public class AuthController(
             response.UserId = linkUser.Id;
             db.LeagueUserMapping.Add(new LeagueUserMapping { LeagueId = link.LeagueId, UserId = linkUser.Id });
             await db.SaveChangesAsync();
-            try {
-                var token = await userManager.GenerateEmailConfirmationTokenAsync(linkUser);
-                var code = System.Text.Encoding.UTF8.GetBytes(token);
-                var encodedCode = WebEncoders.Base64UrlEncode(code);
-                var confirmationUrl = $"{config["App:BaseUrl"]?.TrimEnd('/') ?? string.Empty}/account/confirmemail";
-                var callbackUrl = $"{confirmationUrl}?userId={linkUser.Id}&code={encodedCode}";
-                await emailSenderApplication.SendConfirmationLinkAsync(linkUser, linkUser.Email!, HtmlEncoder.Default.Encode(callbackUrl));
-            } catch (Exception ex) {
-                logger.LogError(ex, "Failed to send confirmation email to {Email} after invite-link registration", linkUser.Email);
-            }
+            await SendEmailConfirmationLinkAsync(linkUser, user.ConfirmationUrl, "invite-link registration");
             return Ok(response);
         }
 
@@ -348,19 +348,50 @@ public class AuthController(
 
         // Send confirmation email server-side — do not rely on client making a second call.
         // Failure is logged but must not prevent the user account from being returned as created.
-        try {
-            var token = await userManager.GenerateEmailConfirmationTokenAsync(newUser);
-            var code = System.Text.Encoding.UTF8.GetBytes(token);
-            var encodedCode = Microsoft.AspNetCore.WebUtilities.WebEncoders.Base64UrlEncode(code);
-            var confirmationUrl = $"{config["App:BaseUrl"]?.TrimEnd('/') ?? string.Empty}/account/confirmemail";
-            var callbackUrl = $"{confirmationUrl}?userId={newUser.Id}&code={encodedCode}";
-            await emailSenderApplication.SendConfirmationLinkAsync(newUser, newUser.Email!, System.Text.Encodings.Web.HtmlEncoder.Default.Encode(callbackUrl));
-        }
-        catch (Exception ex) {
-            logger.LogError(ex, "Failed to send confirmation email to {Email} after registration; user was still created", newUser.Email);
-        }
+        await SendEmailConfirmationLinkAsync(newUser, user.ConfirmationUrl, "registration");
 
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Generates an email-confirmation token and sends the confirmation link, using the
+    /// client-supplied absolute confirmationUrl (see CreateUserRequest.ConfirmationUrl — the
+    /// server has no App:BaseUrl config of its own; without a client-supplied URL this would
+    /// silently mail a dead relative link). Failure is logged but must not prevent the caller
+    /// from treating account creation as successful.
+    /// </summary>
+    private async Task SendEmailConfirmationLinkAsync(ApplicationUser newlyCreatedUser, string confirmationUrl, string context) {
+        if (string.IsNullOrWhiteSpace(confirmationUrl)) {
+            logger.LogError("Cannot send confirmation email to {Email} after {Context}: no ConfirmationUrl was supplied", newlyCreatedUser.Email, context);
+            return;
+        }
+        try {
+            var token = await userManager.GenerateEmailConfirmationTokenAsync(newlyCreatedUser);
+            var code = WebEncoders.Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(token));
+            var callbackUrl = $"{confirmationUrl}?userId={newlyCreatedUser.Id}&code={code}";
+            await emailSenderApplication.SendConfirmationLinkAsync(newlyCreatedUser, newlyCreatedUser.Email!, HtmlEncoder.Default.Encode(callbackUrl));
+        } catch (Exception ex) {
+            logger.LogError(ex, "Failed to send confirmation email to {Email} after {Context}", newlyCreatedUser.Email, context);
+        }
+    }
+
+    /// <summary>
+    /// True if confirmationUrl is an absolute URL whose origin is in ALLOWED_ORIGINS (the same
+    /// comma-separated allow-list used for CORS). ALLOWED_ORIGINS is only ever empty in
+    /// Development — Program.cs fails startup otherwise — so an empty list allows any origin,
+    /// mirroring the AllowAnyOrigin() CORS fallback for that same case.
+    /// </summary>
+    private bool IsAllowedConfirmationOrigin(string? confirmationUrl) {
+        var allowedOrigins = (config["ALLOWED_ORIGINS"] ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (allowedOrigins.Length == 0)
+            return true;
+
+        if (!Uri.TryCreate(confirmationUrl, UriKind.Absolute, out var uri))
+            return false;
+
+        var origin = $"{uri.Scheme}://{uri.Authority}";
+        return allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
     }
     [HttpPost("forgot-password")]
     [AllowAnonymous] // User is not logged in

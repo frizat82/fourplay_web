@@ -7,4 +7,5 @@ public interface ILeagueInviteLinkService
     Task<LeagueInviteLink> GenerateAsync(int leagueId, string createdByUserId);
     Task<LeagueInviteLink?> ValidateAsync(string token);
     Task<LeagueInviteLink?> GetCurrentAsync(int leagueId);
+    Task RevokeAsync(int leagueId);
 }

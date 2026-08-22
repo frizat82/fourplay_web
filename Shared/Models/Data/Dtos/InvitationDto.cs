@@ -15,6 +15,7 @@ public class InvitationDto
     public DateTimeOffset? UsedAt { get; set; }
     public string? RegisteredUserId { get; set; }
     public string? RegisteredUserName { get; set; }
+    public bool? RegisteredUserEmailConfirmed { get; set; }
     public bool IsExpired { get; set; }
     public bool IsValid { get; set; }
     public int? LeagueId { get; set; }

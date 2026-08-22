@@ -40,6 +40,19 @@ test.describe('Admin pages (administrator role)', () => {
   });
 
   // -----------------------------------------------------------------------
+  // League Costs
+  // -----------------------------------------------------------------------
+  test('League Costs page renders heading, league row, and total', async ({ page }) => {
+    await adminAuth(page, '/admin/leagueCosts');
+    await waitForSpinner(page);
+
+    await expect(page.getByRole('heading', { name: /league costs/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('cell', { name: 'Test League' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('commish')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('$120').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  // -----------------------------------------------------------------------
   // My Leagues — admin-only actions (Create League / Add User / Change Owner)
   // -----------------------------------------------------------------------
   test('My Leagues — Create League button opens Create League dialog', async ({ page }) => {

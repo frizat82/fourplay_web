@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
   alpha,
   Box,
+  Button,
   Card,
   CardContent,
   CircularProgress,
@@ -15,13 +16,17 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
+import IosShareIcon from '@mui/icons-material/IosShare';
 import PageHeader from '../components/PageHeader';
+import ShareableStandingsCard from '../components/ShareableStandingsCard';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { getLeaderboard } from '../api/leaderboard';
 import type { LeaderboardDto } from '../types/leaderboard';
 import type { SportAdapter } from '../services/sportAdapter';
 import { stickyColumnSx } from '../utils/tableStyles';
+import { useShareLink } from '../utils/useShareLink';
+import { useShareImage } from '../utils/useShareImage';
 
 interface LeaderboardPageProps {
   adapter: SportAdapter;
@@ -29,8 +34,11 @@ interface LeaderboardPageProps {
 
 export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
   const theme = useTheme();
-  const { currentLeague, leaguesLoaded } = useSession();
+  const { currentLeague, availableLeagues, leaguesLoaded } = useSession();
   const { user } = useAuth();
+  const { share } = useShareLink();
+  const { shareImage } = useShareImage();
+  const cardRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardDto[]>([]);
 
@@ -98,10 +106,39 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
   };
 
   const rowClass = (row: LeaderboardDto) => {
-    if (!user?.name) return {};
-    return row.userName === user.name
+    if (!user?.userId) return {};
+    return row.userId === user.userId
       ? { backgroundColor: 'action.hover', fontWeight: 600 }
       : {};
+  };
+
+  const myRow = useMemo(
+    () => leaderboard.find((row) => row.userId === user?.userId),
+    [leaderboard, user?.userId]
+  );
+  const leagueName = useMemo(
+    () => availableLeagues.find((l) => l.leagueId === currentLeague)?.leagueName ?? 'IV League',
+    [availableLeagues, currentLeague]
+  );
+
+  const [isPreparingShare, setIsPreparingShare] = useState(false);
+
+  useEffect(() => {
+    if (!isPreparingShare || !myRow) return;
+    void shareImage(cardRef.current, `${myRow.userName}'s IV League Standings`, 'iv-league-standings.png').finally(() =>
+      setIsPreparingShare(false)
+    );
+    // Only re-run when a share is actually kicked off — shareImage is a fresh function
+    // identity every render and must not retrigger a capture on its own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreparingShare]);
+
+  const handleShare = () => {
+    if (!myRow) {
+      share('IV League Standings', window.location.href);
+      return;
+    }
+    setIsPreparingShare(true);
   };
 
   if (loading) {
@@ -119,7 +156,38 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
 
   return (
     <Box>
-      <PageHeader title="Leaderboard" />
+      <PageHeader
+        title="Leaderboard"
+        action={
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<IosShareIcon />}
+            onClick={handleShare}
+          >
+            Share
+          </Button>
+        }
+      />
+      {myRow && isPreparingShare && (
+        // Mounted only while actually capturing a share image — an always-mounted hidden card
+        // duplicates the user's name/rank text in the DOM, which broke a real Playwright demo
+        // test (getByText('alice') matched both the standings row and this card's own text)
+        // even though it's visually hidden. Positioned in normal flow (0,0) inside a zero-size
+        // overflow:hidden wrapper, not at a large negative offset — WebKit's foreignObject-based
+        // canvas capture (what html-to-image uses) can render blank when the source node sits
+        // outside the viewport's coordinate space, which matters here since iOS Safari is this
+        // app's primary audience (CLAUDE.md).
+        <Box sx={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }} aria-hidden="true">
+          <ShareableStandingsCard
+            ref={cardRef}
+            leagueName={leagueName}
+            userName={myRow.userName}
+            rank={myRow.rank}
+            total={myRow.total}
+          />
+        </Box>
+      )}
       {leaderboard.length === 0 && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 4, textAlign: 'center' }}>
           No leaderboard data yet for this season.
