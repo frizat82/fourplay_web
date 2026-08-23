@@ -15,13 +15,14 @@ namespace FourPlayWebApp.Server.UnitTests;
 /// </summary>
 public class UserManagerJobConfigTests
 {
-    private static IConfiguration BuildConfig(string email, string username, string password = "Test!1234") =>
+    private static IConfiguration BuildConfig(string email, string username, string password = "Test!1234", string? forcePasswordSync = null) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ADMIN_EMAIL"]    = email,
                 ["ADMIN_USERNAME"] = username,
                 ["ADMIN_PASSWORD"] = password,
+                ["ADMIN_FORCE_PASSWORD_SYNC"] = forcePasswordSync,
             })
             .Build();
 
@@ -36,6 +37,29 @@ public class UserManagerJobConfigTests
             roleStore, null, null, null, null);
 
         return (userManager, roleManager);
+    }
+
+    /// <summary>
+    /// Shared setup for the SyncAdminPassword gating tests below: wires FindByEmailAsync to
+    /// return an admin with <paramref name="existingHash"/> as its current PasswordHash (null
+    /// for the newly-bootstrapped-account case), stubs the hasher to produce "hashed-value" for
+    /// <paramref name="newPassword"/>, and makes UpdateAsync succeed.
+    /// </summary>
+    private static ApplicationUser SetUpSyncPasswordMocks(
+        UserManager<ApplicationUser> userManager, string? existingHash, string newPassword)
+    {
+        var adminUser = new ApplicationUser
+        {
+            Email = "admin@example.com",
+            UserName = "admin",
+            PasswordHash = existingHash,
+        };
+        userManager.FindByEmailAsync("admin@example.com").Returns(adminUser);
+        var hasher = Substitute.For<IPasswordHasher<ApplicationUser>>();
+        hasher.HashPassword(adminUser, newPassword).Returns("hashed-value");
+        userManager.PasswordHasher = hasher;
+        userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+        return adminUser;
     }
 
     [Fact]
@@ -55,13 +79,15 @@ public class UserManagerJobConfigTests
         var services = Substitute.For<IServiceProvider>();
         var job = new UserManagerJob(roleManager, userManager, config, services);
 
-        await job.CreateUser(configEmail);
+        var wasCreated = await job.CreateUser(configEmail);
 
         // Must look up the config email, not the hardcoded one
         await userManager.Received().FindByEmailAsync(configEmail);
 
         // The hardcoded email must never be queried
         await userManager.DidNotReceive().FindByEmailAsync("markmjohnson@gmail.com");
+
+        Assert.True(wasCreated);
     }
 
     [Fact]
@@ -83,11 +109,33 @@ public class UserManagerJobConfigTests
         var services = Substitute.For<IServiceProvider>();
         var job = new UserManagerJob(roleManager, userManager, config, services);
 
-        await job.CreateUser(configEmail);
+        var wasCreated = await job.CreateUser(configEmail);
 
         Assert.NotNull(capturedUser);
         Assert.Equal(configUser, capturedUser.UserName);  // fails before fix ("frizat" hardcoded)
         Assert.NotEqual("frizat", capturedUser.UserName); // belt-and-suspenders
+        Assert.True(wasCreated);
+    }
+
+    /// <summary>
+    /// frizat-wyo: CreateUser must report whether it actually created a new account so the
+    /// caller can decide whether SyncAdminPassword is allowed to touch the password (see below).
+    /// </summary>
+    [Fact]
+    public async Task CreateUser_ReturnsFalse_WhenAdminAccountAlreadyExists()
+    {
+        var (userManager, roleManager) = BuildMocks();
+        var existingUser = new ApplicationUser { Email = "admin@example.com", UserName = "admin" };
+        userManager.FindByEmailAsync("admin@example.com").Returns(existingUser);
+
+        var config = BuildConfig("admin@example.com", "admin");
+        var services = Substitute.For<IServiceProvider>();
+        var job = new UserManagerJob(roleManager, userManager, config, services);
+
+        var wasCreated = await job.CreateUser("admin@example.com");
+
+        Assert.False(wasCreated);
+        await userManager.DidNotReceive().CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>());
     }
 
     // frizat: SyncAdminPassword used to call RemovePasswordAsync then AddPasswordAsync — two
@@ -95,27 +143,64 @@ public class UserManagerJobConfigTests
     // that user (real incident: a redeploy's own concurrent request hit this exact window and
     // left the admin account passwordless when the second write lost an EF optimistic-concurrency
     // check). Setting PasswordHash directly and calling UpdateAsync once is atomic — no window.
+    //
+    // frizat-wyo: SyncAdminPassword also used to run this unconditionally on EVERY startup, even
+    // for an admin account that already existed with a deliberately-changed password — a second
+    // real incident (2026-08-22) where a dev->main redeploy silently reset the repo owner's own
+    // custom password back to the ADMIN_PASSWORD env var and locked them out via Identity's
+    // failed-login threshold. It must now only overwrite the hash when the account was just
+    // bootstrapped this run (isNewAccount:true) or an explicit ADMIN_FORCE_PASSWORD_SYNC=true
+    // opt-in is set — never on a routine restart of an already-existing account.
     [Fact]
-    public async Task SyncAdminPassword_UpdatesPasswordHashInASingleAtomicWrite_NotRemoveThenAdd()
+    public async Task SyncAdminPassword_UpdatesPasswordHashInASingleAtomicWrite_ForNewlyBootstrappedAccount()
     {
         var (userManager, roleManager) = BuildMocks();
-        var adminUser = new ApplicationUser { Email = "admin@example.com", UserName = "admin" };
-        userManager.FindByEmailAsync("admin@example.com").Returns(adminUser);
-        var hasher = Substitute.For<IPasswordHasher<ApplicationUser>>();
-        hasher.HashPassword(adminUser, "NewPass!123").Returns("hashed-value");
-        userManager.PasswordHasher = hasher;
-        userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+        var adminUser = SetUpSyncPasswordMocks(userManager, existingHash: null, newPassword: "NewPass!123");
 
         var config = BuildConfig("admin@example.com", "admin", "NewPass!123");
         var services = Substitute.For<IServiceProvider>();
         var job = new UserManagerJob(roleManager, userManager, config, services);
 
-        await job.SyncAdminPassword("admin@example.com");
+        await job.SyncAdminPassword("admin@example.com", isNewAccount: true);
 
         Assert.Equal("hashed-value", adminUser.PasswordHash);
         await userManager.Received(1).UpdateAsync(adminUser);
         await userManager.DidNotReceive().RemovePasswordAsync(Arg.Any<ApplicationUser>());
         await userManager.DidNotReceive().AddPasswordAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task SyncAdminPassword_DoesNotOverwriteExistingAccount_OnRoutineRestart()
+    {
+        var (userManager, roleManager) = BuildMocks();
+        var adminUser = SetUpSyncPasswordMocks(userManager, existingHash: "owner-chosen-hash", newPassword: "NewPass!123");
+
+        // No ADMIN_FORCE_PASSWORD_SYNC set — routine restart of an already-existing account.
+        var config = BuildConfig("admin@example.com", "admin", "NewPass!123");
+        var services = Substitute.For<IServiceProvider>();
+        var job = new UserManagerJob(roleManager, userManager, config, services);
+
+        await job.SyncAdminPassword("admin@example.com", isNewAccount: false);
+
+        // The owner's own password must survive an ordinary redeploy.
+        Assert.Equal("owner-chosen-hash", adminUser.PasswordHash);
+        await userManager.DidNotReceive().UpdateAsync(Arg.Any<ApplicationUser>());
+    }
+
+    [Fact]
+    public async Task SyncAdminPassword_OverwritesExistingAccount_WhenForceSyncFlagIsSet()
+    {
+        var (userManager, roleManager) = BuildMocks();
+        var adminUser = SetUpSyncPasswordMocks(userManager, existingHash: "owner-chosen-hash", newPassword: "NewPass!123");
+
+        var config = BuildConfig("admin@example.com", "admin", "NewPass!123", forcePasswordSync: "true");
+        var services = Substitute.For<IServiceProvider>();
+        var job = new UserManagerJob(roleManager, userManager, config, services);
+
+        await job.SyncAdminPassword("admin@example.com", isNewAccount: false);
+
+        Assert.Equal("hashed-value", adminUser.PasswordHash);
+        await userManager.Received(1).UpdateAsync(adminUser);
     }
 
     /// <summary>
