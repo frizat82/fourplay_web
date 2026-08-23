@@ -15,7 +15,7 @@ export default function JoinLeaguePage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { reloadLeagues, availableLeagues } = useSession();
+  const { reloadLeagues, availableLeagues, refreshPendingInvites } = useSession();
 
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -43,8 +43,11 @@ export default function JoinLeaguePage() {
     setJoining(true);
     setError(null);
     try {
+      // joinViaLink creates a pending membership invite rather than joining directly (see
+      // LeagueController.JoinViaLink) — refresh pending invites, not leagues, so
+      // PendingInviteBanner shows up immediately on the dashboard with Accept/Decline.
       await joinViaLink(token!);
-      await reloadLeagues();
+      await refreshPendingInvites();
       navigate('/dashboard');
     } catch (err) {
       const status = (err as { response?: { status?: number } }).response?.status;
