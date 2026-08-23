@@ -8,8 +8,6 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
-import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
-import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import type { NflPickDto, SpreadCalculationResponse } from '../types/picks';
@@ -60,20 +58,6 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
           flexShrink: 0,
         }}
       >
-        {pick.pick === 'Over' && (
-          <ArrowCircleUpIcon
-            fontSize="small"
-            sx={{ position: 'absolute', top: 4, left: 4, bgcolor: 'white', borderRadius: '50%' }}
-            color={result ? 'success' : 'error'}
-          />
-        )}
-        {pick.pick === 'Under' && (
-          <ArrowCircleDownIcon
-            fontSize="small"
-            sx={{ position: 'absolute', top: 4, left: 4, bgcolor: 'white', borderRadius: '50%' }}
-            color={result ? 'success' : 'error'}
-          />
-        )}
         {/* frizat: the helmet logo + 9px label was hard to read at a glance against the
             win/loss color-coded background — text-only, much larger, reads clearly instead.
             CFB abbreviations run up to 4 chars (UTSA, UNLV, WASH) vs NFL's 2-3 — shrink to fit
@@ -81,6 +65,23 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
         <Typography sx={{ fontSize: pick.team.length > 3 ? 16 : 22, fontWeight: 800, letterSpacing: '0.02em' }}>
           {pick.team}
         </Typography>
+        {/* frizat: a tiny corner arrow icon was easy to miss against the color-coded background
+            and the large team text above it — spell out OVER/UNDER instead, same bold treatment.
+            Match the badge background's 3-way branch (win/loss/no-result-yet) — result is null
+            for a scheduled/in-progress game (ScoresPage's matrixSpreads only populates an entry
+            once a game is final), which must read as neutral, not silently collapse into "loss". */}
+        {pick.pick !== 'Spread' && (
+          <Typography
+            sx={{
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: '0.03em',
+              color: result === true ? 'success.main' : result === false ? 'error.main' : 'text.secondary',
+            }}
+          >
+            {pick.pick.toUpperCase()}
+          </Typography>
+        )}
         {result === true && (
           <CheckCircleIcon
             fontSize="small"
