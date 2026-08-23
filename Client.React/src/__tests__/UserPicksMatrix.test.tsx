@@ -64,6 +64,72 @@ describe('UserPicksMatrix — text-only badges (no team logo)', () => {
   });
 });
 
+describe('UserPicksMatrix — Over/Under shown as a bold word, not a small icon', () => {
+  // frizat: a tiny corner arrow icon competing with the win/loss-colored badge background and
+  // the large team text was easy to miss — spell out OVER/UNDER instead, same size treatment
+  // as the team abbreviation label.
+  it('shows the word OVER for an Over pick', () => {
+    const overPick: NflPickDto[] = [
+      { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
+    ];
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <UserPicksMatrix users={['alice']} picks={overPick} spreads={{}} requiredPicks={1} />
+      </ThemeProvider>,
+    );
+    expect(screen.getByText('OVER')).toBeInTheDocument();
+  });
+
+  it('shows the word UNDER for an Under pick', () => {
+    const underPick: NflPickDto[] = [
+      { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Under', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
+    ];
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <UserPicksMatrix users={['alice']} picks={underPick} spreads={{}} requiredPicks={1} />
+      </ThemeProvider>,
+    );
+    expect(screen.getByText('UNDER')).toBeInTheDocument();
+  });
+
+  it('does not show an OVER/UNDER label for a Spread pick', () => {
+    renderMatrix('light');
+    expect(screen.queryByText('OVER')).not.toBeInTheDocument();
+    expect(screen.queryByText('UNDER')).not.toBeInTheDocument();
+  });
+
+  it('does not render an arrow icon anymore', () => {
+    const overPick: NflPickDto[] = [
+      { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
+    ];
+    const { container } = render(
+      <ThemeProvider theme={createTheme()}>
+        <UserPicksMatrix users={['alice']} picks={overPick} spreads={{}} requiredPicks={1} />
+      </ThemeProvider>,
+    );
+    expect(container.querySelector('[data-testid="ArrowCircleUpIcon"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="ArrowCircleDownIcon"]')).not.toBeInTheDocument();
+  });
+
+  it('renders the OVER/UNDER label in a neutral color, not red, when the game has no result yet', () => {
+    // frizat: /code-review caught that the old icon's color logic (carried into the new text
+    // label) collapsed "no spread data yet" (result === null, a scheduled/in-progress game per
+    // ScoresPage's matrixSpreads) into the same branch as an actual loss — falsely showing a red
+    // "OVER" before the game was even decided. Matches the badge background's own 3-way branch.
+    const pendingPick: NflPickDto[] = [
+      { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
+    ];
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <UserPicksMatrix users={['alice']} picks={pendingPick} spreads={{}} requiredPicks={1} />
+      </ThemeProvider>,
+    );
+    const label = screen.getByText('OVER');
+    expect(label).not.toHaveStyle({ color: 'rgb(211, 47, 47)' }); // MUI error.main
+    expect(label).not.toHaveStyle({ color: 'rgb(46, 125, 50)' }); // MUI success.main
+  });
+});
+
 describe('UserPicksMatrix — Over/Under is an alternate pick type, not an additional pick', () => {
   // frizat: AddPicks' server-side validation caps total picks (any type) at requiredPicks — a
   // real user's Over/Under pick REPLACES one of their spread picks, it never adds a pick beyond
