@@ -18,6 +18,7 @@ vi.mock('../services/auth', () => ({ useAuth: () => authState }));
 
 const sessionMock = {
   reloadLeagues: vi.fn().mockResolvedValue(undefined),
+  refreshPendingInvites: vi.fn().mockResolvedValue(undefined),
   availableLeagues: [] as { leagueId: number }[],
 };
 vi.mock('../services/session', () => ({ useSession: () => sessionMock }));
@@ -43,6 +44,7 @@ describe('JoinLeaguePage', () => {
   beforeEach(() => {
     navigateMock.mockReset();
     sessionMock.reloadLeagues.mockResolvedValue(undefined);
+    sessionMock.refreshPendingInvites.mockReset().mockResolvedValue(undefined);
     sessionMock.availableLeagues = [];
     authState.user = null;
   });
@@ -111,7 +113,11 @@ describe('JoinLeaguePage', () => {
     expect(screen.getByRole('button', { name: /go to dashboard/i })).toBeInTheDocument();
   });
 
-  it('calls joinViaLink and navigates to dashboard on success', async () => {
+  it('calls joinViaLink, refreshes pending invites (not leagues), and navigates to dashboard on success', async () => {
+    // frizat: joinViaLink now creates a pending membership invite rather than joining directly
+    // (see LeagueController.JoinViaLink) — the user isn't a league member yet after this call,
+    // so refreshing leagues would be a no-op; refreshing pending invites is what makes
+    // PendingInviteBanner show up immediately on the dashboard with Accept/Decline.
     vi.mocked(validateInviteLink).mockResolvedValue({
       token: 'tok123',
       leagueId: 1,
@@ -124,6 +130,10 @@ describe('JoinLeaguePage', () => {
     await waitFor(() => screen.getByRole('button', { name: /join/i }));
     await userEvent.click(screen.getByRole('button', { name: /join/i }));
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/dashboard'));
-    expect(sessionMock.reloadLeagues).toHaveBeenCalled();
+    expect(sessionMock.refreshPendingInvites).toHaveBeenCalled();
+    // frizat: /code-review caught that this test's title promised "not leagues" without
+    // actually asserting it — a regression re-adding reloadLeagues() to the success path
+    // would have passed silently.
+    expect(sessionMock.reloadLeagues).not.toHaveBeenCalled();
   });
 });
