@@ -889,8 +889,13 @@ public class LeagueController(
         var link = await leagueInviteLinkService.ValidateAsync(token);
         if (link is null) return NotFound();
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        if (!await TryAddUserToLeagueAsync(userId, link.LeagueId))
+        if (await repo.UserExistsInLeagueAsync(userId, link.LeagueId))
             return Conflict("You are already a member of this league.");
+        // An already-authenticated user clicking a share link gets the same pending-invite +
+        // banner treatment as the "Invite Player" flow (see InviteToLeague above) — not an
+        // instant, undo-less join. Only a brand-new user's register-and-join-in-one-step path
+        // (AuthController.CreateUser's InviteLinkToken branch) still joins directly.
+        await membershipInviteService.CreateOrReopenAsync(link.LeagueId, userId, link.CreatedByUserId);
         return NoContent();
     }
 

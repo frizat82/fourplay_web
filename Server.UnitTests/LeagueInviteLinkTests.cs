@@ -464,21 +464,29 @@ public class LeagueInviteLinkTests
     }
 
     [Fact]
-    public async Task JoinViaLink_ReturnsNoContent_WhenSuccessful()
+    public async Task JoinViaLink_CreatesPendingMembershipInvite_RatherThanJoiningDirectly()
     {
-        var link = new LeagueInviteLink { Token = "tok", LeagueId = 1, League = new LeagueInfo { Id = 1, LeagueName = "L" }, ExpiresAt = DateTimeOffset.UtcNow.AddHours(1) };
+        // frizat: an already-authenticated user clicking a share link used to be added to the
+        // league immediately, with no way to decline — that's inconsistent with the "Invite
+        // Player" flow, which creates a pending invite an existing user must explicitly accept
+        // or decline via PendingInviteBanner. Route link-joins through the same mechanism so
+        // both invite paths behave identically for an existing user; only a brand-new user's
+        // register-and-join-in-one-step path is unaffected by this change.
+        var link = new LeagueInviteLink { Token = "tok", LeagueId = 1, CreatedByUserId = OwnerId, League = new LeagueInfo { Id = 1, LeagueName = "L" }, ExpiresAt = DateTimeOffset.UtcNow.AddHours(1) };
         var linkService = Substitute.For<ILeagueInviteLinkService>();
         linkService.ValidateAsync("tok").Returns(link);
 
         var repo = Substitute.For<ILeagueRepository>();
         repo.UserExistsInLeagueAsync(MemberId, 1).Returns(false);
 
-        var controller = BuildController(BuildPrincipal(MemberId), repo: repo, linkService: linkService);
+        var membershipInviteService = Substitute.For<ILeagueMembershipInviteService>();
+
+        var controller = BuildController(BuildPrincipal(MemberId), repo: repo, linkService: linkService, membershipInviteService: membershipInviteService);
 
         var result = await controller.JoinViaLink("tok");
 
         Assert.IsType<NoContentResult>(result);
-        await repo.Received(1).AddLeagueUserMappingAsync(Arg.Is<LeagueUserMapping>(m =>
-            m.LeagueId == 1 && m.UserId == MemberId));
+        await membershipInviteService.Received(1).CreateOrReopenAsync(1, MemberId, OwnerId);
+        await repo.DidNotReceiveWithAnyArgs().AddLeagueUserMappingAsync(default!);
     }
 }
