@@ -2,6 +2,7 @@ using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services;
 
@@ -13,6 +14,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 {
     private readonly IEspnApiService _espnApiService;
     private readonly ILeagueRepository _leagueRepository;
+    private readonly IMemoryCache _historicalCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
 
     public event Action? ScoresChanged
@@ -21,10 +23,11 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         remove => _cache.Changed -= value;
     }
 
-    public EspnCacheService(IEspnApiService espnApiService, INflCurrentWeekService nflCurrentWeekService, ILeagueRepository leagueRepository, TimeSpan? initialDelay = null)
+    public EspnCacheService(IEspnApiService espnApiService, INflCurrentWeekService nflCurrentWeekService, ILeagueRepository leagueRepository, IMemoryCache historicalCache, TimeSpan? initialDelay = null)
     {
         _espnApiService = espnApiService;
         _leagueRepository = leagueRepository;
+        _historicalCache = historicalCache;
         _cache = new PeriodicRefreshCache<EspnScores>(
             fetch: async () => {
                 // NflCurrentWeekService always resolves *something* now (most-recently-completed
@@ -45,17 +48,23 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 
     // Historical weeks are read straight from NflScores when persisted — every persisted row is
     // already FINAL (NflScoresJob only writes finished games), so 100 concurrent viewers of the
-    // same past week share one DB read instead of each triggering its own ESPN call. Only a week
-    // NflScoresJob hasn't synced yet (or a genuinely current/future week — not this endpoint's
-    // real use, see EspnController's doc comment) falls through to a live ESPN call.
+    // same past week share one DB read (and one build, cached indefinitely — settled data never
+    // changes) instead of each triggering its own ESPN call or DB query. Only a week NflScoresJob
+    // hasn't synced yet (or a genuinely current/future week — not this endpoint's real use, see
+    // EspnController's doc comment) falls through to a live ESPN call.
     public async Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false)
     {
+        var cacheKey = $"nfl-week-scores_{year}_{week}_{postSeason}";
+        if (_historicalCache.TryGetValue<EspnScores>(cacheKey, out var cached)) return cached;
+
         var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, postSeason);
         var rows = await _leagueRepository.GetNflScoresAsync(year, nflWeek);
         if (rows.Count > 0) {
             var games = rows.Select(row => new FinalScoresEspnMapper.FinishedGame(
                 row.Id.ToString(), row.HomeTeam, row.AwayTeam, row.HomeTeamScore, row.AwayTeamScore, row.GameTime));
-            return FinalScoresEspnMapper.Build(games, year, week, postSeason);
+            var built = FinalScoresEspnMapper.Build(games, year, week, postSeason);
+            _historicalCache.Set(cacheKey, built);
+            return built;
         }
         return await _espnApiService.GetWeekScores(week, year, postSeason);
     }

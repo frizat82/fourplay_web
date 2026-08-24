@@ -3,6 +3,7 @@ using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 
@@ -11,7 +12,7 @@ namespace FourPlayWebApp.Server.Services;
 // ICfbRepository is registered Scoped, but this fetcher is a Singleton — resolving it directly in
 // the constructor would be a captive-dependency DI violation (same pattern CfbCacheService already
 // uses for the identical problem; see its own comment).
-public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory scopeFactory) : ICfbLiveScoreFetcher {
+public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory scopeFactory, IMemoryCache settledCache) : ICfbLiveScoreFetcher {
     public async Task<EspnScores?> FetchForSlateAsync(CfbSlates slate) {
         // CfbSeasonWeekConfig.EspnWeekNumber is non-nullable, and both known producers of CfbSlates
         // rows (CfbSlateSeederJob, DemoDataSeeder) always copy a real week number through — so every
@@ -41,6 +42,9 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
         // identical fix for NFL's historical-week endpoint.
         var slateHasEnded = slate.EndDate < DateOnly.FromDateTime(DateTime.UtcNow);
         if (slateHasEnded) {
+            var cacheKey = $"cfb-slate-scores_{slate.Id}";
+            if (settledCache.TryGetValue<EspnScores>(cacheKey, out var cached)) return cached;
+
             using var scope = scopeFactory.CreateScope();
             var cfbRepo = scope.ServiceProvider.GetRequiredService<ICfbRepository>();
             var rows = (await cfbRepo.GetScoresForSlateAsync(slate.Id)).ToList();
@@ -50,7 +54,9 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
                     row.WeatherDisplayValue is null && row.WeatherConditionId is null && row.WeatherTemperatureF is null
                         ? null
                         : new FinalScoresEspnMapper.WeatherInfo(row.WeatherDisplayValue, row.WeatherConditionId, row.WeatherTemperatureF)));
-                return FinalScoresEspnMapper.Build(games, slate.Season, slate.EspnWeekNumber.Value, CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat));
+                var built = FinalScoresEspnMapper.Build(games, slate.Season, slate.EspnWeekNumber.Value, CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat));
+                settledCache.Set(cacheKey, built);
+                return built;
             }
         }
 

@@ -3,6 +3,7 @@ using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Enum;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -16,6 +17,7 @@ public class EspnCacheServiceTests
     private readonly IEspnApiService _espnApi;
     private readonly INflCurrentWeekService _nflCurrentWeekService;
     private readonly ILeagueRepository _leagueRepo;
+    private readonly IMemoryCache _memoryCache = new MemoryCache(new MemoryCacheOptions());
 
     // Default week returned by the mock — tests that don't care about the specific week use this
     private static readonly NflWeekInfo DefaultWeek = new(5, 5, 2025, false, "Week 5", "Standard", new DateTime(2025, 10, 2, 18, 0, 0, DateTimeKind.Utc));
@@ -58,7 +60,7 @@ public class EspnCacheServiceTests
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
                 .Returns(Task.FromResult<EspnScores?>(null));
 
-        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo);
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache);
 
         // API returns null → RefreshScoresAsync short-circuits before firing ScoresChanged, so
         // there's nothing to wait on deterministically; a null result is the correct outcome
@@ -85,7 +87,7 @@ public class EspnCacheServiceTests
         // without it, the mocked (near-instant) refresh can complete before ScoresChanged is
         // subscribed to below, and WaitForScoresChangedAsync would wait for an event that
         // already fired.
-        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
         await WaitForScoresChangedAsync(svc);
 
         var result = await svc.GetScoresAsync();
@@ -110,7 +112,7 @@ public class EspnCacheServiceTests
 
         // initialDelay gives the test time to subscribe before the first refresh fires — see
         // GetScoresAsync_WhenCacheHit_ReturnsCachedValue for why this is needed.
-        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
         await WaitForScoresChangedAsync(svc);
 
         // Even if a subsequent refresh throws, the previously cached value remains
@@ -135,7 +137,7 @@ public class EspnCacheServiceTests
 
         int fireCount = 0;
         // initialDelay gives us time to subscribe before the first refresh fires
-        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
         svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
 
         await WaitForScoresChangedAsync(svc);
@@ -151,7 +153,7 @@ public class EspnCacheServiceTests
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>()).Returns(Task.FromResult<EspnScores?>(scores));
 
         int fireCount = 0;
-        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
         svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
 
         await WaitForScoresChangedAsync(svc);
@@ -165,7 +167,7 @@ public class EspnCacheServiceTests
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>()).Returns(Task.FromResult<EspnScores?>(null));
 
         int fireCount = 0;
-        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
         svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
 
         // API returns null → ScoresChanged can never fire (RefreshScoresAsync short-circuits first),
@@ -186,7 +188,7 @@ public class EspnCacheServiceTests
     {
         _nflCurrentWeekService.IsSeasonActiveAsync().Returns(false);
 
-        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, initialDelay: TimeSpan.FromMilliseconds(50));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
         await Task.Delay(300);
 
         var result = await svc.GetScoresAsync();
@@ -209,7 +211,7 @@ public class EspnCacheServiceTests
         // Wild Card (ESPN week 1, postseason) = internal NflWeek 19 (GameHelpers.GetWeekFromEspnWeek).
         _leagueRepo.GetNflScoresAsync(2025, 19).Returns(rows);
 
-        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, initialDelay: TimeSpan.FromMinutes(5));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
         var result = await svc.GetWeekScoresAsync(1, 2025, postSeason: true);
 
         Assert.NotNull(result);
@@ -228,10 +230,31 @@ public class EspnCacheServiceTests
         var espnScores = new EspnScores { Season = new Season { Year = 2025 } };
         _espnApi.GetWeekScores(5, 2025, false).Returns(Task.FromResult<EspnScores?>(espnScores));
 
-        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, initialDelay: TimeSpan.FromMinutes(5));
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
         var result = await svc.GetWeekScoresAsync(5, 2025, postSeason: false);
 
         Assert.Same(espnScores, result);
         await _espnApi.Received(1).GetWeekScores(5, 2025, false);
+    }
+
+    // A settled week's DB-built response is immutable (a persisted row is always FINAL) — once
+    // built, repeated requests for the same week should be served from an in-memory cache instead
+    // of re-querying the DB every time, so 100 concurrent viewers of the same past week share one
+    // DB read total, not one DB read each.
+    [Fact]
+    public async Task GetWeekScoresAsync_CachesTheDbBuiltResult_SecondCallForSameWeekNeverHitsDbAgain()
+    {
+        var rows = new List<Shared.Models.Data.NflScores> {
+            new() { Id = 1, Season = 2025, NflWeek = 1, HomeTeam = "KC", AwayTeam = "DEN", HomeTeamScore = 27, AwayTeamScore = 20, GameTime = new DateTimeOffset(2025, 9, 10, 18, 0, 0, TimeSpan.Zero) },
+        };
+        _leagueRepo.GetNflScoresAsync(2025, 1).Returns(rows);
+
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
+        var first = await svc.GetWeekScoresAsync(1, 2025, postSeason: false);
+        var second = await svc.GetWeekScoresAsync(1, 2025, postSeason: false);
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        await _leagueRepo.Received(1).GetNflScoresAsync(2025, 1);
     }
 }
