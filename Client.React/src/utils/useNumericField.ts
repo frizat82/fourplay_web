@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
+interface UseNumericFieldOptions {
+  // Strips a typed decimal point instead of accepting it — for fields whose backend DTO is
+  // an `int` (e.g. Juice/Cost settings), where a decimal value would otherwise display fine
+  // but 400 silently on save.
+  integerOnly?: boolean;
+}
+
 // Buffers a numeric <TextField>'s displayed value as a raw string so mid-edit states
 // (empty, "-", "17.") aren't stomped back to a parsed number on every keystroke. Only
 // pushes a value upward once it actually parses to a finite number; resyncs from `value`
 // on a genuinely external change (not one this hook itself just committed) and on blur.
-export function useNumericField(value: number, onChange: (n: number) => void) {
+export function useNumericField(value: number, onChange: (n: number) => void, options?: UseNumericFieldOptions) {
+  const integerOnly = options?.integerOnly ?? false;
   const [raw, setRaw] = useState(String(value));
   const lastCommitted = useRef(value);
   useEffect(() => {
@@ -18,10 +26,11 @@ export function useNumericField(value: number, onChange: (n: number) => void) {
   return {
     value: raw,
     onChange: (e: ChangeEvent<HTMLInputElement>) => {
-      const str = e.target.value;
+      const typed = e.target.value;
+      const str = integerOnly ? (typed.startsWith('-') ? '-' : '') + typed.replace(/\D/g, '') : typed;
       setRaw(str);
       const parsed = Number(str);
-      if (str.trim() !== '' && Number.isFinite(parsed)) {
+      if (str.trim() !== '' && str !== '-' && Number.isFinite(parsed)) {
         lastCommitted.current = parsed;
         onChange(parsed);
       }

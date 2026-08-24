@@ -185,9 +185,8 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
     // on mobile Chrome. Root cause: value={juiceForm.juice} (a NUMBER) fed straight from
     // onChange={(e) => onJuiceFormChange('juice', Number(e.target.value))} — every keystroke
     // immediately re-coerces through Number() and feeds the result back as the controlled
-    // value, so clearing the field to retype, or typing a decimal point, gets silently
-    // overwritten back to a fully-parsed number (typing "1" then "." collapsed to "0" in live
-    // reproduction) before the next character lands. Live-verified against the local demo
+    // value, so clearing the field to retype gets silently overwritten back to a fully-parsed
+    // number (e.g. "0") before the next character lands. Live-verified against the local demo
     // stack before writing this test.
     renderPage();
     await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
@@ -200,8 +199,22 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
     await userEvent.clear(field);
     expect(field).toHaveValue(null); // truly empty — not silently reset to 0
 
+    await userEvent.type(field, '175');
+    expect(field).toHaveValue(175);
+  });
+
+  // frizat: the backend's Juice DTO is `int` (Shared/Models/Data/Dtos/LeagueCreateDto.cs) —
+  // a decimal typed here used to display fine but 400 silently on save. Strip the decimal
+  // point as it's typed instead of catching the mismatch only after a failed save.
+  it('strips a typed decimal point in Tease Pts instead of accepting it, since the field is whole-number only', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    const field = await screen.findByLabelText(/Tease Pts \(Regular Season\)/i);
+    await waitFor(() => expect(field).not.toBeDisabled());
+
+    await userEvent.clear(field);
     await userEvent.type(field, '17.5');
-    expect(field).toHaveValue(17.5); // decimal point survives the intermediate "17." state
+    expect(field).toHaveValue(175);
   });
 
   // frizat: "Juice Settings"/"Weekly Cost" read as gambling jargon to a general audience —
