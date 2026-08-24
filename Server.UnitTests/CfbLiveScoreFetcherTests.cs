@@ -5,6 +5,7 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
@@ -19,6 +20,7 @@ public class CfbLiveScoreFetcherTests {
     private readonly ICfbApiService _cfbApi = Substitute.For<ICfbApiService>();
     private readonly ICfbRepository _cfbRepo = Substitute.For<ICfbRepository>();
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IMemoryCache _settledCache = new MemoryCache(new MemoryCacheOptions());
 
     public CfbLiveScoreFetcherTests() {
         // Default: no persisted rows for any slate, so existing tests (which never seed the repo)
@@ -29,7 +31,7 @@ public class CfbLiveScoreFetcherTests {
         _scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 
-    private CfbLiveScoreFetcher BuildFetcher() => new(_cfbApi, _scopeFactory);
+    private CfbLiveScoreFetcher BuildFetcher() => new(_cfbApi, _scopeFactory, _settledCache);
 
     private static EspnScores BuildScoreboard(
         string eventId = "401677183",
@@ -235,5 +237,26 @@ public class CfbLiveScoreFetcherTests {
         await _cfbApi.Received(1).GetScoresByWeekAsync(3, false);
         Assert.NotNull(result);
         Assert.Single(result!.Events!);
+    }
+
+    // A settled slate's DB-built response is immutable (a persisted row is always FINAL) — once
+    // built, repeated requests for the same slate should be served from an in-memory cache instead
+    // of re-querying the DB every time, so concurrent viewers of the same settled slate share one
+    // DB read total, not one DB read each.
+    [Fact]
+    public async Task FetchForSlateAsync_CachesTheDbBuiltResult_SecondCallForSameSlateNeverHitsDbAgain() {
+        var slate = BuildRegularSeasonSlate(); // EndDate 2025-9-28 — already ended
+        var rows = new List<CfbScores> {
+            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = "STATUS_FINAL", GameTime = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero) },
+        };
+        _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)rows);
+
+        var fetcher = BuildFetcher();
+        var first = await fetcher.FetchForSlateAsync(slate);
+        var second = await fetcher.FetchForSlateAsync(slate);
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        await _cfbRepo.Received(1).GetScoresForSlateAsync(slate.Id);
     }
 }
