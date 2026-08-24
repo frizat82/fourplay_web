@@ -121,4 +121,24 @@ public class CfbRepositoryTests
         Assert.Contains((2026, 3), weeksWithData);
         Assert.DoesNotContain((2026, 4), weeksWithData);
     }
+
+    // GetAllSlatesAsync mirrors the existing all-seasons GetAllWeekConfigsAsync pattern —
+    // added so CfbCurrentSlateService can resolve the current slate across every season in
+    // the DB instead of a single hardcoded ConfiguredSeason (frizat plan: wobbly-chasing-lynx).
+    [Fact]
+    public async Task GetAllSlatesAsync_ReturnsSlatesAcrossEverySeason_OrderedBySeasonThenSlateNumber()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetAllSlatesAsync_ReturnsSlatesAcrossEverySeason_OrderedBySeasonThenSlateNumber));
+        var seedDb = factory.CreateDbContext();
+        seedDb.CfbSlates.Add(new CfbSlates { Id = 1, Season = 2026, SlateNumber = 2, Label = "Slate 2", SlateType = "RegularSeason" });
+        seedDb.CfbSlates.Add(new CfbSlates { Id = 2, Season = 2025, SlateNumber = 4, Label = "Slate 4", SlateType = "Championship" });
+        seedDb.CfbSlates.Add(new CfbSlates { Id = 3, Season = 2026, SlateNumber = 1, Label = "Slate 1", SlateType = "RegularSeason" });
+        await seedDb.SaveChangesAsync();
+        var repo = new CfbRepository(factory);
+
+        var all = (await repo.GetAllSlatesAsync()).ToList();
+
+        Assert.Equal(3, all.Count);
+        Assert.Equal([(2025, 4), (2026, 1), (2026, 2)], all.Select(s => (s.Season, s.SlateNumber)));
+    }
 }

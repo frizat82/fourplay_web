@@ -1,4 +1,6 @@
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
+using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
 
 namespace FourPlayWebApp.Server.Services;
@@ -10,6 +12,7 @@ namespace FourPlayWebApp.Server.Services;
 public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 {
     private readonly IEspnApiService _espnApiService;
+    private readonly ILeagueRepository _leagueRepository;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
 
     public event Action? ScoresChanged
@@ -18,11 +21,18 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         remove => _cache.Changed -= value;
     }
 
-    public EspnCacheService(IEspnApiService espnApiService, INflCurrentWeekService nflCurrentWeekService, TimeSpan? initialDelay = null)
+    public EspnCacheService(IEspnApiService espnApiService, INflCurrentWeekService nflCurrentWeekService, ILeagueRepository leagueRepository, TimeSpan? initialDelay = null)
     {
         _espnApiService = espnApiService;
+        _leagueRepository = leagueRepository;
         _cache = new PeriodicRefreshCache<EspnScores>(
             fetch: async () => {
+                // NflCurrentWeekService always resolves *something* now (most-recently-completed
+                // or soonest-upcoming week, for UI-default purposes) — so its result alone can't
+                // gate off-season ESPN polling. IsSeasonActiveAsync is the purpose-built,
+                // season-level check for that (see SeasonWindowResolver).
+                if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return null;
+
                 var week = await nflCurrentWeekService.GetCurrentWeekAsync();
                 return await espnApiService.GetWeekScores(week.EspnWeek, week.Season, week.IsPostSeason);
             },
@@ -33,8 +43,22 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 
     public Task<EspnScores?> GetScoresAsync() => Task.FromResult(_cache.Current);
 
-    public Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false) =>
-        _espnApiService.GetWeekScores(week, year, postSeason);
+    // Historical weeks are read straight from NflScores when persisted — every persisted row is
+    // already FINAL (NflScoresJob only writes finished games), so 100 concurrent viewers of the
+    // same past week share one DB read instead of each triggering its own ESPN call. Only a week
+    // NflScoresJob hasn't synced yet (or a genuinely current/future week — not this endpoint's
+    // real use, see EspnController's doc comment) falls through to a live ESPN call.
+    public async Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false)
+    {
+        var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, postSeason);
+        var rows = await _leagueRepository.GetNflScoresAsync(year, nflWeek);
+        if (rows.Count > 0) {
+            var games = rows.Select(row => new FinalScoresEspnMapper.FinishedGame(
+                row.Id.ToString(), row.HomeTeam, row.AwayTeam, row.HomeTeamScore, row.AwayTeamScore, row.GameTime));
+            return FinalScoresEspnMapper.Build(games, year, week, postSeason);
+        }
+        return await _espnApiService.GetWeekScores(week, year, postSeason);
+    }
 
     public ValueTask DisposeAsync() => _cache.DisposeAsync();
 }
