@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react';
+import { ThemeProvider } from '@mui/material/styles';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import WeekYearSelector from '../components/WeekYearSelector';
+import { createAppTheme } from '../app/theme';
 
 const defaultProps = {
   season: 2025,
@@ -42,6 +44,25 @@ describe('WeekYearSelector', () => {
     setup();
     expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();
+  });
+
+  // -----------------------------------------------------------------------
+  // /style-guide audit — container background/border must be theme-aware,
+  // not hardcoded light-mode literals (rgba(26, 40, 71, ...) is theme.ts's
+  // light-mode primary.main and renders near-invisible in dark mode)
+  // -----------------------------------------------------------------------
+
+  it('uses a dark-mode-appropriate border, not the hardcoded light literal', () => {
+    const darkTheme = createAppTheme('dark');
+    render(
+      <ThemeProvider theme={darkTheme}>
+        <WeekYearSelector {...defaultProps} />
+      </ThemeProvider>,
+    );
+    const container = screen.getByTestId('week-year-selector-container');
+    const style = getComputedStyle(container);
+    expect(style.borderColor).not.toBe('rgba(26, 40, 71, 0.1)');
+    expect(style.borderColor.replace(/\s/g, '')).toBe(darkTheme.palette.divider.replace(/\s/g, ''));
   });
 
   it('disables Previous button at minSeason week 1', () => {

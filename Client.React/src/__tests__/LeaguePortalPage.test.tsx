@@ -180,6 +180,30 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
     expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
   });
 
+  it('lets the owner clear and retype a Tease Pts value without it snapping back mid-edit', async () => {
+    // frizat: real user report — "can't type in #'s here" on desktop, "can't click up or down"
+    // on mobile Chrome. Root cause: value={juiceForm.juice} (a NUMBER) fed straight from
+    // onChange={(e) => onJuiceFormChange('juice', Number(e.target.value))} — every keystroke
+    // immediately re-coerces through Number() and feeds the result back as the controlled
+    // value, so clearing the field to retype, or typing a decimal point, gets silently
+    // overwritten back to a fully-parsed number (typing "1" then "." collapsed to "0" in live
+    // reproduction) before the next character lands. Live-verified against the local demo
+    // stack before writing this test.
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    // The default beforeEach only seeds juice data for CURRENT_SEASON - 1, so the current
+    // season's fields start at the form's zero-value default — irrelevant to this test, which
+    // only cares about the clear/retype behavior, not the starting number.
+    const field = await screen.findByLabelText(/Tease Pts \(Regular Season\)/i);
+    await waitFor(() => expect(field).not.toBeDisabled());
+
+    await userEvent.clear(field);
+    expect(field).toHaveValue(null); // truly empty — not silently reset to 0
+
+    await userEvent.type(field, '17.5');
+    expect(field).toHaveValue(17.5); // decimal point survives the intermediate "17." state
+  });
+
   // frizat: "Juice Settings"/"Weekly Cost" read as gambling jargon to a general audience —
   // renamed to plain language. Locking in the new copy so this doesn't silently regress.
   it('shows the Settings tab with plain-language labels (no gambling jargon)', async () => {
