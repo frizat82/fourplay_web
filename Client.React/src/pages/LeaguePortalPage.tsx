@@ -965,10 +965,13 @@ function JuiceTab({
   availableSeasons, selectedSeason, onSeasonChange, juiceForm, onJuiceFormChange,
   hasMappingForSeason, locked, onSave, onRollForward, saving, rollingForward,
 }: JuiceTabProps) {
-  const juiceField = useNumericField(juiceForm.juice, (n) => onJuiceFormChange('juice', n));
-  const juiceDivisionalField = useNumericField(juiceForm.juiceDivisional, (n) => onJuiceFormChange('juiceDivisional', n));
-  const juiceConferenceField = useNumericField(juiceForm.juiceConference, (n) => onJuiceFormChange('juiceConference', n));
-  const weeklyCostField = useNumericField(juiceForm.weeklyCost, (n) => onJuiceFormChange('weeklyCost', n));
+  // All 4 fields are backend `int` DTOs (Shared/Models/Data/Dtos/LeagueCreateDto.cs) — teaser
+  // points and weekly cost are always whole numbers in this domain, so integerOnly strips a
+  // typed decimal point instead of letting it through to a save that 400s.
+  const juiceField = useNumericField(juiceForm.juice, (n) => onJuiceFormChange('juice', n), { integerOnly: true });
+  const juiceDivisionalField = useNumericField(juiceForm.juiceDivisional, (n) => onJuiceFormChange('juiceDivisional', n), { integerOnly: true });
+  const juiceConferenceField = useNumericField(juiceForm.juiceConference, (n) => onJuiceFormChange('juiceConference', n), { integerOnly: true });
+  const weeklyCostField = useNumericField(juiceForm.weeklyCost, (n) => onJuiceFormChange('weeklyCost', n), { integerOnly: true });
 
   return (
     <Box>
@@ -1004,6 +1007,7 @@ function JuiceTab({
           type="number"
           size="small"
           disabled={locked}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           {...juiceField}
         />
         <TextField
@@ -1011,6 +1015,7 @@ function JuiceTab({
           type="number"
           size="small"
           disabled={locked}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           {...juiceDivisionalField}
         />
         <TextField
@@ -1018,6 +1023,7 @@ function JuiceTab({
           type="number"
           size="small"
           disabled={locked}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           {...juiceConferenceField}
         />
         <TextField
@@ -1025,6 +1031,7 @@ function JuiceTab({
           type="number"
           size="small"
           disabled={locked}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           {...weeklyCostField}
         />
         <Button variant="contained" onClick={onSave} disabled={saving || locked} sx={{ alignSelf: 'flex-start' }}>
