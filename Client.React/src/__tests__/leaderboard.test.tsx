@@ -146,6 +146,107 @@ describe('LeaderboardPage', () => {
   });
 });
 
+describe('LeaderboardPage — season selector', () => {
+  beforeEach(() => {
+    sessionState.currentLeague = 1;
+    mockedGetLeaderboard.mockReset();
+    mockedGetLeaderboard.mockResolvedValue([
+      createLeaderboardEntry({ userId: '123', userName: 'TestUser', rank: '1', total: 5, weekResults: [] }),
+    ]);
+    vi.mocked(mockAdapter.currentSeasonYear).mockResolvedValue(2023);
+  });
+
+  it('defaults to the current season and loads it on mount', async () => {
+    renderPage();
+    await screen.findByRole('table');
+    expect(screen.getByText('2023 Season')).toBeInTheDocument();
+    expect(mockedGetLeaderboard).toHaveBeenCalledWith(1, 2023);
+  });
+
+  it('lets the viewer pick a previous season, like ESPN — re-fetches standings for that year', async () => {
+    renderPage();
+    await screen.findByRole('table');
+    mockedGetLeaderboard.mockClear();
+
+    await userEvent.click(screen.getByRole('combobox'));
+    await userEvent.click(screen.getByRole('option', { name: '2021 Season' }));
+
+    await waitFor(() => expect(mockedGetLeaderboard).toHaveBeenCalledWith(1, 2021));
+    expect(screen.getByText('2021 Season')).toBeInTheDocument();
+  });
+
+  it('offers every season from adapter.weekSelectorConfig.minSeason through the current season', async () => {
+    renderPage();
+    await screen.findByRole('table');
+
+    await userEvent.click(screen.getByRole('combobox'));
+    expect(screen.getByRole('option', { name: '2023 Season' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '2020 Season' })).toBeInTheDocument(); // mockAdapter.weekSelectorConfig.minSeason
+    expect(screen.queryByRole('option', { name: '2019 Season' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '2024 Season' })).not.toBeInTheDocument();
+  });
+
+  it('disables the season selector while a season change is loading, preventing overlapping requests', async () => {
+    // frizat: /code-review flagged that rapidly re-selecting seasons had no race guard — a
+    // slower earlier request resolving after a later one could leave the table showing the
+    // wrong season's data. Rather than layering a manual staleness-check on top, disable the
+    // control while a fetch is in flight so a second request can never be fired before the
+    // first resolves — simpler, and standard behavior for a data-driven selector mid-fetch.
+    let resolveFetch!: (value: ReturnType<typeof createLeaderboardEntry>[]) => void;
+    mockedGetLeaderboard.mockImplementationOnce(() => Promise.resolve([
+      createLeaderboardEntry({ userId: '123', userName: 'TestUser', rank: '1', total: 5, weekResults: [] }),
+    ]));
+
+    renderPage();
+    await screen.findByRole('table');
+
+    mockedGetLeaderboard.mockImplementationOnce(() => new Promise((res) => { resolveFetch = res; }));
+    await userEvent.click(screen.getByRole('combobox'));
+    await userEvent.click(screen.getByRole('option', { name: '2021 Season' }));
+
+    expect(screen.getByRole('combobox')).toHaveAttribute('aria-disabled', 'true');
+
+    resolveFetch([createLeaderboardEntry({ userId: '456', userName: 'PastYearUser', rank: '1', total: 2, weekResults: [] })]);
+    await screen.findByText('PastYearUser');
+    expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('shows the full loading state (not stale data) when the current league changes, not just the season', async () => {
+    // frizat: /code-review caught that the "only show a light refresh, not a full spinner, after
+    // the first load" optimization was keyed on ANY fetch ever completing, not on the currently
+    // selected league — switching leagues via AppLayout's league-selector chip while sitting on
+    // this page (a real, reachable flow, unrelated to this page's own season selector) left the
+    // PREVIOUS league's standings rendered, unlabeled as stale, while the new league's data
+    // loaded, with no guard against an out-of-order response overwriting the right one.
+    mockedGetLeaderboard.mockResolvedValueOnce([
+      createLeaderboardEntry({ userId: '123', userName: 'LeagueOneUser', rank: '1', total: 5, weekResults: [] }),
+    ]);
+    const { rerender } = renderPage();
+    await screen.findByText('LeagueOneUser');
+
+    let resolveLeagueTwo!: (value: ReturnType<typeof createLeaderboardEntry>[]) => void;
+    mockedGetLeaderboard.mockImplementationOnce(() => new Promise((res) => { resolveLeagueTwo = res; }));
+
+    sessionState.currentLeague = 2;
+    rerender(
+      <ThemeProvider theme={createAppTheme('light')}>
+        <MemoryRouter initialEntries={['/leaderboard']}>
+          <Routes>
+            <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
+            <Route path="/leaguepicker" element={<div>League Picker</div>} />
+          </Routes>
+        </MemoryRouter>
+      </ThemeProvider>,
+    );
+
+    // The old league's data must not still be on screen while the new league loads.
+    await waitFor(() => expect(screen.queryByText('LeagueOneUser')).not.toBeInTheDocument());
+
+    resolveLeagueTwo([createLeaderboardEntry({ userId: '789', userName: 'LeagueTwoUser', rank: '1', total: 9, weekResults: [] })]);
+    await screen.findByText('LeagueTwoUser');
+  });
+});
+
 describe('LeaderboardPage — week-cell colors', () => {
   beforeEach(() => {
     sessionState.currentLeague = 1;

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ScoresPage from '../pages/ScoresPage';
@@ -202,6 +202,65 @@ describe('ScoresPage', () => {
     await renderPage();
     expect(screen.getAllByTestId('ArrowCircleUpIcon').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('ArrowCircleDownIcon').length).toBeGreaterThan(0);
+  });
+
+  // frizat: /style-guide audit — each pick-result row encoded win/loss three redundant ways at
+  // once: this shield icon (shape AND color both changed), the IconButton's own color, and the
+  // Badge's color. Drop the standalone shield icon; the badge/icon-button pair alone is the
+  // signal now (same "background/color is the only signal" resolution as the Matrix view).
+  it('does not render a redundant win/loss shield icon — the pick badge/button color alone carries it', async () => {
+    const picks = [createPick({ team: 'BUF', userName: 'OtherUser', userId: '456' })];
+    await setupDefaults({ picks, gameStarted: true });
+    await renderPage();
+    expect(screen.queryByTestId('GppGoodIcon')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('GppBadIcon')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('GppMaybeIcon')).not.toBeInTheDocument();
+  });
+
+  // frizat: same redundancy on the O/U row — the up/down arrows were colored success/error on
+  // top of the Badge/IconButton pairs on either side already showing the identical win/loss
+  // state. Arrows now stay a fixed neutral color; the badges are the one signal.
+  it('keeps the Over/Under arrows a neutral color regardless of win/loss — the badges already carry that signal', async () => {
+    // BUF 24, MIA 10 → total 34 < O/U 47.5 → Under wins (see makeScores comment above)
+    await setupDefaults({ week: 1, postSeason: true, gameStarted: true });
+    await renderPage();
+    const upArrow = screen.getAllByTestId('ArrowCircleUpIcon')[0];
+    const downArrow = screen.getAllByTestId('ArrowCircleDownIcon')[0];
+    expect(upArrow).not.toHaveStyle({ color: 'rgb(211, 47, 47)' }); // MUI error.main
+    expect(upArrow).not.toHaveStyle({ color: 'rgb(46, 125, 50)' }); // MUI success.main
+    expect(downArrow).not.toHaveStyle({ color: 'rgb(211, 47, 47)' });
+    expect(downArrow).not.toHaveStyle({ color: 'rgb(46, 125, 50)' });
+  });
+
+  // frizat: /style-guide audit — "Show As Matrix" defaulted to unstyled contained (reads as
+  // primary navy, near-inert next to body text) while "Show Only My Picks" used contained
+  // secondary (the brand orange reserved for real CTAs like Share) — two equal-weight view
+  // filters shouldn't have one wearing the brand accent. Both are the same neutral treatment now.
+  it('gives the Matrix and My-Picks view toggles matching weight, neither wearing the brand-CTA color', async () => {
+    const picks = [createPick({ team: 'BUF' })];
+    await setupDefaults({ picks, gameStarted: true });
+    await renderPage();
+
+    const matrixButton = screen.getByRole('button', { name: /show as matrix/i });
+    const myPicksButton = screen.getByRole('button', { name: /show only my picks/i });
+    expect(matrixButton.className).toMatch(/MuiButton-outlinedInfo/);
+    expect(myPicksButton.className).toMatch(/MuiButton-outlinedInfo/);
+    expect(matrixButton.className).not.toMatch(/Secondary/);
+    expect(myPicksButton.className).not.toMatch(/Secondary/);
+  });
+
+  // /code-review caught that the removed shield icon was the ONLY win/loss signal for a team
+  // nobody in the league picked — the badge/icon-button pair used pickCount === 0 to both hide
+  // the count bubble AND disable the button, and MUI's disabled state flattens `color` to gray
+  // regardless of the success/error prop. Disabled must now track "not decided yet" only, so the
+  // outcome color still shows even with zero picks.
+  it('keeps the pick icon enabled and colored by outcome even when nobody in the league picked that side', async () => {
+    await setupDefaults({ picks: [], gameStarted: true });
+    const { getByTestId } = await renderPage();
+    const badge = getByTestId('badge-BUF-spread');
+    const button = within(badge).getByRole('button');
+    expect(button).not.toBeDisabled();
+    expect(button.className).toMatch(/colorSuccess/);
   });
 
   it('spread badge is info when current user has a pick', async () => {

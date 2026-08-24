@@ -40,6 +40,7 @@ import { useToast } from '../services/toast';
 import { isAdmin } from '../utils/auth';
 import { extractApiErrorMessage } from '../utils/apiError';
 import { useShareLink } from '../utils/useShareLink';
+import { useNumericField } from '../utils/useNumericField';
 import {
   getLeagueUserMappings,
   getLeagueJuice,
@@ -767,6 +768,22 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
         )}
       </Stack>
 
+      {/* frizat: real incident — an owner generated a share link meaning "blast it to my whole
+          group," a member clicked it, and the owner was confused about what would happen next.
+          Always-visible text, not a hover tooltip, since this is mobile-first and the confusion
+          happens exactly when someone is about to click one of these buttons. Both mechanisms
+          apply the identical accept/decline-vs-register rule (LeagueController.JoinViaLink
+          routes an existing user through the same membershipInviteService.CreateOrReopenAsync
+          as InviteToLeague) — the real difference is targeting: one email vs. one shareable
+          link for a whole group. Don't say the link joins existing members instantly; it
+          doesn't (only a brand-new visitor registering through either path does). */}
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, maxWidth: 640 }}>
+        Invite Player sends a request to one email — existing members get a request to accept or decline, new visitors register to join.
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 640 }}>
+        Invite Link works the same way, but gives you one shareable link for your whole group instead of one email at a time.
+      </Typography>
+
       {inviteLink && (
         <Box sx={{ mb: 3, p: 2, border: 1, borderColor: linkExpired ? 'warning.main' : 'divider', borderRadius: 1, maxWidth: 520 }}>
           <Stack spacing={1}>
@@ -948,6 +965,14 @@ function JuiceTab({
   availableSeasons, selectedSeason, onSeasonChange, juiceForm, onJuiceFormChange,
   hasMappingForSeason, locked, onSave, onRollForward, saving, rollingForward,
 }: JuiceTabProps) {
+  // All 4 fields are backend `int` DTOs (Shared/Models/Data/Dtos/LeagueCreateDto.cs) — teaser
+  // points and weekly cost are always whole numbers in this domain, so integerOnly strips a
+  // typed decimal point instead of letting it through to a save that 400s.
+  const juiceField = useNumericField(juiceForm.juice, (n) => onJuiceFormChange('juice', n), { integerOnly: true });
+  const juiceDivisionalField = useNumericField(juiceForm.juiceDivisional, (n) => onJuiceFormChange('juiceDivisional', n), { integerOnly: true });
+  const juiceConferenceField = useNumericField(juiceForm.juiceConference, (n) => onJuiceFormChange('juiceConference', n), { integerOnly: true });
+  const weeklyCostField = useNumericField(juiceForm.weeklyCost, (n) => onJuiceFormChange('weeklyCost', n), { integerOnly: true });
+
   return (
     <Box>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
@@ -982,32 +1007,32 @@ function JuiceTab({
           type="number"
           size="small"
           disabled={locked}
-          value={juiceForm.juice}
-          onChange={(e) => onJuiceFormChange('juice', Number(e.target.value))}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          {...juiceField}
         />
         <TextField
           label="Tease Pts (Divisional)"
           type="number"
           size="small"
           disabled={locked}
-          value={juiceForm.juiceDivisional}
-          onChange={(e) => onJuiceFormChange('juiceDivisional', Number(e.target.value))}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          {...juiceDivisionalField}
         />
         <TextField
           label="Tease Pts (Conference)"
           type="number"
           size="small"
           disabled={locked}
-          value={juiceForm.juiceConference}
-          onChange={(e) => onJuiceFormChange('juiceConference', Number(e.target.value))}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          {...juiceConferenceField}
         />
         <TextField
           label="Cost Per Week ($)"
           type="number"
           size="small"
           disabled={locked}
-          value={juiceForm.weeklyCost}
-          onChange={(e) => onJuiceFormChange('weeklyCost', Number(e.target.value))}
+          slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          {...weeklyCostField}
         />
         <Button variant="contained" onClick={onSave} disabled={saving || locked} sx={{ alignSelf: 'flex-start' }}>
           {saving ? <CircularProgress size={18} /> : 'Save'}
