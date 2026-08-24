@@ -510,6 +510,24 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
     expect(mockedGetLeagueInvitations).toHaveBeenCalledWith(1);
   });
 
+  it('explains the difference between Invite Player and Invite Link so owners pick the right one', async () => {
+    // frizat: a real incident — an owner generated a share link meaning "blast it to my whole
+    // group," a member clicked it, and the owner was confused about what would happen next.
+    // A short always-visible explanation next to the buttons is more likely to be read at the
+    // moment of confusion than a separate help page (mobile-first: no hover-only tooltip).
+    // /code-review caught that an earlier draft of this copy claimed the link joins existing
+    // members instantly — stale relative to LeagueController.JoinViaLink routing an existing
+    // user through the same pending-invite/Accept-Decline mechanism as Invite Player (see
+    // feat/invite-link-uses-membership-banner). The real distinguishing feature is targeting
+    // (one email vs. one shareable link for a whole group) — the accept/decline-vs-register
+    // rule is now identical on both paths, so the copy must say so, not the opposite.
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(screen.getByText(/invite player sends a request to one email.*existing members get a request to accept or decline.*new visitors register to join/i)).toBeInTheDocument();
+    expect(screen.getByText(/invite link.*same way.*one shareable link for your whole group/i)).toBeInTheDocument();
+  });
+
   it('shows the active invite link panel with copy and share buttons when a link exists', async () => {
     mockedGetCurrentInviteLink.mockResolvedValue(makeInviteLink());
     renderPage();
