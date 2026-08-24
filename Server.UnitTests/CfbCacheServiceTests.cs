@@ -23,14 +23,19 @@ public class CfbCacheServiceTests
     private readonly ICfbLiveScoreFetcher _fetcher;
     private readonly IServiceScopeFactory _scopeFactory;
 
+    // StartDate/EndDate relative to "now" (not a fixed calendar date) so this slate is always
+    // "currently active" for the SeasonWindowResolver-based gate CfbCacheService now checks
+    // before fetching — tests below shouldn't have to also fight an unrelated off-season skip.
+    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
+
     private static readonly CfbSlateInfo DefaultSlateInfo = new(
         Id: 1, Season: 2026, SlateNumber: 5, Label: "Week 5", SlateType: "RegularSeason",
-        StartDate: new DateOnly(2026, 9, 27), EndDate: new DateOnly(2026, 9, 28), FirstGameUtc: null,
-        SpreadLockDatetime: new DateTime(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc));
+        StartDate: Today.AddDays(-1), EndDate: Today.AddDays(1), FirstGameUtc: null,
+        SpreadLockDatetime: DateTime.UtcNow.AddDays(-7));
 
     private static readonly CfbSlates DefaultSlate = new() {
         Id = 1, Season = 2026, SlateNumber = 5, Label = "Week 5", SlateType = "RegularSeason",
-        StartDate = new DateOnly(2026, 9, 27), EndDate = new DateOnly(2026, 9, 28),
+        StartDate = Today.AddDays(-1), EndDate = Today.AddDays(1),
         EspnWeekNumber = 5, ScoringFormat = "Spread",
     };
 
@@ -41,6 +46,9 @@ public class CfbCacheServiceTests
         _fetcher = Substitute.For<ICfbLiveScoreFetcher>();
         _currentSlateService.GetCurrentSlateAsync().Returns(DefaultSlateInfo);
         _cfbRepo.GetSlateByIdAsync(DefaultSlate.Id).Returns(DefaultSlate);
+        // Default: a season is active, so existing tests keep exercising the live-fetch branch
+        // unchanged by the new off-season gate.
+        _currentSlateService.IsSeasonActiveAsync().Returns(true);
 
         var services = new ServiceCollection();
         services.AddSingleton(_currentSlateService);
@@ -105,6 +113,22 @@ public class CfbCacheServiceTests
         await WaitForScoresChangedAsync(svc);
 
         Assert.Equal(1, fireCount);
+    }
+
+    // Off-season gating — the poller must not hit ESPN when no season is active (frizat plan:
+    // wobbly-chasing-lynx). Previously CfbCurrentSlateService's ConfiguredSeason hardcode meant
+    // GetCurrentSlateAsync's null-ness happened to gate this correctly by accident; now that it
+    // always resolves *something*, IsSeasonActive is the purpose-built check instead.
+    [Fact]
+    public async Task GetScoresAsync_NeverFetches_WhenNoSeasonIsCurrentlyActive()
+    {
+        _currentSlateService.IsSeasonActiveAsync().Returns(false);
+
+        await using var svc = new CfbCacheService(_scopeFactory, _fetcher, initialDelay: TimeSpan.FromMilliseconds(50));
+        await Task.Delay(300);
+
+        Assert.Null(await svc.GetScoresAsync());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
     }
 
     [Fact]

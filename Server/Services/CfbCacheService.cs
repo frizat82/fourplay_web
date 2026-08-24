@@ -36,6 +36,12 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                 var currentSlateService = scope.ServiceProvider.GetRequiredService<ICfbCurrentSlateService>();
                 var cfbRepo = scope.ServiceProvider.GetRequiredService<ICfbRepository>();
 
+                // CfbCurrentSlateService always resolves *something* now (most-recently-completed
+                // or soonest-upcoming slate, for UI-default purposes) — so its null-ness alone can
+                // no longer be used to gate off-season ESPN polling. IsSeasonActiveAsync is the
+                // purpose-built, season-level check for that (see SeasonWindowResolver).
+                if (!await currentSlateService.IsSeasonActiveAsync()) return null;
+
                 var currentSlate = await currentSlateService.GetCurrentSlateAsync();
                 if (currentSlate is null) return null;
 

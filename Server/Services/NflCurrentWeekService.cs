@@ -8,19 +8,21 @@ public class NflCurrentWeekService(ILeagueRepository repo) : INflCurrentWeekServ
         var now = DateTime.UtcNow;
         var configs = await repo.GetNflSeasonWeekConfigsAsync();
 
-        var active = configs.FirstOrDefault(c => c.WeekStartDatetime <= now && now <= c.WeekEndDatetime);
+        // Active window wins; else most-recently-completed (off-season); else soonest
+        // upcoming (pre-season) — see SeasonWindowResolver for the shared NFL/CFB logic.
+        var windows = configs.Select(c => new SeasonWindowResolver.Window(c.Season, c.WeekStartDatetime, c.WeekEndDatetime));
+        var resolved = SeasonWindowResolver.ResolveCurrentWeek(windows, now)
+            ?? throw new InvalidOperationException("No NflSeasonWeekConfig rows exist — cannot resolve a current week.");
 
-        // Off-season: return most recent completed week
-        active ??= configs.Where(c => c.WeekEndDatetime < now)
-                          .OrderByDescending(c => c.WeekEndDatetime)
-                          .FirstOrDefault();
+        var config = configs.First(c => c.Season == resolved.Season
+            && c.WeekStartDatetime == resolved.Start && c.WeekEndDatetime == resolved.End);
+        return ToWeekInfo(config);
+    }
 
-        // Pre-season: return upcoming Week 1
-        active ??= configs.Where(c => c.WeekStartDatetime > now)
-                          .OrderBy(c => c.WeekStartDatetime)
-                          .First();
-
-        return ToWeekInfo(active);
+    public async Task<bool> IsSeasonActiveAsync() {
+        var configs = await repo.GetNflSeasonWeekConfigsAsync();
+        var windows = configs.Select(c => new SeasonWindowResolver.Window(c.Season, c.WeekStartDatetime, c.WeekEndDatetime));
+        return SeasonWindowResolver.IsSeasonActive(windows, DateTime.UtcNow);
     }
 
     private static NflWeekInfo ToWeekInfo(Models.Data.NflSeasonWeekConfig cfg) {
