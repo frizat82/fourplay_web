@@ -73,4 +73,40 @@ describe('useNumericField', () => {
     rerender({ value: 20 });
     expect(result.current.value).toBe('20');
   });
+
+  describe('integerOnly', () => {
+    // The backend's Juice/Cost DTOs are all `int` — a decimal typed into these fields
+    // previously displayed fine but 400'd silently on save. Stripping the decimal point
+    // as it's typed keeps the field's own contract (whole numbers) instead of catching
+    // the mismatch only after a failed save.
+    it('strips a typed decimal point instead of accepting it', () => {
+      const onChange = vi.fn();
+      const { result } = renderHook(() => useNumericField(1, onChange, { integerOnly: true }));
+
+      act(() => result.current.onChange({ target: { value: '1.' } } as React.ChangeEvent<HTMLInputElement>));
+      expect(result.current.value).toBe('1');
+
+      act(() => result.current.onChange({ target: { value: '1.5' } } as React.ChangeEvent<HTMLInputElement>));
+      expect(result.current.value).toBe('15');
+      expect(onChange).toHaveBeenLastCalledWith(15);
+    });
+
+    it('still allows a bare "-" as a mid-edit state without pushing a value upward', () => {
+      const onChange = vi.fn();
+      const { result } = renderHook(() => useNumericField(3, onChange, { integerOnly: true }));
+
+      act(() => result.current.onChange({ target: { value: '-' } } as React.ChangeEvent<HTMLInputElement>));
+      expect(result.current.value).toBe('-');
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('does not strip the decimal point when integerOnly is not set', () => {
+      const onChange = vi.fn();
+      const { result } = renderHook(() => useNumericField(1, onChange));
+
+      act(() => result.current.onChange({ target: { value: '1.5' } } as React.ChangeEvent<HTMLInputElement>));
+      expect(result.current.value).toBe('1.5');
+      expect(onChange).toHaveBeenCalledWith(1.5);
+    });
+  });
 });
