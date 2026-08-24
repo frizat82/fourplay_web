@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { buildDescendingSeasonRange } from '../utils/seasonRange';
 import { Navigate } from 'react-router-dom';
 import {
   alpha,
@@ -8,6 +9,8 @@ import {
   CardContent,
   CircularProgress,
   Grid,
+  MenuItem,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -41,19 +44,51 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardDto[]>([]);
+  const [season, setSeason] = useState<number | null>(null);
+  // Remember the real current-season ceiling separately from `season` (which the selector
+  // below can move to a past year) — otherwise re-deriving the selector's upper bound from
+  // whatever season is currently being VIEWED would shrink the range after picking a past
+  // year, trapping the viewer in history (same bug class PicksPage's season selector hit).
+  const [maxSeason, setMaxSeason] = useState<number | null>(null);
+
+  // Only the very first fetch FOR THE CURRENTLY SELECTED LEAGUE shows the full-page spinner — a
+  // season switch within the same league keeps the page on screen and just disables the
+  // selector for the moment a fetch is in flight. Scoping this per-league (not a single global
+  // "ever loaded" flag) matters because AppLayout's league-selector chip can change
+  // `currentLeague` while already sitting on this page: without resetting the flag here, that
+  // switch would silently keep the PREVIOUS league's standings on screen (unlabeled as stale)
+  // while the new league's data loaded, with no guard against an out-of-order response
+  // overwriting the right one (/code-review caught this as a real, reachable regression).
+  const hasLoadedOnce = useRef(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    const run = async () => {
-      setLoading(true);
-      if (!leaguesLoaded || !currentLeague) { setLoading(false); return; }
-      const seasonYear = await adapter.currentSeasonYear();
+    if (!leaguesLoaded || !currentLeague) { setLoading(false); return; }
+    hasLoadedOnce.current = false;
+    void adapter.currentSeasonYear().then((seasonYear) => {
       if (!seasonYear) { setLoading(false); return; }
-      const data = await getLeaderboard(currentLeague, seasonYear);
+      setSeason(seasonYear);
+      setMaxSeason(seasonYear);
+    });
+  }, [currentLeague, leaguesLoaded, adapter]);
+
+  useEffect(() => {
+    if (!currentLeague || season == null) return;
+    const run = async () => {
+      if (hasLoadedOnce.current) setRefreshing(true); else setLoading(true);
+      const data = await getLeaderboard(currentLeague, season);
       setLeaderboard(data ?? []);
+      hasLoadedOnce.current = true;
       setLoading(false);
+      setRefreshing(false);
     };
     void run();
-  }, [currentLeague, leaguesLoaded, adapter]);
+  }, [currentLeague, season]);
+
+  const seasonOptions = useMemo(() => {
+    if (maxSeason == null) return [];
+    return buildDescendingSeasonRange(adapter.weekSelectorConfig.minSeason, maxSeason);
+  }, [maxSeason, adapter.weekSelectorConfig.minSeason]);
 
   const maxWeek = useMemo(() => {
     if (leaderboard.length === 0) return 0;
@@ -169,6 +204,24 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
           </Button>
         }
       />
+      {season != null && seasonOptions.length > 0 && (
+        // frizat: /code-review flagged that cramming this into PageHeader's title+action row
+        // (already carrying the "Leaderboard" h4 + Share button) risked overflow on the app's
+        // ~390px mobile primary viewport — its own row has no competing width to fight for.
+        <Box sx={{ mb: 2 }}>
+          <Select
+            size="small"
+            value={season}
+            disabled={refreshing}
+            onChange={(e) => setSeason(Number(e.target.value))}
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
+          >
+            {seasonOptions.map((year) => (
+              <MenuItem key={year} value={year}>{year} Season</MenuItem>
+            ))}
+          </Select>
+        </Box>
+      )}
       {myRow && isPreparingShare && (
         // Mounted only while actually capturing a share image — an always-mounted hidden card
         // duplicates the user's name/rank text in the DOM, which broke a real Playwright demo
