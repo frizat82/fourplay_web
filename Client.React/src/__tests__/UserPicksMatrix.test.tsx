@@ -111,22 +111,50 @@ describe('UserPicksMatrix — Over/Under shown as a bold word, not a small icon'
     expect(container.querySelector('[data-testid="ArrowCircleDownIcon"]')).not.toBeInTheDocument();
   });
 
-  it('renders the OVER/UNDER label in a neutral color, not red, when the game has no result yet', () => {
-    // frizat: /code-review caught that the old icon's color logic (carried into the new text
-    // label) collapsed "no spread data yet" (result === null, a scheduled/in-progress game per
-    // ScoresPage's matrixSpreads) into the same branch as an actual loss — falsely showing a red
-    // "OVER" before the game was even decided. Matches the badge background's own 3-way branch.
-    const pendingPick: NflPickDto[] = [
+  // frizat: the badge already encoded win/loss three different ways at once — the tinted
+  // background, a colored OVER/UNDER label, and a corner check/cancel icon — which read as
+  // cluttered rather than clear (user feedback: "hard to see w/ the check box"). The
+  // background alone now carries the win/loss signal; text stays a single neutral ink color,
+  // same as the team abbreviation, in every case (win, loss, or no result yet).
+  it.each([
+    ['light', 'a winning pick', { team: 'KC', isWinner: true, isOverWinner: true, isUnderWinner: false, spread: -3, over: 45, under: 45 }],
+    ['light', 'a losing pick', { team: 'KC', isWinner: false, isOverWinner: false, isUnderWinner: true, spread: -3, over: 45, under: 45 }],
+    ['light', 'a pick with no result yet', undefined],
+    ['dark', 'a winning pick', { team: 'KC', isWinner: true, isOverWinner: true, isUnderWinner: false, spread: -3, over: 45, under: 45 }],
+    ['dark', 'a losing pick', { team: 'KC', isWinner: false, isOverWinner: false, isUnderWinner: true, spread: -3, over: 45, under: 45 }],
+    ['dark', 'a pick with no result yet', undefined],
+  ] as const)('renders the OVER/UNDER label in the same neutral ink as the team name in %s mode for %s', (mode, _label, spread) => {
+    // frizat: /code-review caught that this only ever rendered in light mode — a future
+    // dark-mode-only color override on just one of the two labels would've silently passed.
+    const pick: NflPickDto[] = [
       { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
     ];
     render(
-      <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix users={['alice']} picks={pendingPick} spreads={{}} requiredPicks={1} />
+      <ThemeProvider theme={createTheme({ palette: { mode } })}>
+        <UserPicksMatrix users={['alice']} picks={pick} spreads={spread ? { KC: spread } : {}} requiredPicks={1} />
       </ThemeProvider>,
     );
-    const label = screen.getByText('OVER');
-    expect(label).not.toHaveStyle({ color: 'rgb(211, 47, 47)' }); // MUI error.main
-    expect(label).not.toHaveStyle({ color: 'rgb(46, 125, 50)' }); // MUI success.main
+    const teamLabel = screen.getByText('KC');
+    const ouLabel = screen.getByText('OVER');
+    expect(getComputedStyle(ouLabel).color).toBe(getComputedStyle(teamLabel).color);
+  });
+
+  it('does not render a win/loss check or cancel icon — the badge background alone carries that signal', () => {
+    const picks: NflPickDto[] = [
+      { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
+    ];
+    const { container } = render(
+      <ThemeProvider theme={createTheme()}>
+        <UserPicksMatrix
+          users={['alice']}
+          picks={picks}
+          spreads={{ KC: { team: 'KC', isWinner: true, isOverWinner: true, isUnderWinner: false, spread: -3, over: 45, under: 45 } }}
+          requiredPicks={1}
+        />
+      </ThemeProvider>,
+    );
+    expect(container.querySelector('[data-testid="CheckCircleIcon"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="CancelIcon"]')).not.toBeInTheDocument();
   });
 });
 
