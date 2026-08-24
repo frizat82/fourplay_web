@@ -3,6 +3,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useEffect, useMemo } from 'react';
 import { getWeekName } from '../utils/gameHelpers';
+import { buildDescendingSeasonRange } from '../utils/seasonRange';
 
 interface WeekYearSelectorProps {
   season: number;
@@ -93,21 +94,23 @@ export default function WeekYearSelector({
   };
 
   const seasonOptions = useMemo(
-    () => Array.from({ length: maxSeason - minSeason + 1 }, (_, i) => minSeason + i).reverse(),
+    () => buildDescendingSeasonRange(minSeason, maxSeason),
     [minSeason, maxSeason]
   );
 
   return (
     <Box
+      data-testid="week-year-selector-container"
       sx={{
         display: 'flex',
         flexDirection: 'column',
         gap: 1.5,
         p: { xs: 1, sm: 2 },
         mb: 3,
-        backgroundColor: 'rgba(26, 40, 71, 0.04)',
+        bgcolor: 'action.hover',
         borderRadius: 2,
-        border: '1px solid rgba(26, 40, 71, 0.1)',
+        border: '1px solid',
+        borderColor: 'divider',
       }}
     >
       {/* Selects row — frizat: flexWrap alone made mobile layout depend on content width: a short

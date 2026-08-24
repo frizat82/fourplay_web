@@ -180,6 +180,43 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
     expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
   });
 
+  it('lets the owner clear and retype a Tease Pts value without it snapping back mid-edit', async () => {
+    // frizat: real user report — "can't type in #'s here" on desktop, "can't click up or down"
+    // on mobile Chrome. Root cause: value={juiceForm.juice} (a NUMBER) fed straight from
+    // onChange={(e) => onJuiceFormChange('juice', Number(e.target.value))} — every keystroke
+    // immediately re-coerces through Number() and feeds the result back as the controlled
+    // value, so clearing the field to retype gets silently overwritten back to a fully-parsed
+    // number (e.g. "0") before the next character lands. Live-verified against the local demo
+    // stack before writing this test.
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    // The default beforeEach only seeds juice data for CURRENT_SEASON - 1, so the current
+    // season's fields start at the form's zero-value default — irrelevant to this test, which
+    // only cares about the clear/retype behavior, not the starting number.
+    const field = await screen.findByLabelText(/Tease Pts \(Regular Season\)/i);
+    await waitFor(() => expect(field).not.toBeDisabled());
+
+    await userEvent.clear(field);
+    expect(field).toHaveValue(null); // truly empty — not silently reset to 0
+
+    await userEvent.type(field, '175');
+    expect(field).toHaveValue(175);
+  });
+
+  // frizat: the backend's Juice DTO is `int` (Shared/Models/Data/Dtos/LeagueCreateDto.cs) —
+  // a decimal typed here used to display fine but 400 silently on save. Strip the decimal
+  // point as it's typed instead of catching the mismatch only after a failed save.
+  it('strips a typed decimal point in Tease Pts instead of accepting it, since the field is whole-number only', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    const field = await screen.findByLabelText(/Tease Pts \(Regular Season\)/i);
+    await waitFor(() => expect(field).not.toBeDisabled());
+
+    await userEvent.clear(field);
+    await userEvent.type(field, '17.5');
+    expect(field).toHaveValue(175);
+  });
+
   // frizat: "Juice Settings"/"Weekly Cost" read as gambling jargon to a general audience —
   // renamed to plain language. Locking in the new copy so this doesn't silently regress.
   it('shows the Settings tab with plain-language labels (no gambling jargon)', async () => {
@@ -484,6 +521,24 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
 
     expect(mockedGetCurrentInviteLink).toHaveBeenCalledWith(1);
     expect(mockedGetLeagueInvitations).toHaveBeenCalledWith(1);
+  });
+
+  it('explains the difference between Invite Player and Invite Link so owners pick the right one', async () => {
+    // frizat: a real incident — an owner generated a share link meaning "blast it to my whole
+    // group," a member clicked it, and the owner was confused about what would happen next.
+    // A short always-visible explanation next to the buttons is more likely to be read at the
+    // moment of confusion than a separate help page (mobile-first: no hover-only tooltip).
+    // /code-review caught that an earlier draft of this copy claimed the link joins existing
+    // members instantly — stale relative to LeagueController.JoinViaLink routing an existing
+    // user through the same pending-invite/Accept-Decline mechanism as Invite Player (see
+    // feat/invite-link-uses-membership-banner). The real distinguishing feature is targeting
+    // (one email vs. one shareable link for a whole group) — the accept/decline-vs-register
+    // rule is now identical on both paths, so the copy must say so, not the opposite.
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(screen.getByText(/invite player sends a request to one email.*existing members get a request to accept or decline.*new visitors register to join/i)).toBeInTheDocument();
+    expect(screen.getByText(/invite link.*same way.*one shareable link for your whole group/i)).toBeInTheDocument();
   });
 
   it('shows the active invite link panel with copy and share buttons when a link exists', async () => {

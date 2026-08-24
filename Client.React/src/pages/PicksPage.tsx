@@ -226,7 +226,11 @@ export default function PicksPage({ adapter }: PicksPageProps) {
               <Button variant="contained" color="success" disabled={storingPicks || userPicks.size === 0} onClick={handleSubmit}>
                 {storingPicks ? 'Submitting…' : 'Submit Pick(s)'}
               </Button>
-              <Button variant="contained" color="warning" disabled={userPicks.size === 0} onClick={handleClear}>
+              {/* frizat: /style-guide audit — both buttons were equal-weight contained, and
+                  Clear used color="warning" as a small filled button, the exact configuration
+                  the style guide documents as unreadable in both modes for pick-state buttons.
+                  Outlined demotes Clear to secondary, matching its rare, lower-stakes role. */}
+              <Button variant="outlined" disabled={userPicks.size === 0} onClick={handleClear}>
                 Clear Selected Picks
               </Button>
             </Stack>
