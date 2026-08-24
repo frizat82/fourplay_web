@@ -3,6 +3,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useEffect, useMemo } from 'react';
 import { getWeekName } from '../utils/gameHelpers';
+import { buildDescendingSeasonRange } from '../utils/seasonRange';
 
 interface WeekYearSelectorProps {
   season: number;
@@ -93,7 +94,7 @@ export default function WeekYearSelector({
   };
 
   const seasonOptions = useMemo(
-    () => Array.from({ length: maxSeason - minSeason + 1 }, (_, i) => minSeason + i).reverse(),
+    () => buildDescendingSeasonRange(minSeason, maxSeason),
     [minSeason, maxSeason]
   );
 
