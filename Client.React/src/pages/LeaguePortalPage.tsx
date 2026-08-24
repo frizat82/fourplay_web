@@ -40,6 +40,7 @@ import { useToast } from '../services/toast';
 import { isAdmin } from '../utils/auth';
 import { extractApiErrorMessage } from '../utils/apiError';
 import { useShareLink } from '../utils/useShareLink';
+import { useNumericField } from '../utils/useNumericField';
 import {
   getLeagueUserMappings,
   getLeagueJuice,
@@ -948,6 +949,11 @@ function JuiceTab({
   availableSeasons, selectedSeason, onSeasonChange, juiceForm, onJuiceFormChange,
   hasMappingForSeason, locked, onSave, onRollForward, saving, rollingForward,
 }: JuiceTabProps) {
+  const juiceField = useNumericField(juiceForm.juice, (n) => onJuiceFormChange('juice', n));
+  const juiceDivisionalField = useNumericField(juiceForm.juiceDivisional, (n) => onJuiceFormChange('juiceDivisional', n));
+  const juiceConferenceField = useNumericField(juiceForm.juiceConference, (n) => onJuiceFormChange('juiceConference', n));
+  const weeklyCostField = useNumericField(juiceForm.weeklyCost, (n) => onJuiceFormChange('weeklyCost', n));
+
   return (
     <Box>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
@@ -982,32 +988,28 @@ function JuiceTab({
           type="number"
           size="small"
           disabled={locked}
-          value={juiceForm.juice}
-          onChange={(e) => onJuiceFormChange('juice', Number(e.target.value))}
+          {...juiceField}
         />
         <TextField
           label="Tease Pts (Divisional)"
           type="number"
           size="small"
           disabled={locked}
-          value={juiceForm.juiceDivisional}
-          onChange={(e) => onJuiceFormChange('juiceDivisional', Number(e.target.value))}
+          {...juiceDivisionalField}
         />
         <TextField
           label="Tease Pts (Conference)"
           type="number"
           size="small"
           disabled={locked}
-          value={juiceForm.juiceConference}
-          onChange={(e) => onJuiceFormChange('juiceConference', Number(e.target.value))}
+          {...juiceConferenceField}
         />
         <TextField
           label="Cost Per Week ($)"
           type="number"
           size="small"
           disabled={locked}
-          value={juiceForm.weeklyCost}
-          onChange={(e) => onJuiceFormChange('weeklyCost', Number(e.target.value))}
+          {...weeklyCostField}
         />
         <Button variant="contained" onClick={onSave} disabled={saving || locked} sx={{ alignSelf: 'flex-start' }}>
           {saving ? <CircularProgress size={18} /> : 'Save'}
