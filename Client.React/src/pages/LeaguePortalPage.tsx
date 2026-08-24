@@ -767,6 +767,22 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
         )}
       </Stack>
 
+      {/* frizat: real incident — an owner generated a share link meaning "blast it to my whole
+          group," a member clicked it, and the owner was confused about what would happen next.
+          Always-visible text, not a hover tooltip, since this is mobile-first and the confusion
+          happens exactly when someone is about to click one of these buttons. Both mechanisms
+          apply the identical accept/decline-vs-register rule (LeagueController.JoinViaLink
+          routes an existing user through the same membershipInviteService.CreateOrReopenAsync
+          as InviteToLeague) — the real difference is targeting: one email vs. one shareable
+          link for a whole group. Don't say the link joins existing members instantly; it
+          doesn't (only a brand-new visitor registering through either path does). */}
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, maxWidth: 640 }}>
+        Invite Player sends a request to one email — existing members get a request to accept or decline, new visitors register to join.
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 640 }}>
+        Invite Link works the same way, but gives you one shareable link for your whole group instead of one email at a time.
+      </Typography>
+
       {inviteLink && (
         <Box sx={{ mb: 3, p: 2, border: 1, borderColor: linkExpired ? 'warning.main' : 'divider', borderRadius: 1, maxWidth: 520 }}>
           <Stack spacing={1}>
