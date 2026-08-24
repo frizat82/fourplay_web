@@ -70,6 +70,31 @@ test.describe('Leaderboard page (authenticated)', () => {
     await expect(page.getByText('Standings')).not.toBeVisible();
   });
 
+  test('season selector defaults to the current season, and switching seasons re-fetches standings for that year', async ({ page }) => {
+    await gotoLeaderboard(page, sampleLeaderboard);
+    await expect(page.getByText('2024 Season')).toBeVisible({ timeout: 5000 }); // TEST_SEASON in e2e/helpers/routes.ts
+
+    // Registered after the default mock (from setupRoutes, via gotoLeaderboard/mockAuth) so it
+    // takes over for any leaderboard request from here on — proves the season change actually
+    // fires a new request for the newly-selected year, not just a client-side re-render.
+    const requestedSeasons: string[] = [];
+    await page.route(/\/api\/leaderboard\/\d+\/leaderboard\/\d+/, (route) => {
+      requestedSeasons.push(new URL(route.request().url()).pathname.split('/').pop()!);
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(sampleLeaderboard) });
+    });
+
+    // Other combobox-role selectors (e.g. Picks' week/season-type selector) can linger in the
+    // DOM after the client-side nav gotoLeaderboard does — target this one by its visible text.
+    await page.getByText('2024 Season').click();
+    await page.getByRole('option', { name: '2022 Season' }).click();
+
+    await expect(page.getByRole('combobox').filter({ hasText: '2022 Season' })).toBeVisible({ timeout: 5000 });
+    // Not asserting the exact call list — an incidental extra same-season refetch is possible
+    // depending on render timing and isn't what this test is about — just that switching to
+    // 2022 actually fires a real request for that year, not just a client-side re-render.
+    expect(requestedSeasons.at(-1)).toBe('2022');
+  });
+
   test('Share button renders the standings card and shares it (falls back to download when the browser cannot share files)', async ({ page }) => {
     // Force the download-fallback branch deterministically, rather than relying on whatever
     // Web Share API support this Chromium build happens to have.
