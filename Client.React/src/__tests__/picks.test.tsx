@@ -189,6 +189,20 @@ describe('PicksPage', () => {
     });
   });
 
+  // frizat: /style-guide audit — Submit and Clear were both contained/equal-size, reading as
+  // two equal-strength CTAs when Submit is the primary action and Clear is a rare, lesser one.
+  // Clear also used color="warning" as a small filled button — the exact configuration the
+  // style guide documents as unreadable in both modes for pick-state buttons.
+  it('demotes Clear to an outlined button so Submit reads as the primary action', async () => {
+    await setupDefaults();
+    await renderPage();
+    const submit = screen.getByRole('button', { name: /submit pick/i });
+    const clear = screen.getByRole('button', { name: /clear selected picks/i });
+    expect(submit.className).toMatch(/MuiButton-contained/);
+    expect(clear.className).toMatch(/MuiButton-outlined/);
+    expect(clear.className).not.toMatch(/warning/i);
+  });
+
   it('pick button toggles to picked and back', async () => {
     await setupDefaults();
     await renderPage();

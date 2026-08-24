@@ -4,9 +4,6 @@ import {
   IconButton, Paper, Stack, Typography,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
-import GppGoodIcon from '@mui/icons-material/GppGood';
-import GppBadIcon from '@mui/icons-material/GppBad';
-import GppMaybeIcon from '@mui/icons-material/GppMaybe';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
 import IosShareIcon from '@mui/icons-material/IosShare';
@@ -41,12 +38,6 @@ function teamWins(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'U
   }
   if (game.overWins == null) return null;
   return pickType === 'Over' ? game.overWins : !game.overWins;
-}
-
-function coverIcon(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under') {
-  const wins = teamWins(game, team, pickType);
-  if (wins == null) return <GppMaybeIcon color="disabled" />;
-  return wins ? <GppGoodIcon color="success" /> : <GppBadIcon color="error" />;
 }
 
 function badgeColor(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): 'success' | 'error' | 'info' | 'default' {
@@ -272,13 +263,17 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
       <Grid container spacing={2}>
         {/* Controls row */}
         <Grid size={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+          {/* frizat: /style-guide audit — these are neutral view filters, not brand CTAs, but
+              one defaulted to unstyled contained (reads as inert navy) and the other used
+              contained secondary (the brand orange reserved for real CTAs like Share). Same
+              matching, neutral treatment for both now. */}
           {data?.allPicks.length && data.allPicks.length > 0 && (
-            <Button variant="contained" onClick={() => setShowMatrixView(p => !p)}>
+            <Button variant="outlined" color="info" onClick={() => setShowMatrixView(p => !p)}>
               {showMatrixView ? 'Show Standard View' : 'Show As Matrix'}
             </Button>
           )}
           {!showMatrixView && (
-            <Button variant="contained" color="secondary" onClick={() => setShowOnlyMyPicks(p => !p)}>
+            <Button variant="outlined" color="info" onClick={() => setShowOnlyMyPicks(p => !p)}>
               {showOnlyMyPicks ? 'Show All Games' : 'Show Only My Picks'}
             </Button>
           )}
@@ -341,7 +336,6 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
                     {/* Away team pick row */}
                     <Stack direction="row" alignItems="center" sx={{ mt: 2, gap: 1.5, px: 1 }}>
-                      {coverIcon(game, game.awayTeam, 'Spread')}
                       <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.awayTeam}</Typography>
                       <Box sx={{ flexGrow: 1 }} />
                       <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
@@ -353,9 +347,16 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         badgeContent={pickCountForTeam(game.id, game.awayTeam, 'Spread')}
                         invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.awayTeam, 'Spread') === 0}
                       >
+                        {/* frizat: /code-review caught that gating `disabled` on pickCount === 0 (in
+                            addition to not-decided-yet) flattens this icon's color to MUI's disabled
+                            gray via the `disabled` prop, which erases the win/loss signal for a team
+                            literally nobody in the league picked — the one case the removed shield
+                            icon used to cover on its own, independent of picks. Disabled now tracks
+                            only "not decided yet"; `invisible` above still hides the pick-count bubble
+                            when nobody picked, but the button itself stays colored by outcome. */}
                         <IconButton
                           color={(isFinal || isLive) ? (hc === false ? 'success' : hc === true ? 'error' : 'inherit') : 'inherit'}
-                          disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.awayTeam, 'Spread') === 0}
+                          disabled={!isFinal && !isLive}
                           onClick={() => showDialog(game, game.awayTeam, 'Spread')}
                           size="small"
                         >
@@ -366,7 +367,6 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
                     {/* Home team pick row */}
                     <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1.5, px: 1 }}>
-                      {coverIcon(game, game.homeTeam, 'Spread')}
                       <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.homeTeam}</Typography>
                       <Box sx={{ flexGrow: 1 }} />
                       <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>
@@ -380,7 +380,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                       >
                         <IconButton
                           color={(isFinal || isLive) ? (hc === true ? 'success' : hc === false ? 'error' : 'inherit') : 'inherit'}
-                          disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Spread') === 0}
+                          disabled={!isFinal && !isLive}
                           onClick={() => showDialog(game, game.homeTeam, 'Spread')}
                           size="small"
                         >
@@ -397,20 +397,24 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                           invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Over') === 0}>
                           <IconButton size="small"
                             color={(isFinal || isLive) ? (ov ? 'success' : ov === false ? 'error' : 'inherit') : 'inherit'}
-                            disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Over') === 0}
+                            disabled={!isFinal && !isLive}
                             onClick={() => showDialog(game, game.homeTeam, 'Over')}>
                             <PersonIcon />
                           </IconButton>
                         </Badge>
-                        <ArrowCircleUpIcon sx={{ color: (isFinal || isLive) ? (ov ? 'success.main' : 'error.main') : 'text.secondary', flexShrink: 0 }} />
+                        {/* frizat: /style-guide audit — these were color-coded success/error on top of the
+                            Badge/IconButton pairs on either side already showing the identical win/loss
+                            state (same redundant-signal issue as the shield icon this page dropped
+                            elsewhere). The arrows are just Over/Under labels now; the badges are the signal. */}
+                        <ArrowCircleUpIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
                         <Typography variant="subtitle1" sx={{ minWidth: 36, textAlign: 'center' }}>{game.overUnder}</Typography>
-                        <ArrowCircleDownIcon sx={{ color: (isFinal || isLive) ? (!ov ? 'success.main' : 'error.main') : 'text.secondary', flexShrink: 0 }} />
+                        <ArrowCircleDownIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
                         <Badge data-testid={`badge-${game.homeTeam}-under`} color={didUserPick(game.id, game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
                           badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Under')}
                           invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}>
                           <IconButton size="small"
                             color={(isFinal || isLive) ? (!ov ? 'success' : ov === true ? 'error' : 'inherit') : 'inherit'}
-                            disabled={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}
+                            disabled={!isFinal && !isLive}
                             onClick={() => showDialog(game, game.homeTeam, 'Under')}>
                             <PersonIcon />
                           </IconButton>
