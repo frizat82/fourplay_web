@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
@@ -19,6 +20,17 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo) : I
         var slates = (await repo.GetSlatesForSeasonAsync(Season)).ToList();
         if (slates.Count == 0) {
             Log.Warning("CfbScoresJob: no slates found for season {Season}", Season);
+            return;
+        }
+
+        // Beyond "slates exist" — are we actually within this season's window right now? Season
+        // is a calendar-month cutoff, so slates for the upcoming season can already be seeded
+        // while we're still deep in the prior season's off-season; without this check the job
+        // would keep hitting ESPN for a not-yet-started or long-finished season.
+        var windows = slates.Select(s => new SeasonWindowResolver.Window(
+            s.Season, s.StartDate.ToDateTime(TimeOnly.MinValue), s.EndDate.ToDateTime(TimeOnly.MaxValue)));
+        if (!SeasonWindowResolver.IsSeasonActive(windows, DateTime.UtcNow)) {
+            Log.Information("CfbScoresJob: season {Season} not currently active, skipping ESPN fetch", Season);
             return;
         }
 

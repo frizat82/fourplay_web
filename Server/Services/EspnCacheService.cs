@@ -1,5 +1,8 @@
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
+using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services;
 
@@ -10,6 +13,8 @@ namespace FourPlayWebApp.Server.Services;
 public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 {
     private readonly IEspnApiService _espnApiService;
+    private readonly ILeagueRepository _leagueRepository;
+    private readonly IMemoryCache _historicalCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
 
     public event Action? ScoresChanged
@@ -18,11 +23,19 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         remove => _cache.Changed -= value;
     }
 
-    public EspnCacheService(IEspnApiService espnApiService, INflCurrentWeekService nflCurrentWeekService, TimeSpan? initialDelay = null)
+    public EspnCacheService(IEspnApiService espnApiService, INflCurrentWeekService nflCurrentWeekService, ILeagueRepository leagueRepository, IMemoryCache historicalCache, TimeSpan? initialDelay = null)
     {
         _espnApiService = espnApiService;
+        _leagueRepository = leagueRepository;
+        _historicalCache = historicalCache;
         _cache = new PeriodicRefreshCache<EspnScores>(
             fetch: async () => {
+                // NflCurrentWeekService always resolves *something* now (most-recently-completed
+                // or soonest-upcoming week, for UI-default purposes) — so its result alone can't
+                // gate off-season ESPN polling. IsSeasonActiveAsync is the purpose-built,
+                // season-level check for that (see SeasonWindowResolver).
+                if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return null;
+
                 var week = await nflCurrentWeekService.GetCurrentWeekAsync();
                 return await espnApiService.GetWeekScores(week.EspnWeek, week.Season, week.IsPostSeason);
             },
@@ -33,8 +46,45 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 
     public Task<EspnScores?> GetScoresAsync() => Task.FromResult(_cache.Current);
 
-    public Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false) =>
-        _espnApiService.GetWeekScores(week, year, postSeason);
+    // Historical weeks are read straight from NflScores when persisted — every persisted row is
+    // already FINAL (NflScoresJob only writes finished games), so 100 concurrent viewers of the
+    // same past week share one DB read (and one build, cached indefinitely — settled data never
+    // changes) instead of each triggering its own ESPN call or DB query. Only a week NflScoresJob
+    // hasn't synced yet (or a genuinely current/future week — not this endpoint's real use, see
+    // EspnController's doc comment) falls through to a live ESPN call.
+    //
+    // DB-first only kicks in once the week's own window has fully ended — /code-review caught
+    // that this exact bug, already fixed for CFB in CfbLiveScoreFetcher (see its comment), had
+    // not been ported here: gating purely on "any row persisted" means the instant one game in a
+    // multi-game week finishes and gets persisted, the response is built from only that game and
+    // cached forever — every other game in that week, including ones that finish and get
+    // persisted later, is permanently dropped from every future response.
+    public async Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false)
+    {
+        var cacheKey = $"nfl-week-scores_{year}_{week}_{postSeason}";
+        if (_historicalCache.TryGetValue<EspnScores>(cacheKey, out var cached)) return cached;
+
+        var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, postSeason);
+        var configs = await _leagueRepository.GetNflSeasonWeekConfigsAsync();
+        var matchingConfig = configs.FirstOrDefault(c => c.Season == year && c.WeekId == nflWeek);
+        // 6-hour buffer past the configured end, mirroring CfbLiveScoreFetcher's identical
+        // safety margin — this now gets cached forever once true, so a week whose config end
+        // time turns out to be a little too tight against its actual last kickoff shouldn't
+        // permanently freeze a still-in-progress game out of every future response.
+        var weekHasEnded = matchingConfig is not null && matchingConfig.WeekEndDatetime.AddHours(6) < DateTime.UtcNow;
+
+        if (weekHasEnded) {
+            var rows = await _leagueRepository.GetNflScoresAsync(year, nflWeek);
+            if (rows.Count > 0) {
+                var games = rows.Select(row => new FinalScoresEspnMapper.FinishedGame(
+                    row.Id.ToString(), row.HomeTeam, row.AwayTeam, row.HomeTeamScore, row.AwayTeamScore, row.GameTime));
+                var built = FinalScoresEspnMapper.Build(games, year, week, postSeason);
+                _historicalCache.Set(cacheKey, built);
+                return built;
+            }
+        }
+        return await _espnApiService.GetWeekScores(week, year, postSeason);
+    }
 
     public ValueTask DisposeAsync() => _cache.DisposeAsync();
 }

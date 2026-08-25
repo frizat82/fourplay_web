@@ -74,15 +74,24 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
 
   useEffect(() => {
     if (!currentLeague || season == null) return;
+    // /code-review: the season selector's own race is prevented elsewhere by disabling it
+    // mid-fetch, but AppLayout's separate league-switcher chip can change `currentLeague` while
+    // this effect's previous run is still in flight — nothing stops league A -> B -> A happening
+    // before any of those fetches resolve. `ignore` is this run's own flag, closed over fresh on
+    // every dependency change; a response is only applied if this exact run is still the latest
+    // one when it resolves.
+    let ignore = false;
     const run = async () => {
       if (hasLoadedOnce.current) setRefreshing(true); else setLoading(true);
       const data = await getLeaderboard(currentLeague, season);
+      if (ignore) return;
       setLeaderboard(data ?? []);
       hasLoadedOnce.current = true;
       setLoading(false);
       setRefreshing(false);
     };
     void run();
+    return () => { ignore = true; };
   }, [currentLeague, season]);
 
   const seasonOptions = useMemo(() => {
