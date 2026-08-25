@@ -46,6 +46,13 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<CfbSlates>> GetAllSlatesAsync() {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.CfbSlates
+            .OrderBy(s => s.Season).ThenBy(s => s.SlateNumber)
+            .ToListAsync();
+    }
+
     public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbSlates.FirstOrDefaultAsync(s => s.Id == slateId);
