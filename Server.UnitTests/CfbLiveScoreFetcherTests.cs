@@ -163,7 +163,7 @@ public class CfbLiveScoreFetcherTests {
     public async Task FetchForSlateAsync_MissingEspnWeekNumber_ReturnsNull_EvenWithPersistedRows() {
         var slate = BuildSlateMissingWeekNumber(); // EndDate 2025-12-20 — already ended
         var rows = new List<CfbScores> {
-            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = "STATUS_FINAL", GameTime = new DateTimeOffset(2025, 12, 19, 18, 0, 0, TimeSpan.Zero) },
+            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = new DateTimeOffset(2025, 12, 19, 18, 0, 0, TimeSpan.Zero) },
         };
         _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)rows);
 
@@ -182,7 +182,7 @@ public class CfbLiveScoreFetcherTests {
     public async Task FetchForSlateAsync_WhenDbHasPersistedRowsForTheSlate_ReturnsDbBuiltScores_NeverCallsEspn() {
         var slate = BuildRegularSeasonSlate();
         var rows = new List<CfbScores> {
-            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = "STATUS_FINAL", GameTime = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero) },
+            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero) },
         };
         _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)rows);
 
@@ -227,7 +227,7 @@ public class CfbLiveScoreFetcherTests {
         };
         // One game in this slate already finished and was persisted; the rest are still live.
         var partialRows = new List<CfbScores> {
-            new() { Id = 1, CfbSlateId = activeSlate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = "STATUS_FINAL", GameTime = DateTimeOffset.UtcNow.AddHours(-3) },
+            new() { Id = 1, CfbSlateId = activeSlate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = DateTimeOffset.UtcNow.AddHours(-3) },
         };
         _cfbRepo.GetScoresForSlateAsync(activeSlate.Id).Returns((IEnumerable<CfbScores>)partialRows);
         _cfbApi.GetScoresByWeekAsync(3, false).Returns(BuildScoreboardWithRanking());
@@ -247,7 +247,7 @@ public class CfbLiveScoreFetcherTests {
     public async Task FetchForSlateAsync_CachesTheDbBuiltResult_SecondCallForSameSlateNeverHitsDbAgain() {
         var slate = BuildRegularSeasonSlate(); // EndDate 2025-9-28 — already ended
         var rows = new List<CfbScores> {
-            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = "STATUS_FINAL", GameTime = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero) },
+            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero) },
         };
         _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)rows);
 

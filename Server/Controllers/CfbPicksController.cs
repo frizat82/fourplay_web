@@ -5,9 +5,11 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using FourPlayWebApp.Server.Infrastructure;
 
 namespace FourPlayWebApp.Server.Controllers;
@@ -73,7 +75,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             AwayTeam            = s.AwayTeam,
             HomeTeamScore       = s.HomeTeamScore,
             AwayTeamScore       = s.AwayTeamScore,
-            GameStatus          = s.GameStatus,
+            GameStatus          = s.GameStatus.ToString(),
             GameTime            = s.GameTime.ToString("O"),
             WeatherDisplayValue = s.WeatherDisplayValue,
             WeatherConditionId  = s.WeatherConditionId,
@@ -207,6 +209,7 @@ public record AddCfbPicksRequest {
 }
 
 public record CfbPickItem {
-    public string Team        { get; init; } = string.Empty;
-    public string PickType    { get; init; } = "Spread";
+    public string Team { get; init; } = string.Empty;
+    [property: JsonConverter(typeof(JsonStringEnumConverter))]
+    public PickType PickType { get; init; } = PickType.Spread;
 }

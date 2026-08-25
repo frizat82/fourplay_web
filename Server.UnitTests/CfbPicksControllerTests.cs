@@ -1,8 +1,10 @@
 using FourPlayWebApp.Server.Controllers;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
+using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
+using FourPlayWebApp.Shared.Models.Enum;
 using NSubstitute;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -81,7 +83,7 @@ public class CfbPicksControllerTests
             LeagueId = 1,
             CfbSlateId = 1,
             Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
         _repo.AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>()).Returns(Task.CompletedTask);
@@ -106,7 +108,7 @@ public class CfbPicksControllerTests
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -124,7 +126,7 @@ public class CfbPicksControllerTests
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -144,7 +146,7 @@ public class CfbPicksControllerTests
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -164,7 +166,7 @@ public class CfbPicksControllerTests
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -184,7 +186,7 @@ public class CfbPicksControllerTests
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -203,7 +205,7 @@ public class CfbPicksControllerTests
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
         var result = await BuildController().AddPicks(request);
@@ -228,8 +230,8 @@ public class CfbPicksControllerTests
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
             Picks =
             [
-                new CfbPickItem { Team = "ORE", PickType = "Spread" },
-                new CfbPickItem { Team = "ALA", PickType = "Spread" },
+                new CfbPickItem { Team = "ORE", PickType = PickType.Spread },
+                new CfbPickItem { Team = "ALA", PickType = PickType.Spread },
             ]
         };
 
@@ -355,7 +357,7 @@ public class CfbPicksControllerTests
     private static CfbScores MakeScore(string home = "ORE", string away = "OSU") => new()
     {
         CfbSlateId = 1, HomeTeam = home, AwayTeam = away,
-        HomeTeamScore = 24, AwayTeamScore = 17, GameStatus = "STATUS_FINAL",
+        HomeTeamScore = 24, AwayTeamScore = 17, GameStatus = TypeName.StatusFinal,
     };
 
     [Fact]
@@ -413,7 +415,7 @@ public class CfbPicksControllerTests
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
-            Picks = [new CfbPickItem { Team = "ORE", PickType = "Spread" }]
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
         var result = await BuildController().AddPicks(request);

@@ -78,28 +78,17 @@ public class CfbSpreadJob(
                 || (CfbSlateHelpers.HasRankedTeam(comp.Competitors) && !CfbSlateHelpers.IsMidweekGame(comp.Date));
 
             try {
-                var odds = await oddsService.GetCfbEventsWithOddsAsync(eventId, (int)EspnOddsProviders.DraftKings);
-                if (odds is null) {
-                    var allOdds = await oddsService.GetCfbEventsWithOddsAsync(eventId);
-                    if (allOdds is null || allOdds.Count == 0) {
-                        Log.Warning("CfbSpreadJob: no odds for event {EventId} ({Home} vs {Away})", eventId, home, away);
-                        continue;
-                    }
-                    odds = allOdds.Items.First();
-                }
-
-                var homeSpread = odds.HomeTeamOdds.Current.PointSpread.American.Replace("+", "");
-                var awaySpread = odds.AwayTeamOdds.Current.PointSpread.American.Replace("+", "");
-                if (!double.TryParse(homeSpread, out var parsedHome)) continue;
-                if (!double.TryParse(awaySpread, out var parsedAway)) continue;
+                var parsed = await SpreadOddsFetcher.FetchAsync(
+                    oddsService.GetCfbEventsWithOddsAsync, oddsService.GetCfbEventsWithOddsAsync, eventId, $"{home} vs {away}");
+                if (parsed is null) continue;
 
                 spreads.Add(new CfbSpreads {
                     CfbSlateId    = slate.Id,
                     HomeTeam      = home,
                     AwayTeam      = away,
-                    HomeTeamSpread = parsedHome,
-                    AwayTeamSpread = parsedAway,
-                    OverUnder     = odds.OverUnder,
+                    HomeTeamSpread = parsed.Value.HomeSpread,
+                    AwayTeamSpread = parsed.Value.AwaySpread,
+                    OverUnder     = parsed.Value.OverUnder,
                     GameTime      = comp.Date,
                     IsLeagueEligible = isEligible,
                 });
