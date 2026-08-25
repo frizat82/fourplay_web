@@ -2,6 +2,7 @@ using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Identity;
@@ -1125,7 +1126,7 @@ public class DemoDataSeeder(
             HomeTeamScore = g.HomeScore,
             AwayTeamScore = g.AwayScore,
             // Championship (slate 18) is in-progress so we can show field position in demo
-            GameStatus    = g.SlateIdx == 18 ? "StatusInProgress" : "StatusFinal",
+            GameStatus    = g.SlateIdx == 18 ? TypeName.StatusInProgress : TypeName.StatusFinal,
             GameTime      = g.GameTime,
         }).ToList();
 
@@ -1252,7 +1253,7 @@ public class DemoDataSeeder(
         var picks = new List<CfbPicks>();
 
         void AddPick(int leagueId, string userId, int slateId, string team) =>
-            picks.Add(new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, Team = team, PickType = "Spread", Season = CfbDemoSeason });
+            picks.Add(new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, Team = team, PickType = PickType.Spread, Season = CfbDemoSeason });
 
         // frizat: Over/Under is an alternate PICK TYPE for a game, not an additional pick beyond
         // the slate's required count — CfbPicksController's server-side validation enforces total
@@ -1264,11 +1265,11 @@ public class DemoDataSeeder(
         // replaces their game-0 spread pick instead of adding to it.
         void AddFirstPickOrOverUnder(string uName, string userId, int slateId, string homeTeam, string pickedTeam) {
             if (uName == "Bob") {
-                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, Team = homeTeam, PickType = "Over", Season = CfbDemoSeason });
+                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, Team = homeTeam, PickType = PickType.Over, Season = CfbDemoSeason });
                 return;
             }
             if (uName == "Dana") {
-                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, Team = homeTeam, PickType = "Under", Season = CfbDemoSeason });
+                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, Team = homeTeam, PickType = PickType.Under, Season = CfbDemoSeason });
                 return;
             }
             AddPick(league.Id, userId, slateId, pickedTeam);

@@ -41,34 +41,12 @@ public class NflSpreadJob(IEspnCoreOddsService sportsOdds, IEspnApiService espn,
             }
             Log.Information("Grabbing NFL Spreads for {Game} {Time}",spread.HomeTeam, DateTime.UtcNow);
             try {
-                var result = await sportsOdds.GetEventsWithOddsAsync(games.Id, (int)EspnOddsProviders.DraftKings);
-                if (result is null) {
-                    Log.Error("Spread not available using DraftKings for {Game}, trying default Spreads", spread.HomeTeam);
-                    var allResults = await sportsOdds.GetEventsWithOddsAsync(games.Id);
-                    if (allResults is null || allResults.Count == 0) {
-                        Log.Error("No spreads available for {Game}, moving on", spread.HomeTeam);
-                        continue;
-                    }
-                    Log.Warning("Not using ESPNBet, found spread from {Provider} {Game}", allResults.Items.First().Provider.Name, spread.HomeTeam);
-                    result = allResults.Items.First();
-                }
-                var cleanHomeSpread = result.HomeTeamOdds.Current.PointSpread.American.Replace("+", "");
-                var cleanAwaySpread = result.AwayTeamOdds.Current.PointSpread.American.Replace("+", "");
-                if (cleanHomeSpread == "FK") {
-                    Log.Error("Error");
-                }
-
-                if (cleanAwaySpread == "FK") {
-                    Log.Error("Error");
-                }
-
-                if (!double.TryParse(cleanHomeSpread, out var parsedSpread))
-                    continue;
-                spread.HomeTeamSpread = parsedSpread;
-                if (!double.TryParse(cleanAwaySpread, out parsedSpread))
-                    continue;
-                spread.AwayTeamSpread = parsedSpread;
-                spread.OverUnder = result.OverUnder;
+                var parsed = await SpreadOddsFetcher.FetchAsync(
+                    sportsOdds.GetEventsWithOddsAsync, sportsOdds.GetEventsWithOddsAsync, games.Id, spread.HomeTeam);
+                if (parsed is null) continue;
+                spread.HomeTeamSpread = parsed.Value.HomeSpread;
+                spread.AwayTeamSpread = parsed.Value.AwaySpread;
+                spread.OverUnder = parsed.Value.OverUnder;
                 spreads.Add(spread);
             }
             catch (Exception ex) {

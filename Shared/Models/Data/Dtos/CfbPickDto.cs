@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using FourPlayWebApp.Shared.Models.Enum;
+
 namespace FourPlayWebApp.Shared.Models.Data.Dtos;
 
 public class CfbPickDto {
@@ -7,6 +10,7 @@ public class CfbPickDto {
     public int LeagueId { get; set; }
     public int CfbSlateId { get; set; }
     public string Team { get; set; } = string.Empty;
-    public string PickType { get; set; } = "Spread";
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public PickType PickType { get; set; } = PickType.Spread;
     public int Season { get; set; }
 }

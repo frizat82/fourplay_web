@@ -2,7 +2,7 @@ import { loadScoresWithRetry, getWeekScores, getLiveGames } from '../api/espn';
 import { getUserPicks, doOddsExist, spreadBatch, addPicks, getLeaguePicks, getNflCurrentWeek } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import type { Competition, Event } from '../types/espn';
-import type { NflPickDto, PickType, SpreadResponse } from '../types/picks';
+import type { NflPickDto, SpreadResponse } from '../types/picks';
 import {
   getHomeTeamAbbr, getAwayTeamAbbr,
   getHomeTeam, getAwayTeam,
@@ -13,7 +13,7 @@ import {
   isGameOver, isGameStarted, toGameStatus,
   computeHomeCovers, computeOverWins,
 } from '../utils/gameHelpers';
-import type { SportAdapter, GameView, PickView } from './sportAdapter';
+import type { SportAdapter, GameView, PickView, PickType } from './sportAdapter';
 import { revealPicksForStartedGames } from './sportAdapter';
 
 function competitionToGameView(
@@ -63,7 +63,7 @@ function nflPickToPickView(pick: NflPickDto, games: GameView[]): PickView | null
   return {
     gameId: game.id,
     team: pick.team,
-    pickType: pick.pick as PickView['pickType'],
+    pickType: pick.pick as PickType,
     userId: pick.userId,
     userName: pick.userName,
   };

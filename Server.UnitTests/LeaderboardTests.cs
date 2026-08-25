@@ -350,12 +350,12 @@ public class LeaderboardServiceTests {
             new CfbSpreads { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true }
         ]);
         cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
-            new CfbScores { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = "StatusFinal" }
+            new CfbScores { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal }
         ]);
 
         var picksRepo = Substitute.For<ICfbPicksRepository>();
         picksRepo.GetUserPicksAsync(leagueId, slateId, userId).Returns((IEnumerable<CfbPicks>)[
-            new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, Team = "IU", PickType = "Spread", Season = 2025 }
+            new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, Team = "IU", PickType = PickType.Spread, Season = 2025 }
         ]);
 
         return (leagueRepo, cfbRepo, picksRepo);
@@ -381,7 +381,7 @@ public class LeaderboardServiceTests {
 
         // Override scores: IU loses badly — 7 to 35, so IU 7 + (-7+5) = 5; 5 - 35 = -30 < 0 → loss
         cfbRepo.GetScoresForSlateAsync(1).Returns((IEnumerable<CfbScores>)[
-            new CfbScores { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 7, AwayTeamScore = 35, GameStatus = "StatusFinal" }
+            new CfbScores { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 7, AwayTeamScore = 35, GameStatus = TypeName.StatusFinal }
         ]);
 
         var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
@@ -441,17 +441,17 @@ public class LeaderboardServiceTests {
             new CfbSpreads { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true }
         ]);
         cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
-            new CfbScores { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = "StatusFinal" }
+            new CfbScores { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal }
         ]);
 
         var picksRepo = Substitute.For<ICfbPicksRepository>();
         picksRepo.GetUserPicksAsync(leagueId, slateId, Arg.Is<string>(uid => winnerIds.Contains(uid)))
             .Returns((IEnumerable<CfbPicks>)[
-                new CfbPicks { CfbSlateId = slateId, Team = "IU", PickType = "Spread", Season = 2025 }
+                new CfbPicks { CfbSlateId = slateId, Team = "IU", PickType = PickType.Spread, Season = 2025 }
             ]);
         picksRepo.GetUserPicksAsync(leagueId, slateId, Arg.Is<string>(uid => loserIds.Contains(uid)))
             .Returns((IEnumerable<CfbPicks>)[
-                new CfbPicks { CfbSlateId = slateId, Team = "OSU", PickType = "Spread", Season = 2025 }
+                new CfbPicks { CfbSlateId = slateId, Team = "OSU", PickType = PickType.Spread, Season = 2025 }
             ]);
 
         return (leagueRepo, cfbRepo, picksRepo);
@@ -471,7 +471,7 @@ public class LeaderboardServiceTests {
             new CfbSpreads { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -10, AwayTeamSpread = 10, OverUnder = 50, IsLeagueEligible = true }
         ]);
         cfbRepo.GetScoresForSlateAsync(1).Returns((IEnumerable<CfbScores>)[
-            new CfbScores { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 20, GameStatus = "StatusFinal" }
+            new CfbScores { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 20, GameStatus = TypeName.StatusFinal }
         ]);
 
         var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);

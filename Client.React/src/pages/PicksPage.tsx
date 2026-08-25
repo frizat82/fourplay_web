@@ -16,8 +16,9 @@ import SpreadRelease from '../components/SpreadRelease';
 import GameCard, { type PickState } from '../components/sports/GameCard';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import type { SportAdapter, GameView, WeekState } from '../services/sportAdapter';
+import type { SportAdapter, GameView, PickType, WeekState } from '../services/sportAdapter';
 import { useToast } from '../services/toast';
+import { isGameDecided } from '../utils/gameHelpers';
 
 // Pick key: "gameId|team|pickType" — stable across NFL and CFB
 function pickKey(gameId: string, team: string, pickType: string) {
@@ -25,7 +26,7 @@ function pickKey(gameId: string, team: string, pickType: string) {
 }
 
 function gameIsLocked(game: GameView): boolean {
-  if (game.gameStatus === 'final' || game.gameStatus === 'in_progress' || game.gameStatus === 'halftime') return true;
+  if (isGameDecided(game.gameStatus)) return true;
   return new Date(game.gameTime) <= new Date();
 }
 
@@ -130,12 +131,12 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const remainingPicks = requiredPicks - userPicks.size - existingPicks.size;
   const isPicksLocked = () => remainingPicks <= 0;
 
-  const selectPick = (gameId: string, team: string, pickType = 'Spread') => {
+  const selectPick = (gameId: string, team: string, pickType: PickType = 'Spread') => {
     if (isPicksLocked()) return;
     setUserPicks(prev => new Set(prev).add(pickKey(gameId, team, pickType)));
   };
 
-  const unselectPick = (gameId: string, team: string, pickType = 'Spread') => {
+  const unselectPick = (gameId: string, team: string, pickType: PickType = 'Spread') => {
     const key = pickKey(gameId, team, pickType);
     setUserPicks(prev => { const s = new Set(prev); s.delete(key); return s; });
   };
@@ -146,7 +147,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     try {
       const picks = [...userPicks].map(key => {
         const [gameId, team, pickType] = key.split('|');
-        return { gameId, team, pickType };
+        return { gameId, team, pickType: pickType as PickType };
       });
       await adapter.submitPicks(currentLeague, { season, week, isPostSeason }, picks);
       toast.push(`${picks.length} Pick(s) Added`, 'success');
