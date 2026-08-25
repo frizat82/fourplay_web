@@ -121,7 +121,19 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     [HttpGet("picks/{leagueId}/{cfbSlateId}/user")]
     public async Task<IActionResult> GetUserPicks(int leagueId, int cfbSlateId) {
         var picks = await repo.GetUserPicksAsync(leagueId, cfbSlateId, CurrentUserId);
-        return Ok(picks);
+        // Must map to CfbPickDto, not return the entity directly — CfbPicks.PickType has no
+        // JsonStringEnumConverter, so it would silently serialize as an int instead of
+        // "Spread"/"Over"/"Under" and break every frontend consumer matching by that string.
+        var dtos = picks.Select(p => new CfbPickDto {
+            Id = p.Id,
+            UserId = p.UserId,
+            LeagueId = p.LeagueId,
+            CfbSlateId = p.CfbSlateId,
+            Team = p.Team,
+            PickType = p.PickType,
+            Season = p.Season,
+        });
+        return Ok(dtos);
     }
 
     [HttpPost("picks")]
