@@ -1,6 +1,22 @@
 import type { Competition, Competitor, EspnScores, Event, TypeName, HomeAway, EspnRecordType } from '../types/espn';
 import { toLocalDisplay } from './time';
 import type { PickType } from '../types/picks';
+import type { GameStatusValue } from '../services/sportAdapter';
+
+/** True only once a game has finished — the canonical GameView.gameStatus check. */
+export function isGameFinal(status: GameStatusValue): boolean {
+  return status === 'final';
+}
+
+/** True while a game is underway (including halftime) — the canonical GameView.gameStatus check. */
+export function isGameLive(status: GameStatusValue): boolean {
+  return status === 'in_progress' || status === 'halftime';
+}
+
+/** True once a game has started or finished — i.e. no longer just "scheduled". */
+export function isGameDecided(status: GameStatusValue): boolean {
+  return isGameFinal(status) || isGameLive(status);
+}
 
 export function getWeekFromEspnWeek(week: number, isPostSeason = false) {
   if (!isPostSeason) return week;
@@ -232,12 +248,6 @@ export function getPickLabel(pickType: PickType) {
 // ─── Shared cover/over computation used by all sport adapters ────────────────
 // Both NFL and CFB adapters should call these instead of duplicating the logic.
 
-import type { GameStatusValue } from '../services/sportAdapter';
-
-function isDecidedStatus(status: GameStatusValue): boolean {
-  return status === 'final' || status === 'in_progress' || status === 'halftime';
-}
-
 /**
  * Returns whether the home team is covering the spread, or null if the game
  * hasn't started or spread data isn't available.
@@ -249,7 +259,7 @@ export function computeHomeCovers(
   homeScore: number | null,
   awayScore: number | null,
 ): boolean | null {
-  if (!isDecidedStatus(status) || homeSpread == null || homeScore == null || awayScore == null) return null;
+  if (!isGameDecided(status) || homeSpread == null || homeScore == null || awayScore == null) return null;
   return (homeScore + homeSpread) > awayScore;
 }
 
@@ -262,7 +272,7 @@ export function computeOverWins(
   homeScore: number | null,
   awayScore: number | null,
 ): boolean | null {
-  if (!isDecidedStatus(status) || overUnder == null || homeScore == null || awayScore == null) return null;
+  if (!isGameDecided(status) || overUnder == null || homeScore == null || awayScore == null) return null;
   return (homeScore + awayScore) > overUnder;
 }
 

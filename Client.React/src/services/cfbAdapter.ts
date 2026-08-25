@@ -1,10 +1,10 @@
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
 import { loadCfbScoresWithRetry, getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
-import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins, getCfbRequiredPicks } from '../utils/gameHelpers';
+import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins, getCfbRequiredPicks, isGameLive } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
-import type { SportAdapter, GameView, GameStatusValue, PickView, WeekState } from './sportAdapter';
+import type { SportAdapter, GameView, GameStatusValue, PickView, PickType, WeekState } from './sportAdapter';
 import { revealPicksForStartedGames } from './sportAdapter';
 
 /** Map CFB backend status strings to canonical GameStatusValue */
@@ -129,7 +129,7 @@ function cfbPickToPickView(pick: CfbPickDto, teamToHomeTeam: Map<string, string>
   return {
     gameId: teamToHomeTeam.get(pick.team) ?? pick.team,
     team: pick.team,
-    pickType: pick.pickType as PickView['pickType'],
+    pickType: pick.pickType as PickType,
     userId: pick.userId,
     userName: pick.userName ?? '',
   };
@@ -276,7 +276,7 @@ export function createCfbAdapter(): SportAdapter {
       }
       const weekState = slateToWeekState(active);
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active, true);
-      const hasActiveGames = games.some(g => g.gameStatus === 'in_progress' || g.gameStatus === 'halftime');
+      const hasActiveGames = games.some(g => isGameLive(g.gameStatus));
       return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: weekState.week, maxSeason: active.season };
     },
 
