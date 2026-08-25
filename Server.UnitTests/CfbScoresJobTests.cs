@@ -32,15 +32,21 @@ public class CfbScoresJobTests
 
     private CfbScoresJob BuildJob() => new(_fetcher, _repo);
 
-    private static CfbSlates BuildSlate() => new()
-    {
-        Id = 1, Season = 2025, SlateNumber = 1,
-        Label = "Week 1", SlateType = "RegularSeason",
-        StartDate = new DateOnly(2025, 12, 19),
-        EndDate   = new DateOnly(2025, 12, 20),
-        EspnWeekNumber = 1,
-        ScoringFormat = "Spread",
-    };
+    // Dates relative to "now" (not a fixed calendar date) so this slate is always "currently
+    // active" for the SeasonWindowResolver-based gate CfbScoresJob now checks before fetching —
+    // tests below that care about score-parsing/upsert behavior shouldn't also have to fight an
+    // unrelated off-season skip just because time passed since these dates were written.
+    private static CfbSlates BuildSlate() {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return new() {
+            Id = 1, Season = 2025, SlateNumber = 1,
+            Label = "Week 1", SlateType = "RegularSeason",
+            StartDate = today.AddDays(-1),
+            EndDate   = today.AddDays(1),
+            EspnWeekNumber = 1,
+            ScoringFormat = "Spread",
+        };
+    }
 
     private static EspnScores BuildScoreboard(
         string eventId = "401677183",
@@ -72,6 +78,25 @@ public class CfbScoresJobTests
         await BuildJob().Execute(_context);
 
         await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
+    }
+
+    // Beyond "slates exist" — the job must also check whether the season is actually happening
+    // right now (frizat plan: wobbly-chasing-lynx). Slates for the season can already be seeded
+    // while we're deep in the prior season's off-season (Season is a calendar-month cutoff).
+    [Fact]
+    public async Task Execute_WhenSlatesExistButSeasonNotCurrentlyActive_SkipsFetchEntirely()
+    {
+        var offSeasonSlate = new CfbSlates {
+            Id = 1, Season = 2025, SlateNumber = 4, Label = "Championship", SlateType = "Championship",
+            StartDate = new DateOnly(2026, 1, 5), EndDate = new DateOnly(2026, 1, 12),
+            EspnWeekNumber = 16, ScoringFormat = "Spread",
+        };
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([offSeasonSlate]);
+
+        await BuildJob().Execute(_context);
+
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
+        await _repo.DidNotReceive().UpsertCfbScoresAsync(Arg.Any<IEnumerable<CfbScores>>());
     }
 
     [Fact]

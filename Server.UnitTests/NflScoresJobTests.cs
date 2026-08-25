@@ -31,9 +31,18 @@ public class NflScoresJobTests
         _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
                 .Returns((EspnScores?)null);
 
-        // Default: no season week configs (empty control table → no weeks to upsert)
+        // Default: a season-week config whose window is active right now, so existing
+        // score-fetching tests keep exercising the ESPN loop unchanged by the new
+        // IsSeasonActive off-season gate — tests that specifically care about the "no configs at
+        // all" / weekList-upsert behavior override this explicitly below.
         _repo.GetNflSeasonWeekConfigsAsync()
-             .Returns(new List<NflSeasonWeekConfig>());
+             .Returns(new List<NflSeasonWeekConfig> {
+                 new() {
+                     Season = DateTime.UtcNow.Year, WeekId = 1, WeekLabel = "Week 1",
+                     WeekType = "RegularSeason", ScoringFormat = "Standard",
+                     WeekStartDatetime = DateTime.UtcNow.AddDays(-1), WeekEndDatetime = DateTime.UtcNow.AddDays(1),
+                 },
+             });
     }
 
     private NflScoresJob BuildJob() => new(_espnApi, _repo);
@@ -163,6 +172,23 @@ public class NflScoresJobTests
     // UpsertNflScoresAsync — NOT called when no completed games
     // -----------------------------------------------------------------------
 
+    // Beyond "configs exist" — is a season actually happening right now? (frizat plan:
+    // wobbly-chasing-lynx). Without this, the job hits ESPN for up to 5 years x 22 weeks on
+    // every scheduled run, in-season or not — weekList/UpsertNflWeeksAsync is unaffected since
+    // that's a cheap DB-only sync, not an ESPN call.
+    [Fact]
+    public async Task Execute_WhenNoSeasonIsCurrentlyActive_SkipsEspnLoopEntirely()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> {
+            BuildConfig(weekId: 22, season: 2025), // fixed past date, unrelated to "now"
+        });
+
+        await BuildJob().Execute(_context);
+
+        await _espnApi.DidNotReceiveWithAnyArgs().GetWeekScores(default, default, default);
+        await _repo.DidNotReceive().UpsertNflScoresAsync(Arg.Any<List<NflScores>>());
+    }
+
     [Fact]
     public async Task Execute_WhenAllWeekCallsReturnNull_DoesNotCallUpsertScores()
     {
@@ -221,7 +247,8 @@ public class NflScoresJobTests
     [Fact]
     public async Task Execute_WhenSeasonWeekConfigIsEmpty_DoesNotCallUpsertWeeks()
     {
-        // Default constructor stub returns empty list
+        _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig>());
+
         await BuildJob().Execute(_context);
 
         await _repo.DidNotReceive().UpsertNflWeeksAsync(Arg.Any<List<NflWeeks>>());

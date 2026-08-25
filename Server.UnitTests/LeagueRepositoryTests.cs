@@ -244,6 +244,34 @@ public class LeagueRepositoryTests
         Assert.Equal(0, count);
     }
 
+    // /code-review: GetSeasonDateRangeAsync's CFB branch computed the season end as
+    // WeekEndDate.ToDateTime(TimeOnly.MinValue) — midnight at the *start* of the last calendar
+    // day, not end-of-day. A member joining later that same day (a real day, still within the
+    // season by any reasonable reading of WeekEndDate) was incorrectly excluded, inconsistent
+    // with CfbCurrentSlateService's TimeOnly.MaxValue convention for the same "end of this date"
+    // concept elsewhere in the codebase.
+    [Fact]
+    public async Task GetLeagueMemberCountAsync_SeasonAware_Cfb_CountsMemberWhoJoinedLaterOnTheSeasonsLastCalendarDay()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetLeagueMemberCountAsync_SeasonAware_Cfb_CountsMemberWhoJoinedLaterOnTheSeasonsLastCalendarDay));
+        var seedDb = factory.CreateDbContext();
+        seedDb.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
+            Season = 2024, EspnWeekNumber = 1, IvLeagueWeekNumber = 1,
+            WeekStartDate = new DateOnly(2024, 8, 20), WeekEndDate = new DateOnly(2025, 1, 15),
+        });
+        // Joined at 6pm UTC on the season's last calendar day — still that day, still in-season.
+        seedDb.LeagueUserMapping.Add(new LeagueUserMapping {
+            LeagueId = 1, UserId = "joined-late-on-last-day",
+            DateCreated = new DateTimeOffset(2025, 1, 15, 18, 0, 0, TimeSpan.Zero),
+        });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        var count = await repo.GetLeagueMemberCountAsync(1, 2024, LeagueType.Cfb);
+
+        Assert.Equal(1, count);
+    }
+
     [Fact]
     public async Task GetLeagueMemberCountAsync_SeasonAware_ExcludesMemberWhoJoinedAfterTheSeasonEnded()
     {
