@@ -40,7 +40,13 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
         // only writes finished games), so 100 concurrent viewers of the same past slate share one
         // DB read instead of each triggering its own ESPN call — mirrors EspnCacheService's
         // identical fix for NFL's historical-week endpoint.
-        var slateHasEnded = slate.EndDate < DateOnly.FromDateTime(DateTime.UtcNow);
+        //
+        // EndDate is a DateOnly with no time component, but a late game (common for CFB evening
+        // kickoffs) can still be in progress after UTC midnight on that calendar date — a straight
+        // date compare would flip to "ended" mid-game. The 6-hour buffer past the end of EndDate
+        // covers that crossover; this now gets cached forever once true (see the caching layer
+        // below), so getting this boundary right matters more than it used to.
+        var slateHasEnded = slate.EndDate.ToDateTime(TimeOnly.MaxValue).AddHours(6) < DateTime.UtcNow;
         if (slateHasEnded) {
             var cacheKey = $"cfb-slate-scores_{slate.Id}";
             if (settledCache.TryGetValue<EspnScores>(cacheKey, out var cached)) return cached;
