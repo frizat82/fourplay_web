@@ -49,63 +49,9 @@ public class DemoEspnCacheService : IEspnCacheService
 
         if (rows.Count == 0) return null;
 
-        var events = rows.Select(row => BuildEvent(row, week, year, postSeason)).ToArray();
+        var games = rows.Select(row => new FinalScoresEspnMapper.FinishedGame(
+            row.Id.ToString(), row.HomeTeam, row.AwayTeam, row.HomeTeamScore, row.AwayTeamScore, row.GameTime));
 
-        return new EspnScores {
-            Leagues = [],
-            Season = new Season { Year = year, Type = postSeason ? 3 : 2 },
-            Week = new Week { Number = week },
-            Events = events,
-        };
-    }
-
-    private static Event BuildEvent(Shared.Models.Data.NflScores row, int week, int year, bool postSeason)
-    {
-        var id = row.Id.ToString();
-        var competition = new Competition {
-            Id = id,
-            Date = row.GameTime,
-            Competitors = [
-                new Competitor {
-                    Id = "1",
-                    HomeAway = HomeAway.Home,
-                    Team = new EspnTeam { Abbreviation = row.HomeTeam },
-                    Score = row.HomeTeamScore,
-                    Records = [],
-                },
-                new Competitor {
-                    Id = "2",
-                    HomeAway = HomeAway.Away,
-                    Team = new EspnTeam { Abbreviation = row.AwayTeam },
-                    Score = row.AwayTeamScore,
-                    Records = [],
-                },
-            ],
-            Status = new EspnStatus {
-                Clock = 0,
-                DisplayClock = "0:00",
-                Period = 4,
-                Type = new StatusType {
-                    Id = 3,
-                    Name = TypeName.StatusFinal,
-                    State = State.Post,
-                    Completed = true,
-                    Description = Description.Final,
-                    Detail = "Final",
-                    ShortDetail = "Final",
-                },
-            },
-            Odds = [],
-            Situation = null,
-        };
-
-        return new Event {
-            Id = id,
-            Season = new Season { Year = year, Type = postSeason ? 3 : 2 },
-            Week = new Week { Number = week },
-            Date = row.GameTime,
-            Competitions = [competition],
-            Weather = null,
-        };
+        return FinalScoresEspnMapper.Build(games, year, week, postSeason);
     }
 }

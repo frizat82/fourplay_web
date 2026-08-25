@@ -4,20 +4,22 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 namespace FourPlayWebApp.Server.Services;
 
 public class CfbCurrentSlateService(ICfbRepository repo) : ICfbCurrentSlateService {
-    private const int ConfiguredSeason = 2026;
-
     public async Task<CfbSlateInfo?> GetCurrentSlateAsync() {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var slates = (await repo.GetSlatesForSeasonAsync(ConfiguredSeason)).ToList();
+        var now = today.ToDateTime(TimeOnly.MinValue);
+        var slates = (await repo.GetAllSlatesAsync()).ToList();
 
-        // Empty or pre-season: no slates yet, or all are future — fall back to prior year
-        if (slates.All(s => s.StartDate > today))
-            slates = (await repo.GetSlatesForSeasonAsync(ConfiguredSeason - 1)).ToList();
+        // Active window wins; else most-recently-completed (off-season); else soonest
+        // upcoming (pre-season) — see SeasonWindowResolver for the shared NFL/CFB logic.
+        // No hardcoded season: resolves purely from whatever slates exist in the DB.
+        var windows = slates.Select(s => new SeasonWindowResolver.Window(
+            s.Season, s.StartDate.ToDateTime(TimeOnly.MinValue), s.EndDate.ToDateTime(TimeOnly.MaxValue)));
+        var resolved = SeasonWindowResolver.ResolveCurrentWeek(windows, now);
+        if (resolved is null) return null;
 
-        if (slates.Count == 0) return null;
-
-        // First slate whose end date hasn't passed = current; all past → show last (off-season)
-        var active = slates.FirstOrDefault(s => s.EndDate >= today) ?? slates[^1];
+        var active = slates.First(s => s.Season == resolved.Value.Season
+            && s.StartDate.ToDateTime(TimeOnly.MinValue) == resolved.Value.Start
+            && s.EndDate.ToDateTime(TimeOnly.MaxValue) == resolved.Value.End);
 
         var configs = await repo.GetWeekConfigsForSeasonAsync(active.Season);
         var matchingConfig = configs.FirstOrDefault(c => c.IvLeagueWeekNumber == active.SlateNumber);
@@ -31,5 +33,12 @@ public class CfbCurrentSlateService(ICfbRepository repo) : ICfbCurrentSlateServi
 
         return new CfbSlateInfo(active.Id, active.Season, active.SlateNumber, active.Label,
             active.SlateType, active.StartDate, active.EndDate, active.FirstGameUtc, matchingConfig.SpreadLockDatetime);
+    }
+
+    public async Task<bool> IsSeasonActiveAsync() {
+        var slates = await repo.GetAllSlatesAsync();
+        var windows = slates.Select(s => new SeasonWindowResolver.Window(
+            s.Season, s.StartDate.ToDateTime(TimeOnly.MinValue), s.EndDate.ToDateTime(TimeOnly.MaxValue)));
+        return SeasonWindowResolver.IsSeasonActive(windows, DateTime.UtcNow);
     }
 }
