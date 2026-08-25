@@ -31,6 +31,10 @@ public class EspnCacheServiceTests
         // Default: no persisted rows for any week, so existing tests (which never seed the repo)
         // keep exercising the live-ESPN branch exactly as before this constructor param was added.
         _leagueRepo.GetNflScoresAsync(Arg.Any<int>(), Arg.Any<int>()).Returns([]);
+        // Default: no configs, so GetWeekScoresAsync's "has this week ended" check finds no match
+        // and safely falls through to ESPN — tests that need the DB-first branch stub this
+        // explicitly with a matching config below.
+        _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<Models.Data.NflSeasonWeekConfig>());
         // Default: a season is active, so existing poller tests (GetScoresAsync_*/ScoresChanged_*)
         // keep exercising the live-ESPN fetch branch unchanged by the new off-season gate.
         _nflCurrentWeekService.IsSeasonActiveAsync().Returns(true);
@@ -210,6 +214,14 @@ public class EspnCacheServiceTests
         };
         // Wild Card (ESPN week 1, postseason) = internal NflWeek 19 (GameHelpers.GetWeekFromEspnWeek).
         _leagueRepo.GetNflScoresAsync(2025, 19).Returns(rows);
+        // This week's own window has fully ended (well in the past) — DB-first only kicks in once
+        // that's true, mirroring CfbLiveScoreFetcher's identical fix.
+        _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<Models.Data.NflSeasonWeekConfig> {
+            new() {
+                Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = "PostSeason", ScoringFormat = "Standard",
+                WeekStartDatetime = new DateTime(2026, 1, 8), WeekEndDatetime = new DateTime(2026, 1, 12),
+            },
+        });
 
         await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
         var result = await svc.GetWeekScoresAsync(1, 2025, postSeason: true);
@@ -248,6 +260,12 @@ public class EspnCacheServiceTests
             new() { Id = 1, Season = 2025, NflWeek = 1, HomeTeam = "KC", AwayTeam = "DEN", HomeTeamScore = 27, AwayTeamScore = 20, GameTime = new DateTimeOffset(2025, 9, 10, 18, 0, 0, TimeSpan.Zero) },
         };
         _leagueRepo.GetNflScoresAsync(2025, 1).Returns(rows);
+        _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<Models.Data.NflSeasonWeekConfig> {
+            new() {
+                Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "RegularSeason", ScoringFormat = "Standard",
+                WeekStartDatetime = new DateTime(2025, 9, 4), WeekEndDatetime = new DateTime(2025, 9, 15),
+            },
+        });
 
         await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
         var first = await svc.GetWeekScoresAsync(1, 2025, postSeason: false);
@@ -256,5 +274,36 @@ public class EspnCacheServiceTests
         Assert.NotNull(first);
         Assert.NotNull(second);
         await _leagueRepo.Received(1).GetNflScoresAsync(2025, 1);
+    }
+
+    // /code-review caught that this exact bug (fixed for CFB in CfbLiveScoreFetcher — see its
+    // comment) was never ported to NFL: gating DB-first purely on "any row persisted" means the
+    // instant one game in a multi-game week finishes and gets persisted, the response is built
+    // from only that game and cached forever — the rest of that week's still-in-progress games
+    // are permanently dropped from every future response, even after they finish and get
+    // persisted too. DB-first must only kick in once the week's own window has fully ended.
+    [Fact]
+    public async Task GetWeekScoresAsync_WhenWeekStillActiveWithPartialRows_StillCallsEspn_NotJustDbRows()
+    {
+        var now = DateTime.UtcNow;
+        _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<Models.Data.NflSeasonWeekConfig> {
+            new() {
+                Season = 2026, WeekId = 3, WeekLabel = "Week 3", WeekType = "RegularSeason", ScoringFormat = "Standard",
+                WeekStartDatetime = now.AddDays(-1), WeekEndDatetime = now.AddDays(1),
+            },
+        });
+        // One game in this week already finished and was persisted; the rest are still live.
+        var partialRows = new List<Shared.Models.Data.NflScores> {
+            new() { Id = 1, Season = 2026, NflWeek = 3, HomeTeam = "KC", AwayTeam = "DEN", HomeTeamScore = 27, AwayTeamScore = 20, GameTime = now.AddHours(-3) },
+        };
+        _leagueRepo.GetNflScoresAsync(2026, 3).Returns(partialRows);
+        var espnScores = new EspnScores { Season = new Season { Year = 2026 } };
+        _espnApi.GetWeekScores(3, 2026, false).Returns(Task.FromResult<EspnScores?>(espnScores));
+
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
+        var result = await svc.GetWeekScoresAsync(3, 2026, postSeason: false);
+
+        await _espnApi.Received(1).GetWeekScores(3, 2026, false);
+        Assert.Same(espnScores, result);
     }
 }
