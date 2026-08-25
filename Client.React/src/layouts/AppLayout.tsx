@@ -46,6 +46,7 @@ import { useSportContext } from '../services/sport';
 import { useThemeMode } from '../services/theme';
 import { isAdmin } from '../utils/auth';
 import PendingInviteBanner from '../components/PendingInviteBanner';
+import VersionFooter from '../components/VersionFooter';
 
 const drawerWidth = 260;
 
@@ -399,6 +400,7 @@ export default function AppLayout() {
           <PendingInviteBanner />
           {noAccessContent ?? <Outlet />}
         </Box>
+        <VersionFooter />
       </Box>
     </Box>
   );

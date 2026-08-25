@@ -224,6 +224,17 @@ builder.Services.AddRateLimiter(options =>
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         opt.QueueLimit = 0;
     });
+
+    // Public, unauthenticated, no-side-effect endpoints (e.g. /api/version): generous but bounded,
+    // so an unthrottled scanner/bot can't hit them at unlimited volume the way every other
+    // anonymous endpoint in this app is already protected from.
+    options.AddFixedWindowLimiter("public", opt =>
+    {
+        opt.PermitLimit = 60;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 0;
+    });
 });
 
 
