@@ -245,6 +245,51 @@ describe('LeaderboardPage — season selector', () => {
     resolveLeagueTwo([createLeaderboardEntry({ userId: '789', userName: 'LeagueTwoUser', rank: '1', total: 9, weekResults: [] })]);
     await screen.findByText('LeagueTwoUser');
   });
+
+  // /code-review: the season selector's own race is prevented by disabling it mid-fetch (see the
+  // test above), but AppLayout's separate league-switcher chip lives outside this page — nothing
+  // stops a user from switching league A -> B -> A again while earlier fetches are still in
+  // flight, and the fetch effect had no staleness guard: whichever response happened to resolve
+  // last was applied, regardless of whether it matched the currently-selected league.
+  it('ignores a stale response from an abandoned league switch, even if it resolves after a newer one', async () => {
+    mockedGetLeaderboard.mockResolvedValueOnce([
+      createLeaderboardEntry({ userId: '1', userName: 'LeagueOneUser', rank: '1', total: 1, weekResults: [] }),
+    ]);
+    const { rerender } = renderPage();
+    await screen.findByText('LeagueOneUser');
+
+    const rerenderWithLeague = (leagueId: number) => {
+      sessionState.currentLeague = leagueId;
+      rerender(
+        <ThemeProvider theme={createAppTheme('light')}>
+          <MemoryRouter initialEntries={['/leaderboard']}>
+            <Routes>
+              <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
+              <Route path="/leaguepicker" element={<div>League Picker</div>} />
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>,
+      );
+    };
+
+    let resolveLeagueTwo!: (value: ReturnType<typeof createLeaderboardEntry>[]) => void;
+    mockedGetLeaderboard.mockImplementationOnce(() => new Promise((res) => { resolveLeagueTwo = res; }));
+    rerenderWithLeague(2); // switch to league 2 — fetch starts, left pending
+
+    let resolveLeagueThree!: (value: ReturnType<typeof createLeaderboardEntry>[]) => void;
+    mockedGetLeaderboard.mockImplementationOnce(() => new Promise((res) => { resolveLeagueThree = res; }));
+    rerenderWithLeague(3); // switch again before league 2's fetch ever resolved
+
+    resolveLeagueThree([createLeaderboardEntry({ userId: '3', userName: 'LeagueThreeUser', rank: '1', total: 3, weekResults: [] })]);
+    await screen.findByText('LeagueThreeUser');
+
+    // The abandoned league-2 request finally resolves — its data must NOT overwrite league 3's,
+    // which is what's actually selected now.
+    resolveLeagueTwo([createLeaderboardEntry({ userId: '2', userName: 'LeagueTwoUser', rank: '1', total: 2, weekResults: [] })]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText('LeagueTwoUser')).not.toBeInTheDocument();
+    expect(screen.getByText('LeagueThreeUser')).toBeInTheDocument();
+  });
 });
 
 describe('LeaderboardPage — week-cell colors', () => {
