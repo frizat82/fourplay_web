@@ -180,7 +180,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         if (newPicks.Count > 0)
             await repo.AddPicksAsync(newPicks);
 
-        return Ok(new { added = newPicks.Count });
+        return Ok(new AddCfbPicksResponseDto(newPicks.Count));
     }
 
     [HttpDelete("picks/{leagueId}/{cfbSlateId}")]

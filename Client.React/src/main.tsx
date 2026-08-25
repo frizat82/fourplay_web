@@ -12,6 +12,8 @@ import { SessionProvider } from './services/session';
 import { SportsProvider } from './services/sport';
 import { ToastProvider } from './services/toast';
 import { ThemeModeProvider, useThemeMode } from './services/theme';
+import { useVersionCheck } from './utils/useVersionCheck';
+import UpdateBanner from './components/UpdateBanner';
 import './app/global.css';
 
 const queryClient = new QueryClient({
@@ -26,9 +28,11 @@ const queryClient = new QueryClient({
 function ThemedApp() {
   const { mode } = useThemeMode();
   const theme = useMemo(() => createAppTheme(mode), [mode]);
+  const { mismatch } = useVersionCheck();
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <UpdateBanner mismatch={mismatch} />
       <BrowserRouter>
         <ToastProvider>
           <SportsProvider>

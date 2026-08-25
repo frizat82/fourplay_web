@@ -6,6 +6,7 @@ public class LeagueInfo {
     public int Id { get; set; }
     public string LeagueName { get; set; }
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UpdatedAt { get; set; }
     // Foreign key to the AspNetUsers table
     public string OwnerUserId { get; set; }
     public ApplicationUser Owner { get; set; } // Navigation property

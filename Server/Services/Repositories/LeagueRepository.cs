@@ -253,12 +253,27 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await using var db = await dbContextFactory.CreateDbContextAsync();
         var league = await db.LeagueInfo.FirstAsync(l => l.Id == leagueId);
         league.OwnerUserId = newOwnerUserId;
+        league.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
     }
 
+    // /code-review: the caller (LeagueController.UpdateLeagueJuice) fetches `mapping` via
+    // GetLeagueJuiceMappingAsync, which .Include()s the League navigation. A blind
+    // db.LeagueJuiceMapping.Update(mapping) on that detached graph would make EF Core's
+    // change-tracker walk the whole reachable graph and mark the stale, detached League
+    // instance as Modified too — clobbering LeagueInfo's columns (including its own new
+    // UpdatedAt) with whatever snapshot was captured back when the mapping was fetched,
+    // silently reverting any concurrent change to that league's other fields. Fetch fresh in
+    // this context and mutate only the juice scalars instead — same pattern as
+    // UpdateLeagueOwnerAsync above — so League is never touched.
     public async Task UpdateLeagueJuiceMappingAsync(LeagueJuiceMapping mapping) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        db.LeagueJuiceMapping.Update(mapping);
+        var existing = await db.LeagueJuiceMapping.FirstAsync(m => m.Id == mapping.Id);
+        existing.Juice = mapping.Juice;
+        existing.JuiceDivisional = mapping.JuiceDivisional;
+        existing.JuiceConference = mapping.JuiceConference;
+        existing.WeeklyCost = mapping.WeeklyCost;
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
     }
 

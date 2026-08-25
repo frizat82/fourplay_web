@@ -37,3 +37,13 @@ describe('HomePage — sport indicator', () => {
     expect(screen.queryByText(/^NFL$/)).not.toBeInTheDocument();
   });
 });
+
+describe('HomePage — promo video', () => {
+  // frizat-f29: the video had no native controls at all, so viewers couldn't resize or
+  // fullscreen it — only a custom mute button was rendered on top.
+  it('renders the promo video with native controls enabled', () => {
+    renderPage();
+    const video = document.querySelector('video');
+    expect(video).toHaveAttribute('controls');
+  });
+});
