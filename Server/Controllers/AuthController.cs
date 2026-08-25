@@ -4,6 +4,7 @@ using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Account;
 using FourPlayWebApp.Shared.Models.Account.Dto;
+using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
@@ -163,7 +164,7 @@ public class AuthController(
 
         ExpireAuthCookies();
 
-        return Ok(new { ok = true });
+        return Ok(new OkResponseDto());
     }
     // GET /api/auth/me
     [Authorize]
@@ -463,7 +464,7 @@ public class AuthController(
         if (newRefresh is not null)
             Response.Cookies.Append("RefreshToken", newRefresh.Token, BuildCookieOptions(newRefresh.Expires));
 
-        return Ok(new { ok = true });
+        return Ok(new OkResponseDto());
     }
     [HttpPost("request-email-confirmation")]
     [AllowAnonymous]

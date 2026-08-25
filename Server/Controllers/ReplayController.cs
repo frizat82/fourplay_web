@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Services;
+using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,10 +19,10 @@ public class ReplayController(IServiceProvider serviceProvider) : ControllerBase
     private IActionResult RunOnReplayService(Action<ReplayCacheService> action, string successMessage) {
         var replayService = serviceProvider.GetService<ReplayCacheService>();
         if (replayService is null)
-            return NotFound(new { message = "Replay mode is not enabled (DEMO_REPLAY_MODE != true)." });
+            return NotFound(new MessageResponseDto("Replay mode is not enabled (DEMO_REPLAY_MODE != true)."));
 
         action(replayService);
-        return Ok(new { message = successMessage });
+        return Ok(new MessageResponseDto(successMessage));
     }
 
     [HttpPost("advance")]

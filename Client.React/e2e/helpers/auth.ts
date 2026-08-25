@@ -8,7 +8,7 @@ import type { SetupRoutesOptions } from './routes';
  * /api/auth/me (which is mocked to return TEST_USER) to hydrate the auth
  * context. Presence of the cookie alone satisfies the client-side cookie check.
  */
-const FAKE_JWT =
+export const FAKE_JWT =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
   'eyJzdWIiOiJ0ZXN0LXVzZXItaWQtMDAxIiwibmFtZSI6IlRlc3RVc2VyIiwiaWF0IjoxNzAwMDAwMDAwfQ.' +
   'fake-signature-for-e2e-tests-only';
