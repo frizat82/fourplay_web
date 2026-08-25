@@ -189,10 +189,18 @@ builder.Services.AddRateLimiter(options =>
     // Return 429 when limits are exceeded
     options.RejectionStatusCode = 429;
 
-    // Login endpoint: 5 requests per minute per IP
+    // Login endpoint: 5 requests per minute per IP in real environments. In DEMO_MODE (CI/demo
+    // stack only — never real production, see the isDemoMode flag above) this was the root cause
+    // of flaky "Demo replay e2e tests" runs: the replay specs legitimately log in as multiple
+    // distinct users (admin via API context, admin/Alice via the browser) from the SAME CI runner
+    // IP, and Playwright's CI retry policy (2 retries) re-issues both logins on any transient
+    // failure — quickly exceeding 5/min, then cascading, since every retry after that fails
+    // immediately at the login step once already throttled. Raised generously here since this
+    // limiter's purpose (block credential-stuffing against real users) doesn't apply to a
+    // demo/CI backend's own trusted runner traffic.
     options.AddFixedWindowLimiter("auth", opt =>
     {
-        opt.PermitLimit = 5;
+        opt.PermitLimit = isDemoMode ? 100 : 5;
         opt.Window = TimeSpan.FromMinutes(1);
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         opt.QueueLimit = 0;
