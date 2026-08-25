@@ -354,4 +354,102 @@ public class LeagueRepositoryTests
 
         Assert.False(exists);
     }
+
+    // ── UpdatedAt audit column (frizat-b0t) ─────────────────────────────────────
+
+    [Fact]
+    public async Task LeagueInfo_UpdatedAt_IsNullImmediatelyAfterInsert()
+    {
+        var factory = new DbContextFactoryStub(nameof(LeagueInfo_UpdatedAt_IsNullImmediatelyAfterInsert));
+        var seedDb = factory.CreateDbContext();
+        seedDb.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "L", OwnerUserId = "owner-1" });
+        await seedDb.SaveChangesAsync();
+
+        var db = factory.CreateDbContext();
+        var league = await db.LeagueInfo.SingleAsync(l => l.Id == 1);
+        Assert.Null(league.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task UpdateLeagueOwnerAsync_SetsUpdatedAt()
+    {
+        var factory = new DbContextFactoryStub(nameof(UpdateLeagueOwnerAsync_SetsUpdatedAt));
+        var seedDb = factory.CreateDbContext();
+        seedDb.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "L", OwnerUserId = "owner-1" });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        await repo.UpdateLeagueOwnerAsync(1, "owner-2");
+
+        var db = factory.CreateDbContext();
+        var league = await db.LeagueInfo.SingleAsync(l => l.Id == 1);
+        Assert.Equal("owner-2", league.OwnerUserId);
+        Assert.NotNull(league.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task LeagueJuiceMapping_UpdatedAt_IsNullImmediatelyAfterInsert()
+    {
+        var factory = new DbContextFactoryStub(nameof(LeagueJuiceMapping_UpdatedAt_IsNullImmediatelyAfterInsert));
+        var seedDb = factory.CreateDbContext();
+        seedDb.LeagueJuiceMapping.Add(new LeagueJuiceMapping { Id = 1, LeagueId = 1, Season = 2025 });
+        await seedDb.SaveChangesAsync();
+
+        var db = factory.CreateDbContext();
+        var mapping = await db.LeagueJuiceMapping.SingleAsync(m => m.Id == 1);
+        Assert.Null(mapping.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task UpdateLeagueJuiceMappingAsync_SetsUpdatedAt()
+    {
+        var factory = new DbContextFactoryStub(nameof(UpdateLeagueJuiceMappingAsync_SetsUpdatedAt));
+        var seedDb = factory.CreateDbContext();
+        seedDb.LeagueJuiceMapping.Add(new LeagueJuiceMapping { Id = 1, LeagueId = 1, Season = 2025, Juice = 13 });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        await repo.UpdateLeagueJuiceMappingAsync(new LeagueJuiceMapping { Id = 1, LeagueId = 1, Season = 2025, Juice = 14 });
+
+        var db = factory.CreateDbContext();
+        var mapping = await db.LeagueJuiceMapping.SingleAsync(m => m.Id == 1);
+        Assert.Equal(14, mapping.Juice);
+        Assert.NotNull(mapping.UpdatedAt);
+    }
+
+    // /code-review: the controller's real call shape (LeagueController.UpdateLeagueJuice) always
+    // passes a mapping fetched via GetLeagueJuiceMappingAsync, which .Include()s the League
+    // navigation — so `mapping.League` is a populated, detached LeagueInfo snapshot from whenever
+    // it was fetched. A blind db.LeagueJuiceMapping.Update(mapping) would make EF Core's
+    // change-tracker walk that whole reachable graph and mark the stale League instance Modified
+    // too, silently overwriting the real row's other columns (including its own UpdatedAt) with
+    // the stale snapshot on save. This test mirrors that exact call shape and proves the league
+    // row is untouched.
+    [Fact]
+    public async Task UpdateLeagueJuiceMappingAsync_DoesNotClobberTheParentLeagueInfoRow()
+    {
+        var factory = new DbContextFactoryStub(nameof(UpdateLeagueJuiceMappingAsync_DoesNotClobberTheParentLeagueInfoRow));
+        var seedDb = factory.CreateDbContext();
+        seedDb.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Original Name", OwnerUserId = "original-owner" });
+        seedDb.LeagueJuiceMapping.Add(new LeagueJuiceMapping { Id = 1, LeagueId = 1, Season = 2025, Juice = 13 });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        // Simulates GetLeagueJuiceMappingAsync's real .Include(League) shape: a stale, detached
+        // League snapshot captured before a concurrent owner change lands.
+        var staleMapping = new LeagueJuiceMapping {
+            Id = 1, LeagueId = 1, Season = 2025, Juice = 13,
+            League = new LeagueInfo { Id = 1, LeagueName = "Original Name", OwnerUserId = "original-owner" },
+        };
+
+        // A concurrent request changes the league's owner after the stale snapshot was captured.
+        await repo.UpdateLeagueOwnerAsync(1, "new-owner");
+
+        staleMapping.Juice = 14;
+        await repo.UpdateLeagueJuiceMappingAsync(staleMapping);
+
+        var db = factory.CreateDbContext();
+        var league = await db.LeagueInfo.SingleAsync(l => l.Id == 1);
+        Assert.Equal("new-owner", league.OwnerUserId); // not reverted by the stale snapshot
+    }
 }

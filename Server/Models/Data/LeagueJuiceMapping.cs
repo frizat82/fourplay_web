@@ -9,4 +9,5 @@ public class LeagueJuiceMapping {
     public int JuiceConference { get; set; } = 6;
     public int WeeklyCost { get; set; } = 5;
     public DateTimeOffset DateCreated { get; set; }
+    public DateTimeOffset? UpdatedAt { get; set; }
 }

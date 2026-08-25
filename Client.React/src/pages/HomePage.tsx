@@ -5,10 +5,8 @@ import SportsTennisIcon from '@mui/icons-material/SportsTennis';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import VolumeOffIcon from '@mui/icons-material/VolumeOff';
-import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import { Link as RouterLink } from 'react-router-dom';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../services/auth';
 import { useSportContext } from '../services/sport';
 import { RulesContent } from './RulesPage';
@@ -50,16 +48,7 @@ export default function HomePage({ adapter }: HomePageProps) {
   const { user } = useAuth();
   const { isCfb } = useSportContext();
   const isAuthed = Boolean(user);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [muted, setMuted] = useState(true);
   const [rulesOpen, setRulesOpen] = useState(false);
-
-  const toggleMute = () => {
-    if (videoRef.current) {
-      videoRef.current.muted = !videoRef.current.muted;
-      setMuted(videoRef.current.muted);
-    }
-  };
 
   return (
     <div>
@@ -136,30 +125,16 @@ export default function HomePage({ adapter }: HomePageProps) {
                 {!isAuthed && (
                   <Paper elevation={8} sx={{ position: 'relative', overflow: 'hidden', borderRadius: 2 }}>
                     <video
-                      ref={videoRef}
                       autoPlay
                       muted
                       loop
                       playsInline
+                      controls
                       style={{ width: '100%', display: 'block' }}
                       poster="/Images/fourplayhome.jpg"
                     >
                       <source src="/Videos/demo.mp4" type="video/mp4" />
                     </video>
-                    <IconButton
-                      onClick={toggleMute}
-                      size="small"
-                      sx={{
-                        position: 'absolute',
-                        bottom: 8,
-                        right: 8,
-                        bgcolor: 'rgba(0,0,0,0.5)',
-                        color: 'white',
-                        '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
-                      }}
-                    >
-                      {muted ? <VolumeOffIcon fontSize="small" /> : <VolumeUpIcon fontSize="small" />}
-                    </IconButton>
                   </Paper>
                 )}
                 <Paper className="hero-image" elevation={8}>
