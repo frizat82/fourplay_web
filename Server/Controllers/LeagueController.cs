@@ -738,12 +738,10 @@ public class LeagueController(
     [HttpGet("{leagueId:int}/cost")]
     [ProducesResponseType(typeof(LeagueCostDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLeagueCost(int leagueId, int? season = null) {
-        var league = await repo.GetLeagueInfoAsync(leagueId);
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != userId)
-            return Forbid();
+        var (league, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         var count = season.HasValue
-            ? await repo.GetLeagueMemberCountAsync(leagueId, season.Value, league.LeagueType)
+            ? await repo.GetLeagueMemberCountAsync(leagueId, season.Value, league!.LeagueType)
             : await repo.GetLeagueMemberCountAsync(leagueId);
         return Ok(new LeagueCostDto(count, ComputeLeagueCost(count)));
     }
@@ -777,10 +775,8 @@ public class LeagueController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateLeagueJuice(int leagueId, int season, [FromBody] LeagueJuiceUpdateDto dto) {
-        var league = await repo.GetLeagueInfoAsync(leagueId);
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != userId)
-            return Forbid();
+        var (_, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         var existing = await repo.GetLeagueJuiceMappingAsync(leagueId, season);
         if (existing is null) return NotFound($"No juice mapping for league {leagueId} season {season}.");
         existing.Juice = dto.Juice;
@@ -796,10 +792,8 @@ public class LeagueController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RollForwardJuice(int leagueId, int toSeason) {
-        var league = await repo.GetLeagueInfoAsync(leagueId);
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != userId)
-            return Forbid();
+        var (_, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         if (await repo.GetLeagueJuiceMappingAsync(leagueId, toSeason) is not null)
             return BadRequest($"Juice mapping for season {toSeason} already exists.");
         var priorMapping = (await repo.GetLeagueJuiceMappingAsync(leagueId))
@@ -823,10 +817,8 @@ public class LeagueController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RemoveLeagueMember(int leagueId, string userId) {
-        var league = await repo.GetLeagueInfoAsync(leagueId);
-        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
-            return Forbid();
+        var (_, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         await repo.RemoveLeagueUserMappingAsync(leagueId, userId);
         return NoContent();
     }
@@ -839,18 +831,8 @@ public class LeagueController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteLeague(int leagueId) {
-        LeagueInfo league;
-        try {
-            league = await repo.GetLeagueInfoAsync(leagueId);
-        } catch (InvalidOperationException) {
-            // GetLeagueInfoAsync's real implementation throws (FirstAsync) rather than returning
-            // null for a missing league — realistic here specifically: a double-submitted delete
-            // (slow network, already-deleted league) should 404, not 500.
-            return NotFound();
-        }
-        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
-            return Forbid();
+        var (_, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         await repo.DeleteLeagueAsync(leagueId);
         return NoContent();
     }
@@ -861,14 +843,11 @@ public class LeagueController(
     [ProducesResponseType(typeof(LeagueInviteLinkDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<LeagueInviteLinkDto>> GenerateInviteLink(int leagueId) {
-        LeagueInfo league;
-        try { league = await repo.GetLeagueInfoAsync(leagueId); }
-        catch (InvalidOperationException) { return NotFound(); }
+        var (league, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
-            return Forbid();
         var link = await leagueInviteLinkService.GenerateAsync(leagueId, callerId);
-        return Ok(new LeagueInviteLinkDto(link.Token, link.LeagueId, league.LeagueName, link.ExpiresAt));
+        return Ok(new LeagueInviteLinkDto(link.Token, link.LeagueId, league!.LeagueName, link.ExpiresAt));
     }
 
     [HttpGet("join/{token}")]
@@ -924,27 +903,19 @@ public class LeagueController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<LeagueInviteLinkDto>> GetCurrentInviteLink(int leagueId) {
-        LeagueInfo league;
-        try { league = await repo.GetLeagueInfoAsync(leagueId); }
-        catch (InvalidOperationException) { return NotFound(); }
-        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
-            return Forbid();
+        var (league, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         var link = await leagueInviteLinkService.GetCurrentAsync(leagueId);
         if (link is null) return NotFound();
-        return Ok(new LeagueInviteLinkDto(link.Token, link.LeagueId, league.LeagueName, link.ExpiresAt));
+        return Ok(new LeagueInviteLinkDto(link.Token, link.LeagueId, league!.LeagueName, link.ExpiresAt));
     }
 
     [HttpDelete("{leagueId:int}/invite-link")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RevokeInviteLink(int leagueId) {
-        LeagueInfo league;
-        try { league = await repo.GetLeagueInfoAsync(leagueId); }
-        catch (InvalidOperationException) { return NotFound(); }
-        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
-            return Forbid();
+        var (_, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         await leagueInviteLinkService.RevokeAsync(leagueId);
         return NoContent();
     }
@@ -953,12 +924,8 @@ public class LeagueController(
     [ProducesResponseType(typeof(IReadOnlyList<InvitationDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<InvitationDto>>> GetLeagueInvitations(int leagueId) {
-        LeagueInfo league;
-        try { league = await repo.GetLeagueInfoAsync(leagueId); }
-        catch (InvalidOperationException) { return NotFound(); }
-        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
-            return Forbid();
+        var (_, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         var invitations = await invitationService.GetInvitationsByLeagueAsync(leagueId);
         return Ok(invitations.ToDtoList());
     }
@@ -967,12 +934,8 @@ public class LeagueController(
     [ProducesResponseType(typeof(IReadOnlyList<MembershipInviteStatusDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<MembershipInviteStatusDto>>> GetLeagueMembershipInvites(int leagueId) {
-        LeagueInfo league;
-        try { league = await repo.GetLeagueInfoAsync(leagueId); }
-        catch (InvalidOperationException) { return NotFound(); }
-        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
-            return Forbid();
+        var (_, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         var invites = await membershipInviteService.GetByLeagueAsync(leagueId);
         return Ok(invites.ToStatusDtoList());
     }
@@ -983,12 +946,9 @@ public class LeagueController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> InviteToLeague(int leagueId, [FromBody] LeagueInviteDto dto) {
-        LeagueInfo league;
-        try { league = await repo.GetLeagueInfoAsync(leagueId); }
-        catch (InvalidOperationException) { return NotFound(); }
+        var (_, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error is not null) return error;
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
-            return Forbid();
 
         // Someone who already has an account (owns a league or belongs to one) must be
         // addable to a NEW league directly — routing them through CreateInvitationAsync would
@@ -1044,6 +1004,25 @@ public class LeagueController(
 
         await membershipInviteService.MarkDeclinedAsync(id);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Shared preamble for the 10+ endpoints that load a league by id and require the caller to
+    /// own it (or be an admin): 404 if the league doesn't exist (GetLeagueInfoAsync's real
+    /// implementation uses FirstAsync(), which throws InvalidOperationException rather than
+    /// returning null), 403 if the caller is neither the owner nor an admin.
+    /// </summary>
+    private async Task<(LeagueInfo? league, ActionResult? error)> LoadOwnedLeagueAsync(int leagueId) {
+        LeagueInfo league;
+        try {
+            league = await repo.GetLeagueInfoAsync(leagueId);
+        } catch (InvalidOperationException) {
+            return (null, NotFound());
+        }
+        var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != callerId)
+            return (null, Forbid());
+        return (league, null);
     }
 
     /// <summary>
