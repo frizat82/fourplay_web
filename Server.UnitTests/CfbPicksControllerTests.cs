@@ -57,20 +57,27 @@ public class CfbPicksControllerTests
         IsLeagueEligible = isLeagueEligible,
     };
 
+    // /code-review + live CI failure: this endpoint used to return the raw CfbPicks entity
+    // directly (Ok(picks)) — harmless while PickType was a plain string, but once PickType became
+    // an enum, the entity (no JsonStringEnumConverter) silently started serializing it as an int
+    // instead of "Spread"/"Over"/"Under", breaking every frontend consumer that matches by that
+    // string. Must go through CfbPickDto like every other picks-returning endpoint already does.
     [Fact]
     public async Task GetUserPicks_ReturnsPicksForUser()
     {
         var picks = new List<CfbPicks>
         {
-            new() { Id = 1, UserId = UserId, LeagueId = 1, CfbSlateId = 1, Team = "ORE" }
+            new() { Id = 1, UserId = UserId, LeagueId = 1, CfbSlateId = 1, Team = "ORE", PickType = PickType.Spread }
         };
         _repo.GetUserPicksAsync(1, 1, UserId).Returns(picks);
 
         var result = await BuildController().GetUserPicks(1, 1);
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        var returned = Assert.IsAssignableFrom<IEnumerable<CfbPicks>>(ok.Value);
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbPickDto>>(ok.Value).ToList();
         Assert.Single(returned);
+        Assert.Equal(PickType.Spread, returned[0].PickType);
+        Assert.Equal("ORE", returned[0].Team);
     }
 
     [Fact]
