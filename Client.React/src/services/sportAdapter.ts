@@ -1,3 +1,8 @@
+import { isGameDecided } from '../utils/gameHelpers';
+import type { PickType } from '../types/picks';
+
+export type { PickType };
+
 /** Canonical game status — both adapters normalize to this before populating GameView */
 export type GameStatusValue = 'final' | 'in_progress' | 'halftime' | 'scheduled' | null;
 
@@ -13,7 +18,7 @@ export function revealPicksForStartedGames(allPicks: PickView[], games: GameView
     games
       .filter(g => {
         // ESPN confirmed the game is underway or finished
-        if (g.gameStatus !== 'scheduled' && g.gameStatus !== null) return true;
+        if (isGameDecided(g.gameStatus)) return true;
         // ESPN still says scheduled but kickoff time has passed — cache is stale
         if (g.gameStatus === 'scheduled' && g.gameTime != null && new Date(g.gameTime) <= now) return true;
         return false;
@@ -52,7 +57,7 @@ export interface GameView {
 export interface PickView {
   gameId: string;
   team: string;
-  pickType: 'Spread' | 'Over' | 'Under';
+  pickType: PickType;
   userId: string;
   userName: string;
 }
@@ -88,7 +93,7 @@ export interface SportAdapter {
   // Picks page
   loadCurrentGames(leagueId: number, userId: string): Promise<LoadedWeek>;
   loadHistoricalGames(leagueId: number, userId: string, week: WeekState): Promise<LoadedWeek | null>;
-  submitPicks(leagueId: number, state: WeekState, picks: { gameId: string; team: string; pickType: string }[]): Promise<void>;
+  submitPicks(leagueId: number, state: WeekState, picks: { gameId: string; team: string; pickType: PickType }[]): Promise<void>;
   clearPicks(leagueId: number, state: WeekState): Promise<PickView[]>;
   loadJerseys?(season: number, week: number): Promise<Record<string, string>>;
 

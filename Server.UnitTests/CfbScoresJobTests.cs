@@ -140,7 +140,7 @@ public class CfbScoresJobTests
         Assert.Equal("OSU", score.AwayTeam);
         Assert.Equal(41,    score.HomeTeamScore);
         Assert.Equal(21,    score.AwayTeamScore);
-        Assert.Equal("StatusFinal", score.GameStatus);
+        Assert.Equal(TypeName.StatusFinal, score.GameStatus);
         Assert.Equal(slate.Id, score.CfbSlateId);
     }
 

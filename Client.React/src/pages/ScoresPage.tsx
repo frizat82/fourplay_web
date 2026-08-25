@@ -18,19 +18,17 @@ import PickDialog from '../components/PickDialog';
 import FieldPosition from '../components/FieldPosition';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { spreadLabel } from '../utils/gameHelpers';
+import { isGameDecided, isGameFinal, isGameLive, spreadLabel } from '../utils/gameHelpers';
 import { useShareLink } from '../utils/useShareLink';
-import type { SportAdapter, GameView, WeekState } from '../services/sportAdapter';
-
-// GameView.gameStatus is canonical GameStatusValue — use === directly, no string parsing
+import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
 
 function isDecided(game: GameView): boolean {
-  return game.gameStatus === 'final' || game.gameStatus === 'in_progress' || game.gameStatus === 'halftime';
+  return isGameDecided(game.gameStatus);
 }
 
-function teamWins(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): boolean | null {
+function teamWins(game: GameView, team: string, pickType: PickType): boolean | null {
   if (!isDecided(game)) return null;
   if (pickType === 'Spread') {
     if (game.homeCovers == null) return null;
@@ -310,8 +308,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
             )}
 
             {data?.hasOdds && games.map(game => {
-              const isFinal = game.gameStatus === 'final';
-              const isLive = game.gameStatus === 'in_progress' || game.gameStatus === 'halftime';
+              const isFinal = isGameFinal(game.gameStatus);
+              const isLive = isGameLive(game.gameStatus);
               const hc = game.homeCovers ?? null;
               const ov = game.overWins ?? null;
 

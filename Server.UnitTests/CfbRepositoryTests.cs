@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Repositories;
+using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -140,5 +141,43 @@ public class CfbRepositoryTests
 
         Assert.Equal(3, all.Count);
         Assert.Equal([(2025, 4), (2026, 1), (2026, 2)], all.Select(s => (s.Season, s.SlateNumber)));
+    }
+
+    // frizat-b2y: CapturedAtUtc changed from DateTime to DateTimeOffset for unambiguous instant
+    // representation, matching DateCreated/UpdatedAt elsewhere in this codebase. Note: Postgres's
+    // timestamptz (what this column maps to either way) always normalizes to UTC and never
+    // preserves an arbitrary input offset — DateTimeOffset.Equals compares by absolute instant,
+    // not literal offset, so a non-UTC input still round-trips correctly here without asserting
+    // (falsely) that the original -5 offset itself survives storage.
+    [Fact]
+    public async Task AddRankingsAsync_PreservesCapturedAtUtcInstant()
+    {
+        var factory = new DbContextFactoryStub(nameof(AddRankingsAsync_PreservesCapturedAtUtcInstant));
+        var repo = new CfbRepository(factory);
+        var capturedAt = new DateTimeOffset(2026, 8, 26, 9, 0, 0, TimeSpan.FromHours(-5));
+
+        await repo.AddRankingsAsync([
+            new CfbRanking { Season = 2026, EspnWeekNumber = 1, EspnEventId = 1, TeamAbbreviation = "ALA", CuratedRank = 3, CapturedAtUtc = capturedAt },
+        ]);
+
+        var saved = await factory.CreateDbContext().CfbRankings.SingleAsync(r => r.TeamAbbreviation == "ALA");
+        Assert.Equal(capturedAt, saved.CapturedAtUtc);
+    }
+
+    // frizat-bo1: CfbScores.GameStatus was a raw string ("StatusFinal", "StatusInProgress", ...) —
+    // migrated to reuse the existing TypeName enum (the same one ESPN status parsing already uses
+    // everywhere else) rather than either a loose string or a brand-new duplicate enum.
+    [Fact]
+    public async Task UpsertCfbScoresAsync_PersistsGameStatusEnum_AndReadsItBack()
+    {
+        var factory = new DbContextFactoryStub(nameof(UpsertCfbScoresAsync_PersistsGameStatusEnum_AndReadsItBack));
+        var repo = new CfbRepository(factory);
+
+        await repo.UpsertCfbScoresAsync([
+            new CfbScores { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamScore = 21, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal },
+        ]);
+
+        var saved = (await repo.GetScoresForSlateAsync(1)).Single();
+        Assert.Equal(TypeName.StatusFinal, saved.GameStatus);
     }
 }
