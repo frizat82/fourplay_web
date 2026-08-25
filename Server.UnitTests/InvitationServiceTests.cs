@@ -1,7 +1,10 @@
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Models;
+using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Server.Models.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Xunit;
@@ -193,6 +196,55 @@ namespace FourPlayWebApp.Server.UnitTests
             var (service, _) = BuildService(nameof(DeleteInvitationAsync_NonExistentId_DoesNotThrow));
 
             await service.DeleteInvitationAsync(999999);
+        }
+
+        // /code-review: CreateInvitationAsync's upsert has the identical TOCTOU race
+        // LeagueMembershipInviteService.CreateOrReopenAsync guards against (see its own comment
+        // and CreateOrReopenAsync_ConcurrentCallsForSameNewPair_BothSucceed_ExactlyOneRowCreated)
+        // — two concurrent requests inviting the same not-yet-invited (Email, LeagueId) pair can
+        // both read `existing == null` before either writes, and the loser's SaveChangesAsync
+        // throws an unhandled DbUpdateException on the unique-index violation instead of the
+        // caller getting a clean result. The InMemory provider used by BuildService above doesn't
+        // enforce unique indexes, so this needs a real constraint-enforcing provider (SQLite,
+        // mirroring LeagueMembershipInviteServiceTests' setup) to actually reproduce.
+        private static ApplicationDbContext OpenSqliteDb(string dbName) =>
+            new(new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseSqlite($"Data Source={dbName};Mode=Memory;Cache=Shared")
+                .Options);
+
+        private static IDbContextFactory<ApplicationDbContext> BuildSqliteFactory(string dbName)
+        {
+            var factory = Substitute.For<IDbContextFactory<ApplicationDbContext>>();
+            factory.CreateDbContextAsync().Returns(_ => Task.FromResult(OpenSqliteDb(dbName)));
+            return factory;
+        }
+
+        [Fact]
+        public async Task CreateInvitationAsync_ConcurrentCallsForSameNewPair_BothSucceed_ExactlyOneRowCreated()
+        {
+            var dbName = nameof(CreateInvitationAsync_ConcurrentCallsForSameNewPair_BothSucceed_ExactlyOneRowCreated);
+            await using var keepAlive = new SqliteConnection($"Data Source={dbName};Mode=Memory;Cache=Shared");
+            await keepAlive.OpenAsync();
+            await using (var init = OpenSqliteDb(dbName)) { await init.Database.EnsureCreatedAsync(); }
+            await using (var seed = OpenSqliteDb(dbName)) {
+                seed.Users.Add(new ApplicationUser {
+                    Id = "owner", UserName = "owner", NormalizedUserName = "OWNER", Email = "owner@example.com",
+                    SecurityStamp = Guid.NewGuid().ToString(), ConcurrencyStamp = Guid.NewGuid().ToString(),
+                });
+                seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
+                await seed.SaveChangesAsync();
+            }
+            var factory = BuildSqliteFactory(dbName);
+            var emailSender = Substitute.For<IEmailSender>();
+            var serviceA = new InvitationService(factory, emailSender);
+            var serviceB = new InvitationService(factory, emailSender);
+
+            await Task.WhenAll(
+                serviceA.CreateInvitationAsync("race@example.com", "owner", leagueId: 1),
+                serviceB.CreateInvitationAsync("race@example.com", "owner", leagueId: 1));
+
+            await using var verify = OpenSqliteDb(dbName);
+            Assert.Equal(1, await verify.Invitations.CountAsync(i => i.Email == "race@example.com" && i.LeagueId == 1));
         }
     }
 }

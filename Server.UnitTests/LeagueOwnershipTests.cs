@@ -352,6 +352,55 @@ public class LeagueOwnershipTests
         await repo.DidNotReceive().GetLeagueMemberCountAsync(1, Arg.Any<int>(), Arg.Any<LeagueType>());
     }
 
+    // /code-review: GetLeagueCost/UpdateLeagueJuice/RollForwardJuice/RemoveLeagueMember all called
+    // GetLeagueInfoAsync(leagueId) unguarded — its real (non-mocked) implementation uses
+    // FirstAsync(), which throws InvalidOperationException for a missing league, same as
+    // DeleteLeague's existing guard above. Without a try/catch, a bad/deleted leagueId 500s
+    // instead of a clean 404, inconsistent with every other endpoint in this controller.
+    [Fact]
+    public async Task GetLeagueCost_ReturnsNotFound_WhenLeagueDoesNotExist()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(999).Returns(Task.FromException<LeagueInfo>(new InvalidOperationException("Sequence contains no elements")));
+
+        var result = await ctrl.GetLeagueCost(999);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task UpdateLeagueJuice_ReturnsNotFound_WhenLeagueDoesNotExist()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(999).Returns(Task.FromException<LeagueInfo>(new InvalidOperationException("Sequence contains no elements")));
+
+        var result = await ctrl.UpdateLeagueJuice(999, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 5));
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task RollForwardJuice_ReturnsNotFound_WhenLeagueDoesNotExist()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(999).Returns(Task.FromException<LeagueInfo>(new InvalidOperationException("Sequence contains no elements")));
+
+        var result = await ctrl.RollForwardJuice(999, 2026);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveLeagueMember_ReturnsNotFound_WhenLeagueDoesNotExist()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(999).Returns(Task.FromException<LeagueInfo>(new InvalidOperationException("Sequence contains no elements")));
+
+        var result = await ctrl.RemoveLeagueMember(999, "victim-003");
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
     // ── GetAllLeaguesCost (admin platform-wide cost dashboard, frizat-fug) ──────
 
     [Fact]

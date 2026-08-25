@@ -329,7 +329,12 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             var weeks = await db.CfbSeasonWeekConfigs.Where(c => c.Season == season).ToListAsync();
             if (weeks.Count == 0) return null;
             var start = weeks.Min(w => w.WeekStartDate).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-            var end = weeks.Max(w => w.WeekEndDate).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            // MaxValue (end of day), not MinValue — a DateOnly season end means the whole of that
+            // calendar day is still in-season, matching CfbCurrentSlateService's convention for
+            // the same "end of this date" concept. /code-review caught this using MinValue
+            // (midnight at the *start* of the last day), which excluded anyone active later that
+            // same day.
+            var end = weeks.Max(w => w.WeekEndDate).ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
             return (start, end);
         } else {
             var weeks = await db.NflSeasonWeekConfigs.Where(c => c.Season == season).ToListAsync();
