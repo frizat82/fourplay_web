@@ -46,6 +46,7 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
             invitation.InvitedByUserId = invitedByUserId;
             invitation.ExpiresAt = DateTimeOffset.UtcNow.AddDays(7);
             Log.Information("Invitation for {Email} to league {LeagueId} refreshed by {UserId}", email, leagueId, invitedByUserId);
+            await dbContext.SaveChangesAsync();
         } else {
             invitation = new Invitation {
                 Email = email,
@@ -56,9 +57,17 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
             };
             dbContext.Invitations.Add(invitation);
             Log.Information("Invitation created for {Email} by {UserId}", email, invitedByUserId);
+            try {
+                await dbContext.SaveChangesAsync();
+            } catch (DbUpdateException) {
+                // TOCTOU: a concurrent request already inserted this exact (Email, LeagueId) pair
+                // between our read and write — same race LeagueMembershipInviteService.CreateOrReopenAsync
+                // guards against. Re-read whichever row won so the caller gets a usable Invitation
+                // back instead of an unhandled 500.
+                invitation = await dbContext.Invitations
+                    .FirstAsync(i => i.Email == email && i.LeagueId == leagueId);
+            }
         }
-
-        await dbContext.SaveChangesAsync();
 
         if (!string.IsNullOrWhiteSpace(baseUrl)) {
             try {
