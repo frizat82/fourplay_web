@@ -377,8 +377,15 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    const mockJuiceMapping = { id: 1, leagueId: TEST_LEAGUE_ID, season: TEST_SEASON, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5 };
+
     if (url.match(/\/api\/league\/\d+\/juice$/) && method === 'GET') {
-      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 1, leagueId: TEST_LEAGUE_ID, season: TEST_SEASON, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5 }]) });
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([mockJuiceMapping]) });
+      return;
+    }
+
+    if (url.match(/\/api\/league\/\d+\/juice\/\d+$/) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockJuiceMapping) });
       return;
     }
 

@@ -28,10 +28,24 @@ const sessionState = {
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/auth', () => ({ useAuth: () => ({ user: { userId: '123', name: 'TestUser', claims: [] } }) }));
 vi.mock('../api/leaderboard', () => ({ getLeaderboard: vi.fn() }));
+vi.mock('../api/league', () => ({ getLeagueJuiceForSeason: vi.fn() }));
 
 import { getLeaderboard } from '../api/leaderboard';
+import { getLeagueJuiceForSeason } from '../api/league';
 
 const mockedGetLeaderboard = vi.mocked(getLeaderboard);
+const mockedGetLeagueJuiceForSeason = vi.mocked(getLeagueJuiceForSeason);
+
+// frizat-ugs: every existing test in this file exercises a season whose Juice IS configured —
+// default the mock to "configured" globally so only the new not-configured tests need to
+// override it, instead of touching all the pre-existing test bodies below.
+beforeEach(() => {
+  mockedGetLeagueJuiceForSeason.mockReset();
+  mockedGetLeagueJuiceForSeason.mockResolvedValue({
+    id: 1, leagueId: 1, leagueName: 'Demo League', season: 2023,
+    juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2023-01-01T00:00:00Z',
+  });
+});
 
 const mockAdapter: SportAdapter = {
   sport: 'nfl',
@@ -143,6 +157,36 @@ describe('LeaderboardPage', () => {
     sessionState.currentLeague = null;
     renderPage();
     await screen.findByText(/League Picker/i);
+  });
+
+  // frizat-ugs: see the juiceConfigured state comment in LeaderboardPage.tsx for the full context.
+  it('shows a "Juice not configured" message instead of the generic empty state when Juice is unconfigured', async () => {
+    mockedGetLeagueJuiceForSeason.mockResolvedValue(null);
+    mockedGetLeaderboard.mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText(/juice.*not configured/i);
+    expect(screen.queryByText(/no leaderboard data yet/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the generic "no data yet" message when Juice IS configured but the leaderboard is still empty', async () => {
+    mockedGetLeaderboard.mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText(/no leaderboard data yet/i);
+    expect(screen.queryByText(/juice.*not configured/i)).not.toBeInTheDocument();
+  });
+
+  // /code-review: the juice-configured lookup is a second await inside the same fetch effect —
+  // without a try/finally around it, a rejected request there (network error, non-401 failure;
+  // http.ts's interceptor only retries on 401) left the page stuck on the spinner forever, since
+  // nothing after the throw ever called setLoading(false).
+  it('still clears the loading spinner when the follow-up Juice-configured check fails', async () => {
+    mockedGetLeaderboard.mockResolvedValue([]);
+    mockedGetLeagueJuiceForSeason.mockRejectedValue(new Error('network down'));
+
+    renderPage();
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
   });
 });
 
