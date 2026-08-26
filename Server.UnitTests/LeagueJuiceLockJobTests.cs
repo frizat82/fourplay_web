@@ -79,4 +79,22 @@ public class LeagueJuiceLockJobTests
 
         await _observer.Received(1).RecordJobSuccessAsync(nameof(LeagueJuiceLockJob), Arg.Any<string>());
     }
+
+    // frizat-703.2: an unhandled exception must propagate to Quartz (not be swallowed after
+    // logging) so the global JobFailureAlertListener — which only fires when JobWasExecuted
+    // receives a non-null jobException — actually sees this job's failures. Recording via
+    // IJobObserverService is for the existing admin job-monitor UI; it's not a substitute alert
+    // path, since RecordJobFailureAsync has no wiring to the Discord notifier.
+    [Fact]
+    public async Task RecordsFailure_ThenRethrows_OnUnexpectedException()
+    {
+        _repo.GetLeagueJuiceMappingAsync(1, 2026).Returns((LeagueJuiceMapping?)null);
+        var boom = new InvalidOperationException("DB unavailable");
+        _repo.AddLeagueJuiceMappingAsync(Arg.Any<LeagueJuiceMapping>()).Returns<Task>(_ => throw boom);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        Assert.Same(boom, thrown);
+        await _observer.Received(1).RecordJobFailureAsync(nameof(LeagueJuiceLockJob), "DB unavailable");
+    }
 }

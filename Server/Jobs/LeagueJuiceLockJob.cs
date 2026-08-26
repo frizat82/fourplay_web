@@ -2,7 +2,6 @@ using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using Quartz;
-using Serilog;
 
 namespace FourPlayWebApp.Server.Jobs;
 
@@ -32,8 +31,7 @@ public class LeagueJuiceLockJob(ILeagueRepository repo, IJobObserverService obse
                 ? $"League {leagueId} season {season} Juice carried forward from season {priorMapping.Season}"
                 : $"League {leagueId} season {season} Juice set to defaults (no prior season)");
         } catch (Exception ex) {
-            Log.Error(ex, "LeagueJuiceLockJob failed");
-            await observer.RecordJobFailureAsync(jobName, ex.Message);
+            await observer.RecordAndRethrowAsync(jobName, ex);
         }
     }
 }
