@@ -16,10 +16,6 @@ public class NflPicks {
     public int NflWeek { get; set; }
     public int Season { get; set; }
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
-    // Navigation property
-    public NflWeeks NflWeekInfo { get; set; }
-    public int NflWeekId { get; set; }
-    // Foreign key to the NFlWeeks table
     public override int GetHashCode() {
         return HashCode.Combine(Team, Pick, Season, NflWeek, UserId, LeagueId);
     }

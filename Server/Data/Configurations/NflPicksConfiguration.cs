@@ -23,11 +23,6 @@ public class NflPicksConfiguration : IEntityTypeConfiguration<NflPicks>
             .HasForeignKey(e => e.UserId)
             .IsRequired();
 
-        entity.HasOne(e => e.NflWeekInfo)
-            .WithMany(l => l.NflPicks)
-            .HasForeignKey(e => e.NflWeekId)
-            .IsRequired();
-
         entity.HasIndex(x => new { x.UserId, x.LeagueId, x.NflWeek, x.Season, x.Team, x.Pick }).IsUnique();
     }
 }
