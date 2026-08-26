@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [dev, main]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   secret-scan:
     name: Secret scan
@@ -51,8 +55,24 @@ jobs:
 
       - name: Test
         # Category=Contract tests hit the real ESPN/odds APIs over the network — excluded here,
-        # run weekly + on-demand via espn-contract.yml instead.
-        run: dotnet test --no-build -c Release --filter "Category!=Contract" --logger "console;verbosity=minimal"
+        # run weekly + on-demand via espn-contract.yml instead. Collects coverage in the same
+        # run as the required test pass (dotnet.yml used to duplicate this whole job just to
+        # add coverage — merged in here instead so tests run once per PR, not twice).
+        run: >
+          dotnet test --no-build -c Release --filter "Category!=Contract"
+          --settings Server.UnitTests/coverlet.runsettings
+          --logger "console;verbosity=minimal" --logger:trx
+          --collect:"XPlat Code Coverage" --results-directory ./coverage
+
+      - name: Code Coverage
+        uses: bibipkins/dotnet-test-reporter@v1.5.4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-title: 'Backend Unit Test Results'
+          results-path: 'coverage/*.trx'
+          coverage-path: 'coverage/**/coverage.cobertura.xml'
+          coverage-threshold: 30
+          coverage-type: cobertura
 
   frontend:
     name: Frontend build & test
@@ -80,7 +100,16 @@ jobs:
         run: npm run lint
 
       - name: Test
-        run: npm run test -- --run
+        # dotnet.yml used to duplicate this whole job just to add coverage — merged in here
+        # instead so tests run once per PR, not twice.
+        run: npm run test -- --run --coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./Client.React/coverage/coverage-final.json
+          flags: frontend
+          fail_ci_if_error: false
 
       - name: Build
         run: npm run build

@@ -142,7 +142,7 @@ public class DemoDataSeederIdempotencyTests : IClassFixture<PostgresSeederFixtur
             {
                 UserId = AdminId, LeagueId = league.Id, Team = "KC",
                 Pick = PickType.Spread, NflWeek = week, Season = DemoSeason,
-                NflWeekId = weekRow.Id, DateCreated = DateTimeOffset.UtcNow,
+                DateCreated = DateTimeOffset.UtcNow,
             });
             await db.SaveChangesAsync();
         }

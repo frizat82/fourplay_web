@@ -10,5 +10,5 @@ public class CfbRanking {
     public int EspnEventId { get; set; }
     public string TeamAbbreviation { get; set; } = string.Empty;
     public int CuratedRank { get; set; }
-    public DateTime CapturedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset CapturedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }

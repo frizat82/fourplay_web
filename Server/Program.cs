@@ -189,10 +189,18 @@ builder.Services.AddRateLimiter(options =>
     // Return 429 when limits are exceeded
     options.RejectionStatusCode = 429;
 
-    // Login endpoint: 5 requests per minute per IP
+    // Login endpoint: 5 requests per minute per IP in real environments. In DEMO_MODE (CI/demo
+    // stack only — never real production, see the isDemoMode flag above) this was the root cause
+    // of flaky "Demo replay e2e tests" runs: the replay specs legitimately log in as multiple
+    // distinct users (admin via API context, admin/Alice via the browser) from the SAME CI runner
+    // IP, and Playwright's CI retry policy (2 retries) re-issues both logins on any transient
+    // failure — quickly exceeding 5/min, then cascading, since every retry after that fails
+    // immediately at the login step once already throttled. Raised generously here since this
+    // limiter's purpose (block credential-stuffing against real users) doesn't apply to a
+    // demo/CI backend's own trusted runner traffic.
     options.AddFixedWindowLimiter("auth", opt =>
     {
-        opt.PermitLimit = 5;
+        opt.PermitLimit = isDemoMode ? 100 : 5;
         opt.Window = TimeSpan.FromMinutes(1);
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         opt.QueueLimit = 0;
@@ -221,6 +229,17 @@ builder.Services.AddRateLimiter(options =>
     {
         opt.PermitLimit = 3;
         opt.Window = TimeSpan.FromHours(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 0;
+    });
+
+    // Public, unauthenticated, no-side-effect endpoints (e.g. /api/version): generous but bounded,
+    // so an unthrottled scanner/bot can't hit them at unlimited volume the way every other
+    // anonymous endpoint in this app is already protected from.
+    options.AddFixedWindowLimiter("public", opt =>
+    {
+        opt.PermitLimit = 60;
+        opt.Window = TimeSpan.FromMinutes(1);
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         opt.QueueLimit = 0;
     });
@@ -264,6 +283,7 @@ builder.Services.AddScoped<ICfbCurrentSlateService, CfbCurrentSlateService>();
 builder.Services.AddSingleton<ICfbLiveScoreFetcher, CfbLiveScoreFetcher>();
 builder.Services.AddScoped<NflSpreadScheduleSource>();
 builder.Services.AddScoped<CfbSpreadScheduleSource>();
+builder.Services.AddScoped<LeagueJuiceScheduleSource>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 
@@ -278,6 +298,9 @@ builder.Services.AddScoped<IJob, CfbSpreadSchedulerJob>();
 builder.Services.AddScoped<IJob, CfbRankingCaptureJob>();
 builder.Services.AddScoped<IJob, CfbSpreadJob>();
 builder.Services.AddScoped<IJob, CfbScoresJob>();
+builder.Services.AddScoped<IJob, LeagueJuiceSchedulerJob>();
+builder.Services.AddScoped<IJob, LeagueJuiceReminderJob>();
+builder.Services.AddScoped<IJob, LeagueJuiceLockJob>();
 builder.Services.AddQuartz(q => {
     // In DEMO_MODE/DEMO_REPLAY_MODE fire in 5s so seeding completes before e2e tests start;
     // otherwise fire 2 min after startup to avoid slowing cold boot.
@@ -360,6 +383,18 @@ builder.Services.AddQuartz(q => {
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat 8pm", "Fetches CFB scores at Saturday evening kickoff window", "0 0 20 ? * SAT");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat Midnight", "Fetches CFB final scores late Saturday night", "0 0 0 ? * SUN");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 6am", "Fetches CFB overnight final scores Sunday morning", "0 0 6 ? * SUN");
+
+        // League Juice reminder + auto-lock (frizat-ugs) — mirrors the spread schedulers above:
+        // LeagueJuiceScheduleSource reads NflSeasonWeekConfig/CfbSeasonWeekConfig (never a
+        // hardcoded season) and registers one-time reminder/lock triggers per league per season.
+        // Inside this guard (not unconditional like the slate seeder) because
+        // LeagueJuiceReminderJob sends a REAL email — must never fire against demo users.
+        q.ScheduleJob<LeagueJuiceSchedulerJob>(trigger => trigger
+            .WithIdentity("League Juice Scheduler Startup")
+            .WithDescription("Registers per-league-season Juice reminder/lock triggers")
+            .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+        );
+        q.ScheduleCstCronJob<LeagueJuiceSchedulerJob>("League Juice Scheduler Daily", "Daily catch-up pass for Juice reminder/lock triggers", "0 0 6 * * ?");
     }
 });
 

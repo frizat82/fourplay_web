@@ -44,11 +44,13 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     Task<int> GetLeagueMemberCountAsync(int leagueId, int season, LeagueType leagueType);
     Task<Dictionary<int, int>> GetLeagueMemberCountsAsync(int season);
     Task DeleteLeagueAsync(int leagueId);
+    Task<HashSet<(int LeagueId, int Season)>> GetJuiceRemindersSentAsync();
 
     // Add operations
     Task AddLeagueUserMappingAsync(LeagueUserMapping mapping);
     Task<LeagueInfo> AddLeagueInfoAsync(LeagueInfo leagueInfo);
     Task AddLeagueJuiceMappingAsync(LeagueJuiceMapping mapping);
+    Task RecordJuiceReminderSentAsync(int leagueId, int season);
     Task AddNflScoresAsync(IEnumerable<NflScores> scores);
     Task AddNflSpreadsAsync(IEnumerable<NflSpreads> spreads);
     Task AddNflPicksAsync(IEnumerable<NflPicks> picks);

@@ -46,6 +46,7 @@ import { useSportContext } from '../services/sport';
 import { useThemeMode } from '../services/theme';
 import { isAdmin } from '../utils/auth';
 import PendingInviteBanner from '../components/PendingInviteBanner';
+import VersionFooter from '../components/VersionFooter';
 
 const drawerWidth = 260;
 
@@ -59,6 +60,15 @@ const adminNavItemSx = {
   borderRadius: 2,
   pl: 2,
 } as const;
+
+// Single source for the safe-area CSS value — referenced by both the fixed AppBar's own padding
+// and toolbarSpacerSx below, so the two can't drift out of sync (see the AppBar's comment for why
+// they must move together).
+const safeInsetTop = 'var(--safe-inset-top)';
+
+// Reserves exactly the fixed AppBar's real (safe-area-inset-aware) height — see the AppBar's
+// own comment below for why. Used by both spacer <Toolbar /> placeholders.
+const toolbarSpacerSx = { mt: safeInsetTop } as const;
 
 export default function AppLayout() {
   const theme = useTheme();
@@ -119,7 +129,15 @@ export default function AppLayout() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+      {/* frizat: iOS "Add to Home Screen -> Open as Web App" launches in standalone mode, which
+          (via index.html's viewport-fit=cover + apple-mobile-web-app-status-bar-style=black-
+          translucent) renders content edge-to-edge under the status bar/Dynamic Island — without
+          this, the fixed AppBar's content sat directly behind it. env(safe-area-inset-top)
+          evaluates to 0px in a normal browser tab, so this is a no-op everywhere else. The two
+          spacer <Toolbar /> elements below must gain the same extra margin to keep reserving
+          exactly the AppBar's real (now taller) height, or content directly under it either hides
+          under the bar or leaves a gap. */}
+      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, pt: safeInsetTop }}>
         <Toolbar sx={{ gap: 2 }}>
           <IconButton color="inherit" edge="start" onClick={() => setOpen(!open)}>
             <MenuIcon />
@@ -230,7 +248,7 @@ export default function AppLayout() {
           },
         }}
       >
-        <Toolbar />
+        <Toolbar sx={toolbarSpacerSx} />
         <Box sx={{ overflow: 'auto' }}>
           <List>
             <ListItemButton
@@ -394,11 +412,12 @@ export default function AppLayout() {
           }),
         }}
       >
-        <Toolbar />
+        <Toolbar sx={toolbarSpacerSx} />
         <Box className="page-shell" sx={{ flex: 1 }}>
           <PendingInviteBanner />
           {noAccessContent ?? <Outlet />}
         </Box>
+        <VersionFooter />
       </Box>
     </Box>
   );

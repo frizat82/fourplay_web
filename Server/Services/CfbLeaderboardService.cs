@@ -109,9 +109,9 @@ public class CfbLeaderboardService(
         var rawSpread = isHome ? spread.HomeTeamSpread : spread.AwayTeamSpread;
 
         return pick.PickType switch {
-            "Spread" => teamScore + rawSpread + juice - otherScore > 0,
-            "Over" => teamScore + otherScore > spread.OverUnder - juice,
-            "Under" => teamScore + otherScore < spread.OverUnder + juice,
+            PickType.Spread => teamScore + rawSpread + juice - otherScore > 0,
+            PickType.Over => teamScore + otherScore > spread.OverUnder - juice,
+            PickType.Under => teamScore + otherScore < spread.OverUnder + juice,
             _ => false,
         };
     }

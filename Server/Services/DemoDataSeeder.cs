@@ -2,6 +2,7 @@ using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Identity;
@@ -408,14 +409,14 @@ public class DemoDataSeeder(
     {
         if (league == null) return;
 
-        var nflWeek = await db.NflWeeks.FirstOrDefaultAsync(w => w.Season == DemoSeason && w.NflWeek == DemoWeek);
-        if (nflWeek == null) return;
+        var nflWeekExists = await db.NflWeeks.AnyAsync(w => w.Season == DemoSeason && w.NflWeek == DemoWeek);
+        if (!nflWeekExists) return;
 
         foreach (var (username, email) in DemoUsers)
         {
             var user = await EnsureDemoUserAsync(username, email, league);
             if (user == null) continue;
-            await SeedPicksForUserAsync(user, league, nflWeek);
+            await SeedPicksForUserAsync(user, league);
         }
     }
 
@@ -441,7 +442,7 @@ public class DemoDataSeeder(
         return user;
     }
 
-    private async Task SeedPicksForUserAsync(ApplicationUser user, LeagueInfo league, NflWeeks nflWeek)
+    private async Task SeedPicksForUserAsync(ApplicationUser user, LeagueInfo league)
     {
         if (!DemoPicksMap.TryGetValue(user.UserName!, out var picks)) return;
 
@@ -461,7 +462,6 @@ public class DemoDataSeeder(
                 Pick = PickType.Spread,
                 NflWeek = DemoWeek,
                 Season = DemoSeason,
-                NflWeekId = nflWeek.Id,
                 DateCreated = DateTimeOffset.UtcNow,
             });
         }
@@ -645,7 +645,6 @@ public class DemoDataSeeder(
             var weekStart = new DateTimeOffset(2025, 9, 4, 0, 0, 0, TimeSpan.Zero).AddDays((week - 1) * 7);
             db.NflWeeks.Add(new NflWeeks { Season = DemoSeason, NflWeek = week, StartDate = weekStart, EndDate = weekStart.AddDays(6) });
             await db.SaveChangesAsync();
-            var nflWeek = await db.NflWeeks.FirstAsync(w => w.Season == DemoSeason && w.NflWeek == week);
 
             // NflSpreads (16 games, all 32 NFL teams, home teams favored)
             foreach (var g in HistGames)
@@ -674,7 +673,7 @@ public class DemoDataSeeder(
                     {
                         UserId = user.Id, LeagueId = league.Id, Team = team,
                         Pick = PickType.Spread, NflWeek = week, Season = DemoSeason,
-                        NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow,
+                        DateCreated = DateTimeOffset.UtcNow,
                     });
                 }
             }
@@ -725,7 +724,6 @@ public class DemoDataSeeder(
         // NflWeeks row
         db.NflWeeks.Add(new NflWeeks { Season = DemoSeason, NflWeek = week, StartDate = startDate, EndDate = endDate });
         await db.SaveChangesAsync();
-        var nflWeek = await db.NflWeeks.FirstAsync(w => w.Season == DemoSeason && w.NflWeek == week);
 
         // Spreads
         foreach (var g in games)
@@ -762,11 +760,11 @@ public class DemoDataSeeder(
             for (int i = 0; i < Math.Min(pattern.Length, games.Length); i++)
             {
                 if (i == 0 && name == "Bob") {
-                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Over, NflWeek = week, Season = DemoSeason, NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow });
+                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Over, NflWeek = week, Season = DemoSeason, DateCreated = DateTimeOffset.UtcNow });
                     continue;
                 }
                 if (i == 0 && name == "Dana") {
-                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Under, NflWeek = week, Season = DemoSeason, NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow });
+                    db.NflPicks.Add(new NflPicks { UserId = user.Id, LeagueId = league.Id, Team = games[0].Home, Pick = PickType.Under, NflWeek = week, Season = DemoSeason, DateCreated = DateTimeOffset.UtcNow });
                     continue;
                 }
                 var team = pattern[i] ? games[i].Home : games[i].Away;
@@ -774,7 +772,7 @@ public class DemoDataSeeder(
                 {
                     UserId = user.Id, LeagueId = league.Id, Team = team,
                     Pick = PickType.Spread, NflWeek = week, Season = DemoSeason,
-                    NflWeekId = nflWeek.Id, DateCreated = DateTimeOffset.UtcNow,
+                    DateCreated = DateTimeOffset.UtcNow,
                 });
             }
         }
@@ -1125,7 +1123,7 @@ public class DemoDataSeeder(
             HomeTeamScore = g.HomeScore,
             AwayTeamScore = g.AwayScore,
             // Championship (slate 18) is in-progress so we can show field position in demo
-            GameStatus    = g.SlateIdx == 18 ? "StatusInProgress" : "StatusFinal",
+            GameStatus    = g.SlateIdx == 18 ? TypeName.StatusInProgress : TypeName.StatusFinal,
             GameTime      = g.GameTime,
         }).ToList();
 
@@ -1252,7 +1250,7 @@ public class DemoDataSeeder(
         var picks = new List<CfbPicks>();
 
         void AddPick(int leagueId, string userId, int slateId, string team) =>
-            picks.Add(new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, Team = team, PickType = "Spread", Season = CfbDemoSeason });
+            picks.Add(new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, Team = team, PickType = PickType.Spread, Season = CfbDemoSeason });
 
         // frizat: Over/Under is an alternate PICK TYPE for a game, not an additional pick beyond
         // the slate's required count — CfbPicksController's server-side validation enforces total
@@ -1264,11 +1262,11 @@ public class DemoDataSeeder(
         // replaces their game-0 spread pick instead of adding to it.
         void AddFirstPickOrOverUnder(string uName, string userId, int slateId, string homeTeam, string pickedTeam) {
             if (uName == "Bob") {
-                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, Team = homeTeam, PickType = "Over", Season = CfbDemoSeason });
+                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, Team = homeTeam, PickType = PickType.Over, Season = CfbDemoSeason });
                 return;
             }
             if (uName == "Dana") {
-                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, Team = homeTeam, PickType = "Under", Season = CfbDemoSeason });
+                picks.Add(new CfbPicks { UserId = userId, LeagueId = league.Id, CfbSlateId = slateId, Team = homeTeam, PickType = PickType.Under, Season = CfbDemoSeason });
                 return;
             }
             AddPick(league.Id, userId, slateId, pickedTeam);

@@ -2,8 +2,9 @@ import { Box, Button, Card, CardContent, Chip, Stack, Typography } from '@mui/ma
 import CheckIcon from '@mui/icons-material/Check';
 import TeamHelmet from './TeamHelmet';
 import WeatherIcon from '../WeatherIcon';
-import { spreadLabel } from '../../utils/gameHelpers';
+import { isGameFinal, isGameLive, spreadLabel } from '../../utils/gameHelpers';
 import { toLocalDisplay } from '../../utils/time';
+import type { GameStatusValue } from '../../services/sportAdapter';
 
 export type PickState = 'none' | 'pending' | 'submitted';
 
@@ -18,7 +19,7 @@ export interface GameCardProps {
   // Score display
   homeScore?: number;
   awayScore?: number;
-  gameStatus?: string;
+  gameStatus?: GameStatusValue;
   gameDetail?: string;
   // Pick mode
   homePickState?: PickState;
@@ -57,12 +58,9 @@ function formatShortDateTime(iso: string) {
   });
 }
 
-function statusChip(status: string | undefined, gameTime: string) {
-  const isFinal = status === 'StatusFinal' || status === 'status_final';
-  const isLive = status === 'StatusInProgress' || status === 'status_in_progress';
-
-  if (isFinal) return <Chip label="Final" size="small" color="default" />;
-  if (isLive) return <Chip label="Live" size="small" color="success" />;
+function statusChip(status: GameStatusValue | undefined, gameTime: string) {
+  if (isGameFinal(status ?? null)) return <Chip label="Final" size="small" color="default" />;
+  if (isGameLive(status ?? null)) return <Chip label="Live" size="small" color="success" />;
   return (
     <Typography variant="caption" color="text.secondary">
       {formatShortDateTime(gameTime)}
@@ -89,8 +87,8 @@ export default function GameCard({
   homePickers, awayPickers,
   spreadPostedAt,
 }: GameCardProps) {
-  const isFinal = gameStatus === 'StatusFinal' || gameStatus === 'status_final';
-  const isLive = gameStatus === 'StatusInProgress' || gameStatus === 'status_in_progress';
+  const isFinal = isGameFinal(gameStatus ?? null);
+  const isLive = isGameLive(gameStatus ?? null);
   const showScore = mode === 'score' && (isFinal || isLive);
 
   // frizat: "Picked" (with its checkmark icon) renders ~29px wider than "Pick" at minWidth alone

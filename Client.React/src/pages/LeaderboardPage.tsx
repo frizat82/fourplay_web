@@ -25,6 +25,7 @@ import ShareableStandingsCard from '../components/ShareableStandingsCard';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { getLeaderboard } from '../api/leaderboard';
+import { getLeagueJuiceForSeason } from '../api/league';
 import type { LeaderboardDto } from '../types/leaderboard';
 import type { SportAdapter } from '../services/sportAdapter';
 import { stickyColumnSx } from '../utils/tableStyles';
@@ -44,6 +45,14 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardDto[]>([]);
+  // frizat-ugs: LeaderboardService/CfbLeaderboardService both silently return an empty list when
+  // LeagueJuiceMapping has no row for the season — this tracks that distinct state so the empty
+  // leaderboard renders a "not configured" message instead of the generic "no data yet" one.
+  // Checked via a separate GET (getLeagueJuiceForSeason) rather than a flag on the leaderboard
+  // response itself; safe from drift because both paths ultimately key off the exact same
+  // repository call (GetLeagueJuiceMappingAsync(leagueId, season)) — if that lookup's semantics
+  // ever change, both sides change together.
+  const [juiceConfigured, setJuiceConfigured] = useState(true);
   const [season, setSeason] = useState<number | null>(null);
   // Remember the real current-season ceiling separately from `season` (which the selector
   // below can move to a past year) — otherwise re-deriving the selector's upper bound from
@@ -83,12 +92,32 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
     let ignore = false;
     const run = async () => {
       if (hasLoadedOnce.current) setRefreshing(true); else setLoading(true);
-      const data = await getLeaderboard(currentLeague, season);
-      if (ignore) return;
-      setLeaderboard(data ?? []);
-      hasLoadedOnce.current = true;
-      setLoading(false);
-      setRefreshing(false);
+      try {
+        const data = await getLeaderboard(currentLeague, season);
+        if (ignore) return;
+        const entries = data ?? [];
+        // Only worth the extra round-trip when the empty-state message actually needs to
+        // distinguish "not configured" from "no results yet" — most loads have real rows.
+        // Resolved before either setState call so the two never render out of sync with each
+        // other mid-fetch (e.g. a season switch briefly showing the wrong empty-state message).
+        const configured = entries.length === 0
+          ? (await getLeagueJuiceForSeason(currentLeague, season)) != null
+          : true;
+        if (ignore) return;
+        setLeaderboard(entries);
+        setJuiceConfigured(configured);
+      } catch (err) {
+        // /code-review: without a catch here, a rejected getLeaderboard/getLeagueJuiceForSeason
+        // (e.g. a network error — http.ts's interceptor only retries on 401) left the page stuck
+        // on the spinner forever, since nothing after the throw ever cleared loading/refreshing.
+        if (!ignore) console.error('LeaderboardPage: failed to load leaderboard', err);
+      } finally {
+        if (!ignore) {
+          hasLoadedOnce.current = true;
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
     };
     void run();
     return () => { ignore = true; };
@@ -252,7 +281,9 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
       )}
       {leaderboard.length === 0 && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 4, textAlign: 'center' }}>
-          No leaderboard data yet for this season.
+          {juiceConfigured
+            ? 'No leaderboard data yet for this season.'
+            : 'Juice not configured for this season — ask your league owner to set it up in the League Portal.'}
         </Typography>
       )}
       {leaderboard.length > 0 && (

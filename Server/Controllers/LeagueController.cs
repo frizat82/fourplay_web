@@ -3,6 +3,7 @@ using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Models.Mappers;
+using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
@@ -425,8 +426,7 @@ public class LeagueController(
                 Pick        = pick.Pick,
                 NflWeek     = pick.NflWeek,
                 Season      = pick.Season,
-                DateCreated = pick.DateCreated,
-                NflWeekId   = week.Id
+                DateCreated = pick.DateCreated
             });
         }
 
@@ -796,20 +796,10 @@ public class LeagueController(
         if (error is not null) return error;
         if (await repo.GetLeagueJuiceMappingAsync(leagueId, toSeason) is not null)
             return BadRequest($"Juice mapping for season {toSeason} already exists.");
-        var priorMapping = (await repo.GetLeagueJuiceMappingAsync(leagueId))
-            .Where(m => m.Season < toSeason)
-            .MaxBy(m => m.Season);
+        var priorMapping = LeagueJuiceRollForward.FindPriorSeasonMapping(toSeason, await repo.GetLeagueJuiceMappingAsync(leagueId));
         if (priorMapping is null)
             return BadRequest("No prior season juice mapping to copy from.");
-        await repo.AddLeagueJuiceMappingAsync(new LeagueJuiceMapping {
-            LeagueId = leagueId,
-            Season = toSeason,
-            Juice = priorMapping.Juice,
-            JuiceDivisional = priorMapping.JuiceDivisional,
-            JuiceConference = priorMapping.JuiceConference,
-            WeeklyCost = priorMapping.WeeklyCost,
-            DateCreated = DateTimeOffset.UtcNow,
-        });
+        await repo.AddLeagueJuiceMappingAsync(LeagueJuiceRollForward.BuildMapping(leagueId, toSeason, priorMapping));
         return NoContent();
     }
 

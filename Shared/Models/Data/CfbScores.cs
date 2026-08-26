@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics.CodeAnalysis;
+using FourPlayWebApp.Shared.Models;
 
 namespace FourPlayWebApp.Shared.Models.Data;
 
@@ -12,7 +13,10 @@ public class CfbScores {
     public string AwayTeam { get; set; } = string.Empty;
     public int HomeTeamScore { get; set; }
     public int AwayTeamScore { get; set; }
-    public string GameStatus { get; set; } = string.Empty; // STATUS_FINAL, STATUS_IN_PROGRESS, STATUS_SCHEDULED
+    // Reuses the same TypeName enum ESPN status parsing already uses everywhere else — only
+    // StatusFinal is ever actually persisted here (CfbScoresJob only ever writes final games),
+    // but the column preserves whatever the real ESPN status was rather than assuming.
+    public TypeName GameStatus { get; set; } = TypeName.StatusScheduled;
     public DateTimeOffset GameTime { get; set; }
     public string? WeatherDisplayValue { get; set; }
     public string? WeatherConditionId { get; set; }
