@@ -7,11 +7,11 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import CheckroomIcon from '@mui/icons-material/Checkroom';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../components/PageHeader';
 import WeekYearSelector from '../components/WeekYearSelector';
 import NoLeague from '../components/NoLeague';
+import QueryErrorAlert from '../components/QueryErrorAlert';
 import SpreadRelease from '../components/SpreadRelease';
 import GameCard, { type PickState } from '../components/sports/GameCard';
 import { useSession } from '../services/session';
@@ -45,14 +45,13 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   // Pending (unsubmitted) selections — local state only, never touched by refetches
   const [userPicks, setUserPicks] = useState<Set<string>>(new Set());
   const [storingPicks, setStoringPicks] = useState(false);
-  const [showJerseys, setShowJerseys] = useState(false);
   // The real navigable ceiling, captured only from a current-week load — see the effect below.
   const [currentBounds, setCurrentBounds] = useState<{ maxWeek: number; maxSeason: number } | null>(null);
 
   const isCurrentWeek = weekState === null;
   const enabled = leaguesLoaded && !!currentLeague && !!user?.userId;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: [adapter.sport, 'picks', currentLeague, user?.userId, weekState],
     queryFn: () => weekState
       ? adapter.loadHistoricalGames(currentLeague!, user!.userId, weekState)
@@ -99,14 +98,9 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     if (droppedByLock) toast.push('Selection removed — game already kicked off', 'warning');
   }, [data, games, existingPicks, userPicks, toast]);
 
-  const { data: jerseyCache = {} } = useQuery({
-    queryKey: [adapter.sport, 'jerseys', data?.season, data?.week],
-    queryFn: () => adapter.loadJerseys!(data!.season, data!.week),
-    enabled: !!adapter.loadJerseys && !!data,
-    staleTime: Infinity,
-    retry: false,
-  });
-
+  // frizat-d2h: Show Jerseys toggle removed for now (likely permanent removal pending a
+  // copyright review of the jersey images). adapter.loadJerseys and the underlying
+  // /api/jersey endpoint are left intact for a future re-enable.
   const handleWeekChange = useCallback((newWeek: number, meta?: { isPostSeason?: boolean }) => {
     setWeekState({ season, week: newWeek, isPostSeason: meta?.isPostSeason ?? isPostSeason });
   }, [season, isPostSeason]);
@@ -173,6 +167,9 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   );
 
   if (!currentLeague) return <NoLeague />;
+  if (isError && !data) return (
+    <QueryErrorAlert title="Picks" onRetry={() => void refetch()} />
+  );
   if (!hasOdds && isCurrentWeek) return <SpreadRelease sport={adapter.sport} />;
 
   const hasUnlockedGames = games.some(g => !gameIsLocked(g));
@@ -207,14 +204,6 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       )}
 
       <Grid container spacing={2}>
-        {Object.keys(jerseyCache).length > 0 && (
-          <Grid size={12} sx={{ display: 'flex', justifyContent: 'center' }}>
-            <Button variant="outlined" color="info" startIcon={<CheckroomIcon />} onClick={() => setShowJerseys(p => !p)}>
-              {showJerseys ? 'Show Logos' : 'Show Jerseys'}
-            </Button>
-          </Grid>
-        )}
-
         {hasUnlockedGames && (remainingPicks > 0 || userPicks.size > 0) && (
           <Grid size={12}>
             {remainingPicks > 0 && (
@@ -265,8 +254,6 @@ export default function PicksPage({ adapter }: PicksPageProps) {
                 spreadPostedAt={game.spreadPostedAt}
                 homeRecord={!isPostSeasonSlate ? game.homeRecord : undefined}
                 awayRecord={!isPostSeasonSlate ? game.awayRecord : undefined}
-                homeJerseyUrl={showJerseys ? jerseyCache[game.homeTeam] : undefined}
-                awayJerseyUrl={showJerseys ? jerseyCache[game.awayTeam] : undefined}
                 weatherDisplayValue={game.weather?.displayValue}
                 weatherConditionId={game.weather?.conditionId}
                 weatherTemperatureF={game.weather?.temperatureF}
