@@ -73,3 +73,24 @@ describe('AppLayout league switcher chip (frizat-mon.9)', () => {
     sessionState.currentLeague = 1; // restore
   });
 });
+
+describe('AppLayout iOS/Android safe-area handling', () => {
+  // iOS "Add to Home Screen -> Open as Web App" launches in standalone mode, rendering content
+  // edge-to-edge under the status bar/Dynamic Island (env(safe-area-inset-top) evaluates to a
+  // real value there, 0px in a normal browser tab). The fixed AppBar must reserve that space via
+  // padding, and both spacer <Toolbar/> placeholders (drawer + main content) must grow by exactly
+  // the same amount, or content directly beneath the AppBar either hides under it or leaves a gap.
+  // jsdom can't evaluate real env()/safe-area layout, so this asserts the actual CSS MUI/emotion
+  // injects rather than computed layout — a regression here (e.g. someone hard-coding a Toolbar
+  // height instead of reusing the shared safeInsetTop constant) would go undetected by layout
+  // alone anyway, since jsdom always resolves env() to nothing.
+  it('pads the fixed AppBar and both spacer Toolbars by the same safe-area-inset-top value', () => {
+    renderLayout();
+    const injectedCss = Array.from(document.querySelectorAll('style'))
+      .map((s) => s.textContent)
+      .join('\n');
+
+    expect(injectedCss).toMatch(/-MuiAppBar-root\{[^}]*padding-top:var\(--safe-inset-top\)/);
+    expect(injectedCss).toMatch(/-MuiToolbar-root\{[^}]*margin-top:var\(--safe-inset-top\)/);
+  });
+});
