@@ -1,0 +1,125 @@
+using FourPlayWebApp.Server.Jobs;
+using NSubstitute;
+using Quartz;
+using Quartz.Impl.Matchers;
+using Xunit;
+
+namespace FourPlayWebApp.Server.UnitTests;
+
+// TDD, written RED first (frizat-pxy follow-on plan, Phase 3): TimedTriggerScheduler must branch
+// three ways per candidate — future lock time schedules normally, past lock time with no data
+// fires immediately as catch-up, past lock time with data already present is skipped (already
+// succeeded, don't re-fire indefinitely). Tested directly against IScheduler since this is the
+// core shared logic both NFL and CFB's schedulers depend on.
+public class TimedTriggerSchedulerTests
+{
+    private readonly IScheduler _scheduler;
+    private readonly CancellationToken _token = CancellationToken.None;
+
+    public TimedTriggerSchedulerTests()
+    {
+        _scheduler = Substitute.For<IScheduler>();
+        _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<JobKey>());
+    }
+
+    private class FakeSpreadJob : IJob {
+        public Task Execute(IJobExecutionContext context) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task FutureLockTime_SchedulesAtLockTime()
+    {
+        var lockTime = DateTime.UtcNow.AddDays(3);
+        var candidate = new TimedTriggerCandidate(lockTime, "id-1", "desc", HasData: false);
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [candidate], _token);
+
+        await _scheduler.Received(1).ScheduleJob(
+            Arg.Is<IJobDetail>(j => j.JobType == typeof(FakeSpreadJob)),
+            Arg.Is<ITrigger>(t => t.StartTimeUtc == new DateTimeOffset(lockTime, TimeSpan.Zero)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PastLockTime_NoData_FiresNow()
+    {
+        var lockTime = DateTime.UtcNow.AddDays(-1);
+        var candidate = new TimedTriggerCandidate(lockTime, "id-1", "desc", HasData: false);
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [candidate], _token);
+
+        await _scheduler.Received(1).ScheduleJob(
+            Arg.Is<IJobDetail>(j => j.JobType == typeof(FakeSpreadJob)),
+            Arg.Any<ITrigger>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PastLockTime_HasData_Skipped()
+    {
+        var lockTime = DateTime.UtcNow.AddDays(-1);
+        var candidate = new TimedTriggerCandidate(lockTime, "id-1", "desc", HasData: true);
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [candidate], _token);
+
+        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AlreadyRegisteredTrigger_SkippedRegardlessOfCase()
+    {
+        var lockTime = DateTime.UtcNow.AddDays(3);
+        var candidate = new TimedTriggerCandidate(lockTime, "id-1", "desc", HasData: false);
+        _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<JobKey> { new("id-1") });
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [candidate], _token);
+
+        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MultipleCandidates_EachHandledIndependently()
+    {
+        var candidates = new[] {
+            new TimedTriggerCandidate(DateTime.UtcNow.AddDays(3), "future", "desc", HasData: false),
+            new TimedTriggerCandidate(DateTime.UtcNow.AddDays(-1), "catchup", "desc", HasData: false),
+            new TimedTriggerCandidate(DateTime.UtcNow.AddDays(-1), "done", "desc", HasData: true),
+        };
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, candidates, _token);
+
+        await _scheduler.Received(2).ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
+    }
+
+    // frizat-ugs: LeagueJuiceReminderJob/LockJob need to know WHICH league fired them — unlike the
+    // spread jobs, which resolve "the current week" globally and never needed JobData at all.
+    [Fact]
+    public async Task JobData_WhenPresent_IsAttachedToTheScheduledJobDetail()
+    {
+        var candidate = new TimedTriggerCandidate(
+            DateTime.UtcNow.AddDays(3), "id-1", "desc", HasData: false,
+            JobData: new Dictionary<string, string> { ["LeagueId"] = "42", ["Season"] = "2026" });
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [candidate], _token);
+
+        await _scheduler.Received(1).ScheduleJob(
+            Arg.Is<IJobDetail>(j => j.JobDataMap.GetString("LeagueId") == "42" && j.JobDataMap.GetString("Season") == "2026"),
+            Arg.Any<ITrigger>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task JobData_WhenAbsent_JobDetailHasNoJobData()
+    {
+        var candidate = new TimedTriggerCandidate(DateTime.UtcNow.AddDays(3), "id-1", "desc", HasData: false);
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [candidate], _token);
+
+        await _scheduler.Received(1).ScheduleJob(
+            Arg.Is<IJobDetail>(j => j.JobDataMap.Count == 0),
+            Arg.Any<ITrigger>(),
+            Arg.Any<CancellationToken>());
+    }
+}

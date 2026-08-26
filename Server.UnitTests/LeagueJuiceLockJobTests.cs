@@ -1,0 +1,82 @@
+using FourPlayWebApp.Server.Jobs;
+using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
+using NSubstitute;
+using Quartz;
+
+namespace FourPlayWebApp.Server.UnitTests;
+
+// frizat-ugs: fires once per (league, season) at lock time (2pm America/Chicago on the season's
+// first game date). Auto-fills Juice — carries forward the prior season's values, or falls back
+// to entity defaults if no prior season exists — if still unconfigured at fire time.
+public class LeagueJuiceLockJobTests
+{
+    private readonly ILeagueRepository _repo;
+    private readonly IJobObserverService _observer;
+    private readonly IJobExecutionContext _context;
+
+    public LeagueJuiceLockJobTests()
+    {
+        _repo = Substitute.For<ILeagueRepository>();
+        _observer = Substitute.For<IJobObserverService>();
+        _context = Substitute.For<IJobExecutionContext>();
+
+        var jobData = new JobDataMap();
+        jobData.Put("LeagueId", "1");
+        jobData.Put("Season", "2026");
+        _context.MergedJobDataMap.Returns(jobData);
+        _repo.GetLeagueJuiceMappingAsync(1).Returns(new List<LeagueJuiceMapping>());
+    }
+
+    private LeagueJuiceLockJob BuildJob() => new(_repo, _observer);
+
+    [Fact]
+    public async Task DoesNothing_WhenJuiceWasConfiguredSinceScheduling()
+    {
+        _repo.GetLeagueJuiceMappingAsync(1, 2026).Returns(new LeagueJuiceMapping { LeagueId = 1, Season = 2026 });
+
+        await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().AddLeagueJuiceMappingAsync(Arg.Any<LeagueJuiceMapping>());
+    }
+
+    [Fact]
+    public async Task CarriesForwardPriorSeason_WhenOneExists()
+    {
+        _repo.GetLeagueJuiceMappingAsync(1, 2026).Returns((LeagueJuiceMapping?)null);
+        _repo.GetLeagueJuiceMappingAsync(1).Returns(new List<LeagueJuiceMapping> {
+            new() { LeagueId = 1, Season = 2025, Juice = 20, JuiceDivisional = 15, JuiceConference = 8, WeeklyCost = 12 },
+        });
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m =>
+            m.LeagueId == 1 && m.Season == 2026 &&
+            m.Juice == 20 && m.JuiceDivisional == 15 && m.JuiceConference == 8 && m.WeeklyCost == 12));
+    }
+
+    [Fact]
+    public async Task FallsBackToDefaults_WhenNoPriorSeasonExists()
+    {
+        _repo.GetLeagueJuiceMappingAsync(1, 2026).Returns((LeagueJuiceMapping?)null);
+        var expectedDefaults = new LeagueJuiceMapping();
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m =>
+            m.LeagueId == 1 && m.Season == 2026 &&
+            m.Juice == expectedDefaults.Juice && m.JuiceDivisional == expectedDefaults.JuiceDivisional &&
+            m.JuiceConference == expectedDefaults.JuiceConference && m.WeeklyCost == expectedDefaults.WeeklyCost));
+    }
+
+    [Fact]
+    public async Task RecordsJobSuccess_AfterFillingJuice()
+    {
+        _repo.GetLeagueJuiceMappingAsync(1, 2026).Returns((LeagueJuiceMapping?)null);
+
+        await BuildJob().Execute(_context);
+
+        await _observer.Received(1).RecordJobSuccessAsync(nameof(LeagueJuiceLockJob), Arg.Any<string>());
+    }
+}

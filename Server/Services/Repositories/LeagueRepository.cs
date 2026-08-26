@@ -388,6 +388,20 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await db.SaveChangesAsync();
     }
 
+    public async Task<HashSet<(int LeagueId, int Season)>> GetJuiceRemindersSentAsync() {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        var pairs = await db.LeagueJuiceReminderSent
+            .Select(r => new { r.LeagueId, r.Season })
+            .ToListAsync();
+        return pairs.Select(p => (p.LeagueId, p.Season)).ToHashSet();
+    }
+
+    public async Task RecordJuiceReminderSentAsync(int leagueId, int season) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        await db.LeagueJuiceReminderSent.AddAsync(new LeagueJuiceReminderSent { LeagueId = leagueId, Season = season });
+        await db.SaveChangesAsync();
+    }
+
     public async Task AddNflScoresAsync(IEnumerable<NflScores> scores) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         await db.NflScores.AddRangeAsync(scores);
