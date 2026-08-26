@@ -105,16 +105,19 @@ public class LeagueJuiceReminderJobTests
         await _repo.Received(1).RecordJuiceReminderSentAsync(1, 2026);
     }
 
+    // frizat-703.2: a missing owner email is a real misconfiguration an admin needs to act on —
+    // it must throw (not swallow-and-return) so it reaches Quartz's jobException and the global
+    // JobFailureAlertListener/Discord alert, same as any other unhandled failure in this job.
     [Fact]
-    public async Task DoesNotThrow_WhenOwnerHasNoEmail()
+    public async Task Throws_AndRecordsFailure_WhenOwnerHasNoEmail()
     {
         _repo.GetLeagueJuiceMappingAsync(1, 2026).Returns((LeagueJuiceMapping?)null);
         _userManager.FindByIdAsync("owner-1").Returns(new ApplicationUser { Id = "owner-1", Email = null });
 
-        var exception = await Record.ExceptionAsync(() => BuildJob().Execute(_context));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
-        Assert.Null(exception);
         await _emailSender.DidNotReceive().SendEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>());
+        await _observer.Received(1).RecordJobFailureAsync(nameof(LeagueJuiceReminderJob), Arg.Is<string>(m => m.Contains("no email on file")));
     }
 
     [Fact]
@@ -125,5 +128,23 @@ public class LeagueJuiceReminderJobTests
         await BuildJob().Execute(_context);
 
         await _observer.Received(1).RecordJobSuccessAsync(nameof(LeagueJuiceReminderJob), Arg.Any<string>());
+    }
+
+    // frizat-703.2: an unhandled exception must propagate to Quartz (not be swallowed after
+    // logging) so the global JobFailureAlertListener — which only fires when JobWasExecuted
+    // receives a non-null jobException — actually sees this job's failures. Recording via
+    // IJobObserverService is for the existing admin job-monitor UI; it's not a substitute alert
+    // path, since RecordJobFailureAsync has no wiring to the Discord notifier.
+    [Fact]
+    public async Task RecordsFailure_ThenRethrows_OnUnexpectedException()
+    {
+        _repo.GetLeagueJuiceMappingAsync(1, 2026).Returns((LeagueJuiceMapping?)null);
+        var boom = new InvalidOperationException("SMTP unavailable");
+        _emailSender.SendEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns<Task>(_ => throw boom);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        Assert.Same(boom, thrown);
+        await _observer.Received(1).RecordJobFailureAsync(nameof(LeagueJuiceReminderJob), "SMTP unavailable");
     }
 }

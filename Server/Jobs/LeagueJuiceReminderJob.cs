@@ -5,7 +5,6 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Quartz;
-using Serilog;
 
 namespace FourPlayWebApp.Server.Jobs;
 
@@ -45,10 +44,11 @@ public class LeagueJuiceReminderJob(
 
             var league = await repo.GetLeagueInfoAsync(leagueId);
             var owner = await userManager.FindByIdAsync(league.OwnerUserId);
+            // A missing owner email is a real misconfiguration an admin needs to act on — throw
+            // (rather than log-and-return) so it reaches the catch block below and, from there,
+            // the global JobFailureAlertListener/Discord alert.
             if (owner?.Email is null) {
-                Log.Warning("LeagueJuiceReminderJob: owner {OwnerUserId} for league {LeagueId} has no email on file", league.OwnerUserId, leagueId);
-                await observer.RecordJobFailureAsync(jobName, $"League {leagueId} owner has no email on file");
-                return;
+                throw new InvalidOperationException($"League {leagueId} owner has no email on file");
             }
 
             var portalUrl = $"{baseUrl.TrimEnd('/')}/league/manage";
@@ -73,13 +73,12 @@ public class LeagueJuiceReminderJob(
             // reminder unrecorded, so the next catch-up pass could resend it once more — accepted
             // as a rare residual risk (there's no way to make "send an email" and "write to
             // Postgres" atomic) rather than adding retry/idempotency machinery for it; a failure
-            // here still surfaces via the catch block below and RecordJobFailureAsync, which
-            // frizat-703.2 (job failure alerting) will make visible to an admin.
+            // here still surfaces via the catch block below, which now rethrows so
+            // frizat-703.2's global job-failure alert actually sees it.
             await repo.RecordJuiceReminderSentAsync(leagueId, season);
             await observer.RecordJobSuccessAsync(jobName, $"Reminder sent to league {leagueId} owner for season {season}");
         } catch (Exception ex) {
-            Log.Error(ex, "LeagueJuiceReminderJob failed");
-            await observer.RecordJobFailureAsync(jobName, ex.Message);
+            await observer.RecordAndRethrowAsync(jobName, ex);
         }
     }
 }
