@@ -160,6 +160,31 @@ describe('PicksPage', () => {
     expect(screen.getByText(/Picks Remaining \(2\)/i)).toBeInTheDocument();
   });
 
+  // frizat-d2h: toggle removed for now (likely permanent removal pending a copyright review
+  // of the jersey images).
+  it('never shows the Show Jerseys toggle', async () => {
+    await setupDefaults({ week: 2 });
+    await renderPage();
+    expect(screen.queryByRole('button', { name: /show jerseys/i })).toBeNull();
+  });
+
+  // frizat-bqi: PicksPage previously had no error-state handling at all — a failed fetch just
+  // silently stayed blank. Mirrors ScoresPage's existing Alert + Retry pattern.
+  it('shows an error alert with a retry button when the picks query fails', async () => {
+    await setupDefaults();
+    mockedLoadScoresWithRetry.mockRejectedValue(new Error('network down'));
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
+
+    const retryButton = await screen.findByRole('button', { name: /retry/i });
+    expect(screen.getByText(/couldn.t load picks/i)).toBeInTheDocument();
+
+    // Recover on retry
+    mockedLoadScoresWithRetry.mockResolvedValue(createScores({ week: 2, postSeason: false, gameStarted: false }));
+    await userEvent.click(retryButton);
+
+    await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
+  });
+
   it('shows picks remaining (1) for postseason week 1 with two existing picks', async () => {
     const existing = [createPick({ team: 'BUF' }), createPick({ team: 'DAL' })];
     await setupDefaults({ week: 1, postSeason: true, existingPicks: existing });

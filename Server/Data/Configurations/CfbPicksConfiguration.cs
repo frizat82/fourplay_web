@@ -1,6 +1,7 @@
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Shared.Models.Data;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -14,6 +15,13 @@ public class CfbPicksConfiguration : IEntityTypeConfiguration<CfbPicks>
         entity.Property(e => e.DateCreated)
             .HasColumnType("timestamptz")
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+        // Store as the enum's string name ("Spread"/"Over"/"Under"), not its int ordinal — the
+        // exact literal values this previously-string column already held, so existing rows keep
+        // parsing correctly with zero data migration needed. Tolerant (not HasConversion<string>()
+        // directly) so a malformed/legacy row logs a warning and falls back instead of throwing
+        // and failing the whole query.
+        entity.Property(e => e.PickType).HasConversion(TolerantEnumConverter.Create(PickType.Spread));
 
         // Mirrors NflPicks' unique index — CfbPicksController already checks for an existing pick
         // before inserting, but that's a read-then-write race (two concurrent submits can both

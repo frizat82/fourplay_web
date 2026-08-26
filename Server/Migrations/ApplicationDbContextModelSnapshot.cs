@@ -30,7 +30,7 @@ namespace FourPlayWebApp.Server.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("CapturedAtUtc")
+                    b.Property<DateTimeOffset>("CapturedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("CuratedRank")
@@ -184,6 +184,9 @@ namespace FourPlayWebApp.Server.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("LeagueName")
@@ -268,6 +271,9 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<int>("Season")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("WeeklyCost")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -279,6 +285,33 @@ namespace FourPlayWebApp.Server.Migrations
                         .IsUnique();
 
                     b.ToTable("LeagueJuiceMapping");
+                });
+
+            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueJuiceReminderSent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("LeagueId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Season")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamptz")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeagueId", "Season")
+                        .IsUnique();
+
+                    b.ToTable("LeagueJuiceReminderSent");
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueMembershipInvite", b =>
@@ -375,9 +408,6 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<int>("NflWeek")
                         .HasColumnType("integer");
 
-                    b.Property<int>("NflWeekId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("Pick")
                         .HasColumnType("integer");
 
@@ -395,8 +425,6 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("LeagueId");
-
-                    b.HasIndex("NflWeekId");
 
                     b.HasIndex("UserId", "LeagueId", "NflWeek", "Season", "Team", "Pick")
                         .IsUnique();
@@ -1105,12 +1133,6 @@ namespace FourPlayWebApp.Server.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.NflWeeks", "NflWeekInfo")
-                        .WithMany("NflPicks")
-                        .HasForeignKey("NflWeekId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("FourPlayWebApp.Server.Models.Identity.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -1118,8 +1140,6 @@ namespace FourPlayWebApp.Server.Migrations
                         .IsRequired();
 
                     b.Navigation("League");
-
-                    b.Navigation("NflWeekInfo");
 
                     b.Navigation("User");
                 });
@@ -1255,11 +1275,6 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.Navigation("LeagueUserMappings");
 
-                    b.Navigation("NflPicks");
-                });
-
-            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.NflWeeks", b =>
-                {
                     b.Navigation("NflPicks");
                 });
 #pragma warning restore 612, 618

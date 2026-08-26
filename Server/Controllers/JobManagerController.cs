@@ -1,4 +1,5 @@
 ﻿using FourPlayWebApp.Shared.Models;
+using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Quartz;
@@ -30,7 +31,7 @@ namespace FourPlayWebApp.Server.Controllers {
                     return NotFound();
                 await scheduler.TriggerJob(new JobKey(jobName.JobName));
                 Log.Information("Started Scores Job");
-                return Ok(new {message = "Started Scores Job"});
+                return Ok(new MessageResponseDto("Started Scores Job"));
             }
             catch (Exception e) {
                 return BadRequest(e.Message);
@@ -43,7 +44,7 @@ namespace FourPlayWebApp.Server.Controllers {
                 var scheduler = await schedulerFactory.GetScheduler();
                 await scheduler.TriggerJob(new JobKey("User Manager"));
                 Log.Information("Started User Manager Job");
-                return Ok(new {message = "Started User Manager Job"});
+                return Ok(new MessageResponseDto("Started User Manager Job"));
             }
             catch (Exception e) {
                 return BadRequest(e.Message);
@@ -56,7 +57,7 @@ namespace FourPlayWebApp.Server.Controllers {
                 var scheduler = await schedulerFactory.GetScheduler();
                 await scheduler.TriggerJob(new JobKey("CFB Slate Seeder"));
                 Log.Information("Started CFB Slate Seeder Job");
-                return Ok(new { message = "Started CFB Slate Seeder Job" });
+                return Ok(new MessageResponseDto("Started CFB Slate Seeder Job"));
             }
             catch (Exception e) {
                 return BadRequest(e.Message);
@@ -76,7 +77,7 @@ namespace FourPlayWebApp.Server.Controllers {
                 var scheduler = await schedulerFactory.GetScheduler();
                 await scheduler.TriggerJob(new JobKey("CFB Scores Job"));
                 Log.Information("Started CFB Scores Job");
-                return Ok(new { message = "Started CFB Scores Job" });
+                return Ok(new MessageResponseDto("Started CFB Scores Job"));
             }
             catch (Exception e) {
                 return BadRequest(e.Message);
@@ -183,7 +184,7 @@ namespace FourPlayWebApp.Server.Controllers {
                     await scheduler.TriggerJob(new JobKey(jobName.JobName));
                     Log.Information("Started {SportLabel} Job {JobName}", sportLabel, jobName.JobName);
                 }
-                return Ok(new { message = $"Started {sportLabel} Job" });
+                return Ok(new MessageResponseDto($"Started {sportLabel} Job"));
             }
             catch (Exception e) {
                 return BadRequest(e.Message);

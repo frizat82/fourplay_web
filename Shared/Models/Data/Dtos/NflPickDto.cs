@@ -11,7 +11,7 @@ public class NflPickDto : IEquatable<NflPickDto>
     public string UserName { get; set; } = string.Empty;
     public string Team { get; set; } = string.Empty;
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public PickType Pick { get; set; }  // Represents PickType enum as int for DTO
+    public PickType Pick { get; set; }
     public int NflWeek { get; set; }
     public int Season { get; set; }
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;

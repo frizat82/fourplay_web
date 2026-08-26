@@ -5,9 +5,11 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using FourPlayWebApp.Server.Infrastructure;
 
 namespace FourPlayWebApp.Server.Controllers;
@@ -73,7 +75,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             AwayTeam            = s.AwayTeam,
             HomeTeamScore       = s.HomeTeamScore,
             AwayTeamScore       = s.AwayTeamScore,
-            GameStatus          = s.GameStatus,
+            GameStatus          = s.GameStatus.ToString(),
             GameTime            = s.GameTime.ToString("O"),
             WeatherDisplayValue = s.WeatherDisplayValue,
             WeatherConditionId  = s.WeatherConditionId,
@@ -119,7 +121,19 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     [HttpGet("picks/{leagueId}/{cfbSlateId}/user")]
     public async Task<IActionResult> GetUserPicks(int leagueId, int cfbSlateId) {
         var picks = await repo.GetUserPicksAsync(leagueId, cfbSlateId, CurrentUserId);
-        return Ok(picks);
+        // Must map to CfbPickDto, not return the entity directly — CfbPicks.PickType has no
+        // JsonStringEnumConverter, so it would silently serialize as an int instead of
+        // "Spread"/"Over"/"Under" and break every frontend consumer matching by that string.
+        var dtos = picks.Select(p => new CfbPickDto {
+            Id = p.Id,
+            UserId = p.UserId,
+            LeagueId = p.LeagueId,
+            CfbSlateId = p.CfbSlateId,
+            Team = p.Team,
+            PickType = p.PickType,
+            Season = p.Season,
+        });
+        return Ok(dtos);
     }
 
     [HttpPost("picks")]
@@ -180,7 +194,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         if (newPicks.Count > 0)
             await repo.AddPicksAsync(newPicks);
 
-        return Ok(new { added = newPicks.Count });
+        return Ok(new AddCfbPicksResponseDto(newPicks.Count));
     }
 
     [HttpDelete("picks/{leagueId}/{cfbSlateId}")]
@@ -207,6 +221,7 @@ public record AddCfbPicksRequest {
 }
 
 public record CfbPickItem {
-    public string Team        { get; init; } = string.Empty;
-    public string PickType    { get; init; } = "Spread";
+    public string Team { get; init; } = string.Empty;
+    [property: JsonConverter(typeof(JsonStringEnumConverter))]
+    public PickType PickType { get; init; } = PickType.Spread;
 }

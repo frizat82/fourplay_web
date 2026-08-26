@@ -34,6 +34,11 @@ export async function getLeagueJuice(leagueId: number) {
   return data;
 }
 
+export async function getLeagueJuiceForSeason(leagueId: number, season: number) {
+  const { data } = await http.get<LeagueJuiceMappingDto | null>(`/api/league/${leagueId}/juice/${season}`);
+  return data;
+}
+
 export async function getUsers() {
   const { data } = await http.get<UserSummaryDto[]>(`/api/league/users`);
   return data;

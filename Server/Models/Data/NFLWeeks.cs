@@ -7,5 +7,4 @@ public class NflWeeks {
     public DateTimeOffset StartDate { get; set; }
     public DateTimeOffset EndDate { get; set; }
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
-    public ICollection<NflPicks> NflPicks { get; set; }
 }

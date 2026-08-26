@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics.CodeAnalysis;
+using FourPlayWebApp.Shared.Models.Enum;
 
 namespace FourPlayWebApp.Shared.Models.Data;
 
@@ -11,7 +12,9 @@ public class CfbPicks {
     public int LeagueId { get; set; }
     public int CfbSlateId { get; set; }
     public string Team { get; set; } = string.Empty;
-    public string PickType { get; set; } = "Spread"; // "Spread" | "Over" | "Under"
+    // Reuses NflPicks' PickType enum — same set of values, same concept, no reason for a
+    // separate CFB-only type.
+    public PickType PickType { get; set; } = PickType.Spread;
     public int Season { get; set; }
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
 }

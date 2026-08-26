@@ -70,7 +70,7 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo) : I
                 AwayTeam            = away.Team.Abbreviation,
                 HomeTeamScore       = (int)home.Score,
                 AwayTeamScore       = (int)away.Score,
-                GameStatus          = status.ToString(),
+                GameStatus          = status,
                 GameTime            = comp.Date,
                 WeatherDisplayValue = evt.Weather?.DisplayValue,
                 WeatherConditionId  = evt.Weather?.ConditionId,

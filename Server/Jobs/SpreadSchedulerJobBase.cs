@@ -13,6 +13,6 @@ public abstract class SpreadSchedulerJobBase<TSpreadJob>(ISpreadScheduleSource s
     public async Task Execute(IJobExecutionContext context) {
         var candidates = await source.GetCandidatesAsync();
         var scheduler = await schedulerFactory.GetScheduler(context.CancellationToken);
-        await SpreadTriggerScheduler.ScheduleAsync<TSpreadJob>(scheduler, candidates, context.CancellationToken);
+        await TimedTriggerScheduler.ScheduleAsync<TSpreadJob>(scheduler, candidates, context.CancellationToken);
     }
 }
