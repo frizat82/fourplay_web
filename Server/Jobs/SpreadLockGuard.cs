@@ -3,7 +3,7 @@ using Quartz;
 namespace FourPlayWebApp.Server.Jobs;
 
 // Shared by NflSpreadJob and CfbSpreadJob (frizat CLAUDE.md: NFL/CFB are siblings). The
-// scheduler (SpreadTriggerScheduler) already only fires these jobs at or after each week's
+// scheduler (TimedTriggerScheduler) already only fires these jobs at or after each week's
 // SpreadLockDatetime, but that's not the only way Execute can run — an admin manual trigger
 // (JobManagerController) or a future scheduling bug could invoke it early. This is the second,
 // independent line of defense: the job itself refuses to write before lock time, same principle

@@ -5,5 +5,5 @@ namespace FourPlayWebApp.Server.Jobs;
 // scheduling logic that consumes the result is 100% shared (frizat CLAUDE.md: siblings, not
 // separate products).
 public interface ISpreadScheduleSource {
-    Task<IEnumerable<SpreadTriggerCandidate>> GetCandidatesAsync();
+    Task<IEnumerable<TimedTriggerCandidate>> GetCandidatesAsync();
 }
