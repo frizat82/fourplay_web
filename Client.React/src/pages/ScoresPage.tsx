@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Badge, Box, Button, CircularProgress, Grid,
+  Badge, Box, Button, CircularProgress, Grid,
   IconButton, Paper, Stack, Typography,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
@@ -11,6 +11,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import PageHeader from '../components/PageHeader';
 import WeekYearSelector from '../components/WeekYearSelector';
 import NoLeague from '../components/NoLeague';
+import QueryErrorAlert from '../components/QueryErrorAlert';
 import SpreadRelease from '../components/SpreadRelease';
 import TeamHelmet from '../components/sports/TeamHelmet';
 import UserPicksMatrix from '../components/UserPicksMatrix';
@@ -196,15 +197,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   );
   if (!currentLeague) return <NoLeague />;
   if (isError && !data) return (
-    <Box><PageHeader title="Scores" />
-      <Alert
-        severity="error"
-        sx={{ mt: 4 }}
-        action={<Button color="inherit" size="small" onClick={() => void refetch()}>Retry</Button>}
-      >
-        Couldn&apos;t load scores. Check your connection and try again.
-      </Alert>
-    </Box>
+    <QueryErrorAlert title="Scores" onRetry={() => void refetch()} />
   );
   if (!data?.hasOdds && isCurrentWeek) return <SpreadRelease sport={adapter.sport} />;
   if (!data) return null;
