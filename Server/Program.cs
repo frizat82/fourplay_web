@@ -283,6 +283,7 @@ builder.Services.AddScoped<ICfbCurrentSlateService, CfbCurrentSlateService>();
 builder.Services.AddSingleton<ICfbLiveScoreFetcher, CfbLiveScoreFetcher>();
 builder.Services.AddScoped<NflSpreadScheduleSource>();
 builder.Services.AddScoped<CfbSpreadScheduleSource>();
+builder.Services.AddScoped<LeagueJuiceScheduleSource>();
 // Register job observer for observability
 builder.Services.AddSingleton<IJobObserverService, JobObserverService>();
 
@@ -297,6 +298,9 @@ builder.Services.AddScoped<IJob, CfbSpreadSchedulerJob>();
 builder.Services.AddScoped<IJob, CfbRankingCaptureJob>();
 builder.Services.AddScoped<IJob, CfbSpreadJob>();
 builder.Services.AddScoped<IJob, CfbScoresJob>();
+builder.Services.AddScoped<IJob, LeagueJuiceSchedulerJob>();
+builder.Services.AddScoped<IJob, LeagueJuiceReminderJob>();
+builder.Services.AddScoped<IJob, LeagueJuiceLockJob>();
 builder.Services.AddQuartz(q => {
     // In DEMO_MODE/DEMO_REPLAY_MODE fire in 5s so seeding completes before e2e tests start;
     // otherwise fire 2 min after startup to avoid slowing cold boot.
@@ -379,6 +383,18 @@ builder.Services.AddQuartz(q => {
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat 8pm", "Fetches CFB scores at Saturday evening kickoff window", "0 0 20 ? * SAT");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat Midnight", "Fetches CFB final scores late Saturday night", "0 0 0 ? * SUN");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 6am", "Fetches CFB overnight final scores Sunday morning", "0 0 6 ? * SUN");
+
+        // League Juice reminder + auto-lock (frizat-ugs) — mirrors the spread schedulers above:
+        // LeagueJuiceScheduleSource reads NflSeasonWeekConfig/CfbSeasonWeekConfig (never a
+        // hardcoded season) and registers one-time reminder/lock triggers per league per season.
+        // Inside this guard (not unconditional like the slate seeder) because
+        // LeagueJuiceReminderJob sends a REAL email — must never fire against demo users.
+        q.ScheduleJob<LeagueJuiceSchedulerJob>(trigger => trigger
+            .WithIdentity("League Juice Scheduler Startup")
+            .WithDescription("Registers per-league-season Juice reminder/lock triggers")
+            .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+        );
+        q.ScheduleCstCronJob<LeagueJuiceSchedulerJob>("League Juice Scheduler Daily", "Daily catch-up pass for Juice reminder/lock triggers", "0 0 6 * * ?");
     }
 });
 
