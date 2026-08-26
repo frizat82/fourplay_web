@@ -425,8 +425,7 @@ public class LeagueController(
                 Pick        = pick.Pick,
                 NflWeek     = pick.NflWeek,
                 Season      = pick.Season,
-                DateCreated = pick.DateCreated,
-                NflWeekId   = week.Id
+                DateCreated = pick.DateCreated
             });
         }
 
