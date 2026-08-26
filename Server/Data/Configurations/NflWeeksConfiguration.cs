@@ -14,10 +14,5 @@ public class NflWeeksConfiguration : IEntityTypeConfiguration<NflWeeks>
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         entity.HasIndex(w => new { w.Season, w.NflWeek }).IsUnique();
-
-        entity.HasMany(e => e.NflPicks)
-            .WithOne(l => l.NflWeekInfo)
-            .HasForeignKey(g => g.NflWeekId)
-            .IsRequired();
     }
 }
