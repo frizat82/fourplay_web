@@ -345,7 +345,6 @@ public class PicksTests
         {
             LeagueId = LeagueId, UserId = UserId, Team = "BUF",
             Pick = PickType.Spread, NflWeek = Week, Season = Season,
-            NflWeekId = 1
         };
 
         var repo = Substitute.For<ILeagueRepository>();
@@ -424,7 +423,7 @@ public class PicksTests
     private static NflPicks MakeNflPick(string userId, string team) => new()
     {
         LeagueId = LeagueId, UserId = userId, Team = team,
-        Pick = PickType.Spread, NflWeek = Week, Season = Season, NflWeekId = 1,
+        Pick = PickType.Spread, NflWeek = Week, Season = Season,
         User = new ApplicationUser { UserName = userId }
     };
 
