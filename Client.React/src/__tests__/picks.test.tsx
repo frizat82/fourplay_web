@@ -36,12 +36,13 @@ vi.mock('../api/league', () => ({
   doOddsExist: vi.fn(),
   getUserPicks: vi.fn(),
   spreadBatch: vi.fn(),
+  getNflCurrentWeek: vi.fn(),
 }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
 
 import { getScores, loadScoresWithRetry, getWeekScores } from '../api/espn';
-import { addPicks, doOddsExist, getUserPicks, spreadBatch } from '../api/league';
+import { addPicks, doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
 
@@ -54,6 +55,17 @@ const mockedSpreadBatch = vi.mocked(spreadBatch);
 const mockedAddPicks = vi.mocked(addPicks);
 const mockedGetAllJerseys = vi.mocked(getAllJerseys);
 const mockedGetNextSpreadJob = vi.mocked(getNextSpreadJob);
+const mockedGetNflCurrentWeek = vi.mocked(getNflCurrentWeek);
+
+/** Builds an NflCurrentWeekDto matching setupDefaults'/createScores' fixture convention (season
+ * 2024 unless overridden) — the control table's resolved "current week" answer. */
+function makeCurrentWeek(week: number, postSeason = false, season = 2024) {
+  return {
+    weekId: week, espnWeek: week, season, isPostSeason: postSeason,
+    weekLabel: postSeason ? `Postseason Week ${week}` : `Week ${week}`,
+    scoringFormat: 'Standard', spreadLockDatetime: new Date().toISOString(),
+  };
+}
 
 const setupDefaults = async (options?: {
   week?: number;
@@ -90,7 +102,8 @@ const setupDefaults = async (options?: {
     : createScores({ week, postSeason, gameStarted });
 
   mockedGetScores.mockResolvedValue(scores);
-  mockedLoadScoresWithRetry.mockResolvedValue(scores);
+  mockedGetNflCurrentWeek.mockResolvedValue(makeCurrentWeek(week, postSeason));
+  mockedGetWeekScores.mockResolvedValue(scores);
   mockedDoOddsExist.mockResolvedValue(options?.oddsExist ?? true);
   mockedGetUserPicks.mockResolvedValue(options?.existingPicks ?? []);
   mockedGetAllJerseys.mockResolvedValue({});
@@ -126,6 +139,7 @@ describe('PicksPage', () => {
     mockedGetScores.mockReset();
     mockedLoadScoresWithRetry.mockReset();
     mockedGetWeekScores.mockReset();
+    mockedGetNflCurrentWeek.mockReset();
     mockedDoOddsExist.mockReset();
     mockedGetUserPicks.mockReset();
     mockedSpreadBatch.mockReset();
@@ -182,14 +196,14 @@ describe('PicksPage', () => {
   // silently stayed blank. Mirrors ScoresPage's existing Alert + Retry pattern.
   it('shows an error alert with a retry button when the picks query fails', async () => {
     await setupDefaults();
-    mockedLoadScoresWithRetry.mockRejectedValue(new Error('network down'));
+    mockedGetWeekScores.mockRejectedValue(new Error('network down'));
     renderWithClient(<PicksPage adapter={createNflAdapter()} />);
 
     const retryButton = await screen.findByRole('button', { name: /retry/i });
     expect(screen.getByText(/couldn.t load picks/i)).toBeInTheDocument();
 
     // Recover on retry
-    mockedLoadScoresWithRetry.mockResolvedValue(createScores({ week: 2, postSeason: false, gameStarted: false }));
+    mockedGetWeekScores.mockResolvedValue(createScores({ week: 2, postSeason: false, gameStarted: false }));
     await userEvent.click(retryButton);
 
     await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
@@ -337,9 +351,12 @@ describe('PicksPage', () => {
     // re-deriving maxSeason from that on every render instead of remembering the real ceiling
     // from the last current-week load.
     await setupDefaults({ week: 2 }); // current week resolves to season 2024 (fixture default)
-    mockedGetWeekScores.mockResolvedValue(
-      createScores({ week: 2, seasonYear: 2022, gameStarted: false }),
-    );
+    // getWeekScores now serves both the current week (season 2024) and the historical navigation
+    // below (season 2022) — differentiate by the requested year so the initial current-week load
+    // isn't overwritten by the season-2022 fixture before the snapshot is even captured.
+    mockedGetWeekScores.mockImplementation(async (_week: number, year: number) => year === 2022
+      ? createScores({ week: 2, seasonYear: 2022, gameStarted: false })
+      : createScores({ week: 2, postSeason: false, gameStarted: false }));
 
     await renderPage();
 
@@ -494,8 +511,7 @@ describe('PicksPage', () => {
       await renderPage();
 
       // Hold the next fetch in-flight forever so we can observe mid-refetch UI
-      mockedLoadScoresWithRetry.mockImplementation(() => new Promise(() => {}));
-      mockedGetScores.mockImplementation(() => new Promise(() => {}));
+      mockedGetWeekScores.mockImplementation(() => new Promise(() => {}));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(POLL_MS);
@@ -538,8 +554,7 @@ describe('PicksPage', () => {
           },
         ],
       });
-      mockedGetScores.mockResolvedValue(startedScores);
-      mockedLoadScoresWithRetry.mockResolvedValue(startedScores);
+      mockedGetWeekScores.mockResolvedValue(startedScores);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(POLL_MS);
