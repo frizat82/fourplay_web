@@ -35,9 +35,9 @@ vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 const sportContext = { sport: 'NFL', isCfb: false, isNfl: true };
 vi.mock('../services/sport', () => ({ useSportContext: () => sportContext }));
 
-function renderLayout() {
+function renderLayout(initialPath = '/') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="*" element={<AppLayout />} />
       </Routes>
@@ -66,6 +66,18 @@ describe('Sport access control', () => {
     renderLayout();
     expect(screen.getByText(/No CFB access/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Go to NFL/i })).toBeInTheDocument();
+  });
+
+  // frizat: League Portal is how a user gets access to a sport in the first place (self-serve
+  // Create League, frizat-d6l) — the blanket "no access" gate previously replaced every routed
+  // page including this one, so an NFL-only user could never reach League Portal on the CFB
+  // site to create their first CFB league at all. Every other sport-specific page (Picks,
+  // Scores, Leaderboard) still needs the gate, since those genuinely require an existing league.
+  it('NFL-only user on CFB site visiting League Portal — no access block, reaches the page', () => {
+    Object.assign(sportContext, { sport: 'CFB', isCfb: true, isNfl: false });
+    Object.assign(sessionState, { hasNflAccess: true, hasCfbAccess: false, currentLeague: null });
+    renderLayout('/league/manage');
+    expect(screen.queryByText(/No CFB access/i)).not.toBeInTheDocument();
   });
 
   it('CFB-only user on NFL site — shows No NFL access with Go to CFB link', () => {
