@@ -8,9 +8,10 @@ public class NflCurrentWeekService(ILeagueRepository repo) : INflCurrentWeekServ
         var now = DateTime.UtcNow;
         var configs = await repo.GetNflSeasonWeekConfigsAsync();
 
-        // Active window wins; else most-recently-completed (off-season); else soonest
-        // upcoming (pre-season) — see SeasonWindowResolver for the shared NFL/CFB logic.
-        var windows = configs.Select(c => new SeasonWindowResolver.Window(c.Season, c.WeekStartDatetime, c.WeekEndDatetime));
+        // frizat-9xg: most recent week whose own spread grab has passed, unless we're within
+        // 2 days of the next week's spread grab — see SeasonWindowResolver for the shared
+        // NFL/CFB logic (applies identically across a season boundary, no special case here).
+        var windows = configs.Select(c => new SeasonWindowResolver.WeekWindow(c.Season, c.WeekStartDatetime, c.WeekEndDatetime, c.SpreadLockDatetime));
         var resolved = SeasonWindowResolver.ResolveCurrentWeek(windows, now)
             ?? throw new InvalidOperationException("No NflSeasonWeekConfig rows exist — cannot resolve a current week.");
 

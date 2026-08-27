@@ -43,19 +43,14 @@
 }
 
 .hero-logo {
-  display: flex;
-  justify-content: flex-start;
-  width: 100%;
+  margin-bottom: 1.25rem;
 }
 
-.hero-logo-img {
-  width: 100%;
-  max-width: 420px;
-  height: auto;
-  margin-bottom: 1.25rem;
-  border-radius: 14px;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
-  object-fit: contain;
+.hero-logo-crest {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
 }
 
 .hero-title {

@@ -142,9 +142,18 @@ export default function AppLayout() {
           <IconButton color="inherit" edge="start" onClick={() => setOpen(!open)}>
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
-            IV League
-          </Typography>
+          {/* frizat: at 390px (this app's primary viewport) the hamburger + CFB-switch chip +
+              league chip + dark-mode toggle already claim most of the Toolbar's width, leaving
+              so little room for this title that `noWrap` collapsed it down to "I…" — illegible
+              and pointless. The remaining controls (sport chip, league name, drawer) already
+              orient the user, so the wordmark text is dropped below `sm` instead of rendering
+              unreadable — the wrapping Box keeps flexGrow so the right-hand controls stay
+              pinned to the edge either way. */}
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h6" noWrap sx={{ display: { xs: 'none', sm: 'block' } }}>
+              IV League
+            </Typography>
+          </Box>
           <Stack direction="row" spacing={1} alignItems="center">
             {hasOther && !noAccessContent && (
               <Chip

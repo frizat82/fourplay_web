@@ -170,111 +170,116 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   if (isError && !data) return (
     <QueryErrorAlert title="Picks" onRetry={() => void refetch()} />
   );
-  if (!hasOdds && isCurrentWeek) return <SpreadRelease sport={adapter.sport} />;
+  // Current week with no odds yet still needs the WeekYearSelector below rendered — otherwise a
+  // visitor checking in before this week's spreads release has no way to browse to a different
+  // week/season at all (frizat: previously this was a full-page early return that skipped the
+  // selector entirely).
+  const oddsNotReady = !hasOdds && isCurrentWeek;
 
   const hasUnlockedGames = games.some(g => !gameIsLocked(g));
   const isPostSeasonSlate = isPostSeason;
-  const showSelector = games.length > 0 || !isCurrentWeek;
 
   return (
     <Box>
       <PageHeader title="Picks" />
 
-      {showSelector && (
-        <Box sx={{ mb: 3 }}>
-          <WeekYearSelector
-            season={season}
-            week={week}
-            isPostSeason={isPostSeason}
-            onSeasonChange={handleSeasonChange}
-            onWeekChange={handleWeekChange}
-            onSeasonTypeChange={handleSeasonTypeChange}
-            {...adapter.weekSelectorConfig}
-            maxRegularSeasonWeek={maxWeek}
-            maxSeason={maxSeason}
-          />
-          {!isCurrentWeek && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>
-              <Button size="small" variant="outlined" onClick={() => setWeekState(null)}>
-                Current Week
-              </Button>
-            </Box>
-          )}
-        </Box>
-      )}
+      <Box sx={{ mb: 3 }}>
+        <WeekYearSelector
+          season={season}
+          week={week}
+          isPostSeason={isPostSeason}
+          onSeasonChange={handleSeasonChange}
+          onWeekChange={handleWeekChange}
+          onSeasonTypeChange={handleSeasonTypeChange}
+          {...adapter.weekSelectorConfig}
+          maxRegularSeasonWeek={maxWeek}
+          maxSeason={maxSeason}
+        />
+        {!isCurrentWeek && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>
+            <Button size="small" variant="outlined" onClick={() => setWeekState(null)}>
+              Current Week
+            </Button>
+          </Box>
+        )}
+      </Box>
 
-      <Grid container spacing={2}>
-        {hasUnlockedGames && (remainingPicks > 0 || userPicks.size > 0) && (
-          <Grid size={12}>
-            {remainingPicks > 0 && (
-              <Stack spacing={1} alignItems="center">
-                <Typography variant="h6">Picks Remaining ({remainingPicks})</Typography>
-                <Typography variant="h6">Submit picks before gametime</Typography>
+      {oddsNotReady ? (
+        <SpreadRelease sport={adapter.sport} />
+      ) : (
+        <Grid container spacing={2}>
+          {hasUnlockedGames && (remainingPicks > 0 || userPicks.size > 0) && (
+            <Grid size={12}>
+              {remainingPicks > 0 && (
+                <Stack spacing={1} alignItems="center">
+                  <Typography variant="h6">Picks Remaining ({remainingPicks})</Typography>
+                  <Typography variant="h6">Submit picks before gametime</Typography>
+                </Stack>
+              )}
+              <Stack direction="row" spacing={2} justifyContent="space-between" sx={{ mt: 2 }}>
+                <Button variant="contained" color="success" disabled={storingPicks || userPicks.size === 0} onClick={handleSubmit}>
+                  {storingPicks ? 'Submitting…' : 'Submit Pick(s)'}
+                </Button>
+                {/* frizat: /style-guide audit — both buttons were equal-weight contained, and
+                    Clear used color="warning" as a small filled button, the exact configuration
+                    the style guide documents as unreadable in both modes for pick-state buttons.
+                    Outlined demotes Clear to secondary, matching its rare, lower-stakes role. */}
+                <Button variant="outlined" disabled={userPicks.size === 0} onClick={handleClear}>
+                  Clear Selected Picks
+                </Button>
               </Stack>
-            )}
-            <Stack direction="row" spacing={2} justifyContent="space-between" sx={{ mt: 2 }}>
-              <Button variant="contained" color="success" disabled={storingPicks || userPicks.size === 0} onClick={handleSubmit}>
-                {storingPicks ? 'Submitting…' : 'Submit Pick(s)'}
-              </Button>
-              {/* frizat: /style-guide audit — both buttons were equal-weight contained, and
-                  Clear used color="warning" as a small filled button, the exact configuration
-                  the style guide documents as unreadable in both modes for pick-state buttons.
-                  Outlined demotes Clear to secondary, matching its rare, lower-stakes role. */}
-              <Button variant="outlined" disabled={userPicks.size === 0} onClick={handleClear}>
-                Clear Selected Picks
-              </Button>
-            </Stack>
-          </Grid>
-        )}
-
-        {!hasOdds && (
-          <Grid size={12} sx={{ textAlign: 'center', py: 6 }}>
-            <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
-          </Grid>
-        )}
-
-        {games.map(game => {
-          const homePickState = pickStateFor(game.id, game.homeTeam);
-          const awayPickState = pickStateFor(game.id, game.awayTeam);
-          const overPickState = pickStateFor(game.id, game.homeTeam, 'Over');
-          const underPickState = pickStateFor(game.id, game.homeTeam, 'Under');
-          const locked = gameIsLocked(game);
-
-          return (
-            <Grid size={{ xs: 12, lg: 4 }} key={game.id}>
-              <GameCard
-                mode="pick"
-                homeTeam={game.homeTeam}
-                awayTeam={game.awayTeam}
-                homeSpread={game.homeSpread ?? 0}
-                awaySpread={game.awaySpread ?? 0}
-                gameTime={game.gameTime}
-                gameStatus={game.gameStatus ?? undefined}
-                spreadPostedAt={game.spreadPostedAt}
-                homeRecord={!isPostSeasonSlate ? game.homeRecord : undefined}
-                awayRecord={!isPostSeasonSlate ? game.awayRecord : undefined}
-                weatherDisplayValue={game.weather?.displayValue}
-                weatherConditionId={game.weather?.conditionId}
-                weatherTemperatureF={game.weather?.temperatureF}
-                isPostSeason={isPostSeasonSlate}
-                homePickState={homePickState}
-                awayPickState={awayPickState}
-                locked={locked}
-                onPickHome={() => homePickState !== 'none' ? unselectPick(game.id, game.homeTeam) : selectPick(game.id, game.homeTeam)}
-                onPickAway={() => awayPickState !== 'none' ? unselectPick(game.id, game.awayTeam) : selectPick(game.id, game.awayTeam)}
-                overValue={isPostSeasonSlate ? game.overUnder : undefined}
-                underValue={isPostSeasonSlate ? game.overUnder : undefined}
-                overPickState={overPickState}
-                underPickState={underPickState}
-                overUnderLocked={locked && overPickState === 'none'}
-                onPickOver={() => overPickState !== 'none' ? unselectPick(game.id, game.homeTeam, 'Over') : selectPick(game.id, game.homeTeam, 'Over')}
-                onPickUnder={() => underPickState !== 'none' ? unselectPick(game.id, game.homeTeam, 'Under') : selectPick(game.id, game.homeTeam, 'Under')}
-              />
             </Grid>
-          );
-        })}
-      </Grid>
+          )}
+
+          {!hasOdds && (
+            <Grid size={12} sx={{ textAlign: 'center', py: 6 }}>
+              <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
+            </Grid>
+          )}
+
+          {games.map(game => {
+            const homePickState = pickStateFor(game.id, game.homeTeam);
+            const awayPickState = pickStateFor(game.id, game.awayTeam);
+            const overPickState = pickStateFor(game.id, game.homeTeam, 'Over');
+            const underPickState = pickStateFor(game.id, game.homeTeam, 'Under');
+            const locked = gameIsLocked(game);
+
+            return (
+              <Grid size={{ xs: 12, lg: 4 }} key={game.id}>
+                <GameCard
+                  mode="pick"
+                  homeTeam={game.homeTeam}
+                  awayTeam={game.awayTeam}
+                  homeSpread={game.homeSpread ?? 0}
+                  awaySpread={game.awaySpread ?? 0}
+                  gameTime={game.gameTime}
+                  gameStatus={game.gameStatus ?? undefined}
+                  spreadPostedAt={game.spreadPostedAt}
+                  homeRecord={!isPostSeasonSlate ? game.homeRecord : undefined}
+                  awayRecord={!isPostSeasonSlate ? game.awayRecord : undefined}
+                  weatherDisplayValue={game.weather?.displayValue}
+                  weatherConditionId={game.weather?.conditionId}
+                  weatherTemperatureF={game.weather?.temperatureF}
+                  isPostSeason={isPostSeasonSlate}
+                  homePickState={homePickState}
+                  awayPickState={awayPickState}
+                  locked={locked}
+                  onPickHome={() => homePickState !== 'none' ? unselectPick(game.id, game.homeTeam) : selectPick(game.id, game.homeTeam)}
+                  onPickAway={() => awayPickState !== 'none' ? unselectPick(game.id, game.awayTeam) : selectPick(game.id, game.awayTeam)}
+                  overValue={isPostSeasonSlate ? game.overUnder : undefined}
+                  underValue={isPostSeasonSlate ? game.overUnder : undefined}
+                  overPickState={overPickState}
+                  underPickState={underPickState}
+                  overUnderLocked={locked && overPickState === 'none'}
+                  onPickOver={() => overPickState !== 'none' ? unselectPick(game.id, game.homeTeam, 'Over') : selectPick(game.id, game.homeTeam, 'Over')}
+                  onPickUnder={() => underPickState !== 'none' ? unselectPick(game.id, game.homeTeam, 'Under') : selectPick(game.id, game.homeTeam, 'Under')}
+                />
+              </Grid>
+            );
+          })}
+        </Grid>
+      )}
     </Box>
   );
 }
