@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PicksPage from '../pages/PicksPage';
 import { createNflAdapter } from '../services/nflAdapter';
-import { createCompetition, createPick, createScores, createSpreadResponse } from '../test/fixtures';
+import { createCompetition, createCurrentWeek, createPick, createScores, createSpreadResponse } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -57,15 +57,6 @@ const mockedGetAllJerseys = vi.mocked(getAllJerseys);
 const mockedGetNextSpreadJob = vi.mocked(getNextSpreadJob);
 const mockedGetNflCurrentWeek = vi.mocked(getNflCurrentWeek);
 
-/** Builds an NflCurrentWeekDto matching setupDefaults'/createScores' fixture convention (season
- * 2024 unless overridden) — the control table's resolved "current week" answer. */
-function makeCurrentWeek(week: number, postSeason = false, season = 2024) {
-  return {
-    weekId: week, espnWeek: week, season, isPostSeason: postSeason,
-    weekLabel: postSeason ? `Postseason Week ${week}` : `Week ${week}`,
-    scoringFormat: 'Standard', spreadLockDatetime: new Date().toISOString(),
-  };
-}
 
 const setupDefaults = async (options?: {
   week?: number;
@@ -102,7 +93,7 @@ const setupDefaults = async (options?: {
     : createScores({ week, postSeason, gameStarted });
 
   mockedGetScores.mockResolvedValue(scores);
-  mockedGetNflCurrentWeek.mockResolvedValue(makeCurrentWeek(week, postSeason));
+  mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, postSeason));
   mockedGetWeekScores.mockResolvedValue(scores);
   mockedDoOddsExist.mockResolvedValue(options?.oddsExist ?? true);
   mockedGetUserPicks.mockResolvedValue(options?.existingPicks ?? []);
