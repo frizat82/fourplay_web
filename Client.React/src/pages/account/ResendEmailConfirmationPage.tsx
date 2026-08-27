@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -17,6 +17,7 @@ type FormValues = z.infer<typeof schema>;
 
 export default function ResendEmailConfirmationPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const prefilledEmail = useMemo(() => new URLSearchParams(location.search).get('email') ?? '', [location.search]);
 
   const {
@@ -73,6 +74,9 @@ export default function ResendEmailConfirmationPage() {
           </form>
         </CardContent>
       </Card>
+      <Button variant="text" onClick={() => navigate('/account/login')} sx={{ alignSelf: 'center' }}>
+        Back to login
+      </Button>
     </Stack>
   );
 }

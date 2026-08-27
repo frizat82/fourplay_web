@@ -31,35 +31,28 @@ export default function SpreadRelease({ sport }: { sport: 'nfl' | 'cfb' }) {
 
   const targetDate = useMemo(() => (nextSpreadJob ? new Date(nextSpreadJob) : null), [nextSpreadJob]);
 
-  // Only show countdown if release is in the future and within 7 days.
-  const MS_7_DAYS = 7 * 24 * 60 * 60 * 1000;
-  // Compute once when targetDate changes — stable enough for "is this within 7 days"
-  const showCountdown = useMemo(() => {
-    if (!targetDate) return false;
-    const nowMs = new Date().getTime();
-    return targetDate.getTime() > nowMs && (targetDate.getTime() - nowMs) < MS_7_DAYS;
-  }, [targetDate, MS_7_DAYS]);
-
+  // NFL and CFB run independent spread schedules (CFB may release next week while NFL's next
+  // release is 2+ weeks out) — the scheduled date is useful information regardless of how far
+  // away it is, so it always renders rather than being hidden past some fixed "is this soon
+  // enough" cutoff. Self-adjusting tick rate: a countdown weeks out doesn't need a per-second
+  // re-render just to keep its seconds digit live — only tick every second once under an hour
+  // remains, otherwise once a minute is plenty.
   useEffect(() => {
-    if (!targetDate || !showCountdown) return;
-    const updateCountdown = () => {
+    if (!targetDate) return;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const tick = () => {
       const diff = targetDate.getTime() - new Date().getTime();
       setTimeRemaining(formatCountdown(diff));
+      const nextDelayMs = diff > 60 * 60 * 1000 ? 60_000 : 1000;
+      timeoutId = setTimeout(tick, nextDelayMs);
     };
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, [targetDate, showCountdown]);
-
-  useEffect(() => {
-    if (targetDate) return;
-    const handle = window.setTimeout(() => setTimeRemaining(''), 0);
-    return () => window.clearTimeout(handle);
+    tick();
+    return () => clearTimeout(timeoutId);
   }, [targetDate]);
 
   if (loading) return null;
 
-  if (!showCountdown) {
+  if (!targetDate) {
     return (
       <Box sx={{ textAlign: 'center', py: 4 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
@@ -89,7 +82,7 @@ export default function SpreadRelease({ sport }: { sport: 'nfl' | 'cfb' }) {
         Next Spread Reload
       </Typography>
       <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }} color="text.primary">
-        {timeRemaining || '00:00:00'}
+        {timeRemaining}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
         Scheduled for {targetDate!.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}

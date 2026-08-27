@@ -131,6 +131,16 @@ describe('ScoresPage', () => {
     await screen.findByText(/Odds Not Posted/i);
   });
 
+  // frizat: previously the current-week/no-odds case was a full-page early return that skipped
+  // WeekYearSelector entirely — a visitor checking in before this week's spreads release had no
+  // way to browse to a different week/season at all.
+  it('still shows the week/season selector when the current week has no odds yet', async () => {
+    await setupDefaults({ oddsExist: false });
+    renderWithClient(<ScoresPage adapter={createNflAdapter()} />);
+    await screen.findByText(/Odds Not Posted/i);
+    expect(screen.getByTestId('week-year-selector-container')).toBeInTheDocument();
+  });
+
   it('shows week title when scores available', async () => {
     await setupDefaults({ week: 5 });
     await renderPage();

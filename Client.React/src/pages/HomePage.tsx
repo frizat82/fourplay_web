@@ -4,6 +4,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SportsTennisIcon from '@mui/icons-material/SportsTennis';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import LoginIcon from '@mui/icons-material/Login';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import { Link as RouterLink } from 'react-router-dom';
 import { useState } from 'react';
@@ -54,21 +55,35 @@ export default function HomePage({ adapter }: HomePageProps) {
     <div>
       <Container maxWidth={false} className="hero-section" sx={{ py: 6 }}>
         <Container maxWidth="lg" className="hero-content">
+          {/* frizat: no generic "Register" link here — registration always requires a real
+              invite code/link a commissioner sent, so a bare /account/register link (with no
+              invite params attached) was a guaranteed dead end for any visitor without one
+              already in hand. The "Got an Invite? You're Ready" section below is the honest,
+              invite-gated equivalent for someone who has a code to type in manually. */}
           {!isAuthed && (
             <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mb: 2 }}>
-              <Button variant="text" component={RouterLink} to="/account/login" className="hero-auth-link">
+              <Button variant="outlined" component={RouterLink} to="/account/login" className="hero-auth-link">
                 Login
-              </Button>
-              <Button variant="outlined" component={RouterLink} to="/account/register" className="hero-auth-link">
-                Register
               </Button>
             </Stack>
           )}
           <Grid container spacing={4} alignItems="center">
             <Grid size={{ xs: 12, md: 6 }} className="hero-text-section">
-              <Box className="hero-logo">
-                <img src="/Images/retro_logo.png" alt="IV League Logo" className="hero-logo-img" />
-              </Box>
+              <Stack direction="row" spacing={1.5} alignItems="center" className="hero-logo">
+                <img src="/icon-512.png" alt="" className="hero-logo-crest" />
+                <Typography
+                  variant="h3"
+                  sx={{
+                    fontFamily: '"Rajdhani", sans-serif',
+                    fontWeight: 700,
+                    color: '#ff6b35',
+                    letterSpacing: 2,
+                    lineHeight: 1,
+                  }}
+                >
+                  IV LEAGUE
+                </Typography>
+              </Stack>
               <Box className="hero-text-inner">
                 <Chip
                   label={isCfb ? 'College Football' : 'NFL'}
@@ -99,11 +114,11 @@ export default function HomePage({ adapter }: HomePageProps) {
                     size="large"
                     color="secondary"
                     className="hero-primary-btn"
-                    startIcon={isAuthed ? <SportsTennisIcon /> : <PersonAddIcon />}
+                    startIcon={isAuthed ? <SportsTennisIcon /> : <LoginIcon />}
                     component={RouterLink}
-                    to={isAuthed ? '/picks' : '/account/register'}
+                    to={isAuthed ? '/picks' : '/account/login'}
                   >
-                    {isAuthed ? 'Make Picks' : 'Register with Invite'}
+                    {isAuthed ? 'Make Picks' : 'Login'}
                   </Button>
                   <Button
                     variant="outlined"
@@ -131,14 +146,14 @@ export default function HomePage({ adapter }: HomePageProps) {
                       playsInline
                       controls
                       style={{ width: '100%', display: 'block' }}
-                      poster="/Images/fourplayhome.jpg"
+                      poster="/Images/hero-action.jpg"
                     >
                       <source src="/Videos/demo.mp4" type="video/mp4" />
                     </video>
                   </Paper>
                 )}
                 <Paper className="hero-image" elevation={8}>
-                  <img src="/Images/fourplayhome.jpg" alt="IV League" className="hero-image-img" />
+                  <img src="/Images/hero-action.jpg" alt="IV League" className="hero-image-img" />
                 </Paper>
                 {isAuthed && adapter && <DashboardStandings adapter={adapter} />}
                 {isAuthed && <OwnerCostSummary />}

@@ -38,6 +38,18 @@ describe('HomePage — sport indicator', () => {
   });
 });
 
+describe('HomePage — unauthenticated navigation', () => {
+  // frizat: registration always requires a real invite code/link a commissioner sent — a bare
+  // /account/register link (no invite params attached) was a guaranteed dead end for any
+  // visitor without one already in hand. Only "Login" remains as a generic account action.
+  it('has no generic Register link, only Login', () => {
+    renderPage();
+    expect(screen.queryByRole('link', { name: /^register$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /register with invite/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /login/i }).length).toBeGreaterThan(0);
+  });
+});
+
 describe('HomePage — promo video', () => {
   // frizat-f29: the video had no native controls at all, so viewers couldn't resize or
   // fullscreen it — only a custom mute button was rendered on top.

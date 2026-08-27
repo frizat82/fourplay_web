@@ -8,12 +8,16 @@ test.describe('Home page', () => {
 
   test('shows Login nav link', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('link', { name: /login/i })).toBeVisible();
+    // frizat: two "Login" links now exist unauthenticated (top-right nav + hero CTA, since the
+    // hero CTA was repurposed from "Register with Invite" to "Login" — the invite-only redesign)
+    // — .first() targets the top-right nav one this test is actually about; either resolves to
+    // the same /account/login destination.
+    await expect(page.getByRole('link', { name: /login/i }).first()).toBeVisible();
   });
 
   test('Login link navigates to login', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('link', { name: 'Login' }).click();
+    await page.getByRole('link', { name: 'Login' }).first().click();
     await expect(page).toHaveURL(/login/);
   });
 
