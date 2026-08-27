@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ScoresPage from '../pages/ScoresPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCfbAdapter } from '../services/cfbAdapter';
-import { createPick, createScores, createSpreadResponse, createCompetition } from '../test/fixtures';
+import { createCurrentWeek, createPick, createScores, createSpreadResponse, createCompetition } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -66,15 +66,6 @@ const mockedGetCfbLiveGames = vi.mocked(getCfbLiveGames);
 const mockedSpreadBatch = vi.mocked(spreadBatch);
 const mockedGetCfbCurrentSlate = vi.mocked(getCfbCurrentSlate);
 
-/** Builds an NflCurrentWeekDto matching makeScores'/createScores' fixture convention (season 2024
- * unless overridden) — the control table's resolved "current week" answer. */
-function makeCurrentWeek(week: number, postSeason = false, season = 2024) {
-  return {
-    weekId: week, espnWeek: week, season, isPostSeason: postSeason,
-    weekLabel: postSeason ? `Postseason Week ${week}` : `Week ${week}`,
-    scoringFormat: 'Standard', spreadLockDatetime: new Date().toISOString(),
-  };
-}
 
 // BUF home (24-10), spread -7: homeCovers = 24+(-7)=17 > 10 ✓ (BUF covers → green)
 // MIA away: !homeCovers → red; Over at 47.5: 24+10=34 < 47.5 → Under wins
@@ -101,7 +92,7 @@ const setupDefaults = async (options?: {
   const week = options?.week ?? 2;
   const postSeason = options?.postSeason ?? false;
   const gameStarted = options?.gameStarted ?? true;
-  mockedGetNflCurrentWeek.mockResolvedValue(makeCurrentWeek(week, postSeason));
+  mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, postSeason));
   mockedGetWeekScores.mockResolvedValue(makeScores(week, postSeason, gameStarted));
   mockedGetLiveGames.mockResolvedValue([]);
   mockedDoOddsExist.mockResolvedValue(options?.oddsExist ?? true);
@@ -371,7 +362,7 @@ describe('ScoresPage', () => {
         homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10,
         liveStatus: { name: 'status_in_progress', period: 2, displayClock: '5:00' },
       });
-      mockedGetNflCurrentWeek.mockResolvedValue(makeCurrentWeek(2));
+      mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(2));
       mockedGetWeekScores.mockResolvedValue(createScores({
         week: 2, postSeason: false,
         events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
@@ -405,7 +396,7 @@ describe('ScoresPage', () => {
         homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10,
         liveStatus: { name: 'status_in_progress', period: 2, displayClock: '5:00' },
       });
-      mockedGetNflCurrentWeek.mockResolvedValue(makeCurrentWeek(2));
+      mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(2));
       // getWeekScores now serves BOTH the current week (2, via loadCurrentScores) and historical
       // navigation (week 5) — differentiate by the requested week, same as the real backend would.
       mockedGetWeekScores.mockImplementation(async (week: number) => week === 5

@@ -159,9 +159,12 @@ export function createNflAdapter(): SportAdapter {
     async loadCurrentGames(leagueId, userId) {
       const current = await getCurrentWeek();
       const { season, espnWeek: weekNum, isPostSeason: postSeason } = current;
-      const data = await getWeekScores(weekNum, season, postSeason);
       const nflWeek = getWeekFromEspnWeek(weekNum, postSeason);
-      const [picksResult, hasOdds] = await Promise.all([getUserPicks(userId, leagueId, season, nflWeek), doOddsExist(leagueId, season, nflWeek)]);
+      const [data, picksResult, hasOdds] = await Promise.all([
+        getWeekScores(weekNum, season, postSeason),
+        getUserPicks(userId, leagueId, season, nflWeek),
+        doOddsExist(leagueId, season, nflWeek),
+      ]);
       const sc = await buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, hasOdds);
       const games: GameView[] = (data?.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const userPicks = picksResult.map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
@@ -197,17 +200,21 @@ export function createNflAdapter(): SportAdapter {
     async loadCurrentScores(leagueId, userId) {
       const current = await getCurrentWeek();
       const { season, espnWeek: weekNum, isPostSeason: postSeason } = current;
-      const data = await getWeekScores(weekNum, season, postSeason);
       const nflWeek = getWeekFromEspnWeek(weekNum, postSeason);
-      const hasOdds = await doOddsExist(leagueId, season, nflWeek);
-      const sc = await buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, hasOdds);
-      const situationMap = await buildSituationMap(data?.events ?? []);
+      const [data, hasOdds, allPicksDtos] = await Promise.all([
+        getWeekScores(weekNum, season, postSeason),
+        doOddsExist(leagueId, season, nflWeek),
+        getLeaguePicks(leagueId, season, nflWeek),
+      ]);
+      const [sc, situationMap] = await Promise.all([
+        buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, hasOdds),
+        buildSituationMap(data?.events ?? []),
+      ]);
       const games = (data?.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc, situationMap)));
       // Use typed helpers on raw competitions — not string comparison on already-mapped GameView
       const hasActiveGames = (data?.events ?? []).some(ev =>
         ev.competitions.some(c => isGameStarted(c) && !isGameOver(c))
       );
-      const allPicksDtos = await getLeaguePicks(leagueId, season, nflWeek);
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
       return { season, week: weekNum, isPostSeason: postSeason, games, allPicks: revealPicksForStartedGames(allPicks, games, userId), userPicks, hasOdds, hasActiveGames, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: 18, maxSeason: season };
