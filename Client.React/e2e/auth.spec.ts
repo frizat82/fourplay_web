@@ -21,9 +21,13 @@ test.describe('Login page', () => {
     await expect(page.getByRole('button', { name: /forgot your password/i })).toBeVisible();
   });
 
-  test('register button is present', async ({ page }) => {
+  // frizat: registration always requires a real invite code/link a commissioner sent — a bare
+  // /account/register link from here (no invite params attached) was a guaranteed dead end, so
+  // the Register button was removed. "Back to home" replaced it as the way out of this page.
+  test('has no register button — registration requires a real invite', async ({ page }) => {
     await page.goto('/account/login');
-    await expect(page.getByRole('button', { name: /register/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^register$/i })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: /back to home/i })).toBeVisible();
   });
 });
 
