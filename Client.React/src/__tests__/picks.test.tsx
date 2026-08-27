@@ -147,6 +147,16 @@ describe('PicksPage', () => {
     await screen.findByText(/Odds Not Posted/i);
   });
 
+  // frizat: previously `showSelector = games.length > 0 || !isCurrentWeek` (plus an earlier-still
+  // full-page return for the no-odds/current-week case) meant a visitor checking in before this
+  // week's spreads release had no way to browse to a different week/season at all.
+  it('still shows the week/season selector when the current week has no odds yet', async () => {
+    await setupDefaults({ oddsExist: false });
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
+    await screen.findByText(/Odds Not Posted/i);
+    expect(screen.getByTestId('week-year-selector-container')).toBeInTheDocument();
+  });
+
   it('shows picks remaining for week 2 with no existing picks', async () => {
     await setupDefaults({ week: 2 });
     await renderPage();

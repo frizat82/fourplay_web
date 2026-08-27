@@ -1,37 +1,50 @@
 namespace FourPlayWebApp.Server.Services;
 
 // Shared, pure NFL/CFB season-resolution logic. Both sports have a control table shaped as
-// "Season + a start/end window per week (NFL) or slate (CFB)" — this used to be two
-// independent, hand-written implementations (NflCurrentWeekService's fallback chain,
-// CfbCurrentSlateService's hardcoded-year hack) that had already drifted into a real bug.
-// No DB/ESPN dependency — callers map their own rows into Window and normalize any
-// DateOnly fields to DateTime first.
+// "Season + a start/end window per week (NFL) or slate (CFB), each with its own spread-lock
+// datetime" — this used to be two independent, hand-written implementations
+// (NflCurrentWeekService's fallback chain, CfbCurrentSlateService's hardcoded-year hack) that
+// had already drifted into a real bug. No DB/ESPN dependency — callers map their own rows into
+// Window/WeekWindow and normalize any DateOnly fields to DateTime first.
 public static class SeasonWindowResolver {
     public readonly record struct Window(int Season, DateTime Start, DateTime End);
 
-    // WEEK-LEVEL: "which specific week/slate are we in (or nearest to)?" — fine-grained,
-    // used for UI defaults, the spread-lock schedule, and the spread-scheduling jobs. An
-    // active window wins; otherwise the most-recently-completed window; otherwise the
-    // soonest upcoming one; null only if the list is empty.
-    public static Window? ResolveCurrentWeek(IEnumerable<Window> windows, DateTime now) {
-        var list = windows as IReadOnlyCollection<Window> ?? windows.ToList();
-        if (list.Count == 0) return null;
+    // A window whose own SpreadLockDatetime is known — ResolveCurrentWeek needs this to tell
+    // whether a window's own data (odds/results) actually exists yet, which its calendar
+    // Start/End range alone can't answer.
+    public readonly record struct WeekWindow(int Season, DateTime Start, DateTime End, DateTime SpreadLockDatetime);
 
-        var active = list.Where(w => w.Start <= now && now <= w.End)
-            .Cast<Window?>()
-            .FirstOrDefault();
-        if (active is not null) return active;
+    // frizat-9xg: don't switch "current" to a window until we're this close to ITS OWN spread
+    // grab — otherwise the moment a new week's (or season's) calendar window begins, the UI
+    // jumps to a week with no odds/results yet while the previous week still has real data.
+    private static readonly TimeSpan EarlyActivationWindow = TimeSpan.FromDays(2);
 
-        var mostRecentlyCompleted = list.Where(w => w.End < now)
-            .OrderByDescending(w => w.End)
-            .Cast<Window?>()
-            .FirstOrDefault();
-        if (mostRecentlyCompleted is not null) return mostRecentlyCompleted;
+    // WEEK-LEVEL: "which specific week/slate should the UI treat as current?" — fine-grained,
+    // used for UI defaults, the spread-lock schedule, and the spread-scheduling jobs.
+    // "Current" = the most recent window whose own SpreadLockDatetime has passed (real data
+    // exists), UNLESS we're within EarlyActivationWindow of the NEXT window's own
+    // SpreadLockDatetime, in which case that next window takes over early. Applies identically
+    // whether "next" is a later week in the same season or week 1 of a new season — no
+    // season-boundary special case, since windows are compared purely by SpreadLockDatetime
+    // across all seasons at once.
+    public static WeekWindow? ResolveCurrentWeek(IEnumerable<WeekWindow> windows, DateTime now) {
+        var sorted = windows.OrderBy(w => w.SpreadLockDatetime).ToList();
+        if (sorted.Count == 0) return null;
 
-        return list.Where(w => w.Start > now)
-            .OrderBy(w => w.Start)
-            .Cast<Window?>()
-            .FirstOrDefault();
+        WeekWindow? lastStarted = null;
+        WeekWindow? next = null;
+        foreach (var w in sorted) {
+            if (w.SpreadLockDatetime <= now) { lastStarted = w; continue; }
+            next = w;
+            break;
+        }
+
+        if (next is not null && now >= next.Value.SpreadLockDatetime - EarlyActivationWindow)
+            return next;
+
+        // Bootstrap: nothing has ever started (app's very first season, pre-launch) — fall
+        // back to the soonest upcoming window regardless of the early-activation proximity.
+        return lastStarted ?? next;
     }
 
     // SEASON-LEVEL: "is a season actually happening right now, at all?" — coarse, used

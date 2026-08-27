@@ -130,12 +130,15 @@ export default function LoginPage() {
           </form>
         </CardContent>
       </Card>
-      <Stack direction="row" justifyContent="space-between" sx={{ px: 0.5 }}>
+      {/* frizat: no "Register" link here — registration always requires a real invite
+          code/link a commissioner sent, so a bare /account/register link (no invite params
+          attached) was a guaranteed dead end for anyone without one already in hand. */}
+      <Stack direction="row" justifyContent="center" sx={{ px: 0.5 }}>
+        <Button variant="text" onClick={() => navigate('/')} sx={{ opacity: 0.75, fontSize: '0.85rem' }}>
+          Back to home
+        </Button>
         <Button variant="text" onClick={() => navigate('/account/forgotpassword')} sx={{ opacity: 0.75, fontSize: '0.85rem' }}>
           Forgot your password?
-        </Button>
-        <Button variant="text" onClick={() => navigate('/account/register')} sx={{ opacity: 0.75, fontSize: '0.85rem' }}>
-          Register
         </Button>
       </Stack>
     </Stack>

@@ -94,3 +94,21 @@ describe('AppLayout iOS/Android safe-area handling', () => {
     expect(injectedCss).toMatch(/-MuiToolbar-root\{[^}]*margin-top:var\(--safe-inset-top\)/);
   });
 });
+
+describe('AppLayout header title', () => {
+  // frizat: at 390px (this app's primary viewport) the hamburger + CFB-switch chip + league
+  // chip + dark-mode toggle already claim most of the Toolbar's width — the "IV League" title
+  // used `noWrap` with no responsive handling, so it collapsed down to an illegible "I…"
+  // fragment instead of hiding cleanly. jsdom can't evaluate real container-width layout, so
+  // this asserts the actual injected CSS (base display:none + a min-width media query turning
+  // it back on) rather than computed layout.
+  it('hides the "IV League" title below the sm breakpoint instead of letting it truncate illegibly', () => {
+    renderLayout();
+    const injectedCss = Array.from(document.querySelectorAll('style'))
+      .map((s) => s.textContent)
+      .join('\n');
+
+    expect(injectedCss).toMatch(/@media \(min-width:0px\)\{\.css-[a-z0-9]+-MuiTypography-root\{display:none;?\}\}/);
+    expect(injectedCss).toMatch(/@media \(min-width:600px\)\{\.css-[a-z0-9]+-MuiTypography-root\{display:block;?\}\}/);
+  });
+});

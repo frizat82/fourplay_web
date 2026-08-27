@@ -102,6 +102,9 @@ export default function ResetPasswordPage() {
           </form>
         </CardContent>
       </Card>
+      <Button variant="text" onClick={() => navigate('/account/login')} sx={{ alignSelf: 'center' }}>
+        Back to login
+      </Button>
     </Stack>
   );
 }

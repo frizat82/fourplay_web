@@ -72,6 +72,36 @@ public class NflCurrentWeekServiceTests
         Assert.Equal(1, result.WeekId);
     }
 
+    // frizat-9xg: a week's own SpreadLockDatetime — not its calendar WeekStartDatetime — is
+    // what the resolver actually keys off. This distinguishes the two so the test can't pass
+    // by accident the way the other cases here do (their fixtures set SpreadLockDatetime ==
+    // WeekStartDatetime).
+    [Fact]
+    public async Task GetCurrentWeekAsync_StaysOnPreviousWeek_WhenNextWeeksSpreadLockIsMoreThanTwoDaysAway() {
+        var now = DateTime.UtcNow;
+        var week4 = Config(2026, 4, now.AddDays(-10), now.AddDays(-3));
+        week4.SpreadLockDatetime = now.AddDays(-9); // already started
+        var week5 = Config(2026, 5, now.AddDays(-3), now.AddDays(4)); // calendar-active right now
+        week5.SpreadLockDatetime = now.AddDays(5); // but its own spread grab is 5 days out
+
+        var result = await BuildService([week4, week5]).GetCurrentWeekAsync();
+
+        Assert.Equal(4, result.WeekId);
+    }
+
+    [Fact]
+    public async Task GetCurrentWeekAsync_EarlyActivatesNextWeek_WhenWithinTwoDaysOfItsSpreadLock() {
+        var now = DateTime.UtcNow;
+        var week4 = Config(2026, 4, now.AddDays(-10), now.AddDays(-3));
+        week4.SpreadLockDatetime = now.AddDays(-9);
+        var week5 = Config(2026, 5, now.AddDays(3), now.AddDays(10)); // hasn't calendar-started yet
+        week5.SpreadLockDatetime = now.AddDays(1); // but its spread grab is only 1 day out
+
+        var result = await BuildService([week4, week5]).GetCurrentWeekAsync();
+
+        Assert.Equal(5, result.WeekId);
+    }
+
     [Fact]
     public async Task GetCurrentWeekAsync_MapsEspnWeek_ForPostseasonRounds() {
         // ToWeekInfo's WeekId -> ESPN week mapping is unchanged by this refactor — Super

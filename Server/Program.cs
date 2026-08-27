@@ -301,7 +301,21 @@ builder.Services.AddScoped<IJob, CfbScoresJob>();
 builder.Services.AddScoped<IJob, LeagueJuiceSchedulerJob>();
 builder.Services.AddScoped<IJob, LeagueJuiceReminderJob>();
 builder.Services.AddScoped<IJob, LeagueJuiceLockJob>();
+
+// frizat-703.2: every scheduled job fails silently to admins otherwise — this is hooked to every
+// job below (AddJobListener<JobFailureAlertListener>() with no matcher = Quartz's
+// EverythingMatcher<JobKey>.AllJobs()), not bolted onto each job's own catch block, so a job that
+// lets an exception propagate still alerts. No-ops (logged warning only) if
+// DISCORD_ALERT_WEBHOOK_URL isn't set, e.g. in DEMO_MODE.
+// Named (not typed) client: DiscordJobFailureNotifier is held for the process lifetime by the
+// singleton JobFailureAlertListener below, so it resolves a fresh HttpClient per call via
+// IHttpClientFactory instead of capturing one — see the notifier's own comment for why.
+builder.Services.AddHttpClient(DiscordJobFailureNotifier.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(5));
+builder.Services.AddSingleton<IJobFailureNotifier, DiscordJobFailureNotifier>();
+
 builder.Services.AddQuartz(q => {
+    q.AddJobListener<JobFailureAlertListener>();
+
     // In DEMO_MODE/DEMO_REPLAY_MODE fire in 5s so seeding completes before e2e tests start;
     // otherwise fire 2 min after startup to avoid slowing cold boot.
     var userManagerDelay = seedsDemoData ? 5 : 120;

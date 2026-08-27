@@ -199,8 +199,13 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   if (isError && !data) return (
     <QueryErrorAlert title="Scores" onRetry={() => void refetch()} />
   );
-  if (!data?.hasOdds && isCurrentWeek) return <SpreadRelease sport={adapter.sport} />;
   if (!data) return null;
+
+  // Current week with no odds yet still needs the WeekYearSelector below rendered — otherwise a
+  // visitor checking in before this week's spreads release has no way to browse to a different
+  // week/season at all (frizat: previously this was a full-page early return that skipped the
+  // selector entirely).
+  const oddsNotReady = !data.hasOdds && isCurrentWeek;
 
   const games = showOnlyMyPicks
     ? (data.games ?? []).filter(g =>
@@ -251,176 +256,180 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
         )}
       </Box>
 
-      <Grid container spacing={2}>
-        {/* Controls row */}
-        <Grid size={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          {/* frizat: /style-guide audit — these are neutral view filters, not brand CTAs, but
-              one defaulted to unstyled contained (reads as inert navy) and the other used
-              contained secondary (the brand orange reserved for real CTAs like Share). Same
-              matching, neutral treatment for both now. */}
-          {data?.allPicks.length && data.allPicks.length > 0 && (
-            <Button variant="outlined" color="info" onClick={() => setShowMatrixView(p => !p)}>
-              {showMatrixView ? 'Show Standard View' : 'Show As Matrix'}
-            </Button>
-          )}
-          {!showMatrixView && (
-            <Button variant="outlined" color="info" onClick={() => setShowOnlyMyPicks(p => !p)}>
-              {showOnlyMyPicks ? 'Show All Games' : 'Show Only My Picks'}
-            </Button>
-          )}
-        </Grid>
-
-        {/* Matrix view */}
-        {showMatrixView ? (
-          <Grid size={12}>
-            <UserPicksMatrix
-              users={users}
-              picks={(data.allPicks ?? []).map(p => ({
-                id: 0, leagueId: 0, userId: p.userId, userName: p.userName,
-                team: p.team, pick: p.pickType as 'Spread' | 'Over' | 'Under',
-                nflWeek: data.week, season: data.season, dateCreated: '',
-              }))}
-              spreads={matrixSpreads as Record<string, import('../types/picks').SpreadCalculationResponse>}
-              requiredPicks={data?.requiredPicks ?? 4}
-            />
+      {oddsNotReady ? (
+        <SpreadRelease sport={adapter.sport} />
+      ) : (
+        <Grid container spacing={2}>
+          {/* Controls row */}
+          <Grid size={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+            {/* frizat: /style-guide audit — these are neutral view filters, not brand CTAs, but
+                one defaulted to unstyled contained (reads as inert navy) and the other used
+                contained secondary (the brand orange reserved for real CTAs like Share). Same
+                matching, neutral treatment for both now. */}
+            {data?.allPicks.length && data.allPicks.length > 0 && (
+              <Button variant="outlined" color="info" onClick={() => setShowMatrixView(p => !p)}>
+                {showMatrixView ? 'Show Standard View' : 'Show As Matrix'}
+              </Button>
+            )}
+            {!showMatrixView && (
+              <Button variant="outlined" color="info" onClick={() => setShowOnlyMyPicks(p => !p)}>
+                {showOnlyMyPicks ? 'Show All Games' : 'Show Only My Picks'}
+              </Button>
+            )}
           </Grid>
-        ) : (
-          <>
-            {!data?.hasOdds && (
-              <Grid size={12} sx={{ textAlign: 'center', py: 6 }}>
-                <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
-              </Grid>
-            )}
-            {data?.hasOdds && showOnlyMyPicks && games.length === 0 && (
-              <Grid size={12}>
-                <Paper sx={{ p: 4, textAlign: 'center' }}>
-                  <Typography color="text.secondary">You haven&apos;t made any picks for this week.</Typography>
-                </Paper>
-              </Grid>
-            )}
 
-            {data?.hasOdds && games.map(game => {
-              const isFinal = isGameFinal(game.gameStatus);
-              const isLive = isGameLive(game.gameStatus);
-              const hc = game.homeCovers ?? null;
-              const ov = game.overWins ?? null;
+          {/* Matrix view */}
+          {showMatrixView ? (
+            <Grid size={12}>
+              <UserPicksMatrix
+                users={users}
+                picks={(data.allPicks ?? []).map(p => ({
+                  id: 0, leagueId: 0, userId: p.userId, userName: p.userName,
+                  team: p.team, pick: p.pickType as 'Spread' | 'Over' | 'Under',
+                  nflWeek: data.week, season: data.season, dateCreated: '',
+                }))}
+                spreads={matrixSpreads as Record<string, import('../types/picks').SpreadCalculationResponse>}
+                requiredPicks={data?.requiredPicks ?? 4}
+              />
+            </Grid>
+          ) : (
+            <>
+              {!data?.hasOdds && (
+                <Grid size={12} sx={{ textAlign: 'center', py: 6 }}>
+                  <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
+                </Grid>
+              )}
+              {data?.hasOdds && showOnlyMyPicks && games.length === 0 && (
+                <Grid size={12}>
+                  <Paper sx={{ p: 4, textAlign: 'center' }}>
+                    <Typography color="text.secondary">You haven&apos;t made any picks for this week.</Typography>
+                  </Paper>
+                </Grid>
+              )}
 
-              return (
-                <Grid size={{ xs: 12, md: 6, lg: 4 }} key={game.id}>
-                  <Paper className={''} sx={{ p: 2 }}>
-                    {/* Score header */}
-                    <Stack direction="row" alignItems="center" justifyContent="space-between">
-                      <TeamHelmet abbr={game.awayTeam} size={50} />
-                      <Typography variant="h6">{isFinal || isLive ? game.awayScore : ''}</Typography>
-                      <Typography variant="body2" textAlign="center">
-                        {isFinal ? 'Final' : isLive ? (game.situation?.period && game.situation?.displayClock ? `Q${game.situation.period} ${game.situation.displayClock}` : 'Live') : new Date(game.gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                      </Typography>
-                      <Typography variant="h6">{isFinal || isLive ? game.homeScore : ''}</Typography>
-                      <TeamHelmet abbr={game.homeTeam} size={50} />
-                    </Stack>
+              {data?.hasOdds && games.map(game => {
+                const isFinal = isGameFinal(game.gameStatus);
+                const isLive = isGameLive(game.gameStatus);
+                const hc = game.homeCovers ?? null;
+                const ov = game.overWins ?? null;
 
-                    {/* Field position (NFL only — situation is a full GameSituation object) */}
-                    {isLive && game.situation != null && (
-                      <FieldPosition situation={game.situation} />
-                    )}
+                return (
+                  <Grid size={{ xs: 12, md: 6, lg: 4 }} key={game.id}>
+                    <Paper className={''} sx={{ p: 2 }}>
+                      {/* Score header */}
+                      <Stack direction="row" alignItems="center" justifyContent="space-between">
+                        <TeamHelmet abbr={game.awayTeam} size={50} />
+                        <Typography variant="h6">{isFinal || isLive ? game.awayScore : ''}</Typography>
+                        <Typography variant="body2" textAlign="center">
+                          {isFinal ? 'Final' : isLive ? (game.situation?.period && game.situation?.displayClock ? `Q${game.situation.period} ${game.situation.displayClock}` : 'Live') : new Date(game.gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </Typography>
+                        <Typography variant="h6">{isFinal || isLive ? game.homeScore : ''}</Typography>
+                        <TeamHelmet abbr={game.homeTeam} size={50} />
+                      </Stack>
 
-                    {/* Away team pick row */}
-                    <Stack direction="row" alignItems="center" sx={{ mt: 2, gap: 1.5, px: 1 }}>
-                      <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.awayTeam}</Typography>
-                      <Box sx={{ flexGrow: 1 }} />
-                      <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
-                      <Badge
-                        data-testid={`badge-${game.awayTeam}-spread`}
-                        data-tone={didUserPick(game.id, game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
-                        color={didUserPick(game.id, game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
-                        overlap="circular"
-                        badgeContent={pickCountForTeam(game.id, game.awayTeam, 'Spread')}
-                        invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.awayTeam, 'Spread') === 0}
-                      >
-                        {/* frizat: /code-review caught that gating `disabled` on pickCount === 0 (in
-                            addition to not-decided-yet) flattens this icon's color to MUI's disabled
-                            gray via the `disabled` prop, which erases the win/loss signal for a team
-                            literally nobody in the league picked — the one case the removed shield
-                            icon used to cover on its own, independent of picks. Disabled now tracks
-                            only "not decided yet"; `invisible` above still hides the pick-count bubble
-                            when nobody picked, but the button itself stays colored by outcome. */}
-                        <IconButton
-                          color={(isFinal || isLive) ? (hc === false ? 'success' : hc === true ? 'error' : 'inherit') : 'inherit'}
-                          disabled={!isFinal && !isLive}
-                          onClick={() => showDialog(game, game.awayTeam, 'Spread')}
-                          size="small"
+                      {/* Field position (NFL only — situation is a full GameSituation object) */}
+                      {isLive && game.situation != null && (
+                        <FieldPosition situation={game.situation} />
+                      )}
+
+                      {/* Away team pick row */}
+                      <Stack direction="row" alignItems="center" sx={{ mt: 2, gap: 1.5, px: 1 }}>
+                        <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.awayTeam}</Typography>
+                        <Box sx={{ flexGrow: 1 }} />
+                        <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
+                        <Badge
+                          data-testid={`badge-${game.awayTeam}-spread`}
+                          data-tone={didUserPick(game.id, game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
+                          color={didUserPick(game.id, game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
+                          overlap="circular"
+                          badgeContent={pickCountForTeam(game.id, game.awayTeam, 'Spread')}
+                          invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.awayTeam, 'Spread') === 0}
                         >
-                          <PersonIcon />
-                        </IconButton>
-                      </Badge>
-                    </Stack>
-
-                    {/* Home team pick row */}
-                    <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1.5, px: 1 }}>
-                      <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.homeTeam}</Typography>
-                      <Box sx={{ flexGrow: 1 }} />
-                      <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>
-                      <Badge
-                        data-testid={`badge-${game.homeTeam}-spread`}
-                        data-tone={didUserPick(game.id, game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
-                        color={didUserPick(game.id, game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
-                        overlap="circular"
-                        badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Spread')}
-                        invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Spread') === 0}
-                      >
-                        <IconButton
-                          color={(isFinal || isLive) ? (hc === true ? 'success' : hc === false ? 'error' : 'inherit') : 'inherit'}
-                          disabled={!isFinal && !isLive}
-                          onClick={() => showDialog(game, game.homeTeam, 'Spread')}
-                          size="small"
-                        >
-                          <PersonIcon />
-                        </IconButton>
-                      </Badge>
-                    </Stack>
-
-                    {/* Postseason O/U row */}
-                    {isPostSeason && game.overUnder != null && (
-                      <Stack data-testid="over-under-controls" direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2.5, px: 1, gap: 1 }}>
-                        <Badge data-testid={`badge-${game.homeTeam}-over`} color={didUserPick(game.id, game.homeTeam, 'Over') ? 'info' : badgeColor(game, game.homeTeam, 'Over')} overlap="circular"
-                          badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Over')}
-                          invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Over') === 0}>
-                          <IconButton size="small"
-                            color={(isFinal || isLive) ? (ov ? 'success' : ov === false ? 'error' : 'inherit') : 'inherit'}
+                          {/* frizat: /code-review caught that gating `disabled` on pickCount === 0 (in
+                              addition to not-decided-yet) flattens this icon's color to MUI's disabled
+                              gray via the `disabled` prop, which erases the win/loss signal for a team
+                              literally nobody in the league picked — the one case the removed shield
+                              icon used to cover on its own, independent of picks. Disabled now tracks
+                              only "not decided yet"; `invisible` above still hides the pick-count bubble
+                              when nobody picked, but the button itself stays colored by outcome. */}
+                          <IconButton
+                            color={(isFinal || isLive) ? (hc === false ? 'success' : hc === true ? 'error' : 'inherit') : 'inherit'}
                             disabled={!isFinal && !isLive}
-                            onClick={() => showDialog(game, game.homeTeam, 'Over')}>
-                            <PersonIcon />
-                          </IconButton>
-                        </Badge>
-                        {/* frizat: /style-guide audit — these were color-coded success/error on top of the
-                            Badge/IconButton pairs on either side already showing the identical win/loss
-                            state (same redundant-signal issue as the shield icon this page dropped
-                            elsewhere). The arrows are just Over/Under labels now; the badges are the signal. */}
-                        <ArrowCircleUpIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
-                        <Typography variant="subtitle1" sx={{ minWidth: 36, textAlign: 'center' }}>{game.overUnder}</Typography>
-                        <ArrowCircleDownIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
-                        <Badge data-testid={`badge-${game.homeTeam}-under`} color={didUserPick(game.id, game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
-                          badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Under')}
-                          invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}>
-                          <IconButton size="small"
-                            color={(isFinal || isLive) ? (!ov ? 'success' : ov === true ? 'error' : 'inherit') : 'inherit'}
-                            disabled={!isFinal && !isLive}
-                            onClick={() => showDialog(game, game.homeTeam, 'Under')}>
+                            onClick={() => showDialog(game, game.awayTeam, 'Spread')}
+                            size="small"
+                          >
                             <PersonIcon />
                           </IconButton>
                         </Badge>
                       </Stack>
-                    )}
 
-                    {/* ScoreTicker deferred — needs GameView-compatible refactor */}
-                  </Paper>
-                </Grid>
-              );
-            })}
-          </>
-        )}
-      </Grid>
+                      {/* Home team pick row */}
+                      <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1.5, px: 1 }}>
+                        <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.homeTeam}</Typography>
+                        <Box sx={{ flexGrow: 1 }} />
+                        <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>
+                        <Badge
+                          data-testid={`badge-${game.homeTeam}-spread`}
+                          data-tone={didUserPick(game.id, game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
+                          color={didUserPick(game.id, game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
+                          overlap="circular"
+                          badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Spread')}
+                          invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Spread') === 0}
+                        >
+                          <IconButton
+                            color={(isFinal || isLive) ? (hc === true ? 'success' : hc === false ? 'error' : 'inherit') : 'inherit'}
+                            disabled={!isFinal && !isLive}
+                            onClick={() => showDialog(game, game.homeTeam, 'Spread')}
+                            size="small"
+                          >
+                            <PersonIcon />
+                          </IconButton>
+                        </Badge>
+                      </Stack>
+
+                      {/* Postseason O/U row */}
+                      {isPostSeason && game.overUnder != null && (
+                        <Stack data-testid="over-under-controls" direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2.5, px: 1, gap: 1 }}>
+                          <Badge data-testid={`badge-${game.homeTeam}-over`} color={didUserPick(game.id, game.homeTeam, 'Over') ? 'info' : badgeColor(game, game.homeTeam, 'Over')} overlap="circular"
+                            badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Over')}
+                            invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Over') === 0}>
+                            <IconButton size="small"
+                              color={(isFinal || isLive) ? (ov ? 'success' : ov === false ? 'error' : 'inherit') : 'inherit'}
+                              disabled={!isFinal && !isLive}
+                              onClick={() => showDialog(game, game.homeTeam, 'Over')}>
+                              <PersonIcon />
+                            </IconButton>
+                          </Badge>
+                          {/* frizat: /style-guide audit — these were color-coded success/error on top of the
+                              Badge/IconButton pairs on either side already showing the identical win/loss
+                              state (same redundant-signal issue as the shield icon this page dropped
+                              elsewhere). The arrows are just Over/Under labels now; the badges are the signal. */}
+                          <ArrowCircleUpIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
+                          <Typography variant="subtitle1" sx={{ minWidth: 36, textAlign: 'center' }}>{game.overUnder}</Typography>
+                          <ArrowCircleDownIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
+                          <Badge data-testid={`badge-${game.homeTeam}-under`} color={didUserPick(game.id, game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
+                            badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Under')}
+                            invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}>
+                            <IconButton size="small"
+                              color={(isFinal || isLive) ? (!ov ? 'success' : ov === true ? 'error' : 'inherit') : 'inherit'}
+                              disabled={!isFinal && !isLive}
+                              onClick={() => showDialog(game, game.homeTeam, 'Under')}>
+                              <PersonIcon />
+                            </IconButton>
+                          </Badge>
+                        </Stack>
+                      )}
+
+                      {/* ScoreTicker deferred — needs GameView-compatible refactor */}
+                    </Paper>
+                  </Grid>
+                );
+              })}
+            </>
+          )}
+        </Grid>
+      )}
 
       {dialogState && (
         <PickDialog
