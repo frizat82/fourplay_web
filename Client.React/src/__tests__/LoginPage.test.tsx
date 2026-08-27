@@ -36,6 +36,22 @@ describe('LoginPage', () => {
     loginMock.mockReset();
   });
 
+  // frizat: a bookmarked/deep-linked visit here previously had no way back to the home page.
+  it('has a way back to home', async () => {
+    renderLogin();
+
+    await userEvent.click(screen.getByRole('button', { name: /back to home/i }));
+
+    expect(navigateMock).toHaveBeenCalledWith('/');
+  });
+
+  // frizat: registration always requires a real invite code/link a commissioner sent — a bare
+  // /account/register link from here (no invite params attached) was a guaranteed dead end.
+  it('has no generic Register link', () => {
+    renderLogin();
+    expect(screen.queryByRole('button', { name: /^register$/i })).not.toBeInTheDocument();
+  });
+
   it('navigates to returnUrl on success', async () => {
     loginMock.mockResolvedValue({ succeeded: true, isLockedOut: false, requiresTwoFactor: false, isNotAllowed: false, accessFailedCount: 0 });
     renderLogin();
