@@ -14,7 +14,7 @@ import {
   computeHomeCovers, computeOverWins,
 } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, PickView, PickType } from './sportAdapter';
-import { revealPicksForStartedGames } from './sportAdapter';
+import { revealPicksForStartedGames, memoizeOnce } from './sportAdapter';
 
 function competitionToGameView(
   competition: Competition,
@@ -106,19 +106,23 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
 }
 
 export function createNflAdapter(): SportAdapter {
-  // undefined = not yet fetched; null = backend couldn't resolve one (e.g. no season configs seeded)
-  let cachedCurrentWeek: Awaited<ReturnType<typeof getNflCurrentWeek>> | null | undefined = undefined;
-
-  // NflCurrentWeekService (backing this) already has a real off-season/pre-season fallback (most
-  // recent completed week, or upcoming Week 1) — mirrors cfbAdapter.ts's getCurrentSlate(). Used
-  // as the fallback when ESPN's live "current" scoreboard has nothing in progress, instead of
-  // `new Date().getFullYear()` — today's real calendar year, not a season with any actual data.
-  async function getCurrentWeek() {
-    if (cachedCurrentWeek === undefined) {
-      cachedCurrentWeek = await getNflCurrentWeek().catch(() => null);
-    }
-    return cachedCurrentWeek;
-  }
+  // The control table (NflSeasonWeekConfigs, via SeasonWindowResolver/NflCurrentWeekService) is
+  // the SOLE source of truth for which week is "current" — mirrors cfbAdapter.ts's
+  // getCurrentSlate(). ESPN's own implicit "current" scoreboard (getScores/loadScoresWithRetry
+  // with no week param) must never be used to decide season/week: it has its own notion of
+  // "current" — e.g. during any gap in play it returns the last-completed event — which can
+  // disagree with the league's actual spread-release schedule. Once resolved here, the specific
+  // week is always fetched by week (getWeekScores), same as historical navigation.
+  //
+  // NflCurrentWeekService NEVER legitimately resolves to "nothing" — it either returns a real
+  // week or throws (e.g. no NflSeasonWeekConfig rows seeded at all, a genuine data-integrity
+  // problem, not a normal state). memoizeOnce doesn't cache a throw, so getNflCurrentWeek()
+  // failing here — for that reason, or a DB/network outage — propagates rather than being
+  // swallowed into a fake empty week: a caught-and-hidden failure previously rendered as an
+  // ordinary "no games this week" page, masking a real outage as normal off-season behavior.
+  // Letting it throw surfaces it through useQuery's isError -> QueryErrorAlert, same as any
+  // other failed fetch.
+  const getCurrentWeek = memoizeOnce(getNflCurrentWeek);
 
   return {
     sport: 'nfl',
@@ -146,28 +150,20 @@ export function createNflAdapter(): SportAdapter {
     },
 
     async currentSeasonYear() {
-      const data = await loadScoresWithRetry();
-      if (data?.season?.year) return data.season.year;
       const current = await getCurrentWeek();
-      return current?.season ?? new Date().getFullYear();
+      return current.season;
     },
 
     // ─── Picks ──────────────────────────────────────────────────────────────
 
     async loadCurrentGames(leagueId, userId) {
-      const data = await loadScoresWithRetry();
-      if (!data?.season || !data.week) {
-        const current = await getCurrentWeek();
-        const season = current?.season ?? new Date().getFullYear();
-        return { season, week: current?.espnWeek ?? 1, isPostSeason: current?.isPostSeason ?? false, games: [], userPicks: [], hasOdds: false, requiredPicks: 4, maxWeek: 1, maxSeason: season };
-      }
-      const postSeason = isPostSeasonHelper(data);
-      const weekNum = data.week.number;
-      const season = data.season.year;
+      const current = await getCurrentWeek();
+      const { season, espnWeek: weekNum, isPostSeason: postSeason } = current;
+      const data = await getWeekScores(weekNum, season, postSeason);
       const nflWeek = getWeekFromEspnWeek(weekNum, postSeason);
       const [picksResult, hasOdds] = await Promise.all([getUserPicks(userId, leagueId, season, nflWeek), doOddsExist(leagueId, season, nflWeek)]);
-      const sc = await buildSpreadCache(data.events ?? [], leagueId, season, nflWeek, hasOdds);
-      const games: GameView[] = (data.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
+      const sc = await buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, hasOdds);
+      const games: GameView[] = (data?.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const userPicks = picksResult.map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       return { season, week: weekNum, isPostSeason: postSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: 18, maxSeason: season };
     },
@@ -199,22 +195,16 @@ export function createNflAdapter(): SportAdapter {
     // ─── Scores ─────────────────────────────────────────────────────────────
 
     async loadCurrentScores(leagueId, userId) {
-      const data = await loadScoresWithRetry();
-      if (!data?.season || !data.week) {
-        const current = await getCurrentWeek();
-        const season = current?.season ?? new Date().getFullYear();
-        return { season, week: current?.espnWeek ?? 1, isPostSeason: current?.isPostSeason ?? false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 4, maxWeek: 1, maxSeason: season };
-      }
-      const postSeason = isPostSeasonHelper(data);
-      const weekNum = data.week.number;
-      const season = data.season.year;
+      const current = await getCurrentWeek();
+      const { season, espnWeek: weekNum, isPostSeason: postSeason } = current;
+      const data = await getWeekScores(weekNum, season, postSeason);
       const nflWeek = getWeekFromEspnWeek(weekNum, postSeason);
       const hasOdds = await doOddsExist(leagueId, season, nflWeek);
-      const sc = await buildSpreadCache(data.events ?? [], leagueId, season, nflWeek, hasOdds);
-      const situationMap = await buildSituationMap(data.events ?? []);
-      const games = (data.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc, situationMap)));
+      const sc = await buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, hasOdds);
+      const situationMap = await buildSituationMap(data?.events ?? []);
+      const games = (data?.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc, situationMap)));
       // Use typed helpers on raw competitions — not string comparison on already-mapped GameView
-      const hasActiveGames = (data.events ?? []).some(ev =>
+      const hasActiveGames = (data?.events ?? []).some(ev =>
         ev.competitions.some(c => isGameStarted(c) && !isGameOver(c))
       );
       const allPicksDtos = await getLeaguePicks(leagueId, season, nflWeek);
