@@ -3,6 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 
+const navigateMock = vi.fn();
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => navigateMock };
+});
+
 vi.mock('../api/auth', () => ({ requestConfirmEmail: vi.fn() }));
 
 import ResendEmailConfirmationPage from '../pages/account/ResendEmailConfirmationPage';
@@ -19,7 +25,19 @@ function renderResend(search = '') {
 
 describe('ResendEmailConfirmationPage', () => {
   beforeEach(() => {
+    navigateMock.mockReset();
     vi.mocked(requestConfirmEmail).mockResolvedValue('If your email is registered, you will receive a confirmation link.');
+  });
+
+  // frizat: this route renders outside AppLayout with no header/nav — without this, a visitor
+  // who didn't want to resend anything had no way out of the page at all.
+  it('has a way back to login without resending anything', async () => {
+    renderResend();
+
+    await userEvent.click(screen.getByRole('button', { name: /back to login/i }));
+
+    expect(navigateMock).toHaveBeenCalledWith('/account/login');
+    expect(requestConfirmEmail).not.toHaveBeenCalled();
   });
 
   it('sends an absolute confirmationUrl built from window.location.origin — not a hardcoded relative path', async () => {
