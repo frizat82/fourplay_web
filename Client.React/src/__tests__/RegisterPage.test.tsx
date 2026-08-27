@@ -36,6 +36,20 @@ describe('RegisterPage — invite link flow', () => {
     vi.mocked(createUser).mockResolvedValue({ isSuccess: true, userId: 'new-user-1', errors: [] });
   });
 
+  // frizat: this route renders outside AppLayout with no header/nav, and standalone PWA mode has
+  // no browser chrome to fall back on — without these, a visitor who opened this from a stale
+  // invite and changes their mind has no way out of the page at all.
+  it('has a link back to Home and a link to Login — no dead end', async () => {
+    const user = userEvent.setup();
+    renderWithSearch('');
+
+    await user.click(screen.getByRole('button', { name: /back to home/i }));
+    expect(navigateMock).toHaveBeenCalledWith('/');
+
+    await user.click(screen.getByRole('button', { name: /already have an account/i }));
+    expect(navigateMock).toHaveBeenCalledWith('/account/login');
+  });
+
   it('hides Invitation Code field when inviteLinkToken is in the URL', () => {
     renderWithSearch('?inviteLinkToken=abc123&returnUrl=/join/abc123');
     expect(screen.queryByLabelText(/invitation code/i)).not.toBeInTheDocument();
