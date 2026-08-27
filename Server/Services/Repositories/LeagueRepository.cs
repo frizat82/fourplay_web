@@ -444,13 +444,18 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
 
     public async Task<bool> LeagueExistsAsync(string leagueName, int season) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
+        // Case-insensitive: .ToLower() on both sides translates identically on SQLite (unit
+        // tests) and Npgsql (prod), unlike Npgsql-only EF.Functions.ILike, which would throw on
+        // a SQLite-backed test — see CLAUDE.md's EF Core provider-translation gotcha.
+        var normalized = leagueName.ToLower();
         return await db.LeagueJuiceMapping
-            .AnyAsync(ljm => ljm.League.LeagueName == leagueName && ljm.Season == season);
+            .AnyAsync(ljm => ljm.League.LeagueName.ToLower() == normalized && ljm.Season == season);
     }
     public async Task<bool> LeagueExistsAsync(string leagueName) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
+        var normalized = leagueName.ToLower();
         return await db.LeagueInfo
-            .AnyAsync(ljm => ljm.LeagueName == leagueName);
+            .AnyAsync(ljm => ljm.LeagueName.ToLower() == normalized);
     }
 
     public async Task<bool> UserExistsInLeagueAsync(string userId, int leagueId) {
