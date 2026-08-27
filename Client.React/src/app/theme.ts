@@ -17,11 +17,16 @@ export function createAppTheme(mode: 'light' | 'dark') {
   return createTheme({
   palette: {
     mode,
-    // Professional dark navy primary with vibrant sports orange accent
+    // Professional dark navy primary with vibrant sports orange accent.
+    // Dark mode previously reused the exact same blue as `info` (#3b82f6) — every plain
+    // default-colored button (Save, Create, Change Password, etc.) rendered pixel-identical to
+    // an `info`-colored "available to pick" button, even though they mean different things.
+    // Indigo keeps primary in the same cool "structural" family without colliding with info's
+    // vivid sky-blue.
     primary: {
-      main: isDark ? '#3b82f6' : '#1a2847',
-      dark: isDark ? '#2563eb' : '#0f1729',
-      light: isDark ? '#60a5fa' : '#2a3d5f',
+      main: isDark ? '#6366f1' : '#1a2847',
+      dark: isDark ? '#4f46e5' : '#0f1729',
+      light: isDark ? '#818cf8' : '#2a3d5f',
       contrastText: '#FFFFFF',
     },
     secondary: {
