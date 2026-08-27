@@ -109,6 +109,16 @@ export default function RegisterPage() {
 
   return (
     <Stack spacing={3} sx={{ maxWidth: 640, margin: '0 auto', paddingTop: 6 }}>
+      {/* frizat: standalone PWA mode has no browser chrome to fall back on — this route renders
+          outside AppLayout (no header/nav), so without an explicit link back, a visitor who
+          opened this from a stale/reused invite and changes their mind has no way out. */}
+      <Button
+        variant="text"
+        onClick={() => navigate('/')}
+        sx={{ alignSelf: 'flex-start', opacity: 0.75 }}
+      >
+        ← Back to Home
+      </Button>
       <Typography variant="h4">Register</Typography>
       {leagueName && (
         <Alert severity="info">
@@ -163,6 +173,9 @@ export default function RegisterPage() {
       <Typography variant="body2" color="text.secondary">
         Need an invitation? This site is invite-only. Please contact an administrator to request an invitation.
       </Typography>
+      <Button variant="text" onClick={() => navigate('/account/login')} sx={{ alignSelf: 'center' }}>
+        Already have an account? Log in
+      </Button>
     </Stack>
   );
 }

@@ -36,6 +36,13 @@ describe('LoginPage', () => {
     loginMock.mockReset();
   });
 
+  // frizat: registration always requires a real invite code/link a commissioner sent — a bare
+  // /account/register link from here (no invite params attached) was a guaranteed dead end.
+  it('has no generic Register link', () => {
+    renderLogin();
+    expect(screen.queryByRole('button', { name: /^register$/i })).not.toBeInTheDocument();
+  });
+
   it('navigates to returnUrl on success', async () => {
     loginMock.mockResolvedValue({ succeeded: true, isLockedOut: false, requiresTwoFactor: false, isNotAllowed: false, accessFailedCount: 0 });
     renderLogin();

@@ -4,6 +4,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SportsTennisIcon from '@mui/icons-material/SportsTennis';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import LoginIcon from '@mui/icons-material/Login';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import { Link as RouterLink } from 'react-router-dom';
 import { useState } from 'react';
@@ -54,13 +55,15 @@ export default function HomePage({ adapter }: HomePageProps) {
     <div>
       <Container maxWidth={false} className="hero-section" sx={{ py: 6 }}>
         <Container maxWidth="lg" className="hero-content">
+          {/* frizat: no generic "Register" link here — registration always requires a real
+              invite code/link a commissioner sent, so a bare /account/register link (with no
+              invite params attached) was a guaranteed dead end for any visitor without one
+              already in hand. The "Got an Invite? You're Ready" section below is the honest,
+              invite-gated equivalent for someone who has a code to type in manually. */}
           {!isAuthed && (
             <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mb: 2 }}>
-              <Button variant="text" component={RouterLink} to="/account/login" className="hero-auth-link">
+              <Button variant="outlined" component={RouterLink} to="/account/login" className="hero-auth-link">
                 Login
-              </Button>
-              <Button variant="outlined" component={RouterLink} to="/account/register" className="hero-auth-link">
-                Register
               </Button>
             </Stack>
           )}
@@ -99,11 +102,11 @@ export default function HomePage({ adapter }: HomePageProps) {
                     size="large"
                     color="secondary"
                     className="hero-primary-btn"
-                    startIcon={isAuthed ? <SportsTennisIcon /> : <PersonAddIcon />}
+                    startIcon={isAuthed ? <SportsTennisIcon /> : <LoginIcon />}
                     component={RouterLink}
-                    to={isAuthed ? '/picks' : '/account/register'}
+                    to={isAuthed ? '/picks' : '/account/login'}
                   >
-                    {isAuthed ? 'Make Picks' : 'Register with Invite'}
+                    {isAuthed ? 'Make Picks' : 'Login'}
                   </Button>
                   <Button
                     variant="outlined"
