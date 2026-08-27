@@ -452,4 +452,36 @@ public class LeagueRepositoryTests
         var league = await db.LeagueInfo.SingleAsync(l => l.Id == 1);
         Assert.Equal("new-owner", league.OwnerUserId); // not reverted by the stale snapshot
     }
+
+    // ── LeagueExistsAsync ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task LeagueExistsAsync_ByNameOnly_IsCaseInsensitive() {
+        var factory = new DbContextFactoryStub(nameof(LeagueExistsAsync_ByNameOnly_IsCaseInsensitive));
+        var seedDb = factory.CreateDbContext();
+        seedDb.LeagueInfo.Add(new LeagueInfo { LeagueName = "Office League", OwnerUserId = "owner-1" });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+
+        Assert.True(await repo.LeagueExistsAsync("office league"));
+        Assert.True(await repo.LeagueExistsAsync("OFFICE LEAGUE"));
+        Assert.False(await repo.LeagueExistsAsync("A Totally Different League"));
+    }
+
+    [Fact]
+    public async Task LeagueExistsAsync_ByNameAndSeason_IsCaseInsensitive() {
+        var factory = new DbContextFactoryStub(nameof(LeagueExistsAsync_ByNameAndSeason_IsCaseInsensitive));
+        var seedDb = factory.CreateDbContext();
+        var league = new LeagueInfo { LeagueName = "Office League", OwnerUserId = "owner-1" };
+        seedDb.LeagueInfo.Add(league);
+        await seedDb.SaveChangesAsync();
+        seedDb.LeagueJuiceMapping.Add(new LeagueJuiceMapping { LeagueId = league.Id, Season = 2026, Juice = 13 });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+
+        Assert.True(await repo.LeagueExistsAsync("office league", 2026));
+        Assert.False(await repo.LeagueExistsAsync("office league", 2025));
+    }
 }
