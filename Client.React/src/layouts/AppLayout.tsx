@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
   Box,
@@ -81,6 +81,7 @@ export default function AppLayout() {
   const { user } = useAuth();
   const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const getOtherSportUrl = () => {
     const { hostname, port, protocol } = window.location;
@@ -104,7 +105,13 @@ export default function AppLayout() {
   const hasCurrent = isCfb ? hasCfbAccess : hasNflAccess;
   const hasOther = isCfb ? hasNflAccess : hasCfbAccess;
   const otherSport = isCfb ? 'NFL' : 'CFB';
-  const noAccessContent = leaguesLoaded && currentLeague === null && !hasCurrent ? (
+  // frizat: League Portal is exempt — it's the one page that already handles "no leagues yet"
+  // correctly (a "Create League" empty state, since creating a league needs no prior access).
+  // Without this, a user with only NFL leagues could never reach League Portal on the CFB site
+  // to create their first CFB league at all — the "no access" block replaced every routed page,
+  // including the one page designed to get them out of that exact state.
+  const isLeaguePortalRoute = location.pathname.startsWith('/league/manage');
+  const noAccessContent = !isLeaguePortalRoute && leaguesLoaded && currentLeague === null && !hasCurrent ? (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', textAlign: 'center', p: 4 }}>
       <Typography variant="h5" fontWeight={700} gutterBottom>
         No {isCfb ? 'CFB' : 'NFL'} access
