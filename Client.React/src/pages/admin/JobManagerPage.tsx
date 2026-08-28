@@ -146,6 +146,7 @@ export default function AdminJobManagerPage() {
             <TableHead>
               <TableRow>
                 <TableCell sx={stickyColumnSx}>Job Name</TableCell>
+                <TableCell>League</TableCell>
                 <TableCell>Description</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Next Run</TableCell>
@@ -157,13 +158,14 @@ export default function AdminJobManagerPage() {
               {[...jobsByCategory.entries()].map(([category, categoryJobs]) => (
                 <Fragment key={category}>
                   <TableRow>
-                    <TableCell colSpan={6} sx={{ bgcolor: 'action.hover', fontWeight: 600 }}>
+                    <TableCell colSpan={7} sx={{ bgcolor: 'action.hover', fontWeight: 600 }}>
                       {category}
                     </TableCell>
                   </TableRow>
                   {categoryJobs.map((job) => (
                     <TableRow key={job.jobName}>
                       <TableCell sx={stickyColumnSx}>{job.jobName}</TableCell>
+                      <TableCell>{job.leagueName ?? '—'}</TableCell>
                       <TableCell>{job.description}</TableCell>
                       <TableCell>
                         <Chip size="small" label={job.status} color={getStatusColor(job.status)} />
@@ -179,7 +181,7 @@ export default function AdminJobManagerPage() {
               ))}
               {visibleJobs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">No jobs to show.</TableCell>
+                  <TableCell colSpan={7} align="center">No jobs to show.</TableCell>
                 </TableRow>
               )}
             </TableBody>

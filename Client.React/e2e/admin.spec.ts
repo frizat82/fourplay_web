@@ -27,7 +27,8 @@ test.describe('Admin pages (administrator role)', () => {
     await page.getByLabel(/show background jobs/i).click();
 
     await expect(page.getByText('Juice Reminder 6-2026')).toBeVisible();
-    await expect(page.getByText('Remind "Sunday Funday" owner to configure Juice for season 2026')).toBeVisible();
+    await expect(page.getByText('Remind league 6 owner to configure Juice for season 2026')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Sunday Funday' })).toBeVisible();
   });
 
   // -----------------------------------------------------------------------

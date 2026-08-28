@@ -318,7 +318,7 @@ public class JobManagerControllerTests
     // JobCategoryClassifier) let the admin UI group jobs and hide the noisy per-league/per-week set.
 
     [Fact]
-    public async Task GetAllJobsStatusAsync_JuiceReminderJob_DescriptionUsesLeagueName()
+    public async Task GetAllJobsStatusAsync_JuiceReminderJob_ResolvesLeagueIdToName()
     {
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
         leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo> {
@@ -331,16 +331,18 @@ public class JobManagerControllerTests
         var result = await controller.GetAllJobsStatusAsync();
 
         var job = Assert.Single(result);
-        Assert.Equal("Remind \"Sunday Funday\" owner to configure Juice for season 2026", job.Description);
+        Assert.Equal("Remind league 6 owner to configure Juice for season 2026", job.Description);
+        Assert.Equal(6, job.LeagueId);
+        Assert.Equal("Sunday Funday", job.LeagueName);
         Assert.Equal("Juice", job.Category);
         Assert.True(job.IsDynamic);
     }
 
     [Fact]
-    public async Task GetAllJobsStatusAsync_JuiceReminderJob_UnknownLeagueId_DescriptionUnchanged()
+    public async Task GetAllJobsStatusAsync_JuiceReminderJob_UnknownLeagueId_LeagueNameIsNull()
     {
         // League was deleted (frizat-ugs pruning) or its data hasn't been fetched yet — must not
-        // throw or produce a mangled description, just fall back to the raw text.
+        // throw, just leave LeagueName unresolved.
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
         leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo>());
         SetupJobOfType<LeagueJuiceReminderJob>(scheduler, "Juice Reminder 6-2026",
@@ -350,7 +352,22 @@ public class JobManagerControllerTests
         var result = await controller.GetAllJobsStatusAsync();
 
         var job = Assert.Single(result);
-        Assert.Equal("Remind league 6 owner to configure Juice for season 2026", job.Description);
+        Assert.Equal(6, job.LeagueId);
+        Assert.Null(job.LeagueName);
+    }
+
+    // frizat: GetNextSpreadJobAsync (below) is [Authorize]-only, no admin role — it's on the hot
+    // path for every logged-in user's picks page via SpreadRelease.tsx. GetAllJobsStatusAsync must
+    // not pay for the league join when nothing in the batch actually references a league.
+    [Fact]
+    public async Task GetAllJobsStatusAsync_NoJobReferencesALeague_NeverCallsLeagueRepo()
+    {
+        var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
+        SetupJobOfType<UserManagerJob>(scheduler, "User Manager", "Manages initial user admin");
+
+        await controller.GetAllJobsStatusAsync();
+
+        await leagueRepo.DidNotReceive().GetAllLeaguesAsync();
     }
 
     [Fact]
