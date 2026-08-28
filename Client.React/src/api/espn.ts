@@ -34,25 +34,17 @@ export async function loadScoresWithRetry(maxRetries = 5, delayMs = 500): Promis
   return retryUntilEvents(getScores, maxRetries, delayMs);
 }
 
-/** Cached live CFB scores for the CURRENT slate — same role as getScores() for NFL. */
-export async function getCfbScores(): Promise<EspnScores | null> {
-  const { data } = await http.get<EspnScores>('/api/espn/cfb/scores');
-  return data ?? null;
-}
-
-export async function loadCfbScoresWithRetry(maxRetries = 5, delayMs = 500): Promise<EspnScores | null> {
-  return retryUntilEvents(getCfbScores, maxRetries, delayMs);
-}
-
-/** Direct/uncached live CFB scores for a SPECIFIC (typically non-current) slate — same role as getWeekScores() for NFL. */
+/** Live CFB scores for a specific slate, keyed by the control-table-resolved slate id — same role
+ * as getWeekScores() for NFL. Used for both current and historical slates; there is no separate
+ * "implicit current" CFB scoreboard call (see cfbAdapter.ts's fetchCfbEspnData). */
 export async function getCfbScoresForSlate(slateId: number): Promise<EspnScores | null> {
   const { data } = await http.get<EspnScores>(`/api/espn/cfb/scores/slate/${slateId}`);
   return data ?? null;
 }
 
-export async function getWeekScores(week: number, year: number, postSeason = false) {
+export async function getWeekScores(week: number, year: number, postSeason = false): Promise<EspnScores | null> {
   const { data } = await http.get<EspnScores>(`/api/espn/scores/week/${week}/${year}`, {
     params: { postSeason },
   });
-  return data;
+  return data ?? null;
 }

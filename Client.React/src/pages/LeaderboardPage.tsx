@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   CardContent,
-  CircularProgress,
   Grid,
   MenuItem,
   Select,
@@ -22,6 +21,7 @@ import {
 import IosShareIcon from '@mui/icons-material/IosShare';
 import PageHeader from '../components/PageHeader';
 import ShareableStandingsCard from '../components/ShareableStandingsCard';
+import LeaderboardSkeleton from '../components/LeaderboardSkeleton';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { getLeaderboard } from '../api/leaderboard';
@@ -218,9 +218,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
     return (
       <Box>
         <PageHeader title="Leaderboard" />
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-          <CircularProgress />
-        </Box>
+        <LeaderboardSkeleton />
       </Box>
     );
   }

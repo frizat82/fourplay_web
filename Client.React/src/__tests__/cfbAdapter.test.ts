@@ -15,13 +15,12 @@ vi.mock('../api/cfb', () => ({
 }));
 
 vi.mock('../api/espn', () => ({
-  loadCfbScoresWithRetry: vi.fn(),
   getCfbScoresForSlate: vi.fn(),
   getCfbLiveGames: vi.fn(),
 }));
 
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, addCfbPicks } from '../api/cfb';
-import { loadCfbScoresWithRetry, getCfbLiveGames } from '../api/espn';
+import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
   id: 10, season: 2026, slateNumber: 8, label: 'Week 8',
@@ -71,7 +70,7 @@ describe('cfbAdapter', () => {
     it('maps CfbSpreadDto + ESPN live data to GameView[]', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(espnFinalGame);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(espnFinalGame);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -93,7 +92,7 @@ describe('cfbAdapter', () => {
     it('always sets hasOdds=true when spreads exist', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(null);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(null);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -103,7 +102,7 @@ describe('cfbAdapter', () => {
     it('sets hasOdds=false when no spreads exist', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([]);
-      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(null);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(null);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -117,7 +116,7 @@ describe('cfbAdapter', () => {
       };
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(espnFinalGame);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(espnFinalGame);
       vi.mocked(getCfbUserPicks).mockResolvedValue([pick]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -138,7 +137,7 @@ describe('cfbAdapter', () => {
       };
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(espnFinalGame);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(espnFinalGame);
       vi.mocked(getCfbUserPicks).mockResolvedValue([pick]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -150,7 +149,7 @@ describe('cfbAdapter', () => {
     it('derives WeekState from slate slateNumber', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]); // slateNumber=8
       vi.mocked(getCfbSpreads).mockResolvedValue([]);
-      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue(null);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(null);
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
@@ -162,7 +161,7 @@ describe('cfbAdapter', () => {
     it('game shows scheduled when ESPN has no matching event', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
-      vi.mocked(loadCfbScoresWithRetry).mockResolvedValue({ leagues: [], season: { year: 2026, type: 2 }, week: { number: 8 }, events: [] });
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue({ leagues: [], season: { year: 2026, type: 2 }, week: { number: 8 }, events: [] });
       vi.mocked(getCfbUserPicks).mockResolvedValue([]);
 
       const result = await adapter.loadCurrentGames(1, 'user1');
