@@ -8,16 +8,32 @@ public class GameHelpersTests
     // ─── GetWeekFromEspnWeek ───────────────────────────────────────────────────
 
     [Theory]
-    [InlineData(1, false, 1)]
-    [InlineData(5, false, 5)]
-    [InlineData(18, false, 18)]
-    [InlineData(1, true, 19)]
-    [InlineData(2, true, 20)]
-    [InlineData(3, true, 21)]
-    [InlineData(4, true, 22)]
-    public void GetWeekFromEspnWeek_ReturnsCorrectWeek(int espnWeek, bool isPostSeason, int expected)
+    [InlineData(1, 2025, false, 1)]
+    [InlineData(5, 2025, false, 5)]
+    [InlineData(18, 2025, false, 18)]
+    [InlineData(1, 2025, true, 19)]
+    [InlineData(2, 2025, true, 20)]
+    [InlineData(3, 2025, true, 21)]
+    [InlineData(4, 2025, true, 22)]
+    // frizat: through the 2025 season, 5 was ESPN's own raw Super Bowl week number (it skipped
+    // week 4 = Pro Bowl) — some callers (NFLScoresJob) used to pre-adjust 5->4 before calling
+    // this; that's no longer necessary now that the season gate below handles it directly.
+    [InlineData(5, 2025, true, 22)]
+    // frizat: the NFL discontinued the Pro Bowl GAME starting with the 2026 season (announced
+    // 2026-08-26, see docs/ESPNProBowl.md) — no gap expected in ESPN's postseason numbering from
+    // here on, so week=4 (not 5) is expected to be the Super Bowl going forward. TODO: verify
+    // against a real ESPN response once the 2026 postseason bracket actually exists (~Jan 2027).
+    [InlineData(1, 2026, true, 19)]
+    [InlineData(2, 2026, true, 20)]
+    [InlineData(3, 2026, true, 21)]
+    [InlineData(4, 2026, true, 22)]
+    // A raw week=5 postseason response for 2026+ is NOT remapped to 22 — it's expected to be
+    // unreachable under the "gap closed" assumption, and if the assumption is wrong this should
+    // fail loudly (a nonexistent WeekId 23) rather than silently coincide with the right answer.
+    [InlineData(5, 2026, true, 23)]
+    public void GetWeekFromEspnWeek_ReturnsCorrectWeek(int espnWeek, int season, bool isPostSeason, int expected)
     {
-        Assert.Equal(expected, GameHelpers.GetWeekFromEspnWeek(espnWeek, isPostSeason));
+        Assert.Equal(expected, GameHelpers.GetWeekFromEspnWeek(espnWeek, season, isPostSeason));
     }
 
     // ─── GetWeekName ──────────────────────────────────────────────────────────
