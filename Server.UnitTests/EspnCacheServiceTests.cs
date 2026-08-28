@@ -220,6 +220,16 @@ public class EspnCacheServiceTests
             new() {
                 Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = "PostSeason", ScoringFormat = "Standard",
                 WeekStartDatetime = new DateTime(2026, 1, 8), WeekEndDatetime = new DateTime(2026, 1, 12),
+                SpreadLockDatetime = new DateTime(2026, 1, 8),
+            },
+            // A later (still real-world-past) week the resolver treats as "current" — without
+            // this, the Wild Card row above would trivially resolve as its own "current" week
+            // (nothing else to compare against), exempting it from the DB-first shortcut this
+            // test exists to verify.
+            new() {
+                Season = 2025, WeekId = 20, WeekLabel = "Divisional", WeekType = "PostSeason", ScoringFormat = "Standard",
+                WeekStartDatetime = new DateTime(2026, 1, 15), WeekEndDatetime = new DateTime(2026, 1, 19),
+                SpreadLockDatetime = new DateTime(2026, 1, 15),
             },
         });
 
@@ -233,6 +243,37 @@ public class EspnCacheServiceTests
         Assert.Equal(27, home.Score);
         Assert.Equal(TypeName.StatusFinal, comp.Status.Type.Name);
         await _espnApi.DidNotReceiveWithAnyArgs().GetWeekScores(default, default, default);
+    }
+
+    // frizat: nflAdapter.ts's current-week path now always calls this endpoint for whichever
+    // week the control table (SeasonWindowResolver) resolves as current — that week must always
+    // be live-fetched, even if its own calendar window looks "ended" and persisted rows exist,
+    // or the demo's frozen in-progress fixture data never surfaces for it (this exact regression
+    // broke NFL demo e2e tests before this exemption was added).
+    [Fact]
+    public async Task GetWeekScoresAsync_WhenWeekIsTheResolvedCurrentWeek_AlwaysCallsEspn_EvenWithPersistedRowsAndEndedWindow()
+    {
+        var rows = new List<Shared.Models.Data.NflScores> {
+            new() { Id = 1, Season = 2025, NflWeek = 19, HomeTeam = "KC", AwayTeam = "DEN", HomeTeamScore = 27, AwayTeamScore = 20, GameTime = new DateTimeOffset(2026, 1, 10, 18, 0, 0, TimeSpan.Zero) },
+        };
+        _leagueRepo.GetNflScoresAsync(2025, 19).Returns(rows);
+        // Only one config row — with nothing else to compare against, the resolver trivially
+        // treats it as "current" even though its window is long past.
+        _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<Models.Data.NflSeasonWeekConfig> {
+            new() {
+                Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = "PostSeason", ScoringFormat = "Standard",
+                WeekStartDatetime = new DateTime(2026, 1, 8), WeekEndDatetime = new DateTime(2026, 1, 12),
+                SpreadLockDatetime = new DateTime(2026, 1, 8),
+            },
+        });
+        var espnScores = new EspnScores { Season = new Season { Year = 2025 } };
+        _espnApi.GetWeekScores(1, 2025, true).Returns(Task.FromResult<EspnScores?>(espnScores));
+
+        await using var svc = new EspnCacheService(_espnApi, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
+        var result = await svc.GetWeekScoresAsync(1, 2025, postSeason: true);
+
+        Assert.Same(espnScores, result);
+        await _espnApi.Received(1).GetWeekScores(1, 2025, true);
     }
 
     [Fact]
@@ -260,10 +301,19 @@ public class EspnCacheServiceTests
             new() { Id = 1, Season = 2025, NflWeek = 1, HomeTeam = "KC", AwayTeam = "DEN", HomeTeamScore = 27, AwayTeamScore = 20, GameTime = new DateTimeOffset(2025, 9, 10, 18, 0, 0, TimeSpan.Zero) },
         };
         _leagueRepo.GetNflScoresAsync(2025, 1).Returns(rows);
+        // A later (still real-world-past) week the resolver treats as "current" — without this,
+        // the Week 1 row below would trivially resolve as its own "current" week (nothing else
+        // to compare against), exempting it from the DB-first shortcut this test exists to verify.
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<Models.Data.NflSeasonWeekConfig> {
             new() {
                 Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "RegularSeason", ScoringFormat = "Standard",
                 WeekStartDatetime = new DateTime(2025, 9, 4), WeekEndDatetime = new DateTime(2025, 9, 15),
+                SpreadLockDatetime = new DateTime(2025, 9, 4),
+            },
+            new() {
+                Season = 2025, WeekId = 2, WeekLabel = "Week 2", WeekType = "RegularSeason", ScoringFormat = "Standard",
+                WeekStartDatetime = new DateTime(2025, 9, 11), WeekEndDatetime = new DateTime(2025, 9, 22),
+                SpreadLockDatetime = new DateTime(2025, 9, 18),
             },
         });
 

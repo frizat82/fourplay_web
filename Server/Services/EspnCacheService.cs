@@ -67,11 +67,28 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, postSeason);
         var configs = await _leagueRepository.GetNflSeasonWeekConfigsAsync();
         var matchingConfig = configs.FirstOrDefault(c => c.Season == year && c.WeekId == nflWeek);
+
+        // The control-table-resolved CURRENT week is always live-fetched, even if its own
+        // calendar window already looks "ended" by the 6-hour buffer below —
+        // SeasonWindowResolver can legitimately keep an old window as "current" well past its
+        // nominal end (e.g. the off-season bootstrap case: showing last season's Super Bowl
+        // until 2 days before the next season's first spread grab), and the frontend's
+        // current-week path (nflAdapter.ts) now always calls this endpoint for that resolved
+        // week. Skipping this check would silently serve the "genuinely historical" DB-final-
+        // score reconstruction below (no live situation/clock data) for the week the UI is
+        // actively treating as current, instead of its real live/final ESPN state.
+        var windows = configs.Select(c => new SeasonWindowResolver.WeekWindow(c.Season, c.WeekStartDatetime, c.WeekEndDatetime, c.SpreadLockDatetime));
+        var resolvedCurrent = SeasonWindowResolver.ResolveCurrentWeek(windows, DateTime.UtcNow);
+        var isResolvedCurrentWeek = matchingConfig is not null && resolvedCurrent is not null
+            && resolvedCurrent.Value.Season == matchingConfig.Season
+            && resolvedCurrent.Value.Start == matchingConfig.WeekStartDatetime
+            && resolvedCurrent.Value.End == matchingConfig.WeekEndDatetime;
+
         // 6-hour buffer past the configured end, mirroring CfbLiveScoreFetcher's identical
         // safety margin — this now gets cached forever once true, so a week whose config end
         // time turns out to be a little too tight against its actual last kickoff shouldn't
         // permanently freeze a still-in-progress game out of every future response.
-        var weekHasEnded = matchingConfig is not null && matchingConfig.WeekEndDatetime.AddHours(6) < DateTime.UtcNow;
+        var weekHasEnded = !isResolvedCurrentWeek && matchingConfig is not null && matchingConfig.WeekEndDatetime.AddHours(6) < DateTime.UtcNow;
 
         if (weekHasEnded) {
             var rows = await _leagueRepository.GetNflScoresAsync(year, nflWeek);

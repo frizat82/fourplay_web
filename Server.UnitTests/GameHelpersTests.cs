@@ -15,6 +15,11 @@ public class GameHelpersTests
     [InlineData(2, true, 20)]
     [InlineData(3, true, 21)]
     [InlineData(4, true, 22)]
+    // frizat: 5 is ESPN's own raw Super Bowl week number (it skips week 4 = Pro Bowl) — some
+    // callers (NFLScoresJob) pre-adjust 5->4 before calling this; others (EspnCacheService/
+    // DemoEspnCacheService.GetWeekScoresAsync) pass the raw ESPN week straight from a
+    // NflCurrentWeekDto and need it to resolve to the same WeekId 22 as the pre-adjusted form.
+    [InlineData(5, true, 22)]
     public void GetWeekFromEspnWeek_ReturnsCorrectWeek(int espnWeek, bool isPostSeason, int expected)
     {
         Assert.Equal(expected, GameHelpers.GetWeekFromEspnWeek(espnWeek, isPostSeason));
