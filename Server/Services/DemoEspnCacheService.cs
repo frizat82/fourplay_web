@@ -48,7 +48,7 @@ public class DemoEspnCacheService : IEspnCacheService
     // constructor-injecting the Scoped INflCurrentWeekService into this Singleton.
     public async Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false)
     {
-        var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, postSeason);
+        var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, year, postSeason);
 
         await using var db = await _dbContextFactory.CreateDbContextAsync();
 
