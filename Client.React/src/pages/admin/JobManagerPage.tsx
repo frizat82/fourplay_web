@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
   CircularProgress,
+  FormControlLabel,
   Grid,
   Paper,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -27,7 +29,29 @@ export default function AdminJobManagerPage() {
   const [jobs, setJobs] = useState<JobStatusResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [jobRunning, setJobRunning] = useState(false);
+  // Default hidden: the per-league/per-week jobs TimedTriggerScheduler registers dynamically
+  // (Juice Reminder/Lock, NFL/CFB Spreads) can easily outnumber the fixed scheduler/cron jobs,
+  // which is what made this table "hard to read" in the first place.
+  const [showDynamic, setShowDynamic] = useState(false);
   const toast = useToast();
+
+  const visibleJobs = useMemo(
+    () => (showDynamic ? jobs : jobs.filter((j) => !j.isDynamic)),
+    [jobs, showDynamic],
+  );
+  const dynamicJobCount = useMemo(() => jobs.filter((j) => j.isDynamic).length, [jobs]);
+
+  // Backend already returns jobs ordered by Category then JobName — group in that order rather
+  // than re-sorting, so category order stays server-controlled in one place.
+  const jobsByCategory = useMemo(() => {
+    const grouped = new Map<string, JobStatusResponse[]>();
+    for (const job of visibleJobs) {
+      const existing = grouped.get(job.category);
+      if (existing) existing.push(job);
+      else grouped.set(job.category, [job]);
+    }
+    return grouped;
+  }, [visibleJobs]);
 
   const loadJobs = async () => {
     setLoading(true);
@@ -104,9 +128,15 @@ export default function AdminJobManagerPage() {
       </Paper>
 
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" align="center" sx={{ mb: 2 }}>
-          Scheduled Jobs
-        </Typography>
+        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1} sx={{ mb: 2 }}>
+          <Typography variant="h6">Scheduled Jobs</Typography>
+          {dynamicJobCount > 0 && (
+            <FormControlLabel
+              control={<Switch checked={showDynamic} onChange={(e) => setShowDynamic(e.target.checked)} size="small" />}
+              label={`Show background jobs (${dynamicJobCount})`}
+            />
+          )}
+        </Stack>
         {loading ? (
           <Stack alignItems="center">
             <CircularProgress />
@@ -116,6 +146,7 @@ export default function AdminJobManagerPage() {
             <TableHead>
               <TableRow>
                 <TableCell sx={stickyColumnSx}>Job Name</TableCell>
+                <TableCell>League</TableCell>
                 <TableCell>Description</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Next Run</TableCell>
@@ -124,20 +155,35 @@ export default function AdminJobManagerPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {jobs.map((job) => (
-                <TableRow key={job.jobName}>
-                  <TableCell sx={stickyColumnSx}>{job.jobName}</TableCell>
-                  <TableCell>{job.description}</TableCell>
-                  <TableCell>
-                    <Chip size="small" label={job.status} color={getStatusColor(job.status)} />
-                  </TableCell>
-                  <TableCell>{job.nextRun ? new Date(job.nextRun).toLocaleString() : 'Not scheduled'}</TableCell>
-                  <TableCell sx={{ color: job.lastFailedUtc && (!job.lastSucceededUtc || new Date(job.lastFailedUtc) > new Date(job.lastSucceededUtc)) ? 'error.main' : 'inherit' }}>
-                    {job.lastSucceededUtc ? new Date(job.lastSucceededUtc).toLocaleString() : 'Never'}
-                  </TableCell>
-                  <TableCell>{job.lastMessage || '—'}</TableCell>
-                </TableRow>
+              {[...jobsByCategory.entries()].map(([category, categoryJobs]) => (
+                <Fragment key={category}>
+                  <TableRow>
+                    <TableCell colSpan={7} sx={{ bgcolor: 'action.hover', fontWeight: 600 }}>
+                      {category}
+                    </TableCell>
+                  </TableRow>
+                  {categoryJobs.map((job) => (
+                    <TableRow key={job.jobName}>
+                      <TableCell sx={stickyColumnSx}>{job.jobName}</TableCell>
+                      <TableCell>{job.leagueName ?? '—'}</TableCell>
+                      <TableCell>{job.description}</TableCell>
+                      <TableCell>
+                        <Chip size="small" label={job.status} color={getStatusColor(job.status)} />
+                      </TableCell>
+                      <TableCell>{job.nextRun ? new Date(job.nextRun).toLocaleString() : 'Not scheduled'}</TableCell>
+                      <TableCell sx={{ color: job.lastFailedUtc && (!job.lastSucceededUtc || new Date(job.lastFailedUtc) > new Date(job.lastSucceededUtc)) ? 'error.main' : 'inherit' }}>
+                        {job.lastSucceededUtc ? new Date(job.lastSucceededUtc).toLocaleString() : 'Never'}
+                      </TableCell>
+                      <TableCell>{job.lastMessage || '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
               ))}
+              {visibleJobs.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} align="center">No jobs to show.</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table></Box>
         )}

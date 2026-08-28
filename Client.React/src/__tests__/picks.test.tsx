@@ -114,7 +114,7 @@ const renderWithClient = (ui: React.ReactElement) => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return { ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>), queryClient: client };
 };
 
 const renderPage = async () => {
@@ -421,7 +421,48 @@ describe('PicksPage', () => {
   it('postseason week 4 displays super bowl title', async () => {
     await setupDefaults({ week: 4, postSeason: true });
     await renderPage();
-    expect(screen.getAllByText(/Super Bowl/i).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getAllByText(/Super Bowl/i).length).toBeGreaterThan(0));
+  });
+
+  // frizat: mirrors the equivalent ScoresPage test — same isPlaceholderData fix, same regression
+  // (Previous/Next navigation "freezing" on the old week's stale content with no loading signal).
+  it('shows the skeleton, not a frozen stale week, while navigating to a previous week', async () => {
+    await setupDefaults({ week: 3 });
+    await renderPage();
+    await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
+
+    let resolveHistorical!: (value: Awaited<ReturnType<typeof getWeekScores>>) => void;
+    mockedGetWeekScores.mockImplementationOnce(() => new Promise(resolve => { resolveHistorical = resolve; }));
+
+    await userEvent.click(screen.getByRole('button', { name: /previous/i }));
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: /previous/i })).toBeNull());
+    expect(document.querySelectorAll('.MuiSkeleton-root').length).toBeGreaterThan(0);
+
+    resolveHistorical(createScores({ week: 2, postSeason: false }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument());
+    expect(document.querySelectorAll('.MuiSkeleton-root').length).toBe(0);
+  });
+
+  // frizat: regression caught by /code-review on the isPlaceholderData fix above — see the
+  // equivalent ScoresPage test for the full explanation (enabled:false queries never leave
+  // "placeholder" state, so this must not trap the page on the skeleton forever).
+  it('falls through to the no-league message, not a stuck skeleton, when currentLeague goes from set to null after a successful load', async () => {
+    await setupDefaults();
+    const { rerender, queryClient } = renderWithClient(<PicksPage adapter={createNflAdapter()} />);
+    await screen.findByText(/^Picks$/i);
+    await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
+
+    sessionState.currentLeague = null;
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <PicksPage adapter={createNflAdapter()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Please select a league/i)).toBeInTheDocument());
+    expect(document.querySelectorAll('.MuiSkeleton-root').length).toBe(0);
   });
 
   it('regular season hides over/under buttons', async () => {

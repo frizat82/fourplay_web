@@ -8,4 +8,16 @@ public class JobStatusResponse {
     public DateTimeOffset? LastSucceededUtc { get; set; }
     public DateTimeOffset? LastFailedUtc { get; set; }
     public string? LastMessage { get; set; }
+    // Human-readable grouping for the admin Job Manager table (e.g. "NFL Spreads", "Juice") —
+    // derived server-side from the job's CLR type, see JobCategoryClassifier.
+    public string Category { get; set; } = "System";
+    // True for the numerous per-league/per-week jobs TimedTriggerScheduler registers dynamically
+    // (Juice Reminder/Lock, NFL/CFB Spreads) — false for the fixed set of scheduler/cron jobs
+    // registered directly in Program.cs. Lets the admin UI hide the noisy set by default.
+    public bool IsDynamic { get; set; }
+    // Present only for Juice Reminder/Lock jobs (from the job's JobDataMap). LeagueName is
+    // resolved separately, server-side — the frontend renders it as its own field rather than
+    // the raw id, instead of pattern-matching it back out of Description's free text.
+    public int? LeagueId { get; set; }
+    public string? LeagueName { get; set; }
 }
