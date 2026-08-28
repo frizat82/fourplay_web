@@ -51,14 +51,24 @@ public static class GameHelpers {
         var span = UntilNoonCst();
         return span is null ? null : $"{span.Value.Days}d {span.Value.Hours}h {span.Value.Minutes}m";
     }
-    // ESPN skips postseason week 4 (Pro Bowl) — Super Bowl is raw ESPN week 5. NFLScoresJob
-    // pre-adjusts 5->4 before calling this (the original/legacy calling convention, still
-    // supported below); callers that pass the raw ESPN week directly — e.g.
-    // EspnCacheService/DemoEspnCacheService.GetWeekScoresAsync, fed straight from a
-    // NflCurrentWeekDto's EspnWeek — need week=5 to resolve to the same WeekId 22 as week=4
-    // does, not a nonexistent WeekId 23.
-    public static int GetWeekFromEspnWeek(long week, bool isPostSeason = false) =>
-        isPostSeason ? (week == 5 ? 22 : (int)(week + 18)) : (int)week;
+    // TODO(docs/ESPNProBowl.md): verify against a real ESPN response once the 2026 postseason
+    // bracket actually exists (~Jan 2027) — the NFL discontinued the Pro Bowl GAME starting with
+    // the 2026 season (announced 2026-08-26), so ESPN's postseason week numbering is expected to
+    // close the old week-4 gap from here on. See docs/ESPNProBowl.md for the full writeup; update
+    // LastSeasonEspnSkippedProBowlWeek there if this guess turns out wrong.
+    private const int LastSeasonEspnSkippedProBowlWeek = 2025;
+
+    // Through the 2025 season, ESPN skipped postseason week 4 for the Pro Bowl — Super Bowl was
+    // raw ESPN week 5 (one slot past Conference Championship=3), not the 4th round it actually is.
+    // Gated by SEASON, not by the raw week value: for 2026+ we deliberately do NOT apply the old
+    // week==5 special case, so if that guess is wrong, a real ESPN week=5 postseason response for
+    // 2026+ maps to a nonexistent WeekId (23) and fails loudly (no matching config/DB rows found)
+    // instead of silently coinciding with the right answer by accident.
+    public static int GetWeekFromEspnWeek(long week, int season, bool isPostSeason = false) {
+        if (!isPostSeason) return (int)week;
+        if (season <= LastSeasonEspnSkippedProBowlWeek && week == 5) return 22;
+        return (int)(week + 18);
+    }
     public static string GetWeekName(long week, bool isPostSeason = false) {
         if (!isPostSeason) {
             return $"Week {week}";

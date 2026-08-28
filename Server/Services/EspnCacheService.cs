@@ -64,7 +64,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         var cacheKey = $"nfl-week-scores_{year}_{week}_{postSeason}";
         if (_historicalCache.TryGetValue<EspnScores>(cacheKey, out var cached)) return cached;
 
-        var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, postSeason);
+        var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, year, postSeason);
         var configs = await _leagueRepository.GetNflSeasonWeekConfigsAsync();
         var matchingConfig = configs.FirstOrDefault(c => c.Season == year && c.WeekId == nflWeek);
 
