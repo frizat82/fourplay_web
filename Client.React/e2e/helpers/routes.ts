@@ -3,7 +3,7 @@ import type { UserInfo } from '../../src/types/auth';
 import type { NflPickDto } from '../../src/types/picks';
 import type { LeagueUserMappingDto } from '../../src/types/league';
 import type { LeaderboardDto } from '../../src/types/leaderboard';
-import { createScores, createSpreadResponse } from '../../src/test/fixtures';
+import { createCurrentWeek, createScores, createSpreadResponse } from '../../src/test/fixtures';
 
 const mockInviteLink = () => ({
   token: 'mocktokenabcdef1234567890abcdef12',
@@ -191,6 +191,14 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
     // ── CFB live-stream (SSE) — same role as espn/live-stream for NFL ───────
     if (url.includes('/api/cfb/live-stream') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
+      return;
+    }
+
+    // ── NFL current-week (control table) — nflAdapter.ts resolves this FIRST for the current-
+    // week path, then fetches that exact week via /api/espn/scores/week/ below. Must match
+    // scoresData's week/season/isPostSeason or the two responses disagree.
+    if (url.includes('/api/league/current-week') && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(createCurrentWeek(week, isPostSeason, season)) });
       return;
     }
 
