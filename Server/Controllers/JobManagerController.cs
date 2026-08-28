@@ -5,12 +5,14 @@ using Microsoft.AspNetCore.Mvc;
 using Quartz;
 using Quartz.Impl.Matchers;
 using Serilog;
+using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 
 namespace FourPlayWebApp.Server.Controllers {
     [ApiController]
     [Route("api/[controller]")]
-    public class JobManagerController(ISchedulerFactory schedulerFactory, IJobObserverService observer) : ControllerBase {
+    public class JobManagerController(ISchedulerFactory schedulerFactory, IJobObserverService observer, ILeagueRepository leagueRepo) : ControllerBase {
         [Authorize(Roles = "Administrator")]
         [HttpPost("run-spreads")]
         public Task<IActionResult> RunSpreads([FromQuery] bool force = false) =>
@@ -105,12 +107,16 @@ namespace FourPlayWebApp.Server.Controllers {
 
                     var triggers = await scheduler.GetTriggersOfJob(jobKey);
                     var trigger = triggers.FirstOrDefault();
+                    var (category, isDynamic) = JobCategoryClassifier.Classify(jobDetail.JobType);
 
                     var status = new JobStatusResponse {
                         JobName = jobDetail.Key.Name,
                         Description = jobDetail.Description ?? "",
                         Status = await GetJobStatusAsync(scheduler, jobKey),
-                        NextRun = trigger?.GetNextFireTimeUtc()
+                        NextRun = trigger?.GetNextFireTimeUtc(),
+                        Category = category,
+                        IsDynamic = isDynamic,
+                        LeagueId = TryGetLeagueId(jobDetail),
                     };
 
                     if (observerInfos.TryGetValue(status.JobName, out var info)) {
@@ -123,7 +129,26 @@ namespace FourPlayWebApp.Server.Controllers {
                 }
             }
 
-            return jobStatuses.OrderBy(j => j.JobName);
+            // Only Juice Reminder/Lock jobs carry a LeagueId — this endpoint is also on the hot
+            // path for every logged-in user via GetNextSpreadJobAsync below (not admin-gated), so
+            // the league join only runs when a job in THIS batch actually references one, not on
+            // every call.
+            var referencedLeagueIds = jobStatuses.Where(j => j.LeagueId.HasValue).Select(j => j.LeagueId!.Value).ToHashSet();
+            if (referencedLeagueIds.Count > 0) {
+                var leagueNames = (await leagueRepo.GetAllLeaguesAsync())
+                    .Where(l => referencedLeagueIds.Contains(l.Id))
+                    .ToDictionary(l => l.Id, l => l.LeagueName);
+                foreach (var status in jobStatuses.Where(j => j.LeagueId.HasValue)) {
+                    if (leagueNames.TryGetValue(status.LeagueId!.Value, out var leagueName)) status.LeagueName = leagueName;
+                }
+            }
+
+            return jobStatuses.OrderBy(j => j.Category).ThenBy(j => j.JobName);
+        }
+
+        private static int? TryGetLeagueId(IJobDetail jobDetail) {
+            if (jobDetail.JobDataMap is null || !jobDetail.JobDataMap.ContainsKey(LeagueJuiceJobData.LeagueIdKey)) return null;
+            return int.TryParse(jobDetail.JobDataMap.GetString(LeagueJuiceJobData.LeagueIdKey), out var leagueId) ? leagueId : null;
         }
         [Authorize]
         [HttpGet("get-next-spread-job")]

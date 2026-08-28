@@ -508,4 +508,52 @@ describe('ScoresPage', () => {
     await waitFor(() => expect(screen.getAllByText(/MICH/i).length).toBeGreaterThan(0));
     expect(screen.queryByText(/BUF/i)).toBeNull();
   });
+
+  // frizat: reported on iOS as Previous/Next "freezing" — placeholderData: keepPreviousData
+  // showed the OLD week with zero loading indicator until the new week resolved. isLoading alone
+  // never re-triggers on navigation (only ever true on the very first load), so the guard must
+  // also check isPlaceholderData — the flag that IS true specifically while stale data from a
+  // previous query key is being shown in place of the new key's still-pending result.
+  it('shows the skeleton, not a frozen stale week, while navigating to a previous week', async () => {
+    await setupDefaults({ week: 3 });
+    await renderPage();
+    await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
+
+    let resolveHistorical!: (value: Awaited<ReturnType<typeof getWeekScores>>) => void;
+    mockedGetWeekScores.mockImplementationOnce(() => new Promise(resolve => { resolveHistorical = resolve; }));
+
+    await userEvent.click(screen.getByRole('button', { name: /previous/i }));
+
+    // The whole page (including the Previous button) swaps to the skeleton while the new week's
+    // fetch is pending — same as first load, not a frozen view of week 3's now-stale content.
+    await waitFor(() => expect(screen.queryByRole('button', { name: /previous/i })).toBeNull());
+    expect(document.querySelectorAll('.MuiSkeleton-root').length).toBeGreaterThan(0);
+
+    resolveHistorical(makeScores(2, false, true));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument());
+    expect(document.querySelectorAll('.MuiSkeleton-root').length).toBe(0);
+  });
+
+  // frizat: regression caught by /code-review on the isPlaceholderData fix above — a query with
+  // enabled:false never resolves out of "placeholder" state, so once currentLeague goes from a
+  // real value to null (e.g. the user gets removed from their only league) after a successful
+  // load, isPlaceholderData stays permanently true and the page would get stuck on the skeleton
+  // forever instead of falling through to the "select a league" screen.
+  it('falls through to the no-league message, not a stuck skeleton, when currentLeague goes from set to null after a successful load', async () => {
+    await setupDefaults();
+    const { rerender, queryClient } = renderWithClient(<ScoresPage adapter={createNflAdapter()} />);
+    await screen.findByText(/Scores/i);
+    await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
+
+    sessionState.currentLeague = null;
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ScoresPage adapter={createNflAdapter()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Please select a league/i)).toBeInTheDocument());
+    expect(document.querySelectorAll('.MuiSkeleton-root').length).toBe(0);
+  });
 });
