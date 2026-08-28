@@ -174,4 +174,24 @@ describe('WeekYearSelector', () => {
     ).not.toThrow();
     expect(screen.getByText('CFP Championship')).toBeInTheDocument();
   });
+
+  // -----------------------------------------------------------------------
+  // isCurrent — "Archived" chip (frizat: makes it unmistakable at a glance
+  // that a browsed-to week/season isn't the live one)
+  // -----------------------------------------------------------------------
+
+  it('shows an Archived chip when isCurrent is false', () => {
+    setup({ isCurrent: false });
+    expect(screen.getByText('Archived')).toBeInTheDocument();
+  });
+
+  it('shows no Archived chip when isCurrent is true', () => {
+    setup({ isCurrent: true });
+    expect(screen.queryByText('Archived')).not.toBeInTheDocument();
+  });
+
+  it('shows no Archived chip when isCurrent is not provided (caller doesn\'t know yet)', () => {
+    setup();
+    expect(screen.queryByText('Archived')).not.toBeInTheDocument();
+  });
 });
