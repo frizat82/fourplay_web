@@ -105,13 +105,23 @@ export default function AppLayout() {
   const hasCurrent = isCfb ? hasCfbAccess : hasNflAccess;
   const hasOther = isCfb ? hasNflAccess : hasCfbAccess;
   const otherSport = isCfb ? 'NFL' : 'CFB';
-  // frizat: League Portal is exempt — it's the one page that already handles "no leagues yet"
-  // correctly (a "Create League" empty state, since creating a league needs no prior access).
-  // Without this, a user with only NFL leagues could never reach League Portal on the CFB site
-  // to create their first CFB league at all — the "no access" block replaced every routed page,
-  // including the one page designed to get them out of that exact state.
+  // /code-review: named predicate instead of accreting `&&` clauses on the gate condition itself
+  // — each exemption reason gets its own line here rather than a growing inline expression.
   const isLeaguePortalRoute = location.pathname.startsWith('/league/manage');
-  const noAccessContent = !isLeaguePortalRoute && leaguesLoaded && currentLeague === null && !hasCurrent ? (
+  const isExemptFromSportAccessGate =
+    // League Portal is the one page that already handles "no leagues yet" correctly (a "Create
+    // League" empty state, since creating a league needs no prior access). Without this, a user
+    // with only NFL leagues could never reach League Portal on the CFB site to create their first
+    // CFB league at all — the "no access" block replaced every routed page, including the one
+    // page designed to get them out of that exact state.
+    isLeaguePortalRoute
+    // Admins are exempt everywhere, not just League Portal — an admin's own personal league
+    // membership has nothing to do with whether they should be able to reach the admin panel or
+    // manage the platform on a given sport's site. Requiring them to first self-serve a league of
+    // their own via League Portal, just to unblock the admin pages they actually needed, was a
+    // needless detour that only happened to work by accident.
+    || showAdmin;
+  const noAccessContent = !isExemptFromSportAccessGate && leaguesLoaded && currentLeague === null && !hasCurrent ? (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', textAlign: 'center', p: 4 }}>
       <Typography variant="h5" fontWeight={700} gutterBottom>
         No {isCfb ? 'CFB' : 'NFL'} access
