@@ -77,9 +77,33 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
             }
         }
 
-        return CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat)
+        var result = CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat)
             ? await FetchCfpAsync(slate)
             : await FetchRankedWeekAsync(slate);
+
+        // Replay mode only (DEMO_REPLAY_MODE=true) — ReplayCacheService is a Singleton registered
+        // only then, so this resolves null (a no-op) in every other environment. The replay
+        // game (IND @ ATL) is seeded as a second game inside this real slate specifically so it
+        // can be surfaced through CFB's normal slate-based flow (see
+        // DemoDataSeeder.SeedReplayCfbSlateAsync) — but cfbApi above has no knowledge of it (it
+        // only ever calls the real ESPN endpoints), so it has to be merged in here rather than
+        // fetched as part of the real ESPN response.
+        if (isCurrentSlate) {
+            var replayService = scope.ServiceProvider.GetService<ReplayCacheService>();
+            var replaySnapshot = replayService is null ? null : await replayService.GetScoresAsync();
+            if (replaySnapshot?.Events is { Length: > 0 } replayEvents) {
+                result = result is null
+                    ? replaySnapshot
+                    : new EspnScores {
+                        Leagues = result.Leagues,
+                        Season = result.Season,
+                        Week = result.Week,
+                        Events = [.. result.Events ?? [], .. replayEvents],
+                    };
+            }
+        }
+
+        return result;
     }
 
     private async Task<EspnScores?> FetchCfpAsync(CfbSlates slate) {

@@ -250,6 +250,26 @@ public class DemoDataSeeder(
             await db.SaveChangesAsync();
         }
 
+        // frizat: nflAdapter.ts's current-week path now resolves "current" via the control table
+        // (SeasonWindowResolver) FIRST, then fetches that exact week — it no longer just trusts
+        // whatever season/week the raw ESPN "current" response happens to carry (see this class's
+        // top-of-file comment on ReplaySeason, written when that was still true). The migration-
+        // seeded NflSeasonWeekConfigs row for (ReplaySeason, ReplayWeek) has a real fixed calendar
+        // date (Super Bowl LXI, Feb 2027) — SeasonWindowResolver would only ever pick it as
+        // "current" during a ~2-day window around that real date, not whenever this backend
+        // happens to actually run. Self-healing this row's dates to "just resolved" on every
+        // startup (same pattern as the NflSpreads GameTime refresh below) keeps replay mode's
+        // control-table entry always current, regardless of real wall-clock time.
+        var replayConfig = await db.NflSeasonWeekConfigs.FirstOrDefaultAsync(c =>
+            c.Season == ReplaySeason && c.WeekId == ReplayWeek);
+        if (replayConfig is not null)
+        {
+            replayConfig.WeekStartDatetime = DateTimeOffset.UtcNow.AddHours(-2).UtcDateTime;
+            replayConfig.WeekEndDatetime = DateTimeOffset.UtcNow.AddDays(1).UtcDateTime;
+            replayConfig.SpreadLockDatetime = DateTimeOffset.UtcNow.AddHours(-1).UtcDateTime;
+            await db.SaveChangesAsync();
+        }
+
         // Self-healing, not skip-if-exists: a long-lived local backend process can outlive the
         // "future" GameTime seeded on a previous startup, which would silently make the replay
         // game un-pickable without ever touching the DB by hand. Re-seeding fresh on every
