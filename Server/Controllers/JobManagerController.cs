@@ -96,12 +96,6 @@ namespace FourPlayWebApp.Server.Controllers {
             var observerInfos = (await observer.GetAllJobInfosAsync())
                 .ToDictionary(i => i.JobName, StringComparer.OrdinalIgnoreCase);
 
-            // Juice Reminder/Lock job descriptions embed a raw LeagueId ("Remind league 6 owner
-            // ...") — resolve it to the league's actual name once, not per-row, same pattern as
-            // observerInfos above.
-            var leagueNames = (await leagueRepo.GetAllLeaguesAsync())
-                .ToDictionary(l => l.Id, l => l.LeagueName);
-
             var jobGroups = await scheduler.GetJobGroupNames();
             foreach (var group in jobGroups) {
                 var groupMatcher = GroupMatcher<JobKey>.GroupEquals(group);
@@ -117,11 +111,12 @@ namespace FourPlayWebApp.Server.Controllers {
 
                     var status = new JobStatusResponse {
                         JobName = jobDetail.Key.Name,
-                        Description = DescribeWithLeagueName(jobDetail, leagueNames),
+                        Description = jobDetail.Description ?? "",
                         Status = await GetJobStatusAsync(scheduler, jobKey),
                         NextRun = trigger?.GetNextFireTimeUtc(),
                         Category = category,
                         IsDynamic = isDynamic,
+                        LeagueId = TryGetLeagueId(jobDetail),
                     };
 
                     if (observerInfos.TryGetValue(status.JobName, out var info)) {
@@ -134,18 +129,26 @@ namespace FourPlayWebApp.Server.Controllers {
                 }
             }
 
+            // Only Juice Reminder/Lock jobs carry a LeagueId — this endpoint is also on the hot
+            // path for every logged-in user via GetNextSpreadJobAsync below (not admin-gated), so
+            // the league join only runs when a job in THIS batch actually references one, not on
+            // every call.
+            var referencedLeagueIds = jobStatuses.Where(j => j.LeagueId.HasValue).Select(j => j.LeagueId!.Value).ToHashSet();
+            if (referencedLeagueIds.Count > 0) {
+                var leagueNames = (await leagueRepo.GetAllLeaguesAsync())
+                    .Where(l => referencedLeagueIds.Contains(l.Id))
+                    .ToDictionary(l => l.Id, l => l.LeagueName);
+                foreach (var status in jobStatuses.Where(j => j.LeagueId.HasValue)) {
+                    if (leagueNames.TryGetValue(status.LeagueId!.Value, out var leagueName)) status.LeagueName = leagueName;
+                }
+            }
+
             return jobStatuses.OrderBy(j => j.Category).ThenBy(j => j.JobName);
         }
 
-        // Only Juice Reminder/Lock jobs carry a LeagueId in their JobDataMap (see
-        // LeagueJuiceScheduleSource) — everything else's description passes through unchanged.
-        private static string DescribeWithLeagueName(IJobDetail jobDetail, Dictionary<int, string> leagueNames) {
-            var description = jobDetail.Description ?? "";
-            if (jobDetail.JobDataMap is null || !jobDetail.JobDataMap.ContainsKey("LeagueId")) return description;
-            var leagueIdRaw = jobDetail.JobDataMap.GetString("LeagueId");
-            if (leagueIdRaw is null || !int.TryParse(leagueIdRaw, out var leagueId)) return description;
-            if (!leagueNames.TryGetValue(leagueId, out var leagueName)) return description;
-            return description.Replace($"league {leagueId}", $"\"{leagueName}\"");
+        private static int? TryGetLeagueId(IJobDetail jobDetail) {
+            if (jobDetail.JobDataMap is null || !jobDetail.JobDataMap.ContainsKey("LeagueId")) return null;
+            return int.TryParse(jobDetail.JobDataMap.GetString("LeagueId"), out var leagueId) ? leagueId : null;
         }
         [Authorize]
         [HttpGet("get-next-spread-job")]

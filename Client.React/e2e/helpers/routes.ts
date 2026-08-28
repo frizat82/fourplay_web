@@ -323,7 +323,7 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
           },
           {
             jobName: 'Juice Reminder 6-2026',
-            description: 'Remind "Sunday Funday" owner to configure Juice for season 2026',
+            description: 'Remind league 6 owner to configure Juice for season 2026',
             status: 'Idle',
             nextRun: null,
             lastRun: null,
@@ -332,6 +332,8 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
             lastMessage: null,
             category: 'Juice',
             isDynamic: true,
+            leagueId: 6,
+            leagueName: 'Sunday Funday',
           },
         ]),
       });

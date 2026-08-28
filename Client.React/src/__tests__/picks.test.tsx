@@ -424,6 +424,27 @@ describe('PicksPage', () => {
     await waitFor(() => expect(screen.getAllByText(/Super Bowl/i).length).toBeGreaterThan(0));
   });
 
+  // frizat: mirrors the equivalent ScoresPage test — same isPlaceholderData fix, same regression
+  // (Previous/Next navigation "freezing" on the old week's stale content with no loading signal).
+  it('shows the skeleton, not a frozen stale week, while navigating to a previous week', async () => {
+    await setupDefaults({ week: 3 });
+    await renderPage();
+    await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
+
+    let resolveHistorical!: (value: Awaited<ReturnType<typeof getWeekScores>>) => void;
+    mockedGetWeekScores.mockImplementationOnce(() => new Promise(resolve => { resolveHistorical = resolve; }));
+
+    await userEvent.click(screen.getByRole('button', { name: /previous/i }));
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: /previous/i })).toBeNull());
+    expect(document.querySelectorAll('.MuiSkeleton-root').length).toBeGreaterThan(0);
+
+    resolveHistorical(createScores({ week: 2, postSeason: false }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument());
+    expect(document.querySelectorAll('.MuiSkeleton-root').length).toBe(0);
+  });
+
   it('regular season hides over/under buttons', async () => {
     await setupDefaults({ week: 2, postSeason: false });
     await renderPage();

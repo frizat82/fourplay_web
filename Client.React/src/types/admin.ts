@@ -47,6 +47,8 @@ export interface JobStatusResponse {
   lastMessage?: string | null;
   category: string;
   isDynamic: boolean;
+  leagueId?: number | null;
+  leagueName?: string | null;
 }
 
 export interface InvitationDto {
