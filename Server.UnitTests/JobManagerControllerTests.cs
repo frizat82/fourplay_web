@@ -1,5 +1,8 @@
 using FourPlayWebApp.Server.Controllers;
+using FourPlayWebApp.Server.Jobs;
+using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -309,19 +312,101 @@ public class JobManagerControllerTests
         Assert.IsType<NotFoundResult>(result);
     }
 
+    // ── Functional: GetAllJobsStatusAsync — category/description enrichment ───
+    // frizat: "Juice-Reminder-6" was reported unreadable — 6 is a raw league DB id, not a league
+    // count. Description now substitutes the actual league name; Category/IsDynamic (from
+    // JobCategoryClassifier) let the admin UI group jobs and hide the noisy per-league/per-week set.
+
+    [Fact]
+    public async Task GetAllJobsStatusAsync_JuiceReminderJob_DescriptionUsesLeagueName()
+    {
+        var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
+        leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo> {
+            new() { Id = 6, LeagueName = "Sunday Funday", OwnerUserId = "u1" },
+        });
+        SetupJobOfType<LeagueJuiceReminderJob>(scheduler, "Juice Reminder 6-2026",
+            "Remind league 6 owner to configure Juice for season 2026",
+            jobData: new Dictionary<string, string> { ["LeagueId"] = "6" });
+
+        var result = await controller.GetAllJobsStatusAsync();
+
+        var job = Assert.Single(result);
+        Assert.Equal("Remind \"Sunday Funday\" owner to configure Juice for season 2026", job.Description);
+        Assert.Equal("Juice", job.Category);
+        Assert.True(job.IsDynamic);
+    }
+
+    [Fact]
+    public async Task GetAllJobsStatusAsync_JuiceReminderJob_UnknownLeagueId_DescriptionUnchanged()
+    {
+        // League was deleted (frizat-ugs pruning) or its data hasn't been fetched yet — must not
+        // throw or produce a mangled description, just fall back to the raw text.
+        var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
+        leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo>());
+        SetupJobOfType<LeagueJuiceReminderJob>(scheduler, "Juice Reminder 6-2026",
+            "Remind league 6 owner to configure Juice for season 2026",
+            jobData: new Dictionary<string, string> { ["LeagueId"] = "6" });
+
+        var result = await controller.GetAllJobsStatusAsync();
+
+        var job = Assert.Single(result);
+        Assert.Equal("Remind league 6 owner to configure Juice for season 2026", job.Description);
+    }
+
+    [Fact]
+    public async Task GetAllJobsStatusAsync_SchedulerJob_IsNotDynamic()
+    {
+        var (_, scheduler, _, _, controller) = BuildSutWithLeagueRepo(isAdmin: true);
+        SetupJobOfType<UserManagerJob>(scheduler, "User Manager", "Manages initial user admin");
+
+        var result = await controller.GetAllJobsStatusAsync();
+
+        var job = Assert.Single(result);
+        Assert.Equal("System", job.Category);
+        Assert.False(job.IsDynamic);
+    }
+
+    private static void SetupJobOfType<TJob>(IScheduler scheduler, string name, string? description,
+        Dictionary<string, string>? jobData = null) where TJob : IJob {
+        var groupName = "DEFAULT";
+        var jobKey = new JobKey(name);
+        scheduler.GetJobGroupNames().Returns(new List<string> { groupName });
+        scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>()).Returns(new HashSet<JobKey> { jobKey });
+        scheduler.GetCurrentlyExecutingJobs().Returns(new List<IJobExecutionContext>());
+        scheduler.GetTriggerState(Arg.Any<TriggerKey>()).Returns(TriggerState.Normal);
+
+        var builder = JobBuilder.Create<TJob>().WithIdentity(jobKey).WithDescription(description);
+        if (jobData is not null) {
+            var map = new JobDataMap();
+            foreach (var (key, value) in jobData) map.Put(key, value);
+            builder.UsingJobData(map);
+        }
+        var jobDetail = builder.Build();
+        scheduler.GetJobDetail(jobKey).Returns(jobDetail);
+        scheduler.GetTriggersOfJob(jobKey).Returns(new List<ITrigger>());
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
     private static (ISchedulerFactory factory, IScheduler scheduler, IJobObserverService observer, JobManagerController controller)
-        BuildSut(bool isAdmin = false)
+        BuildSut(bool isAdmin = false) {
+        var (factory, scheduler, observer, _, controller) = BuildSutWithLeagueRepo(isAdmin);
+        return (factory, scheduler, observer, controller);
+    }
+
+    private static (ISchedulerFactory factory, IScheduler scheduler, IJobObserverService observer, ILeagueRepository leagueRepo, JobManagerController controller)
+        BuildSutWithLeagueRepo(bool isAdmin = false)
     {
         var factory   = Substitute.For<ISchedulerFactory>();
         var scheduler = Substitute.For<IScheduler>();
         var observer  = Substitute.For<IJobObserverService>();
+        var leagueRepo = Substitute.For<ILeagueRepository>();
 
         factory.GetScheduler().Returns(scheduler);
         observer.GetAllJobInfosAsync().Returns(new List<JobRunInfo>());
+        leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo>());
 
         var claims = new List<Claim>
         {
@@ -332,13 +417,13 @@ public class JobManagerControllerTests
 
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
 
-        var controller = new JobManagerController(factory, observer);
+        var controller = new JobManagerController(factory, observer, leagueRepo);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
 
-        return (factory, scheduler, observer, controller);
+        return (factory, scheduler, observer, leagueRepo, controller);
     }
 
     /// <summary>

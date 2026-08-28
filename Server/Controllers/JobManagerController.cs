@@ -5,12 +5,14 @@ using Microsoft.AspNetCore.Mvc;
 using Quartz;
 using Quartz.Impl.Matchers;
 using Serilog;
+using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 
 namespace FourPlayWebApp.Server.Controllers {
     [ApiController]
     [Route("api/[controller]")]
-    public class JobManagerController(ISchedulerFactory schedulerFactory, IJobObserverService observer) : ControllerBase {
+    public class JobManagerController(ISchedulerFactory schedulerFactory, IJobObserverService observer, ILeagueRepository leagueRepo) : ControllerBase {
         [Authorize(Roles = "Administrator")]
         [HttpPost("run-spreads")]
         public Task<IActionResult> RunSpreads([FromQuery] bool force = false) =>
@@ -94,6 +96,12 @@ namespace FourPlayWebApp.Server.Controllers {
             var observerInfos = (await observer.GetAllJobInfosAsync())
                 .ToDictionary(i => i.JobName, StringComparer.OrdinalIgnoreCase);
 
+            // Juice Reminder/Lock job descriptions embed a raw LeagueId ("Remind league 6 owner
+            // ...") — resolve it to the league's actual name once, not per-row, same pattern as
+            // observerInfos above.
+            var leagueNames = (await leagueRepo.GetAllLeaguesAsync())
+                .ToDictionary(l => l.Id, l => l.LeagueName);
+
             var jobGroups = await scheduler.GetJobGroupNames();
             foreach (var group in jobGroups) {
                 var groupMatcher = GroupMatcher<JobKey>.GroupEquals(group);
@@ -105,12 +113,15 @@ namespace FourPlayWebApp.Server.Controllers {
 
                     var triggers = await scheduler.GetTriggersOfJob(jobKey);
                     var trigger = triggers.FirstOrDefault();
+                    var (category, isDynamic) = JobCategoryClassifier.Classify(jobDetail.JobType);
 
                     var status = new JobStatusResponse {
                         JobName = jobDetail.Key.Name,
-                        Description = jobDetail.Description ?? "",
+                        Description = DescribeWithLeagueName(jobDetail, leagueNames),
                         Status = await GetJobStatusAsync(scheduler, jobKey),
-                        NextRun = trigger?.GetNextFireTimeUtc()
+                        NextRun = trigger?.GetNextFireTimeUtc(),
+                        Category = category,
+                        IsDynamic = isDynamic,
                     };
 
                     if (observerInfos.TryGetValue(status.JobName, out var info)) {
@@ -123,7 +134,18 @@ namespace FourPlayWebApp.Server.Controllers {
                 }
             }
 
-            return jobStatuses.OrderBy(j => j.JobName);
+            return jobStatuses.OrderBy(j => j.Category).ThenBy(j => j.JobName);
+        }
+
+        // Only Juice Reminder/Lock jobs carry a LeagueId in their JobDataMap (see
+        // LeagueJuiceScheduleSource) — everything else's description passes through unchanged.
+        private static string DescribeWithLeagueName(IJobDetail jobDetail, Dictionary<int, string> leagueNames) {
+            var description = jobDetail.Description ?? "";
+            if (jobDetail.JobDataMap is null || !jobDetail.JobDataMap.ContainsKey("LeagueId")) return description;
+            var leagueIdRaw = jobDetail.JobDataMap.GetString("LeagueId");
+            if (leagueIdRaw is null || !int.TryParse(leagueIdRaw, out var leagueId)) return description;
+            if (!leagueNames.TryGetValue(leagueId, out var leagueName)) return description;
+            return description.Replace($"league {leagueId}", $"\"{leagueName}\"");
         }
         [Authorize]
         [HttpGet("get-next-spread-job")]
