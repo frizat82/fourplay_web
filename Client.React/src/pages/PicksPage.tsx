@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
-  CircularProgress,
   Grid,
   Stack,
   Typography,
@@ -14,6 +13,7 @@ import NoLeague from '../components/NoLeague';
 import QueryErrorAlert from '../components/QueryErrorAlert';
 import SpreadRelease from '../components/SpreadRelease';
 import GameCard, { type PickState } from '../components/sports/GameCard';
+import GameCardGridSkeleton from '../components/GameCardSkeleton';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import type { SportAdapter, GameView, PickType, WeekState } from '../services/sportAdapter';
@@ -161,9 +161,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
 
   // First load only — background refetches (polling, SSE-adjacent) keep the grid mounted
   if (!leaguesLoaded || isLoading) return (
-    <Box><PageHeader title="Picks" />
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
-    </Box>
+    <Box><PageHeader title="Picks" /><GameCardGridSkeleton /></Box>
   );
 
   if (!currentLeague) return <NoLeague />;
@@ -194,6 +192,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
           {...adapter.weekSelectorConfig}
           maxRegularSeasonWeek={maxWeek}
           maxSeason={maxSeason}
+          isCurrent={isCurrentWeek}
         />
         {!isCurrentWeek && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>

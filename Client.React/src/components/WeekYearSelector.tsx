@@ -1,4 +1,4 @@
-import { Box, Button, MenuItem, Select, Stack } from '@mui/material';
+import { Box, Button, Chip, MenuItem, Select, Stack } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useEffect, useMemo } from 'react';
@@ -18,6 +18,10 @@ interface WeekYearSelectorProps {
   maxSeason?: number;
   maxRegularSeasonWeek?: number;
   weekLabelFn?: (week: number, isPostSeason: boolean) => string;
+  // Whether the displayed season/week IS the live current one — false shows an "Archived" chip so
+  // it's unmistakable at a glance that this isn't the active week (undefined = caller doesn't know
+  // yet, e.g. still loading, so no chip either way).
+  isCurrent?: boolean;
 }
 
 export default function WeekYearSelector({
@@ -33,6 +37,7 @@ export default function WeekYearSelector({
   maxSeason = new Date().getFullYear(),
   maxRegularSeasonWeek = 18,
   weekLabelFn = getWeekName,
+  isCurrent,
 }: WeekYearSelectorProps) {
   const defaultRegularWeeks = useMemo(() => Array.from({ length: maxRegularSeasonWeek }, (_, idx) => idx + 1), [
     maxRegularSeasonWeek,
@@ -113,6 +118,12 @@ export default function WeekYearSelector({
         borderColor: 'divider',
       }}
     >
+      {isCurrent === false && (
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          <Chip label="Archived" size="small" color="warning" variant="outlined" />
+        </Box>
+      )}
+
       {/* Selects row — frizat: flexWrap alone made mobile layout depend on content width: a short
           label (e.g. "Super Bowl") left enough room for all three selects to share one row, a
           long one ("Conference Championship") pushed to a stacked layout — same page, two
