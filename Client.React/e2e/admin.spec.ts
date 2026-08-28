@@ -9,7 +9,7 @@ test.describe('Admin pages (administrator role)', () => {
   // Job Manager
   // -----------------------------------------------------------------------
   test('Job Manager renders heading and job table', async ({ page }) => {
-    await adminAuth(page, '/admin/jobManagement');
+    await adminAuth(page, '/admin/jobManager');
     await waitForSpinner(page);
 
     await expect(page.getByRole('heading', { name: /^job manager$/i })).toBeVisible({ timeout: 5000 });
