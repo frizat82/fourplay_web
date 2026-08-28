@@ -136,4 +136,48 @@ public class DemoEspnCacheServiceTests
 
         Assert.Null(result);
     }
+
+    // frizat: nflAdapter.ts's current-week path now always calls this endpoint for whichever
+    // week the control table resolves as current — that week must serve the frozen in-progress
+    // fixture (same as GetScoresAsync), not DB-persisted final scores. Before this fix, this
+    // endpoint always went DB-only regardless of "current," which silently dropped the live
+    // situation/clock/down-distance data the demo e2e suite's Super Bowl scenarios depend on.
+    [Fact]
+    public async Task GetWeekScoresAsync_WhenWeekIsTheResolvedCurrentWeek_ReturnsTheFrozenFixture_NotDbBuiltScores()
+    {
+        await using var db = BuildDb(nameof(GetWeekScoresAsync_WhenWeekIsTheResolvedCurrentWeek_ReturnsTheFrozenFixture_NotDbBuiltScores));
+        // A seeded final score that would otherwise be served by the DB-only path — proves the
+        // frozen fixture wins instead once this week resolves as "current".
+        db.NflScores.Add(new NflScores {
+            Season = 2025,
+            NflWeek = 22,
+            HomeTeam = "SF",
+            AwayTeam = "SEA",
+            HomeTeamScore = 10,
+            AwayTeamScore = 9,
+            GameTime = new DateTimeOffset(2026, 1, 25, 18, 0, 0, TimeSpan.Zero),
+        });
+        db.NflSeasonWeekConfigs.Add(new Models.Data.NflSeasonWeekConfig {
+            Season = 2025,
+            WeekId = 22,
+            WeekLabel = "Super Bowl",
+            WeekType = "PostSeason",
+            ScoringFormat = "Standard",
+            WeekStartDatetime = new DateTime(2026, 1, 25),
+            WeekEndDatetime = new DateTime(2026, 1, 26),
+            SpreadLockDatetime = new DateTime(2026, 1, 25),
+        });
+        await db.SaveChangesAsync();
+
+        var sut = new DemoEspnCacheService(BuildFactory(db));
+
+        // Raw ESPN week 5 = Super Bowl = internal WeekId 22 (GameHelpers.GetWeekFromEspnWeek).
+        var result = await sut.GetWeekScoresAsync(5, 2025, postSeason: true);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result!.Events);
+        Assert.NotEmpty(result.Events!);
+        // The frozen fixture's teams, not the DB-persisted SF/SEA final score.
+        Assert.DoesNotContain(result.Events!, e => e.Competitions[0].Competitors.Any(c => c.Team.Abbreviation == "SF"));
+    }
 }

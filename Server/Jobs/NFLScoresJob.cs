@@ -42,13 +42,13 @@ public class NflScoresJob(IEspnApiService espn, ILeagueRepository leagueReposito
                             (x, y) => new CompetitionBySeason { Id = int.Parse(x.Id), Season = x.Season, Competition = y })
                         .Where(y => GameHelpers.IsGameOver(y.Competition)).ToList();
                     if (results.Count != 0) {
-                        scoreList.AddRange(results.ParseCompetitionToNflScore(GameHelpers.GetWeekFromEspnWeek(j)));
+                        scoreList.AddRange(results.ParseCompetitionToNflScore(GameHelpers.GetWeekFromEspnWeek(j, DateTime.UtcNow.AddYears(i).Year)));
                     }
                 }
 
                 for (var j = 1; j < 6; j++) {
                     if (j == 4)
-                        continue; // Skip week 4 as ESPN treats week 4 as the Pro Bowl
+                        continue; // Skip week 4 as ESPN treats week 4 as the Pro Bowl (through the 2025 season — see GameHelpers.GetWeekFromEspnWeek)
                     var scores = await espn.GetWeekScores(j, DateTime.UtcNow.AddYears(i).Year, true);
                     if (scores is null || scores.Events is null)
                         break;
@@ -57,7 +57,7 @@ public class NflScoresJob(IEspnApiService espn, ILeagueRepository leagueReposito
                         .Where(y => GameHelpers.IsGameOver(y.Competition)).ToList();
                     if (results.Count != 0) {
                         scoreList.AddRange(
-                            results.ParseCompetitionToNflScore(GameHelpers.GetWeekFromEspnWeek(j == 5 ? 4 : j, true)));
+                            results.ParseCompetitionToNflScore(GameHelpers.GetWeekFromEspnWeek(j, DateTime.UtcNow.AddYears(i).Year, true)));
                     }
                 }
             }

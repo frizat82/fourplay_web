@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Badge, Box, Button, CircularProgress, Grid,
+  Badge, Box, Button, Grid,
   IconButton, Paper, Stack, Typography,
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
@@ -13,6 +13,7 @@ import WeekYearSelector from '../components/WeekYearSelector';
 import NoLeague from '../components/NoLeague';
 import QueryErrorAlert from '../components/QueryErrorAlert';
 import SpreadRelease from '../components/SpreadRelease';
+import GameCardGridSkeleton from '../components/GameCardSkeleton';
 import TeamHelmet from '../components/sports/TeamHelmet';
 import UserPicksMatrix from '../components/UserPicksMatrix';
 import PickDialog from '../components/PickDialog';
@@ -191,9 +192,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   // First load only — background refetches (polling, SSE) keep the grid mounted via
   // placeholderData: keepPreviousData, so isLoading here only reflects a truly empty cache.
   if (!leaguesLoaded || isLoading) return (
-    <Box><PageHeader title="Scores" />
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
-    </Box>
+    <Box><PageHeader title="Scores" /><GameCardGridSkeleton /></Box>
   );
   if (!currentLeague) return <NoLeague />;
   if (isError && !data) return (
@@ -246,6 +245,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
           {...adapter.weekSelectorConfig}
           maxRegularSeasonWeek={maxWeek}
           maxSeason={maxSeason}
+          isCurrent={isCurrentWeek}
         />
         {!isCurrentWeek && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: -1, mb: 1 }}>
