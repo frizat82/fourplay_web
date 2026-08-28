@@ -27,6 +27,10 @@ public class TimedTriggerSchedulerTests
         public Task Execute(IJobExecutionContext context) => Task.CompletedTask;
     }
 
+    private class FakeOtherJob : IJob {
+        public Task Execute(IJobExecutionContext context) => Task.CompletedTask;
+    }
+
     [Fact]
     public async Task FutureLockTime_SchedulesAtLockTime()
     {
@@ -121,5 +125,56 @@ public class TimedTriggerSchedulerTests
             Arg.Is<IJobDetail>(j => j.JobDataMap.Count == 0),
             Arg.Any<ITrigger>(),
             Arg.Any<CancellationToken>());
+    }
+
+    // frizat: a one-time future trigger only ever disappears from GetJobKeys once it actually
+    // FIRES — Quartz has no concept of "the source stopped producing this candidate" (e.g. a
+    // league got deleted, or a week's config row was corrected away). Without active pruning
+    // these orphans sit in the Job Manager forever, which is exactly what surfaced as "6-7 Juice
+    // Reminder jobs for 3 leagues" in prod.
+    [Fact]
+    public async Task StaleJobOfSameType_NoLongerACandidate_IsDeleted()
+    {
+        var staleKey = new JobKey("stale-id");
+        _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<JobKey> { staleKey });
+        _scheduler.GetJobDetail(staleKey, Arg.Any<CancellationToken>())
+            .Returns(JobBuilder.Create<FakeSpreadJob>().WithIdentity(staleKey).Build());
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [], _token);
+
+        await _scheduler.Received(1).DeleteJob(staleKey, Arg.Any<CancellationToken>());
+    }
+
+    // Multiple job types share one Quartz job store (Juice Reminder, Juice Lock, NFL/CFB Spread
+    // all call this same method) — pruning must never touch a job that belongs to a different
+    // TJob's candidate source just because it's absent from THIS call's candidate list.
+    [Fact]
+    public async Task StaleJobOfDifferentType_IsNotDeleted()
+    {
+        var otherKey = new JobKey("other-id");
+        _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<JobKey> { otherKey });
+        _scheduler.GetJobDetail(otherKey, Arg.Any<CancellationToken>())
+            .Returns(JobBuilder.Create<FakeOtherJob>().WithIdentity(otherKey).Build());
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [], _token);
+
+        await _scheduler.DidNotReceive().DeleteJob(Arg.Any<JobKey>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task JobStillAmongCurrentCandidates_IsNotPruned()
+    {
+        var key = new JobKey("id-1");
+        var candidate = new TimedTriggerCandidate(DateTime.UtcNow.AddDays(3), "id-1", "desc", HasData: false);
+        _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<JobKey> { key });
+        _scheduler.GetJobDetail(key, Arg.Any<CancellationToken>())
+            .Returns(JobBuilder.Create<FakeSpreadJob>().WithIdentity(key).Build());
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [candidate], _token);
+
+        await _scheduler.DidNotReceive().DeleteJob(Arg.Any<JobKey>(), Arg.Any<CancellationToken>());
     }
 }

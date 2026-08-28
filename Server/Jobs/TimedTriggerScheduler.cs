@@ -22,10 +22,25 @@ internal static class TimedTriggerScheduler {
 
         var now = DateTime.UtcNow;
         var candidateList = candidates.ToList();
-        if (candidateList.Count == 0) return;
 
         var existingKeys = (await scheduler.GetJobKeys(GroupMatcher<JobKey>.AnyGroup(), cancellationToken))
             .ToHashSet();
+
+        // A one-time future trigger only ever leaves GetJobKeys once it actually FIRES — Quartz
+        // has no notion of "the source stopped producing this candidate" (a league got deleted, a
+        // week's config row got corrected away). Without this, orphaned jobs sit in the Job
+        // Manager forever. Scoped to jobs of TJob's own type — this method is shared by Juice
+        // Reminder, Juice Lock, and both spread schedulers against the same job store, so a key
+        // absent from this call's candidates must not be assumed to belong to this source.
+        var candidateKeys = candidateList.Select(c => new JobKey(c.Identity)).ToHashSet();
+        foreach (var staleKey in existingKeys.Except(candidateKeys)) {
+            var staleDetail = await scheduler.GetJobDetail(staleKey, cancellationToken);
+            if (staleDetail?.JobType != typeof(TJob)) continue;
+            await scheduler.DeleteJob(staleKey, cancellationToken);
+            Log.Information("TimedTriggerScheduler: pruned stale {Identity} — no longer produced by the candidate source", staleKey.Name);
+        }
+
+        if (candidateList.Count == 0) return;
 
         foreach (var candidate in candidateList) {
             var lockTime = candidate.LockTime;
