@@ -57,8 +57,8 @@ public class LeagueJuiceScheduleSource(ILeagueRepository leagueRepo, ICfbReposit
                 var hasJuice = league.LeagueJuiceMappings.Any(m => m.Season == season);
                 var identitySuffix = $"{league.Id}-{season}";
                 var jobData = new Dictionary<string, string> {
-                    ["LeagueId"] = league.Id.ToString(),
-                    ["Season"] = season.ToString(),
+                    [LeagueJuiceJobData.LeagueIdKey] = league.Id.ToString(),
+                    [LeagueJuiceJobData.SeasonKey] = season.ToString(),
                 };
 
                 // /code-review: "Juice configured" can't be the reminder's own "already handled"

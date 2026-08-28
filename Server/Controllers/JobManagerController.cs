@@ -147,8 +147,8 @@ namespace FourPlayWebApp.Server.Controllers {
         }
 
         private static int? TryGetLeagueId(IJobDetail jobDetail) {
-            if (jobDetail.JobDataMap is null || !jobDetail.JobDataMap.ContainsKey("LeagueId")) return null;
-            return int.TryParse(jobDetail.JobDataMap.GetString("LeagueId"), out var leagueId) ? leagueId : null;
+            if (jobDetail.JobDataMap is null || !jobDetail.JobDataMap.ContainsKey(LeagueJuiceJobData.LeagueIdKey)) return null;
+            return int.TryParse(jobDetail.JobDataMap.GetString(LeagueJuiceJobData.LeagueIdKey), out var leagueId) ? leagueId : null;
         }
         [Authorize]
         [HttpGet("get-next-spread-job")]
