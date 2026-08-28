@@ -2,7 +2,9 @@ import {
   Avatar,
   Dialog,
   DialogContent,
+  DialogTitle,
   Divider,
+  IconButton,
   List,
   ListItem,
   ListItemAvatar,
@@ -12,6 +14,7 @@ import {
 } from '@mui/material';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
+import CloseIcon from '@mui/icons-material/Close';
 import TeamHelmet from './sports/TeamHelmet';
 
 interface PickDialogProps {
@@ -34,30 +37,40 @@ export default function PickDialog({
   pickType,
 }: PickDialogProps) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogContent>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{ sx: { maxHeight: '70vh' } }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+        <Stack direction="row" alignItems="center" gap={1}>
           {pickType === 'Spread' && (
             <>
+              <TeamHelmet abbr={teamAbbr} size={44} />
               <Typography variant="h5" fontWeight={700}>{teamAbbr}</Typography>
-              <TeamHelmet abbr={teamAbbr} size={60} />
             </>
           )}
           {pickType === 'Over' && (
-            <Stack direction="row" alignItems="center" gap={1}>
+            <>
               <ArrowCircleUpIcon fontSize="large" color="success" />
               <Typography variant="h5" fontWeight={700}>Over</Typography>
-            </Stack>
+            </>
           )}
           {pickType === 'Under' && (
-            <Stack direction="row" alignItems="center" gap={1}>
+            <>
               <ArrowCircleDownIcon fontSize="large" color="error" />
               <Typography variant="h5" fontWeight={700}>Under</Typography>
-            </Stack>
+            </>
           )}
         </Stack>
-        <Divider sx={{ mb: 2 }} />
-
+        <IconButton onClick={onClose} aria-label="Close" sx={{ minWidth: 44, minHeight: 44 }}>
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+      <Divider />
+      <DialogContent sx={{ overflowY: 'auto' }}>
         {userNames.length > 0 && (
           <List dense>
             {userNames.map((user) => (
