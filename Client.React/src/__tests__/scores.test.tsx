@@ -534,4 +534,26 @@ describe('ScoresPage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument());
     expect(document.querySelectorAll('.MuiSkeleton-root').length).toBe(0);
   });
+
+  // frizat: regression caught by /code-review on the isPlaceholderData fix above — a query with
+  // enabled:false never resolves out of "placeholder" state, so once currentLeague goes from a
+  // real value to null (e.g. the user gets removed from their only league) after a successful
+  // load, isPlaceholderData stays permanently true and the page would get stuck on the skeleton
+  // forever instead of falling through to the "select a league" screen.
+  it('falls through to the no-league message, not a stuck skeleton, when currentLeague goes from set to null after a successful load', async () => {
+    await setupDefaults();
+    const { rerender, queryClient } = renderWithClient(<ScoresPage adapter={createNflAdapter()} />);
+    await screen.findByText(/Scores/i);
+    await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
+
+    sessionState.currentLeague = null;
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ScoresPage adapter={createNflAdapter()} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Please select a league/i)).toBeInTheDocument());
+    expect(document.querySelectorAll('.MuiSkeleton-root').length).toBe(0);
+  });
 });

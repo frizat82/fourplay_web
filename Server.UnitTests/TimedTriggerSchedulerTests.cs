@@ -140,10 +140,29 @@ public class TimedTriggerSchedulerTests
             .Returns(new HashSet<JobKey> { staleKey });
         _scheduler.GetJobDetail(staleKey, Arg.Any<CancellationToken>())
             .Returns(JobBuilder.Create<FakeSpreadJob>().WithIdentity(staleKey).Build());
+        // A non-empty candidate list that just doesn't include "stale-id" — pruning is
+        // intentionally skipped entirely when the list is empty (see the guard's own comment).
+        var stillCurrent = new TimedTriggerCandidate(DateTime.UtcNow.AddDays(3), "still-current", "desc", HasData: false);
+
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [stillCurrent], _token);
+
+        await _scheduler.Received(1).DeleteJob(staleKey, Arg.Any<CancellationToken>());
+    }
+
+    // The empty-candidate-list case is the dangerous one: without this guard, pruning would treat
+    // "the source returned nothing" as "delete every already-scheduled job of this type" — a
+    // single transient/partial read wiping every future Juice Reminder/Lock or Spread trigger.
+    [Fact]
+    public async Task EmptyCandidateList_PrunesNothing()
+    {
+        var existingKey = new JobKey("existing-id");
+        _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<JobKey> { existingKey });
 
         await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [], _token);
 
-        await _scheduler.Received(1).DeleteJob(staleKey, Arg.Any<CancellationToken>());
+        await _scheduler.DidNotReceive().GetJobDetail(Arg.Any<JobKey>(), Arg.Any<CancellationToken>());
+        await _scheduler.DidNotReceive().DeleteJob(Arg.Any<JobKey>(), Arg.Any<CancellationToken>());
     }
 
     // Multiple job types share one Quartz job store (Juice Reminder, Juice Lock, NFL/CFB Spread
@@ -157,8 +176,9 @@ public class TimedTriggerSchedulerTests
             .Returns(new HashSet<JobKey> { otherKey });
         _scheduler.GetJobDetail(otherKey, Arg.Any<CancellationToken>())
             .Returns(JobBuilder.Create<FakeOtherJob>().WithIdentity(otherKey).Build());
+        var stillCurrent = new TimedTriggerCandidate(DateTime.UtcNow.AddDays(3), "still-current", "desc", HasData: false);
 
-        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [], _token);
+        await TimedTriggerScheduler.ScheduleAsync<FakeSpreadJob>(_scheduler, [stillCurrent], _token);
 
         await _scheduler.DidNotReceive().DeleteJob(Arg.Any<JobKey>(), Arg.Any<CancellationToken>());
     }

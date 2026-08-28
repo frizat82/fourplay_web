@@ -22,6 +22,14 @@ internal static class TimedTriggerScheduler {
 
         var now = DateTime.UtcNow;
         var candidateList = candidates.ToList();
+        // /code-review: an empty candidate list is ambiguous — it might genuinely mean "nothing
+        // should be scheduled" (e.g. truly zero leagues exist), or it might be a transient/partial
+        // read from the source. Pruning below deletes anything NOT in this list, so treating empty
+        // as "prune everything of this type" risked wiping every already-scheduled future Juice
+        // Reminder/Lock or Spread trigger on a single bad tick. Bail out before pruning OR
+        // scheduling when there's nothing to compare against — orphans from a genuinely-deleted
+        // record still get cleaned up on the next tick once the source returns real data again.
+        if (candidateList.Count == 0) return;
 
         var existingKeys = (await scheduler.GetJobKeys(GroupMatcher<JobKey>.AnyGroup(), cancellationToken))
             .ToHashSet();
@@ -39,8 +47,6 @@ internal static class TimedTriggerScheduler {
             await scheduler.DeleteJob(staleKey, cancellationToken);
             Log.Information("TimedTriggerScheduler: pruned stale {Identity} — no longer produced by the candidate source", staleKey.Name);
         }
-
-        if (candidateList.Count == 0) return;
 
         foreach (var candidate in candidateList) {
             var lockTime = candidate.LockTime;
