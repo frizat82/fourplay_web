@@ -51,7 +51,14 @@ public static class GameHelpers {
         var span = UntilNoonCst();
         return span is null ? null : $"{span.Value.Days}d {span.Value.Hours}h {span.Value.Minutes}m";
     }
-    public static int GetWeekFromEspnWeek(long week, bool isPostSeason = false) => (int)(isPostSeason ? week + 18 : week);
+    // ESPN skips postseason week 4 (Pro Bowl) — Super Bowl is raw ESPN week 5. NFLScoresJob
+    // pre-adjusts 5->4 before calling this (the original/legacy calling convention, still
+    // supported below); callers that pass the raw ESPN week directly — e.g.
+    // EspnCacheService/DemoEspnCacheService.GetWeekScoresAsync, fed straight from a
+    // NflCurrentWeekDto's EspnWeek — need week=5 to resolve to the same WeekId 22 as week=4
+    // does, not a nonexistent WeekId 23.
+    public static int GetWeekFromEspnWeek(long week, bool isPostSeason = false) =>
+        isPostSeason ? (week == 5 ? 22 : (int)(week + 18)) : (int)week;
     public static string GetWeekName(long week, bool isPostSeason = false) {
         if (!isPostSeason) {
             return $"Week {week}";
