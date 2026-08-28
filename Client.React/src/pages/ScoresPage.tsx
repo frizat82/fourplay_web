@@ -79,7 +79,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   const isCurrentWeek = weekState === null;
   const enabled = leaguesLoaded && !!currentLeague && !!user?.userId;
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isPlaceholderData, isError, refetch } = useQuery({
     queryKey: [adapter.sport, 'scores', currentLeague, user?.userId, weekState],
     queryFn: () => weekState
       ? adapter.loadHistoricalScores(currentLeague!, user!.userId, weekState)
@@ -189,9 +189,12 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
   // ─── Guard states ─────────────────────────────────────────────────────────
 
-  // First load only — background refetches (polling, SSE) keep the grid mounted via
-  // placeholderData: keepPreviousData, so isLoading here only reflects a truly empty cache.
-  if (!leaguesLoaded || isLoading) return (
+  // isLoading covers the very first load; isPlaceholderData covers navigating to a week whose
+  // data isn't cached yet — without it, keepPreviousData silently shows the PREVIOUS week's
+  // stale grid with no loading indicator until the new week resolves (reported as Previous/Next
+  // "freezing"). Same-key background refetches (polling, SSE) never set isPlaceholderData, so
+  // those still update in place with no skeleton flash.
+  if (!leaguesLoaded || isLoading || isPlaceholderData) return (
     <Box><PageHeader title="Scores" /><GameCardGridSkeleton /></Box>
   );
   if (!currentLeague) return <NoLeague />;

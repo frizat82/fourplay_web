@@ -51,7 +51,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const isCurrentWeek = weekState === null;
   const enabled = leaguesLoaded && !!currentLeague && !!user?.userId;
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isPlaceholderData, isError, refetch } = useQuery({
     queryKey: [adapter.sport, 'picks', currentLeague, user?.userId, weekState],
     queryFn: () => weekState
       ? adapter.loadHistoricalGames(currentLeague!, user!.userId, weekState)
@@ -159,8 +159,12 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     setUserPicks(new Set());
   };
 
-  // First load only — background refetches (polling, SSE-adjacent) keep the grid mounted
-  if (!leaguesLoaded || isLoading) return (
+  // isLoading covers the very first load; isPlaceholderData covers navigating to a week whose
+  // data isn't cached yet — without it, keepPreviousData silently shows the PREVIOUS week's
+  // stale grid with no loading indicator until the new week resolves (reported as Previous/Next
+  // "freezing"). Same-key background refetches (polling, SSE) never set isPlaceholderData, so
+  // those still update in place with no skeleton flash.
+  if (!leaguesLoaded || isLoading || isPlaceholderData) return (
     <Box><PageHeader title="Picks" /><GameCardGridSkeleton /></Box>
   );
 
