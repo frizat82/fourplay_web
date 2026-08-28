@@ -7,6 +7,27 @@ export type { PickType };
 export type GameStatusValue = 'final' | 'in_progress' | 'halftime' | 'scheduled' | null;
 
 /**
+ * Caches an async fetch's resolved value for the lifetime of the closure it's created in —
+ * both nflAdapter.ts (getCurrentWeek, control table) and cfbAdapter.ts (getCurrentSlate, slate)
+ * need the exact same "resolve once per adapter instance, reuse thereafter" behavior so a single
+ * page load doesn't re-fetch "what's current" on every games/scores/season-year call. Caches the
+ * in-flight PROMISE, not just the resolved value — two calls made before the first resolves (e.g.
+ * loadCurrentGames and currentSeasonYear firing close together on the same page) share one
+ * request instead of each independently kicking off their own. A rejected fetch is NOT cached —
+ * the next call retries, rather than pinning a transient failure (network blip, brief DB outage)
+ * for the rest of the adapter's lifetime.
+ */
+export function memoizeOnce<T>(fetch: () => Promise<T>): () => Promise<T> {
+  let promise: Promise<T> | undefined;
+  return () => {
+    if (!promise) {
+      promise = fetch().catch((err: unknown) => { promise = undefined; throw err; });
+    }
+    return promise;
+  };
+}
+
+/**
  * Hide other users' picks for games that haven't started yet.
  * The caller's own picks are always visible (so they can confirm their submission).
  * Once a game kicks off, picks for that game become visible to everyone — mirroring

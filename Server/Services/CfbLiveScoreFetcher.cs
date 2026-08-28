@@ -46,12 +46,23 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
         // date compare would flip to "ended" mid-game. The 6-hour buffer past the end of EndDate
         // covers that crossover; this now gets cached forever once true (see the caching layer
         // below), so getting this boundary right matters more than it used to.
-        var slateHasEnded = slate.EndDate.ToDateTime(TimeOnly.MaxValue).AddHours(6) < DateTime.UtcNow;
+        //
+        // The control-table-resolved CURRENT slate is exempt from this shortcut, same reasoning
+        // as EspnCacheService.GetWeekScoresAsync's identical NFL fix: SeasonWindowResolver can
+        // legitimately keep an old slate as "current" well past its nominal end (the off-season
+        // bootstrap case), and cfbAdapter.ts's current-slate path now always calls this fetcher
+        // for that resolved slate — it needs the slate's real live/final ESPN state, not a DB
+        // reconstruction with no live situation/clock data.
+        using var scope = scopeFactory.CreateScope();
+        var currentSlateService = scope.ServiceProvider.GetRequiredService<ICfbCurrentSlateService>();
+        var currentSlate = await currentSlateService.GetCurrentSlateAsync();
+        var isCurrentSlate = currentSlate?.Id == slate.Id;
+
+        var slateHasEnded = !isCurrentSlate && slate.EndDate.ToDateTime(TimeOnly.MaxValue).AddHours(6) < DateTime.UtcNow;
         if (slateHasEnded) {
             var cacheKey = $"cfb-slate-scores_{slate.Id}";
             if (settledCache.TryGetValue<EspnScores>(cacheKey, out var cached)) return cached;
 
-            using var scope = scopeFactory.CreateScope();
             var cfbRepo = scope.ServiceProvider.GetRequiredService<ICfbRepository>();
             var rows = (await cfbRepo.GetScoresForSlateAsync(slate.Id)).ToList();
             if (rows.Count > 0) {
@@ -66,9 +77,33 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
             }
         }
 
-        return CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat)
+        var result = CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat)
             ? await FetchCfpAsync(slate)
             : await FetchRankedWeekAsync(slate);
+
+        // Replay mode only (DEMO_REPLAY_MODE=true) — ReplayCacheService is a Singleton registered
+        // only then, so this resolves null (a no-op) in every other environment. The replay
+        // game (IND @ ATL) is seeded as a second game inside this real slate specifically so it
+        // can be surfaced through CFB's normal slate-based flow (see
+        // DemoDataSeeder.SeedReplayCfbSlateAsync) — but cfbApi above has no knowledge of it (it
+        // only ever calls the real ESPN endpoints), so it has to be merged in here rather than
+        // fetched as part of the real ESPN response.
+        if (isCurrentSlate) {
+            var replayService = scope.ServiceProvider.GetService<ReplayCacheService>();
+            var replaySnapshot = replayService is null ? null : await replayService.GetScoresAsync();
+            if (replaySnapshot?.Events is { Length: > 0 } replayEvents) {
+                result = result is null
+                    ? replaySnapshot
+                    : new EspnScores {
+                        Leagues = result.Leagues,
+                        Season = result.Season,
+                        Week = result.Week,
+                        Events = [.. result.Events ?? [], .. replayEvents],
+                    };
+            }
+        }
+
+        return result;
     }
 
     private async Task<EspnScores?> FetchCfpAsync(CfbSlates slate) {

@@ -32,12 +32,12 @@ vi.mock('../components/sports/TeamHelmet', () => ({
 vi.mock('../components/WeatherIcon', () => ({ default: () => null }));
 
 // ─── NFL regression ──────────────────────────────────────────────────────────
-vi.mock('../api/league', () => ({ addPicks: vi.fn(), doOddsExist: vi.fn(), getUserPicks: vi.fn(), spreadBatch: vi.fn() }));
+vi.mock('../api/league', () => ({ addPicks: vi.fn(), doOddsExist: vi.fn(), getUserPicks: vi.fn(), spreadBatch: vi.fn(), getNflCurrentWeek: vi.fn() }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
 
-import { loadScoresWithRetry } from '../api/espn';
-import { doOddsExist, getUserPicks, spreadBatch } from '../api/league';
+import { getWeekScores } from '../api/espn';
+import { doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
 import { createCompetition, createScores, createSpreadResponse } from '../test/fixtures';
@@ -49,7 +49,11 @@ describe('NFL PicksPage — GameCard layout regression', () => {
       id: '1', season: { year: 2023, type: 2 }, week: { number: 8 }, date: new Date().toISOString(),
       competitions: [createCompetition({ homeTeam: 'KC', awayTeam: 'BUF' })],
     }]});
-    vi.mocked(loadScoresWithRetry).mockResolvedValue(scores);
+    vi.mocked(getNflCurrentWeek).mockResolvedValue({
+      weekId: 8, espnWeek: 8, season: 2023, isPostSeason: false,
+      weekLabel: 'Week 8', scoringFormat: 'Standard', spreadLockDatetime: new Date().toISOString(),
+    });
+    vi.mocked(getWeekScores).mockResolvedValue(scores);
     vi.mocked(doOddsExist).mockResolvedValue(true);
     vi.mocked(getUserPicks).mockResolvedValue([]);
     vi.mocked(spreadBatch).mockResolvedValue({ responses: {
@@ -81,13 +85,12 @@ vi.mock('../api/espn', () => ({
   loadScoresWithRetry: vi.fn(),
   getWeekScores: vi.fn(),
   getScores: vi.fn(),
-  loadCfbScoresWithRetry: vi.fn(),
   getCfbScoresForSlate: vi.fn(),
   getCfbLiveGames: vi.fn(),
 }));
 
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
-import { loadCfbScoresWithRetry, getCfbLiveGames } from '../api/espn';
+import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
 const spread: CfbSpreadDto = { id: 1, cfbSlateId: 1, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5, gameTime: '2030-10-11T20:00:00Z', dateCreated: '2030-10-09T14:00:00Z' };
@@ -99,7 +102,7 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
     vi.mocked(getCfbSlates).mockResolvedValue([slate]);
     vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
     // ESPN returns scheduled game (future date → no score yet)
-    vi.mocked(loadCfbScoresWithRetry).mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
+    vi.mocked(getCfbScoresForSlate).mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
     vi.mocked(getCfbLiveGames).mockResolvedValue([]);
     vi.mocked(getCfbScores).mockResolvedValue([]);
     vi.mocked(getCfbUserPicks).mockResolvedValue([]);

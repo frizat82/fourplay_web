@@ -445,7 +445,7 @@ public class LeagueController(
                 // team also happened to appear in the currently-cached (unrelated) event.
                 var competition = espnScores.Events
                     .Where(e => e.Season.Year == pick.Season &&
-                                GameHelpers.GetWeekFromEspnWeek(e.Week.Number, e.IsPostSeason()) == pick.NflWeek)
+                                GameHelpers.GetWeekFromEspnWeek(e.Week.Number, (int)e.Season.Year, e.IsPostSeason()) == pick.NflWeek)
                     .SelectMany(e => e.Competitions)
                     .FirstOrDefault(c =>
                         c.Competitors.Any(comp => string.Equals(comp.Team?.Abbreviation, pick.Team, StringComparison.OrdinalIgnoreCase)));
