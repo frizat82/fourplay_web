@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ScoresPage from '../pages/ScoresPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCfbAdapter } from '../services/cfbAdapter';
-import { createPick, createScores, createSpreadResponse, createCompetition } from '../test/fixtures';
+import { createCurrentWeek, createPick, createScores, createSpreadResponse, createCompetition } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -33,11 +33,11 @@ vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/auth', () => ({ useAuth: () => ({ user: { userId: '123', name: 'TestUser', claims: [] } }) }));
 vi.mock('../api/espn', () => ({
   getScores: vi.fn(), loadScoresWithRetry: vi.fn(), getWeekScores: vi.fn(), getLiveGames: vi.fn(),
-  loadCfbScoresWithRetry: vi.fn(), getCfbScoresForSlate: vi.fn(), getCfbLiveGames: vi.fn(),
+  getCfbScoresForSlate: vi.fn(), getCfbLiveGames: vi.fn(),
 }));
 vi.mock('../api/league', () => ({
   doOddsExist: vi.fn(), getLeaguePicks: vi.fn(), spreadBatch: vi.fn(),
-  addPicks: vi.fn(), getUserPicks: vi.fn(),
+  addPicks: vi.fn(), getUserPicks: vi.fn(), getNflCurrentWeek: vi.fn(),
 }));
 vi.mock('../api/cfb', () => ({
   getCfbCurrentSlate: vi.fn(), getCfbSlates: vi.fn(), getCfbSpreads: vi.fn(),
@@ -48,23 +48,24 @@ vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn().mockReso
 const toastPush = vi.fn();
 vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 
-import { loadScoresWithRetry, getLiveGames, getWeekScores, loadCfbScoresWithRetry, getCfbLiveGames } from '../api/espn';
-import { doOddsExist, getLeaguePicks, spreadBatch } from '../api/league';
+import { getLiveGames, getWeekScores, getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
+import { doOddsExist, getLeaguePicks, spreadBatch, getNflCurrentWeek } from '../api/league';
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbAllPicks } from '../api/cfb';
 
-const mockedLoadScoresWithRetry = vi.mocked(loadScoresWithRetry);
 const mockedGetLiveGames = vi.mocked(getLiveGames);
 const mockedGetWeekScores = vi.mocked(getWeekScores);
 const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetLeaguePicks = vi.mocked(getLeaguePicks);
+const mockedGetNflCurrentWeek = vi.mocked(getNflCurrentWeek);
 const mockedGetCfbSlates = vi.mocked(getCfbSlates);
 const mockedGetCfbSpreads = vi.mocked(getCfbSpreads);
 const mockedGetCfbScores = vi.mocked(getCfbScores);
 const mockedGetCfbAllPicks = vi.mocked(getCfbAllPicks);
-const mockedLoadCfbScoresWithRetry = vi.mocked(loadCfbScoresWithRetry);
+const mockedGetCfbScoresForSlate = vi.mocked(getCfbScoresForSlate);
 const mockedGetCfbLiveGames = vi.mocked(getCfbLiveGames);
 const mockedSpreadBatch = vi.mocked(spreadBatch);
 const mockedGetCfbCurrentSlate = vi.mocked(getCfbCurrentSlate);
+
 
 // BUF home (24-10), spread -7: homeCovers = 24+(-7)=17 > 10 ✓ (BUF covers → green)
 // MIA away: !homeCovers → red; Over at 47.5: 24+10=34 < 47.5 → Under wins
@@ -91,7 +92,8 @@ const setupDefaults = async (options?: {
   const week = options?.week ?? 2;
   const postSeason = options?.postSeason ?? false;
   const gameStarted = options?.gameStarted ?? true;
-  mockedLoadScoresWithRetry.mockResolvedValue(makeScores(week, postSeason, gameStarted));
+  mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, postSeason));
+  mockedGetWeekScores.mockResolvedValue(makeScores(week, postSeason, gameStarted));
   mockedGetLiveGames.mockResolvedValue([]);
   mockedDoOddsExist.mockResolvedValue(options?.oddsExist ?? true);
   mockedGetLeaguePicks.mockResolvedValue(options?.picks ?? []);
@@ -360,7 +362,8 @@ describe('ScoresPage', () => {
         homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10,
         liveStatus: { name: 'status_in_progress', period: 2, displayClock: '5:00' },
       });
-      mockedLoadScoresWithRetry.mockResolvedValue(createScores({
+      mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(2));
+      mockedGetWeekScores.mockResolvedValue(createScores({
         week: 2, postSeason: false,
         events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
       }));
@@ -372,7 +375,7 @@ describe('ScoresPage', () => {
       expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0);
 
       // Hold the next fetch in-flight forever so we can observe mid-refetch UI
-      mockedLoadScoresWithRetry.mockImplementation(() => new Promise(() => {}));
+      mockedGetWeekScores.mockImplementation(() => new Promise(() => {}));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(POLL_MS);
@@ -393,15 +396,19 @@ describe('ScoresPage', () => {
         homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10,
         liveStatus: { name: 'status_in_progress', period: 2, displayClock: '5:00' },
       });
-      mockedLoadScoresWithRetry.mockResolvedValue(createScores({
-        week: 2, postSeason: false,
-        events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
-      }));
+      mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(2));
+      // getWeekScores now serves BOTH the current week (2, via loadCurrentScores) and historical
+      // navigation (week 5) — differentiate by the requested week, same as the real backend would.
+      mockedGetWeekScores.mockImplementation(async (week: number) => week === 5
+        ? makeScores(5, false, true)
+        : createScores({
+            week: 2, postSeason: false,
+            events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
+          }));
       mockedGetLiveGames.mockResolvedValue([]);
       mockedDoOddsExist.mockResolvedValue(true);
       mockedGetLeaguePicks.mockResolvedValue([]);
       mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
-      mockedGetWeekScores.mockResolvedValue(makeScores(5, false, true));
       await renderPage();
       expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0);
 
@@ -416,16 +423,16 @@ describe('ScoresPage', () => {
       await user.click(screen.getByRole('option', { name: /week 2/i }));
       await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
 
-      // Clear AFTER the one-off settle call for "week 2" itself — nflAdapter's
-      // loadHistoricalScores also calls loadScoresWithRetry internally (its own frozen-week
-      // check), so a call here is unavoidable and NOT what proves polling stayed active. Only a
-      // FURTHER call, after advancing past the poll interval, proves that.
-      mockedLoadScoresWithRetry.mockClear();
+      // Clear AFTER the one-off settle call for "week 2" itself (loadCurrentScores' own
+      // getWeekScores(2, ...) call when weekState routes back to the live query) — that call is
+      // unavoidable and NOT what proves polling stayed active. Only a FURTHER call, after
+      // advancing past the poll interval, proves that.
+      mockedGetWeekScores.mockClear();
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(POLL_MS);
       });
-      expect(mockedLoadScoresWithRetry).toHaveBeenCalled();
+      expect(mockedGetWeekScores).toHaveBeenCalled();
     });
   });
 
@@ -436,7 +443,12 @@ describe('ScoresPage', () => {
     // ceiling from the active query's data on every render collapses it instead of remembering
     // the real ceiling from the last current-week load (currentWeekSnapshot).
     await setupDefaults({ week: 2 }); // current week resolves to season 2024 (fixture default)
-    mockedGetWeekScores.mockResolvedValue(createScores({ week: 2, seasonYear: 2022, gameStarted: true }));
+    // getWeekScores now serves both the current week (season 2024) and the historical navigation
+    // below (season 2022) — differentiate by the requested year so the initial current-week load
+    // isn't overwritten by the season-2022 fixture before the snapshot is even captured.
+    mockedGetWeekScores.mockImplementation(async (_week: number, year: number) => year === 2022
+      ? createScores({ week: 2, seasonYear: 2022, gameStarted: true })
+      : makeScores(2, false, true));
     await renderPage();
 
     await userEvent.click(screen.getAllByRole('combobox')[0]);
@@ -450,14 +462,14 @@ describe('ScoresPage', () => {
 
   it('shows an error alert with a retry button when the scores query fails', async () => {
     await setupDefaults();
-    mockedLoadScoresWithRetry.mockRejectedValue(new Error('network down'));
+    mockedGetWeekScores.mockRejectedValue(new Error('network down'));
     renderWithClient(<ScoresPage adapter={createNflAdapter()} />);
 
     const retryButton = await screen.findByRole('button', { name: /retry/i });
     expect(screen.getByText(/couldn.t load scores/i)).toBeInTheDocument();
 
     // Recover on retry
-    mockedLoadScoresWithRetry.mockResolvedValue(makeScores(2, false, true));
+    mockedGetWeekScores.mockResolvedValue(makeScores(2, false, true));
     await userEvent.click(retryButton);
 
     await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
@@ -484,7 +496,7 @@ describe('ScoresPage', () => {
     mockedGetCfbSpreads.mockResolvedValue([cfbSpread]);
     mockedGetCfbScores.mockResolvedValue([]);
     mockedGetCfbAllPicks.mockResolvedValue([]);
-    mockedLoadCfbScoresWithRetry.mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
+    mockedGetCfbScoresForSlate.mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
     mockedGetCfbLiveGames.mockResolvedValue([]);
 
     rerender(

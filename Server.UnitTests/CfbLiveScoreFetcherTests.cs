@@ -19,6 +19,7 @@ namespace FourPlayWebApp.Server.UnitTests;
 public class CfbLiveScoreFetcherTests {
     private readonly ICfbApiService _cfbApi = Substitute.For<ICfbApiService>();
     private readonly ICfbRepository _cfbRepo = Substitute.For<ICfbRepository>();
+    private readonly ICfbCurrentSlateService _currentSlateService = Substitute.For<ICfbCurrentSlateService>();
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IMemoryCache _settledCache = new MemoryCache(new MemoryCacheOptions());
 
@@ -26,8 +27,13 @@ public class CfbLiveScoreFetcherTests {
         // Default: no persisted rows for any slate, so existing tests (which never seed the repo)
         // keep exercising the live-ESPN branch exactly as before this DB-first check was added.
         _cfbRepo.GetScoresForSlateAsync(Arg.Any<int>()).Returns((IEnumerable<CfbScores>)[]);
+        // Default: no resolved "current" slate, so existing tests (which never care about the
+        // current-slate exemption) keep exercising slateHasEnded exactly as before that check
+        // was added.
+        _currentSlateService.GetCurrentSlateAsync().Returns((CfbSlateInfo?)null);
         var services = new ServiceCollection();
         services.AddSingleton(_cfbRepo);
+        services.AddSingleton(_currentSlateService);
         _scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 
@@ -196,6 +202,27 @@ public class CfbLiveScoreFetcherTests {
         Assert.Equal(TypeName.StatusFinal, comp.Status.Type.Name);
         await _cfbApi.DidNotReceiveWithAnyArgs().GetScoresByWeekAsync(default, default);
         await _cfbApi.DidNotReceive().GetCfpGamesAsync();
+    }
+
+    // frizat: cfbAdapter.ts's current-slate path now always calls this fetcher for whichever
+    // slate the control table (ICfbCurrentSlateService) resolves as current — that slate must
+    // always be live-fetched, even if its own calendar window looks "ended" and persisted rows
+    // exist, or the demo's frozen in-progress fixture data never surfaces for it.
+    [Fact]
+    public async Task FetchForSlateAsync_WhenSlateIsTheResolvedCurrentSlate_AlwaysCallsEspn_EvenWithPersistedRowsAndEndedWindow() {
+        var slate = BuildRegularSeasonSlate();
+        var rows = new List<CfbScores> {
+            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero) },
+        };
+        _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)rows);
+        _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
+            slate.Id, slate.Season, slate.SlateNumber, slate.Label, slate.SlateType,
+            slate.StartDate, slate.EndDate, null, DateTime.UtcNow));
+        _cfbApi.GetScoresByWeekAsync(5, false).Returns(BuildScoreboardWithRanking());
+
+        await BuildFetcher().FetchForSlateAsync(slate);
+
+        await _cfbApi.Received(1).GetScoresByWeekAsync(5, false);
     }
 
     [Fact]
