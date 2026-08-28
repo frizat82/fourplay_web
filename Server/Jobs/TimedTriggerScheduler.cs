@@ -22,10 +22,31 @@ internal static class TimedTriggerScheduler {
 
         var now = DateTime.UtcNow;
         var candidateList = candidates.ToList();
+        // /code-review: an empty candidate list is ambiguous — it might genuinely mean "nothing
+        // should be scheduled" (e.g. truly zero leagues exist), or it might be a transient/partial
+        // read from the source. Pruning below deletes anything NOT in this list, so treating empty
+        // as "prune everything of this type" risked wiping every already-scheduled future Juice
+        // Reminder/Lock or Spread trigger on a single bad tick. Bail out before pruning OR
+        // scheduling when there's nothing to compare against — orphans from a genuinely-deleted
+        // record still get cleaned up on the next tick once the source returns real data again.
         if (candidateList.Count == 0) return;
 
         var existingKeys = (await scheduler.GetJobKeys(GroupMatcher<JobKey>.AnyGroup(), cancellationToken))
             .ToHashSet();
+
+        // A one-time future trigger only ever leaves GetJobKeys once it actually FIRES — Quartz
+        // has no notion of "the source stopped producing this candidate" (a league got deleted, a
+        // week's config row got corrected away). Without this, orphaned jobs sit in the Job
+        // Manager forever. Scoped to jobs of TJob's own type — this method is shared by Juice
+        // Reminder, Juice Lock, and both spread schedulers against the same job store, so a key
+        // absent from this call's candidates must not be assumed to belong to this source.
+        var candidateKeys = candidateList.Select(c => new JobKey(c.Identity)).ToHashSet();
+        foreach (var staleKey in existingKeys.Except(candidateKeys)) {
+            var staleDetail = await scheduler.GetJobDetail(staleKey, cancellationToken);
+            if (staleDetail?.JobType != typeof(TJob)) continue;
+            await scheduler.DeleteJob(staleKey, cancellationToken);
+            Log.Information("TimedTriggerScheduler: pruned stale {Identity} — no longer produced by the candidate source", staleKey.Name);
+        }
 
         foreach (var candidate in candidateList) {
             var lockTime = candidate.LockTime;

@@ -363,9 +363,9 @@ export default function AppLayout() {
                   <List component="div" disablePadding>
                     <ListItemButton
                       component={NavLink}
-                      to="/admin/jobManagement"
+                      to="/admin/jobManager"
                       sx={adminNavItemSx}
-                      onClick={() => handleNavClick('/admin/jobManagement')}
+                      onClick={() => handleNavClick('/admin/jobManager')}
                     >
                       <ListItemIcon sx={{ minWidth: 36 }}>
                         <WorkIcon sx={{ fontSize: 20 }} />

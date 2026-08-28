@@ -472,7 +472,11 @@ export default function LeaguePortalPage() {
       )}
 
       {leagueOptions.length > 1 && (
-        <FormControl sx={{ mb: 3, minWidth: 240 }} size="small">
+        // frizat: mt matches the header Stack's own gap={2} above — without it, this sits flush
+        // against whatever the header wraps to at narrow widths (its floating "League" label was
+        // reported overlapping the Create League button on iOS, since this select renders above
+        // all three tabs and is visible regardless of which one is active).
+        <FormControl sx={{ mt: 2, mb: 3, minWidth: 240 }} size="small">
           <InputLabel>League</InputLabel>
           <Select
             value={selectedLeague?.id ?? ''}
