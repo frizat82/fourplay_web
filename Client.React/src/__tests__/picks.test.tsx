@@ -421,7 +421,7 @@ describe('PicksPage', () => {
   it('postseason week 4 displays super bowl title', async () => {
     await setupDefaults({ week: 4, postSeason: true });
     await renderPage();
-    expect(screen.getAllByText(/Super Bowl/i).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getAllByText(/Super Bowl/i).length).toBeGreaterThan(0));
   });
 
   it('regular season hides over/under buttons', async () => {
