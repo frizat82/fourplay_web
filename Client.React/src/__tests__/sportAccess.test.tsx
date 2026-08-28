@@ -9,11 +9,14 @@ import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import AppLayout from '../layouts/AppLayout';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { isAdmin } from '../utils/auth';
+
+const mockedIsAdmin = vi.mocked(isAdmin);
 
 vi.mock('../services/auth',  () => ({ useAuth: () => ({ user: { userId: 'u1', name: 'Alice', claims: [] } }) }));
 vi.mock('../services/theme', () => ({ useThemeMode: () => ({ mode: 'light', toggleTheme: vi.fn() }) }));
 vi.mock('../services/toast', () => ({ useToast: () => ({ push: vi.fn() }) }));
-vi.mock('../utils/auth',     () => ({ isAdmin: () => false }));
+vi.mock('../utils/auth',     () => ({ isAdmin: vi.fn() }));
 
 // Mutable session state — updated per test
 const sessionState = {
@@ -51,6 +54,7 @@ describe('Sport access control', () => {
     // Reset to defaults
     Object.assign(sessionState, { currentLeague: 1, hasNflAccess: true, hasCfbAccess: true, leaguesLoaded: true, ownedLeagues: [] });
     Object.assign(sportContext, { sport: 'NFL', isCfb: false, isNfl: true });
+    mockedIsAdmin.mockReturnValue(false);
   });
 
   it('NFL-only user on NFL site — no access message, renders nav normally', () => {
@@ -78,6 +82,33 @@ describe('Sport access control', () => {
     Object.assign(sessionState, { hasNflAccess: true, hasCfbAccess: false, currentLeague: null });
     renderLayout('/league/manage');
     expect(screen.queryByText(/No CFB access/i)).not.toBeInTheDocument();
+  });
+
+  // frizat: an admin's own personal league membership is unrelated to whether they should be able
+  // to reach the admin panel or manage the platform on a given sport's site — the block is meant
+  // for regular users who genuinely have nothing to look at, not for admins doing platform work.
+  it('admin with zero CFB access reaches the CFB admin panel directly — no access block at all', () => {
+    mockedIsAdmin.mockReturnValue(true);
+    Object.assign(sportContext, { sport: 'CFB', isCfb: true, isNfl: false });
+    Object.assign(sessionState, { hasNflAccess: true, hasCfbAccess: false, currentLeague: null });
+    renderLayout('/admin/jobManager');
+    expect(screen.queryByText(/No CFB access/i)).not.toBeInTheDocument();
+  });
+
+  it('admin with zero CFB access reaches ordinary sport-specific pages too (Scores), not just admin/League Portal', () => {
+    mockedIsAdmin.mockReturnValue(true);
+    Object.assign(sportContext, { sport: 'CFB', isCfb: true, isNfl: false });
+    Object.assign(sessionState, { hasNflAccess: true, hasCfbAccess: false, currentLeague: null });
+    renderLayout('/scores');
+    expect(screen.queryByText(/No CFB access/i)).not.toBeInTheDocument();
+  });
+
+  it('non-admin with zero CFB access still sees the block on the same admin route — the exemption is admin-only', () => {
+    mockedIsAdmin.mockReturnValue(false);
+    Object.assign(sportContext, { sport: 'CFB', isCfb: true, isNfl: false });
+    Object.assign(sessionState, { hasNflAccess: true, hasCfbAccess: false, currentLeague: null });
+    renderLayout('/admin/jobManager');
+    expect(screen.getByText(/No CFB access/i)).toBeInTheDocument();
   });
 
   it('CFB-only user on NFL site — shows No NFL access with Go to CFB link', () => {
