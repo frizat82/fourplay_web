@@ -1,6 +1,4 @@
-import { Box, Link, Typography } from '@mui/material';
-
-const REPO_URL = 'https://github.com/frizat82/fourplay_web';
+import { Box, Typography } from '@mui/material';
 
 export default function VersionFooter() {
   const sha = import.meta.env.VITE_APP_VERSION;
@@ -10,9 +8,7 @@ export default function VersionFooter() {
   return (
     <Box component="footer" sx={{ py: 1, textAlign: 'center' }}>
       <Typography variant="caption" color="text.secondary">
-        <Link href={`${REPO_URL}/commit/${sha}`} target="_blank" rel="noopener noreferrer" color="inherit">
-          {shortSha}
-        </Link>
+        {shortSha}
       </Typography>
     </Box>
   );

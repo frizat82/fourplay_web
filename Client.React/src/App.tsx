@@ -107,12 +107,12 @@ export default function App() {
           path="/admin"
           element={
             <RequireAdmin>
-              <Navigate to="/admin/jobManagement" replace />
+              <Navigate to="/admin/jobManager" replace />
             </RequireAdmin>
           }
         />
         <Route
-          path="/admin/jobManagement"
+          path="/admin/jobManager"
           element={
             <RequireAdmin>
               <AdminJobManagerPage />

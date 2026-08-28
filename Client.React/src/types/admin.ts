@@ -45,6 +45,10 @@ export interface JobStatusResponse {
   lastSucceededUtc?: string | null;
   lastFailedUtc?: string | null;
   lastMessage?: string | null;
+  category: string;
+  isDynamic: boolean;
+  leagueId?: number | null;
+  leagueName?: string | null;
 }
 
 export interface InvitationDto {
