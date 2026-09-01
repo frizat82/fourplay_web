@@ -43,14 +43,17 @@ public class InvitationController(
         // (no LeagueMembershipInvite was ever created), so they got nothing. Only applies when a
         // specific league is targeted — a leagueless invite has no league to build a pending
         // membership invite against, so it keeps its original behavior.
-        if (leagueId is int targetLeagueId) {
-            var existingUser = await userManager.FindByEmailAsync(email);
-            if (existingUser != null) {
-                if (await leagueRepo.UserExistsInLeagueAsync(existingUser.Id, targetLeagueId))
-                    return Conflict($"{email} is already a member of this league.");
-                await membershipInviteService.CreateOrReopenAsync(targetLeagueId, existingUser.Id, invitedByUserId);
-                return Ok(new LeagueInviteResultDto(email, LeagueInviteOutcome.ExistingUserInvitePending));
-            }
+        // KNOWN DUPLICATION (deliberate, not an oversight): this block is near-identical to
+        // LeagueController.InviteToLeague's existing-user branch. Extracting a shared
+        // ILeagueMembershipInviteService-backed orchestration method is the right long-term fix,
+        // but LeagueController's callers (LeagueOwnershipTests.cs) mock repo/userManager/
+        // membershipSvc directly against that controller — deferred here to avoid rewriting those
+        // passing tests as a side effect of this bug fix. Keep both branches in sync until then.
+        if (leagueId is int targetLeagueId && await userManager.FindByEmailAsync(email) is { } existingUser) {
+            if (await leagueRepo.UserExistsInLeagueAsync(existingUser.Id, targetLeagueId))
+                return Conflict($"{email} is already a member of this league.");
+            await membershipInviteService.CreateOrReopenAsync(targetLeagueId, existingUser.Id, invitedByUserId);
+            return Ok(new LeagueInviteResultDto(email, LeagueInviteOutcome.ExistingUserInvitePending));
         }
 
         var invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId, leagueId, baseUrl);

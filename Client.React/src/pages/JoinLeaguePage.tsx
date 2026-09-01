@@ -9,6 +9,7 @@ import Typography from '@mui/material/Typography';
 import { validateInviteLink, joinViaLink, type LeagueInviteLinkDto } from '../api/league';
 import { useAuth } from '../services/auth';
 import { useSession } from '../services/session';
+import { buildLoginUrl } from '../utils/url';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 
 export default function JoinLeaguePage() {
@@ -44,7 +45,7 @@ export default function JoinLeaguePage() {
   // branch rejects an existing email with no fallback). Logging in and returning here lets them
   // hit the normal authenticated Join button below.
   const handleLogIn = () => {
-    navigate(`/account/login?returnUrl=${encodeURIComponent(`/join/${token}`)}`);
+    navigate(buildLoginUrl(`/join/${token}`));
   };
 
   const handleJoin = async () => {
