@@ -1,6 +1,7 @@
 ﻿using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Models.Mappers;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Shared.Models.Email;
 using Microsoft.AspNetCore.Authorization;
@@ -12,7 +13,12 @@ namespace FourPlayWebApp.Server.Controllers;
 [Authorize(Roles = "Administrator")]
 [ApiController]
 [Route("api/invitations")]
-public class InvitationController(IInvitationService invitationService, IEmailSender<ApplicationUser> emailSenderApplication) : ControllerBase {
+public class InvitationController(
+    IInvitationService invitationService,
+    IEmailSender<ApplicationUser> emailSenderApplication,
+    UserManager<ApplicationUser> userManager,
+    ILeagueRepository leagueRepo,
+    ILeagueMembershipInviteService membershipInviteService) : ControllerBase {
     [HttpGet("all")]
     public async Task<ActionResult<List<InvitationDto>>> GetAll()
     {
@@ -28,10 +34,27 @@ public class InvitationController(IInvitationService invitationService, IEmailSe
     }
 
     [HttpPost]
-    public async Task<ActionResult<InvitationDto>> Create([FromQuery] string email, [FromQuery] string invitedByUserId, [FromQuery] int? leagueId = null, [FromQuery] string? baseUrl = null)
+    public async Task<ActionResult<LeagueInviteResultDto>> Create([FromQuery] string email, [FromQuery] string invitedByUserId, [FromQuery] int? leagueId = null, [FromQuery] string? baseUrl = null)
     {
+        // Mirrors LeagueController.InviteToLeague's existing-user check: this admin-facing
+        // "Manage Invitations" tool used to unconditionally create a registration-style email
+        // Invitation, even for an email that already has an account — the invitee never saw an
+        // email (they don't need one) and never got the in-app accept/decline banner either
+        // (no LeagueMembershipInvite was ever created), so they got nothing. Only applies when a
+        // specific league is targeted — a leagueless invite has no league to build a pending
+        // membership invite against, so it keeps its original behavior.
+        if (leagueId is int targetLeagueId) {
+            var existingUser = await userManager.FindByEmailAsync(email);
+            if (existingUser != null) {
+                if (await leagueRepo.UserExistsInLeagueAsync(existingUser.Id, targetLeagueId))
+                    return Conflict($"{email} is already a member of this league.");
+                await membershipInviteService.CreateOrReopenAsync(targetLeagueId, existingUser.Id, invitedByUserId);
+                return Ok(new LeagueInviteResultDto(email, LeagueInviteOutcome.ExistingUserInvitePending));
+            }
+        }
+
         var invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId, leagueId, baseUrl);
-        return CreatedAtAction(nameof(GetAll), new { id = invitation.Id }, invitation.ToDto());
+        return Ok(new LeagueInviteResultDto(invitation.Email, LeagueInviteOutcome.NewUserInvitationSent));
     }
 
     [HttpPost("{id:int}/resend")]
