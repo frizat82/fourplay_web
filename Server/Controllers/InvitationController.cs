@@ -43,27 +43,33 @@ public class InvitationController(
         // (no LeagueMembershipInvite was ever created), so they got nothing. Only applies when a
         // specific league is targeted — a leagueless invite has no league to build a pending
         // membership invite against, so it keeps its original behavior.
-        // KNOWN DUPLICATION (deliberate, not an oversight): this block is near-identical to
-        // LeagueController.InviteToLeague's existing-user branch. Extracting a shared
+        // KNOWN DUPLICATION (deliberate, not an oversight): the existing-user branch below is
+        // near-identical to LeagueController.InviteToLeague's. Extracting a shared
         // ILeagueMembershipInviteService-backed orchestration method is the right long-term fix,
         // but LeagueController's callers (LeagueOwnershipTests.cs) mock repo/userManager/
         // membershipSvc directly against that controller — deferred here to avoid rewriting those
         // passing tests as a side effect of this bug fix. Keep both branches in sync until then.
-        if (leagueId is int targetLeagueId && await userManager.FindByEmailAsync(email) is { } existingUser) {
-            // /code-review: without this, a stale or crafted leagueId reached CreateOrReopenAsync,
-            // which inserts a LeagueMembershipInvite with a required FK to LeagueInfo — a bad
-            // leagueId trips a DbUpdateException that CreateOrReopenAsync's catch block silently
-            // swallows (it exists only for a concurrent-duplicate-insert race), so this endpoint
-            // returned 200 OK as if the invite were created even though nothing was persisted.
+        if (leagueId is int targetLeagueId) {
+            // /code-review: without this, a stale or crafted leagueId reaches either
+            // CreateOrReopenAsync (which inserts a LeagueMembershipInvite with a required FK to
+            // LeagueInfo) or CreateInvitationAsync below (same FK, on Invitation) — a bad leagueId
+            // trips a DbUpdateException that both methods' catch blocks assume only ever means "a
+            // concurrent duplicate insert already happened" and mishandle, so this endpoint would
+            // report success (or crash re-reading a row that was never inserted) instead of a
+            // clean 404. Matches LeagueController.InviteToLeague's LoadOwnedLeagueAsync guard,
+            // which runs unconditionally before either of its branches for the same reason.
             try {
                 await leagueRepo.GetLeagueInfoAsync(targetLeagueId);
             } catch (InvalidOperationException) {
                 return NotFound();
             }
-            if (await leagueRepo.UserExistsInLeagueAsync(existingUser.Id, targetLeagueId))
-                return Conflict($"{email} is already a member of this league.");
-            await membershipInviteService.CreateOrReopenAsync(targetLeagueId, existingUser.Id, invitedByUserId);
-            return Ok(new LeagueInviteResultDto(email, LeagueInviteOutcome.ExistingUserInvitePending));
+
+            if (await userManager.FindByEmailAsync(email) is { } existingUser) {
+                if (await leagueRepo.UserExistsInLeagueAsync(existingUser.Id, targetLeagueId))
+                    return Conflict($"{email} is already a member of this league.");
+                await membershipInviteService.CreateOrReopenAsync(targetLeagueId, existingUser.Id, invitedByUserId);
+                return Ok(new LeagueInviteResultDto(email, LeagueInviteOutcome.ExistingUserInvitePending));
+            }
         }
 
         var invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId, leagueId, baseUrl);
