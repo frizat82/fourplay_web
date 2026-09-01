@@ -15,9 +15,9 @@ namespace FourPlayWebApp.Server.UnitTests;
 public class InvitationControllerTests
 {
     private static (InvitationController ctrl, IInvitationService invitationService, ILeagueRepository leagueRepo, UserManager<ApplicationUser> userManager, ILeagueMembershipInviteService membershipInviteService)
-        BuildControllerWithDeps()
+        BuildControllerWithDeps(IInvitationService? invitationService = null)
     {
-        var invitationService = Substitute.For<IInvitationService>();
+        invitationService ??= Substitute.For<IInvitationService>();
         var leagueRepo = Substitute.For<ILeagueRepository>();
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var userManager = Substitute.For<UserManager<ApplicationUser>>(
@@ -29,14 +29,6 @@ public class InvitationControllerTests
         return (ctrl, invitationService, leagueRepo, userManager, membershipInviteService);
     }
 
-    private static InvitationController BuildController(IInvitationService invitationService) =>
-        new(
-            invitationService, Substitute.For<IEmailSender<ApplicationUser>>(),
-            Substitute.For<UserManager<ApplicationUser>>(
-                Substitute.For<IUserStore<ApplicationUser>>(), null, null, null, null, null, null, null, null),
-            Substitute.For<ILeagueRepository>(),
-            Substitute.For<ILeagueMembershipInviteService>());
-
     [Fact]
     public async Task Create_PassesBaseUrlThrough_SoTheInvitationServiceCanSendTheEmail()
     {
@@ -44,9 +36,9 @@ public class InvitationControllerTests
         invitationService
             .CreateInvitationAsync("target@example.com", "admin-1", null, "https://ivleague.com")
             .Returns(new Invitation { Id = 1, Email = "target@example.com", InvitationCode = "code-abc" });
-        var controller = BuildController(invitationService);
+        var (ctrl, _, _, _, _) = BuildControllerWithDeps(invitationService);
 
-        await controller.Create("target@example.com", "admin-1", baseUrl: "https://ivleague.com");
+        await ctrl.Create("target@example.com", "admin-1", baseUrl: "https://ivleague.com");
 
         await invitationService.Received(1).CreateInvitationAsync("target@example.com", "admin-1", null, "https://ivleague.com");
     }
@@ -93,7 +85,7 @@ public class InvitationControllerTests
     [Fact]
     public async Task Create_NoExistingUser_WithLeagueId_StillCreatesEmailInvitation()
     {
-        var (ctrl, invitationService, leagueRepo, userManager, membershipInviteService) = BuildControllerWithDeps();
+        var (ctrl, invitationService, _, userManager, membershipInviteService) = BuildControllerWithDeps();
         userManager.FindByEmailAsync("newplayer@example.com").Returns((ApplicationUser?)null);
         invitationService.CreateInvitationAsync("newplayer@example.com", "admin-1", 5, null)
             .Returns(new Invitation { Id = 1, Email = "newplayer@example.com", InvitationCode = "code-abc" });
@@ -112,7 +104,7 @@ public class InvitationControllerTests
     {
         // No league context means there's nothing to build a LeagueMembershipInvite against —
         // this leagueless "just register" invite keeps its pre-existing behavior untouched.
-        var (ctrl, invitationService, leagueRepo, userManager, membershipInviteService) = BuildControllerWithDeps();
+        var (ctrl, invitationService, _, userManager, membershipInviteService) = BuildControllerWithDeps();
         invitationService.CreateInvitationAsync("someone@example.com", "admin-1", null, null)
             .Returns(new Invitation { Id = 1, Email = "someone@example.com", InvitationCode = "code-abc" });
 
@@ -129,9 +121,9 @@ public class InvitationControllerTests
     public async Task Resend_CallsResendInvitationEmailAsync()
     {
         var invitationService = Substitute.For<IInvitationService>();
-        var controller = BuildController(invitationService);
+        var (ctrl, _, _, _, _) = BuildControllerWithDeps(invitationService);
 
-        await controller.Resend(7, "https://ivleague.com");
+        await ctrl.Resend(7, "https://ivleague.com");
 
         await invitationService.Received(1).ResendInvitationEmailAsync(7, "https://ivleague.com");
     }
@@ -140,9 +132,9 @@ public class InvitationControllerTests
     public async Task Delete_CallsDeleteInvitationAsync_ReturnsNoContent()
     {
         var invitationService = Substitute.For<IInvitationService>();
-        var controller = BuildController(invitationService);
+        var (ctrl, _, _, _, _) = BuildControllerWithDeps(invitationService);
 
-        var result = await controller.Delete(7);
+        var result = await ctrl.Delete(7);
 
         await invitationService.Received(1).DeleteInvitationAsync(7);
         Assert.IsType<NoContentResult>(result);
