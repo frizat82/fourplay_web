@@ -107,6 +107,27 @@ public class InvitationControllerTests
     }
 
     [Fact]
+    public async Task Create_NewUser_LeagueDoesNotExist_ReturnsNotFound_WithoutCreatingAnything()
+    {
+        // /code-review's second pass caught that the first fix only guarded the existing-user
+        // branch — a brand-new email with a bad leagueId still fell through to
+        // CreateInvitationAsync, which has the identical FK-violation-mishandled-as-duplicate-
+        // race bug (InvitationService.CreateInvitationAsync's catch re-reads a row that was never
+        // inserted, throwing an unhandled InvalidOperationException — a 500, not even the wrong
+        // 200 the existing-user branch had). The league-existence check now runs before either
+        // branch, so this path never reaches CreateInvitationAsync at all.
+        var (ctrl, invitationService, leagueRepo, userManager, membershipInviteService) = BuildControllerWithDeps();
+        userManager.FindByEmailAsync("newplayer@example.com").Returns((ApplicationUser?)null);
+        leagueRepo.GetLeagueInfoAsync(999).Returns(Task.FromException<LeagueInfo>(new InvalidOperationException("Sequence contains no elements")));
+
+        var result = await ctrl.Create("newplayer@example.com", "admin-1", leagueId: 999);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+        await invitationService.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
+        await membershipInviteService.DidNotReceiveWithAnyArgs().CreateOrReopenAsync(default, default!, default!);
+    }
+
+    [Fact]
     public async Task Create_NoExistingUser_WithLeagueId_StillCreatesEmailInvitation()
     {
         var (ctrl, invitationService, _, userManager, membershipInviteService) = BuildControllerWithDeps();

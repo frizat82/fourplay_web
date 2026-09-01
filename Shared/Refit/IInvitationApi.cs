@@ -13,7 +13,7 @@ public interface IInvitationApi
     Task<List<InvitationDto>> GetByUser(string userId);
 
     [Post("/api/invitations")]
-    Task<InvitationDto> Create([Query] string email, [Query] string invitedByUserId);
+    Task<LeagueInviteResultDto> Create([Query] string email, [Query] string invitedByUserId);
 
     [Delete("/api/invitations/{id}")]
     Task Delete(int id);
