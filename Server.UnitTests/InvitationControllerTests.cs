@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Controllers;
 using FourPlayWebApp.Server.Models;
+using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -80,6 +81,29 @@ public class InvitationControllerTests
         Assert.IsType<ConflictObjectResult>(result.Result);
         await membershipInviteService.DidNotReceiveWithAnyArgs().CreateOrReopenAsync(default, default!, default!);
         await invitationService.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
+    }
+
+    [Fact]
+    public async Task Create_ExistingUser_LeagueDoesNotExist_ReturnsNotFound_WithoutCreatingAnything()
+    {
+        // /code-review caught this: LoadOwnedLeagueAsync (LeagueController's sibling flow)
+        // 404s on a missing league before doing anything else; this branch didn't, so a stale or
+        // crafted leagueId reached CreateOrReopenAsync, which inserts a LeagueMembershipInvite
+        // with a required FK to LeagueInfo, tripped a DbUpdateException that CreateOrReopenAsync's
+        // catch block silently swallows (it exists only for a concurrent-duplicate-insert race),
+        // and this endpoint returned 200 OK with ExistingUserInvitePending even though nothing
+        // was ever persisted — a false success shown to the admin.
+        var (ctrl, invitationService, leagueRepo, userManager, membershipInviteService) = BuildControllerWithDeps();
+        var existingUser = new ApplicationUser { Id = "existing-user-1", Email = "already-registered@example.com" };
+        userManager.FindByEmailAsync("already-registered@example.com").Returns(existingUser);
+        leagueRepo.GetLeagueInfoAsync(999).Returns(Task.FromException<LeagueInfo>(new InvalidOperationException("Sequence contains no elements")));
+
+        var result = await ctrl.Create("already-registered@example.com", "admin-1", leagueId: 999);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+        await membershipInviteService.DidNotReceiveWithAnyArgs().CreateOrReopenAsync(default, default!, default!);
+        await invitationService.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
+        await leagueRepo.DidNotReceiveWithAnyArgs().UserExistsInLeagueAsync(default!, default);
     }
 
     [Fact]
