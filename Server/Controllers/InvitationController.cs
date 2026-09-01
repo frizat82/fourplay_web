@@ -50,6 +50,16 @@ public class InvitationController(
         // membershipSvc directly against that controller — deferred here to avoid rewriting those
         // passing tests as a side effect of this bug fix. Keep both branches in sync until then.
         if (leagueId is int targetLeagueId && await userManager.FindByEmailAsync(email) is { } existingUser) {
+            // /code-review: without this, a stale or crafted leagueId reached CreateOrReopenAsync,
+            // which inserts a LeagueMembershipInvite with a required FK to LeagueInfo — a bad
+            // leagueId trips a DbUpdateException that CreateOrReopenAsync's catch block silently
+            // swallows (it exists only for a concurrent-duplicate-insert race), so this endpoint
+            // returned 200 OK as if the invite were created even though nothing was persisted.
+            try {
+                await leagueRepo.GetLeagueInfoAsync(targetLeagueId);
+            } catch (InvalidOperationException) {
+                return NotFound();
+            }
             if (await leagueRepo.UserExistsInLeagueAsync(existingUser.Id, targetLeagueId))
                 return Conflict($"{email} is already a member of this league.");
             await membershipInviteService.CreateOrReopenAsync(targetLeagueId, existingUser.Id, invitedByUserId);
