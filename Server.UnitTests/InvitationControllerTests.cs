@@ -2,6 +2,8 @@ using FourPlayWebApp.Server.Controllers;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
+using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -12,8 +14,28 @@ namespace FourPlayWebApp.Server.UnitTests;
 
 public class InvitationControllerTests
 {
+    private static (InvitationController ctrl, IInvitationService invitationService, ILeagueRepository leagueRepo, UserManager<ApplicationUser> userManager, ILeagueMembershipInviteService membershipInviteService)
+        BuildControllerWithDeps()
+    {
+        var invitationService = Substitute.For<IInvitationService>();
+        var leagueRepo = Substitute.For<ILeagueRepository>();
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var userManager = Substitute.For<UserManager<ApplicationUser>>(
+            store, null, null, null, null, null, null, null, null);
+        var membershipInviteService = Substitute.For<ILeagueMembershipInviteService>();
+        var ctrl = new InvitationController(
+            invitationService, Substitute.For<IEmailSender<ApplicationUser>>(),
+            userManager, leagueRepo, membershipInviteService);
+        return (ctrl, invitationService, leagueRepo, userManager, membershipInviteService);
+    }
+
     private static InvitationController BuildController(IInvitationService invitationService) =>
-        new(invitationService, Substitute.For<IEmailSender<ApplicationUser>>());
+        new(
+            invitationService, Substitute.For<IEmailSender<ApplicationUser>>(),
+            Substitute.For<UserManager<ApplicationUser>>(
+                Substitute.For<IUserStore<ApplicationUser>>(), null, null, null, null, null, null, null, null),
+            Substitute.For<ILeagueRepository>(),
+            Substitute.For<ILeagueMembershipInviteService>());
 
     [Fact]
     public async Task Create_PassesBaseUrlThrough_SoTheInvitationServiceCanSendTheEmail()
@@ -27,6 +49,80 @@ public class InvitationControllerTests
         await controller.Create("target@example.com", "admin-1", baseUrl: "https://ivleague.com");
 
         await invitationService.Received(1).CreateInvitationAsync("target@example.com", "admin-1", null, "https://ivleague.com");
+    }
+
+    // ── Existing-user detection when a league is specified ──────────────────
+    // Mirrors LeagueController.InviteToLeague: an admin using the global "Manage Invitations"
+    // page to invite someone to a specific league must get the same existing-user treatment a
+    // commissioner's "Invite Player" gets — otherwise an already-registered user (NFL or CFB)
+    // silently gets a registration-style email Invitation instead of the in-app accept/decline
+    // banner, and never sees anything (the bug this test locks in).
+
+    [Fact]
+    public async Task Create_ExistingUser_WithLeagueId_CreatesPendingMembershipInvite_NotAnEmailInvitation()
+    {
+        var (ctrl, invitationService, leagueRepo, userManager, membershipInviteService) = BuildControllerWithDeps();
+        var existingUser = new ApplicationUser { Id = "existing-user-1", Email = "already-registered@example.com" };
+        userManager.FindByEmailAsync("already-registered@example.com").Returns(existingUser);
+        leagueRepo.UserExistsInLeagueAsync("existing-user-1", 5).Returns(false);
+
+        var result = await ctrl.Create("already-registered@example.com", "admin-1", leagueId: 5);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<LeagueInviteResultDto>(ok.Value);
+        Assert.Equal(LeagueInviteOutcome.ExistingUserInvitePending, dto.Outcome);
+        await membershipInviteService.Received(1).CreateOrReopenAsync(5, "existing-user-1", "admin-1");
+        await invitationService.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
+    }
+
+    [Fact]
+    public async Task Create_ExistingUser_AlreadyMember_ReturnsConflict_WithoutCreatingAnything()
+    {
+        var (ctrl, invitationService, leagueRepo, userManager, membershipInviteService) = BuildControllerWithDeps();
+        var existingUser = new ApplicationUser { Id = "existing-user-1", Email = "already-member@example.com" };
+        userManager.FindByEmailAsync("already-member@example.com").Returns(existingUser);
+        leagueRepo.UserExistsInLeagueAsync("existing-user-1", 5).Returns(true);
+
+        var result = await ctrl.Create("already-member@example.com", "admin-1", leagueId: 5);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        await membershipInviteService.DidNotReceiveWithAnyArgs().CreateOrReopenAsync(default, default!, default!);
+        await invitationService.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
+    }
+
+    [Fact]
+    public async Task Create_NoExistingUser_WithLeagueId_StillCreatesEmailInvitation()
+    {
+        var (ctrl, invitationService, leagueRepo, userManager, membershipInviteService) = BuildControllerWithDeps();
+        userManager.FindByEmailAsync("newplayer@example.com").Returns((ApplicationUser?)null);
+        invitationService.CreateInvitationAsync("newplayer@example.com", "admin-1", 5, null)
+            .Returns(new Invitation { Id = 1, Email = "newplayer@example.com", InvitationCode = "code-abc" });
+
+        var result = await ctrl.Create("newplayer@example.com", "admin-1", leagueId: 5);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<LeagueInviteResultDto>(ok.Value);
+        Assert.Equal(LeagueInviteOutcome.NewUserInvitationSent, dto.Outcome);
+        await invitationService.Received(1).CreateInvitationAsync("newplayer@example.com", "admin-1", 5, null);
+        await membershipInviteService.DidNotReceiveWithAnyArgs().CreateOrReopenAsync(default, default!, default!);
+    }
+
+    [Fact]
+    public async Task Create_ExistingUser_NoLeagueId_SkipsMembershipCheck_CreatesEmailInvitationAsBefore()
+    {
+        // No league context means there's nothing to build a LeagueMembershipInvite against —
+        // this leagueless "just register" invite keeps its pre-existing behavior untouched.
+        var (ctrl, invitationService, leagueRepo, userManager, membershipInviteService) = BuildControllerWithDeps();
+        invitationService.CreateInvitationAsync("someone@example.com", "admin-1", null, null)
+            .Returns(new Invitation { Id = 1, Email = "someone@example.com", InvitationCode = "code-abc" });
+
+        var result = await ctrl.Create("someone@example.com", "admin-1");
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<LeagueInviteResultDto>(ok.Value);
+        Assert.Equal(LeagueInviteOutcome.NewUserInvitationSent, dto.Outcome);
+        await userManager.DidNotReceiveWithAnyArgs().FindByEmailAsync(default!);
+        await membershipInviteService.DidNotReceiveWithAnyArgs().CreateOrReopenAsync(default, default!, default!);
     }
 
     [Fact]
