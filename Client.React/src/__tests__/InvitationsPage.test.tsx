@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import AdminInvitationsPage from '../pages/admin/InvitationsPage';
@@ -7,7 +7,8 @@ import type { LeagueInfoDto } from '../types/admin';
 vi.mock('../services/auth', () => ({
   useAuth: () => ({ user: { userId: 'admin-1', name: 'Admin', claims: [{ type: 'role', value: 'Administrator' }] } }),
 }));
-vi.mock('../services/toast', () => ({ useToast: () => ({ push: vi.fn() }) }));
+const toastPush = vi.fn();
+vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 
 vi.mock('../api/invitations', () => ({
   getAllInvitations: vi.fn().mockResolvedValue([]),
@@ -51,9 +52,10 @@ function makeInvitation(overrides: Partial<InvitationDto> = {}): InvitationDto {
 }
 
 beforeEach(() => {
+  toastPush.mockClear();
   mockedGetAllLeagues.mockResolvedValue([]);
   mockedGetAllInvitations.mockResolvedValue([]);
-  mockedCreateInvitation.mockResolvedValue(makeInvitation());
+  mockedCreateInvitation.mockResolvedValue({ email: 'newplayer@example.com', outcome: 'NewUserInvitationSent' });
 });
 
 describe('AdminInvitationsPage', () => {
@@ -78,6 +80,23 @@ describe('AdminInvitationsPage', () => {
 
     expect(mockedCreateInvitation).toHaveBeenCalledWith('newplayer@example.com', 'admin-1', null);
     expect(mockedResendInvitation).not.toHaveBeenCalled();
+  });
+
+  it('tells the admin an already-registered invitee will see an in-app accept/decline request, not an email', async () => {
+    // Regression: this admin tool used to always create a registration-email Invitation, even
+    // for an email that already had an account — the invitee got nothing (no email needed, no
+    // banner ever created). The backend now detects this and creates a pending membership
+    // invite instead; the toast must reflect that so the admin isn't misled into thinking an
+    // email went out.
+    mockedCreateInvitation.mockResolvedValue({ email: 'existing@example.com', outcome: 'ExistingUserInvitePending' });
+    render(<AdminInvitationsPage />);
+
+    await userEvent.type(await screen.findByLabelText(/email address/i), 'existing@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /^invite$/i }));
+
+    await waitFor(() =>
+      expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/already has an account/i), 'success')
+    );
   });
 
   it('resend button re-sends the invitation email for an existing invitation', async () => {

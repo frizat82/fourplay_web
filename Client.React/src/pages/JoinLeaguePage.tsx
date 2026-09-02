@@ -9,6 +9,7 @@ import Typography from '@mui/material/Typography';
 import { validateInviteLink, joinViaLink, type LeagueInviteLinkDto } from '../api/league';
 import { useAuth } from '../services/auth';
 import { useSession } from '../services/session';
+import { buildLoginUrl } from '../utils/url';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 
 export default function JoinLeaguePage() {
@@ -37,6 +38,14 @@ export default function JoinLeaguePage() {
 
   const handleSignUp = () => {
     navigate(`/account/register?inviteLinkToken=${token}&returnUrl=/join/${token}`);
+  };
+
+  // An invitee who already has an account but isn't currently logged in on this browser has no
+  // other way to accept — registering fails outright (AuthController.CreateUser's InviteLinkToken
+  // branch rejects an existing email with no fallback). Logging in and returning here lets them
+  // hit the normal authenticated Join button below.
+  const handleLogIn = () => {
+    navigate(buildLoginUrl(`/join/${token}`));
   };
 
   const handleJoin = async () => {
@@ -121,16 +130,20 @@ export default function JoinLeaguePage() {
               {joining ? <CircularProgress size={22} color="inherit" /> : 'Join League'}
             </Button>
           ) : (
-            <Button
-              variant="contained"
-              color="secondary"
-              size="large"
-              fullWidth
-              onClick={handleSignUp}
-              sx={{ mt: 2 }}
-            >
-              Create an account to join
-            </Button>
+            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Button
+                variant="contained"
+                color="secondary"
+                size="large"
+                fullWidth
+                onClick={handleSignUp}
+              >
+                Create an account to join
+              </Button>
+              <Button variant="text" size="small" fullWidth onClick={handleLogIn}>
+                Already have an account? Log in
+              </Button>
+            </Box>
           )}
         </CardContent>
       </Card>

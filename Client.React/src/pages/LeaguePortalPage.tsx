@@ -751,7 +751,11 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
 
   return (
     <Box>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap">
+      {/* useFlexGap: Stack's default margin-based spacing only separates items within the same
+          flex line — with flexWrap="wrap" on a narrow (mobile) viewport, buttons that wrap onto
+          their own line end up touching with zero gap. useFlexGap switches to real CSS `gap`,
+          which applies between wrapped lines too. */}
+      <Stack direction="row" spacing={2} useFlexGap alignItems="center" sx={{ mb: 2 }} flexWrap="wrap">
         <Chip label={`${count} member${count !== 1 ? 's' : ''} · $${cost}/season`} color="primary" variant="outlined" />
         <Button startIcon={<PersonAddIcon />} variant="outlined" size="small" onClick={onInvite}>
           Invite Player

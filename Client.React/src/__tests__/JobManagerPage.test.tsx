@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import AdminJobManagerPage from '../pages/admin/JobManagerPage';
 import type { JobStatusResponse } from '../types/admin';
@@ -31,23 +30,16 @@ function makeJob(overrides: Partial<JobStatusResponse> = {}): JobStatusResponse 
   };
 }
 
-describe('AdminJobManagerPage — background-job toggle visibility', () => {
+describe('AdminJobManagerPage', () => {
   beforeEach(() => {
     mockedGetAllJobsStatus.mockReset();
   });
 
-  // frizat: CLAUDE.md's "New nav link or conditional UI element" checklist item — this is the
-  // toggle /code-review flagged as having no unit test, only e2e coverage.
-  it('hides the toggle entirely when no job in the batch is dynamic', async () => {
-    mockedGetAllJobsStatus.mockResolvedValue([makeJob({ jobName: 'User Manager', isDynamic: false })]);
-
-    render(<AdminJobManagerPage />);
-
-    expect(await screen.findByText('User Manager')).toBeInTheDocument();
-    expect(screen.queryByLabelText(/show background jobs/i)).not.toBeInTheDocument();
-  });
-
-  it('shows the toggle with a count, hides dynamic jobs by default, and reveals them when toggled on', async () => {
+  // Regression: the previous "Show background jobs" toggle hid every isDynamic job (Juice
+  // Reminder/Lock, per-week NFL/CFB Spreads) behind a default-off switch — reported as "doesn't
+  // do anything" and as hiding jobs an admin needed to see (there's no other way to check a
+  // league's juice-lock reminder is actually scheduled). Every job is now always visible.
+  it('shows every job — dynamic (per-league/per-week) and fixed — with no hide/show toggle', async () => {
     mockedGetAllJobsStatus.mockResolvedValue([
       makeJob({ jobName: 'User Manager', category: 'System', isDynamic: false }),
       makeJob({ jobName: 'Juice Reminder 6-2026', category: 'Juice', isDynamic: true }),
@@ -56,13 +48,19 @@ describe('AdminJobManagerPage — background-job toggle visibility', () => {
     render(<AdminJobManagerPage />);
 
     expect(await screen.findByText('User Manager')).toBeInTheDocument();
-    const toggle = screen.getByLabelText(/show background jobs \(1\)/i);
-    expect(toggle).not.toBeChecked();
-    expect(screen.queryByText('Juice Reminder 6-2026')).not.toBeInTheDocument();
-
-    await userEvent.click(toggle);
-
-    expect(toggle).toBeChecked();
     expect(screen.getByText('Juice Reminder 6-2026')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/show background jobs/i)).not.toBeInTheDocument();
+  });
+
+  it('groups jobs under their category header', async () => {
+    mockedGetAllJobsStatus.mockResolvedValue([
+      makeJob({ jobName: 'User Manager', category: 'System', isDynamic: false }),
+      makeJob({ jobName: 'Juice Reminder 6-2026', category: 'Juice', isDynamic: true }),
+    ]);
+
+    render(<AdminJobManagerPage />);
+
+    expect(await screen.findByText('System', { exact: true })).toBeInTheDocument();
+    expect(screen.getByText('Juice', { exact: true })).toBeInTheDocument();
   });
 });

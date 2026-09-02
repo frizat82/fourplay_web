@@ -2,6 +2,7 @@ using FourPlayWebApp.Server.Controllers;
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Account;
 using FourPlayWebApp.Shared.Models.Email;
 using Microsoft.AspNetCore.Http;
@@ -39,7 +40,11 @@ public class EmailProcessTests
         IEmailSender<ApplicationUser> emailSenderApp)
     {
         var invitationService = Substitute.For<IInvitationService>();
-        return new InvitationController(invitationService, emailSenderApp);
+        var userManager = Substitute.For<UserManager<ApplicationUser>>(
+            Substitute.For<IUserStore<ApplicationUser>>(), null, null, null, null, null, null, null, null);
+        return new InvitationController(
+            invitationService, emailSenderApp,
+            userManager, Substitute.For<ILeagueRepository>(), Substitute.For<ILeagueMembershipInviteService>());
     }
 
     private static AuthController BuildAuthController(
