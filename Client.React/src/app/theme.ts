@@ -147,6 +147,16 @@ export function createAppTheme(mode: 'light' | 'dark') {
         root: {
           border: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(15, 23, 42, 0.08)',
           transition: 'box-shadow 0.2s ease-in-out',
+          // MUI bakes a translucent-white gradient onto elevated (non-outlined) dark-mode
+          // Paper/Card as a stand-in for a drop shadow — it does NOT apply to
+          // variant="outlined". Pages like RulesPage nest an outer elevated Card around many
+          // inner `Paper variant="outlined"` sections; without this override the outer Card
+          // renders visibly lighter (background.paper + overlay) than every inner section
+          // (flat background.paper), so scrolling repeatedly crosses between two different
+          // shades — reported as "the background alternates" and hard to read. Disabling the
+          // overlay makes every Paper/Card render as one flat background.paper in dark mode,
+          // matching outlined surfaces exactly.
+          backgroundImage: isDark ? 'none' : undefined,
           '&:hover': {
             boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0, 0, 0, 0.05)',
           },

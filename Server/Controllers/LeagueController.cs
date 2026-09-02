@@ -946,6 +946,9 @@ public class LeagueController(
         // Unlike a brand-new user (registering IS joining, one step), an existing user gets a
         // pending invite they must explicitly accept — no email; it surfaces as a banner on
         // their next login. See LeagueMembershipInvite.
+        // KNOWN DUPLICATION: InvitationController.Create has a near-identical existing-user
+        // branch (deliberately not extracted into a shared service yet — see its comment). Keep
+        // both in sync.
         var existingUser = await userManager.FindByEmailAsync(dto.Email);
         if (existingUser != null) {
             if (await repo.UserExistsInLeagueAsync(existingUser.Id, leagueId))
