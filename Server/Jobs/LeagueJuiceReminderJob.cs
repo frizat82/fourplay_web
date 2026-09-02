@@ -18,8 +18,10 @@ public class LeagueJuiceReminderJob(
     IJobObserverService observer) : IJob {
 
     public async Task Execute(IJobExecutionContext context) {
+        // RecordJobStartAsync is now centralized in JobFailureAlertListener.JobToBeExecuted
+        // (fires for every job type, not just this one) — calling it again here would
+        // double-count RunCount for the exact same run.
         var jobName = nameof(LeagueJuiceReminderJob);
-        await observer.RecordJobStartAsync(jobName);
         try {
             // /code-review: reading this in a field initializer would throw during job
             // construction — before this try block — bypassing RecordJobFailureAsync entirely and
