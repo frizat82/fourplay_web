@@ -15,7 +15,13 @@ public class LeagueJuiceLockJob(ILeagueRepository repo, IJobObserverService obse
         // RecordJobStartAsync is now centralized in JobFailureAlertListener.JobToBeExecuted
         // (fires for every job type, not just this one) — calling it again here would
         // double-count RunCount for the exact same run.
-        var jobName = nameof(LeagueJuiceLockJob);
+        //
+        // /code-review: must be the actual Quartz JobKey ("Juice Lock {leagueId}-{season}", per
+        // TimedTriggerScheduler/LeagueJuiceScheduleSource's candidate.Identity), not the class
+        // name — JobManagerController correlates observer info by jobDetail.Key.Name, so
+        // recording under the class name meant every league/season's message clobbered every
+        // other's under one shared key, invisible under the row an admin actually looks at.
+        var jobName = context.JobDetail.Key.Name;
         try {
             var (leagueId, season) = LeagueJuiceJobData.Parse(context);
 
