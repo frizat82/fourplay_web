@@ -385,6 +385,14 @@ builder.Services.AddQuartz(q => {
             .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
         );
         q.ScheduleCstCronJob<CfbRankingCaptureJob>("CFB Ranking Capture", "Captures CFB AP rankings as soon as each week's schedule is known", "0 0 5 ? * MON");
+        // Daily catch-up, mirroring the spread schedulers' own daily pass below: a silently-failed
+        // Monday run would otherwise leave IsLeagueEligible stale for a full week until the next
+        // Monday. Also covers CFP committee rankings, which start replacing/supplementing the AP
+        // poll from roughly week 9 on and are released Tuesdays, not Mondays — capturing daily
+        // means we don't have to know exactly which day ESPN's curatedRank field updates on. The
+        // job itself is a cheap no-op once a week's games are all final, so this costs nothing on
+        // the other six days.
+        q.ScheduleCstCronJob<CfbRankingCaptureJob>("CFB Ranking Capture Daily", "Daily catch-up pass for CFB rankings — covers a missed Monday run and CFP Tuesday releases", "0 15 6 * * ?");
 
         // CFB Spreads — mirrors NflSpreadSchedulerJob above exactly: CfbSpreadJob has no fixed trigger
         // of its own; CfbSpreadSchedulerJob reads CfbSeasonWeekConfig.SpreadLockDatetime and registers
