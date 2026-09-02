@@ -1,5 +1,6 @@
 import { http } from './http';
 import type { InvitationDto } from '../types/admin';
+import type { LeagueInviteResultDto } from './league';
 
 export async function getAllInvitations() {
   const { data } = await http.get<InvitationDto[]>('/api/invitations/all');
@@ -11,11 +12,12 @@ export async function getInvitationsByUser(userId: string) {
   return data;
 }
 
-// The invitation email is sent server-side (same code path as league-scoped
-// invites) — baseUrl tells the backend which frontend origin to build the
-// registration link against.
+// When leagueId targets an already-registered user, the backend routes them through the same
+// existing-user pending-invite flow as League Portal's "Invite Player" (see
+// InvitationController.Create) instead of sending a registration email — outcome tells the
+// caller which one happened.
 export async function createInvitation(email: string, invitedByUserId: string, leagueId?: number | null) {
-  const { data } = await http.post<InvitationDto>('/api/invitations', undefined, {
+  const { data } = await http.post<LeagueInviteResultDto>('/api/invitations', undefined, {
     params: {
       email,
       invitedByUserId,

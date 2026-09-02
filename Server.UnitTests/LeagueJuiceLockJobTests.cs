@@ -26,6 +26,15 @@ public class LeagueJuiceLockJobTests
         jobData.Put("LeagueId", "1");
         jobData.Put("Season", "2026");
         _context.MergedJobDataMap.Returns(jobData);
+        // /code-review: the job must record under the actual Quartz JobKey ("Juice Lock 1-2026",
+        // per TimedTriggerScheduler/LeagueJuiceScheduleSource's candidate.Identity) — not the
+        // static class name — since JobManagerController correlates observer info by
+        // jobDetail.Key.Name. Recording under nameof(LeagueJuiceLockJob) meant every league's/
+        // season's rich success message clobbered every other's under one shared key, and none
+        // of them were ever visible under the Job Manager row an admin actually looks at.
+        var jobDetail = Substitute.For<IJobDetail>();
+        jobDetail.Key.Returns(new JobKey("Juice Lock 1-2026"));
+        _context.JobDetail.Returns(jobDetail);
         _repo.GetLeagueJuiceMappingAsync(1).Returns(new List<LeagueJuiceMapping>());
     }
 
@@ -77,7 +86,7 @@ public class LeagueJuiceLockJobTests
 
         await BuildJob().Execute(_context);
 
-        await _observer.Received(1).RecordJobSuccessAsync(nameof(LeagueJuiceLockJob), Arg.Any<string>());
+        await _observer.Received(1).RecordJobSuccessAsync("Juice Lock 1-2026", Arg.Any<string>());
     }
 
     // frizat-703.2: an unhandled exception must propagate to Quartz (not be swallowed after
@@ -95,6 +104,6 @@ public class LeagueJuiceLockJobTests
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         Assert.Same(boom, thrown);
-        await _observer.Received(1).RecordJobFailureAsync(nameof(LeagueJuiceLockJob), "DB unavailable");
+        await _observer.Received(1).RecordJobFailureAsync("Juice Lock 1-2026", "DB unavailable");
     }
 }

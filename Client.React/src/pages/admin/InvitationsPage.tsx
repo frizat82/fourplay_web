@@ -30,6 +30,7 @@ import { useAuth } from '../../services/auth';
 import { createInvitation, deleteInvitation, getAllInvitations, resendInvitation } from '../../api/invitations';
 import { getAllLeagues } from '../../api/league';
 import type { InvitationDto, LeagueInfoDto } from '../../types/admin';
+import { extractApiErrorMessage } from '../../utils/apiError';
 
 function getInvitationStatusChip(invitation: InvitationDto): { label: string; color: 'success' | 'warning' | 'error' | 'info' } {
   if (invitation.isUsed) {
@@ -91,13 +92,19 @@ export default function AdminInvitationsPage() {
     setCreating(true);
     try {
       const leagueId = selectedLeagueId !== '' ? selectedLeagueId : null;
-      // Email is sent server-side as part of creating the invitation.
-      await createInvitation(email, user.userId, leagueId);
-      toast.push(`Invitation sent to ${email}`, 'success');
+      // Email is sent server-side as part of creating the invitation — unless the address
+      // already belongs to a registered user, in which case the backend creates a pending
+      // membership invite instead (they'll see an in-app accept/decline banner, not an email).
+      const result = await createInvitation(email, user.userId, leagueId);
+      if (result.outcome === 'ExistingUserInvitePending') {
+        toast.push(`${email} already has an account — they'll see a request to accept or decline in the app.`, 'success');
+      } else {
+        toast.push(`Invitation sent to ${email}`, 'success');
+      }
       await loadInvitations();
       setEmail('');
-    } catch {
-      toast.push('Error creating invitation', 'error');
+    } catch (error) {
+      toast.push(extractApiErrorMessage(error, 'Error creating invitation'), 'error');
     } finally {
       setCreating(false);
     }

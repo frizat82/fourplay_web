@@ -1,4 +1,4 @@
-import { buildAbsoluteUrl } from '../utils/url';
+import { buildAbsoluteUrl, buildLoginUrl } from '../utils/url';
 
 describe('buildAbsoluteUrl', () => {
   it('joins a leading-slash path onto window.location.origin', () => {
@@ -11,5 +11,15 @@ describe('buildAbsoluteUrl', () => {
 
   it('returns the origin with a trailing slash for an empty path', () => {
     expect(buildAbsoluteUrl('')).toBe(`${window.location.origin}/`);
+  });
+});
+
+describe('buildLoginUrl', () => {
+  it('builds a login path with the return path URL-encoded as returnUrl', () => {
+    expect(buildLoginUrl('/join/tok123')).toBe('/account/login?returnUrl=%2Fjoin%2Ftok123');
+  });
+
+  it('encodes query params in the return path too', () => {
+    expect(buildLoginUrl('/dashboard?tab=1')).toBe('/account/login?returnUrl=%2Fdashboard%3Ftab%3D1');
   });
 });

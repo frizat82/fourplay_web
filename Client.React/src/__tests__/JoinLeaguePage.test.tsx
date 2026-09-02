@@ -86,6 +86,41 @@ describe('JoinLeaguePage', () => {
     );
   });
 
+  it('offers a log-in option alongside sign-up when logged out — an already-registered invitee has no other way in', async () => {
+    // Regression: a real invite-link batch (20 sent, 11 joined, 9 didn't) traced to exactly
+    // this gap — an already-registered invitee who wasn't currently logged in on this browser
+    // saw only "Create an account to join." Clicking it hits AuthController.CreateUser's
+    // InviteLinkToken branch, which flat-out rejects an existing email ("User already exists.")
+    // with no path back to actually joining. They need to log in, land back on this page, and
+    // then click Join as an authenticated existing user.
+    vi.mocked(validateInviteLink).mockResolvedValue({
+      token: 'tok123',
+      leagueId: 1,
+      leagueName: 'My NFL League',
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    });
+    authState.user = null;
+    renderWithToken('tok123');
+    await waitFor(() => screen.getByRole('button', { name: /create an account/i }));
+    expect(screen.getByRole('button', { name: /already have an account.*log in/i })).toBeInTheDocument();
+  });
+
+  it('navigates to login with a returnUrl back to this join page when the log-in option is clicked', async () => {
+    vi.mocked(validateInviteLink).mockResolvedValue({
+      token: 'tok123',
+      leagueId: 1,
+      leagueName: 'My NFL League',
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    });
+    authState.user = null;
+    renderWithToken('tok123');
+    await waitFor(() => screen.getByRole('button', { name: /already have an account.*log in/i }));
+    await userEvent.click(screen.getByRole('button', { name: /already have an account.*log in/i }));
+    expect(navigateMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/account\/login\?returnUrl=.*join.*tok123/),
+    );
+  });
+
   it('shows Join button when user is logged in and token is valid', async () => {
     vi.mocked(validateInviteLink).mockResolvedValue({
       token: 'tok123',
