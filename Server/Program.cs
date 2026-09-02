@@ -325,18 +325,6 @@ builder.Services.AddQuartz(q => {
         .StartAt(DateBuilder.FutureDate(userManagerDelay, IntervalUnit.Second))
     );
 
-    // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons. Slate-seeding only
-    // — spread-lock trigger scheduling is CfbSpreadSchedulerJob below (frizat-pxy follow-on:
-    // structurally identical to NflSpreadSchedulerJob, its own cadence, not fused into this job).
-    // Registered unconditionally (like UserManagerJob) — it only manages internal slate/date
-    // structure, never pulls live scores or spreads, so it's safe in demo mode.
-    q.ScheduleJob<CfbSlateSeederJob>(trigger => trigger
-        .WithIdentity("CFB Slate Seeder Startup")
-        .WithDescription("Seeds CFB slate dates for the current season")
-        .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
-    );
-    q.ScheduleCstCronJob<CfbSlateSeederJob>("CFB Slate Seeder", "Seeds CFB slate dates for the current season", "0 0 5 ? * MON");
-
     // frizat: every job below this line pulls LIVE data from ESPN and writes it into the same
     // tables DemoDataSeeder owns — NflScoresJob in particular loops currentYear-2..+1, which
     // always includes whatever season the demo seeder fictionally populates. NflScores' unique
@@ -349,6 +337,25 @@ builder.Services.AddQuartz(q => {
     // the seeder — skip all of them (both sports, symmetrically) when seeding demo data.
     if (!seedsDemoData)
     {
+        // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons. Slate-seeding
+        // only — spread-lock trigger scheduling is CfbSpreadSchedulerJob below (frizat-pxy
+        // follow-on: structurally identical to NflSpreadSchedulerJob, its own cadence, not fused
+        // into this job).
+        // Was previously registered unconditionally (like UserManagerJob), on the theory that it
+        // only manages internal slate/date structure and never pulls live scores/spreads, so it
+        // was "safe" in demo mode. That was wrong: it still seeds the real *current* season's slate
+        // rows, and CfbCurrentSlateService's cross-season date-window resolver picks whichever
+        // season's window is "active" right now — once the real season's window opens, it silently
+        // shadows DemoDataSeeder's frozen demo-season data instead of falling back to it, breaking
+        // every CFB demo/e2e test that runs during that window. Moved inside this guard alongside
+        // its siblings, which exist for exactly this class of problem.
+        q.ScheduleJob<CfbSlateSeederJob>(trigger => trigger
+            .WithIdentity("CFB Slate Seeder Startup")
+            .WithDescription("Seeds CFB slate dates for the current season")
+            .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+        );
+        q.ScheduleCstCronJob<CfbSlateSeederJob>("CFB Slate Seeder", "Seeds CFB slate dates for the current season", "0 0 5 ? * MON");
+
         // NFL Spreads — frizat-pxy: NflSpreadJob has no fixed trigger of its own anymore.
         // NflSpreadSchedulerJob reads NflSeasonWeekConfig.SpreadLockDatetime and registers a precise
         // one-time trigger per upcoming week, replacing the old Thursday-2pm/Christmas-Eve crons
