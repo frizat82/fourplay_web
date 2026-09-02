@@ -3,11 +3,9 @@ import {
   Box,
   Button,
   CircularProgress,
-  FormControlLabel,
   Grid,
   Paper,
   Stack,
-  Switch,
   Table,
   TableBody,
   TableCell,
@@ -29,29 +27,23 @@ export default function AdminJobManagerPage() {
   const [jobs, setJobs] = useState<JobStatusResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [jobRunning, setJobRunning] = useState(false);
-  // Default hidden: the per-league/per-week jobs TimedTriggerScheduler registers dynamically
-  // (Juice Reminder/Lock, NFL/CFB Spreads) can easily outnumber the fixed scheduler/cron jobs,
-  // which is what made this table "hard to read" in the first place.
-  const [showDynamic, setShowDynamic] = useState(false);
   const toast = useToast();
 
-  const visibleJobs = useMemo(
-    () => (showDynamic ? jobs : jobs.filter((j) => !j.isDynamic)),
-    [jobs, showDynamic],
-  );
-  const dynamicJobCount = useMemo(() => jobs.filter((j) => j.isDynamic).length, [jobs]);
-
   // Backend already returns jobs ordered by Category then JobName — group in that order rather
-  // than re-sorting, so category order stays server-controlled in one place.
+  // than re-sorting, so category order stays server-controlled in one place. Every job (fixed
+  // scheduler/cron jobs and the per-league/per-week ones TimedTriggerScheduler registers
+  // dynamically — Juice Reminder/Lock, NFL/CFB Spreads) is always shown: a "hide dynamic jobs"
+  // toggle previously defaulted this list to only fixed jobs, which hid the only place an admin
+  // could confirm a league's juice-lock reminder was actually scheduled.
   const jobsByCategory = useMemo(() => {
     const grouped = new Map<string, JobStatusResponse[]>();
-    for (const job of visibleJobs) {
+    for (const job of jobs) {
       const existing = grouped.get(job.category);
       if (existing) existing.push(job);
       else grouped.set(job.category, [job]);
     }
     return grouped;
-  }, [visibleJobs]);
+  }, [jobs]);
 
   const loadJobs = async () => {
     setLoading(true);
@@ -128,15 +120,7 @@ export default function AdminJobManagerPage() {
       </Paper>
 
       <Paper sx={{ p: 2 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1} sx={{ mb: 2 }}>
-          <Typography variant="h6">Scheduled Jobs</Typography>
-          {dynamicJobCount > 0 && (
-            <FormControlLabel
-              control={<Switch checked={showDynamic} onChange={(e) => setShowDynamic(e.target.checked)} size="small" />}
-              label={`Show background jobs (${dynamicJobCount})`}
-            />
-          )}
-        </Stack>
+        <Typography variant="h6" sx={{ mb: 2 }}>Scheduled Jobs</Typography>
         {loading ? (
           <Stack alignItems="center">
             <CircularProgress />
@@ -179,7 +163,7 @@ export default function AdminJobManagerPage() {
                   ))}
                 </Fragment>
               ))}
-              {visibleJobs.length === 0 && (
+              {jobs.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} align="center">No jobs to show.</TableCell>
                 </TableRow>

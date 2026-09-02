@@ -16,15 +16,13 @@ test.describe('Admin pages (administrator role)', () => {
     await expect(page.getByText('NflScoresJob')).toBeVisible({ timeout: 5000 });
   });
 
-  test('Job Manager groups jobs by category and hides background jobs behind a toggle', async ({ page }) => {
+  test('Job Manager groups jobs by category and always shows dynamic (per-league/per-week) jobs alongside fixed ones', async ({ page }) => {
     await adminAuth(page, '/admin/jobManager');
     await waitForSpinner(page);
 
     await expect(page.getByText('NFL Scores', { exact: true })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('NflScoresJob')).toBeVisible();
-    await expect(page.getByText('Juice Reminder 6-2026')).not.toBeVisible();
-
-    await page.getByLabel(/show background jobs/i).click();
+    await expect(page.getByLabel(/show background jobs/i)).not.toBeVisible();
 
     await expect(page.getByText('Juice Reminder 6-2026')).toBeVisible();
     await expect(page.getByText('Remind league 6 owner to configure Juice for season 2026')).toBeVisible();
