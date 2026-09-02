@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { http } from '../api/http';
 import type { LoginRequest, SignInResultDto, UserInfo } from '../types/auth';
 import { isAdmin } from '../utils/auth';
+import { buildLoginUrl } from '../utils/url';
 
 interface AuthContextValue {
   user: UserInfo | null;
@@ -94,8 +95,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    const returnUrl = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/account/login?returnUrl=${returnUrl}`} replace />;
+    return <Navigate to={buildLoginUrl(location.pathname + location.search)} replace />;
   }
 
   return <>{children}</>;
@@ -110,8 +110,7 @@ export function RequireAdmin({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    const returnUrl = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/account/login?returnUrl=${returnUrl}`} replace />;
+    return <Navigate to={buildLoginUrl(location.pathname + location.search)} replace />;
   }
 
   if (!isAdmin(user)) {

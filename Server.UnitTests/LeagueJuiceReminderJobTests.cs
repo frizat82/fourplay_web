@@ -35,6 +35,15 @@ public class LeagueJuiceReminderJobTests
         jobData.Put("LeagueId", "1");
         jobData.Put("Season", "2026");
         _context.MergedJobDataMap.Returns(jobData);
+        // /code-review: the job must record under the actual Quartz JobKey ("Juice Reminder
+        // 1-2026", per TimedTriggerScheduler/LeagueJuiceScheduleSource's candidate.Identity) —
+        // not the static class name — since JobManagerController correlates observer info by
+        // jobDetail.Key.Name. Recording under nameof(LeagueJuiceReminderJob) meant every league's/
+        // season's rich success message clobbered every other's under one shared key, and none
+        // of them were ever visible under the Job Manager row an admin actually looks at.
+        var jobDetail = Substitute.For<IJobDetail>();
+        jobDetail.Key.Returns(new JobKey("Juice Reminder 1-2026"));
+        _context.JobDetail.Returns(jobDetail);
 
         _repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, LeagueName = "Test League", OwnerUserId = "owner-1" });
         _repo.GetJuiceRemindersSentAsync().Returns(new HashSet<(int, int)>());
@@ -117,7 +126,7 @@ public class LeagueJuiceReminderJobTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _emailSender.DidNotReceive().SendEmailAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>());
-        await _observer.Received(1).RecordJobFailureAsync(nameof(LeagueJuiceReminderJob), Arg.Is<string>(m => m.Contains("no email on file")));
+        await _observer.Received(1).RecordJobFailureAsync("Juice Reminder 1-2026", Arg.Is<string>(m => m.Contains("no email on file")));
     }
 
     [Fact]
@@ -127,7 +136,7 @@ public class LeagueJuiceReminderJobTests
 
         await BuildJob().Execute(_context);
 
-        await _observer.Received(1).RecordJobSuccessAsync(nameof(LeagueJuiceReminderJob), Arg.Any<string>());
+        await _observer.Received(1).RecordJobSuccessAsync("Juice Reminder 1-2026", Arg.Any<string>());
     }
 
     // frizat-703.2: an unhandled exception must propagate to Quartz (not be swallowed after
@@ -145,6 +154,6 @@ public class LeagueJuiceReminderJobTests
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         Assert.Same(boom, thrown);
-        await _observer.Received(1).RecordJobFailureAsync(nameof(LeagueJuiceReminderJob), "SMTP unavailable");
+        await _observer.Received(1).RecordJobFailureAsync("Juice Reminder 1-2026", "SMTP unavailable");
     }
 }
