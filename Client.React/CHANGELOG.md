@@ -19,6 +19,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: the season selector on Picks, Scores, and Leaderboard offered years before a league had even started (e.g. a brand-new league showing 2020) — it's now bounded by that league's own earliest configured season
 - Fixed: CFB AP Top 25 rankings could be stored more than once per team per week — now one row per team per week, as intended
 - Changed: tapping "Switch to CFB/NFL" from an installed home-screen app now shows it will open in the regular browser, since each sport is a separate installed app on iOS
+- Fixed: in dark mode, cards could blend almost invisibly into the page background near the bottom of a long page (most visible on the Changelog page) because the page background's own color matched card backgrounds exactly — they're now always visibly distinct
 
 ## 2026-09-02
 
