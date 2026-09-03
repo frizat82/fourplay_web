@@ -51,6 +51,28 @@ public class CfbRepositoryTests
     }
 
     [Fact]
+    public async Task UpsertAsync_ExistingGame_UpdatesTeamRanks()
+    {
+        // /code-review catch: the update-in-place branch copied every spread/eligibility field
+        // but not HomeTeamRank/AwayTeamRank, so a mid-week AP rank change (or CuratedRank landing
+        // late on the first insert) would be silently dropped on every re-run for that game.
+        var factory = new DbContextFactoryStub(nameof(UpsertAsync_ExistingGame_UpdatesTeamRanks));
+        var repo = new CfbRepository(factory);
+
+        await repo.UpsertAsync([
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamRank = null, AwayTeamRank = 12 },
+        ]);
+
+        await repo.UpsertAsync([
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamRank = 4, AwayTeamRank = null },
+        ]);
+
+        var saved = await factory.CreateDbContext().CfbSpreads.SingleAsync(s => s.CfbSlateId == 1 && s.HomeTeam == "A");
+        Assert.Equal(4, saved.HomeTeamRank);
+        Assert.Null(saved.AwayTeamRank);
+    }
+
+    [Fact]
     public async Task UpsertAsync_ExistingGame_PreservesOriginalDateCreated()
     {
         var factory = new DbContextFactoryStub(nameof(UpsertAsync_ExistingGame_PreservesOriginalDateCreated));
