@@ -66,6 +66,19 @@ test.describe('Admin pages (administrator role)', () => {
   });
 
   // -----------------------------------------------------------------------
+  // Changelog
+  // -----------------------------------------------------------------------
+  test('Changelog page renders heading and at least one release', async ({ page }) => {
+    await adminAuth(page, '/admin/changelog');
+    await waitForSpinner(page);
+
+    await expect(page.getByRole('heading', { name: /^changelog$/i })).toBeVisible({ timeout: 5000 });
+    // Bundled from the real CHANGELOG.md at the repo root, not mocked — just assert a release
+    // heading shows up, without pinning to specific entry text that'll churn as the file grows.
+    await expect(page.getByRole('heading', { level: 6 }).first()).toBeVisible({ timeout: 5000 });
+  });
+
+  // -----------------------------------------------------------------------
   // My Leagues — admin-only actions (Create League / Add User / Change Owner)
   // -----------------------------------------------------------------------
   test('My Leagues — Create League button opens Create League dialog', async ({ page }) => {
