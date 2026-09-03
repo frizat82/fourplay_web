@@ -22,6 +22,7 @@ import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { isGameDecided, isGameFinal, isGameLive, spreadLabel } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
+import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
 
@@ -213,11 +214,12 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   // selector entirely).
   const oddsNotReady = !data.hasOdds && isCurrentWeek;
 
+  const sortedGames = sortGamesByTimeThenRank(data.games ?? []);
   const games = showOnlyMyPicks
-    ? (data.games ?? []).filter(g =>
+    ? sortedGames.filter(g =>
         didUserPick(g.id, g.homeTeam) || didUserPick(g.id, g.awayTeam) ||
         didUserPick(g.id, g.homeTeam, 'Over') || didUserPick(g.id, g.homeTeam, 'Under'))
-    : (data.games ?? []);
+    : sortedGames;
 
   const isPostSeason = data.isPostSeason;
 
