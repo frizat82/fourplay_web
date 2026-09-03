@@ -6,6 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-09-03
 
+- Fixed: CFB Picks and Scores pages showed the raw Vegas spread with no league juice (tease) applied, unlike NFL — both sports now share the same spread-plus-juice calculator
 - Added: this Changelog page (admin-only)
 - Fixed: an installed iOS/Android home-screen app could stay on a stale build indefinitely — it now re-checks for updates immediately when reopened, instead of only on a 5-minute timer that pauses while backgrounded
 - Changed: NFL league platform cost is now $200 base / $20 per head (CFB unchanged at $100 / $10)

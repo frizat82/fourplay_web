@@ -1,5 +1,7 @@
 using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Jobs;
+using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
@@ -48,10 +50,43 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     // frizat-9m0: the full FBS slate is persisted for audit (see CfbSpreadJob), but only
     // league-eligible games (ranked-either-side or CFP, excluding MAC Tue/Wed) are ever served —
     // the filter moved here, from ingestion, so the historical data underneath stays complete.
-    [HttpGet("spreads/{cfbSlateId}")]
-    public async Task<IActionResult> GetSpreads(int cfbSlateId) {
-        var spreads = await cfbRepo.GetSpreadsForSlateAsync(cfbSlateId);
-        return Ok(spreads.WhereLeagueEligible());
+    //
+    // Applies the league's configured juice to the displayed spread via the same SpreadCalculator
+    // NFL's LeagueController.GetSpreadBatch uses (see CLAUDE.md's NFL/CFB sharing rule) — this
+    // endpoint used to return the raw spread with no tease added at all. Juice is resolved from
+    // slate number (CfbLeaderboardService.JuiceForSlate), CFB's counterpart to NFL's week-number
+    // tiers; that resolution is the one genuine sport-specific difference, everything else is shared.
+    [HttpGet("spreads/{leagueId:int}/{cfbSlateId:int}")]
+    public async Task<IActionResult> GetSpreads(int leagueId, int cfbSlateId) {
+        if (!User.IsInRole(AppRoles.Administrator) && !await leagueRepo.UserExistsInLeagueAsync(CurrentUserId, leagueId))
+            return Forbid();
+
+        var slateTask = cfbRepo.GetSlateByIdAsync(cfbSlateId);
+        var spreadsTask = cfbRepo.GetSpreadsForSlateAsync(cfbSlateId);
+        await Task.WhenAll(slateTask, spreadsTask);
+
+        var slate = slateTask.Result;
+        var eligibleSpreads = spreadsTask.Result.WhereLeagueEligible().ToList();
+
+        var juice = 0.0;
+        if (slate is not null) {
+            var juiceMapping = await leagueRepo.GetLeagueJuiceMappingAsync(leagueId, slate.Season) ?? new LeagueJuiceMapping();
+            juice = CfbLeaderboardService.JuiceForSlate(slate.SlateNumber, juiceMapping);
+        }
+
+        var calculator = new SpreadCalculator(eligibleSpreads, juice);
+        var dtos = eligibleSpreads.Select(s => new CfbSpreadDto {
+            Id             = s.Id,
+            CfbSlateId     = s.CfbSlateId,
+            HomeTeam       = s.HomeTeam,
+            AwayTeam       = s.AwayTeam,
+            HomeTeamSpread = calculator.GetSpread(s.HomeTeam) ?? s.HomeTeamSpread,
+            AwayTeamSpread = calculator.GetSpread(s.AwayTeam) ?? s.AwayTeamSpread,
+            OverUnder      = s.OverUnder,
+            GameTime       = s.GameTime,
+            DateCreated    = s.DateCreated,
+        });
+        return Ok(dtos);
     }
 
     [HttpGet("scores/{cfbSlateId}")]

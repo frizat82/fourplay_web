@@ -167,7 +167,7 @@ export async function setupCfbRoutes(page: Page, options: SetupCfbRoutesOptions 
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([slate]) });
       return;
     }
-    if (url.match(/\/api\/cfb\/spreads\/\d+$/) && method === 'GET') {
+    if (url.match(/\/api\/cfb\/spreads\/\d+\/\d+$/) && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(spreads) });
       return;
     }
