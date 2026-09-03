@@ -39,6 +39,7 @@ import WorkIcon from '@mui/icons-material/Work';
 import PersonIcon from '@mui/icons-material/Person';
 import MailIcon from '@mui/icons-material/Mail';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import HistoryIcon from '@mui/icons-material/History';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
@@ -414,6 +415,17 @@ export default function AppLayout() {
                         <AttachMoneyIcon sx={{ fontSize: 20 }} />
                       </ListItemIcon>
                       <ListItemText primary="League Costs" />
+                    </ListItemButton>
+                    <ListItemButton
+                      component={NavLink}
+                      to="/admin/changelog"
+                      sx={adminNavItemSx}
+                      onClick={() => handleNavClick('/admin/changelog')}
+                    >
+                      <ListItemIcon sx={{ minWidth: 36 }}>
+                        <HistoryIcon sx={{ fontSize: 20 }} />
+                      </ListItemIcon>
+                      <ListItemText primary="Changelog" />
                     </ListItemButton>
                   </List>
                 </Collapse>
