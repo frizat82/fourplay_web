@@ -76,6 +76,8 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
                 existing.OverUnder        = spread.OverUnder;
                 existing.GameTime         = spread.GameTime;
                 existing.IsLeagueEligible = spread.IsLeagueEligible;
+                existing.HomeTeamRank     = spread.HomeTeamRank;
+                existing.AwayTeamRank     = spread.AwayTeamRank;
                 // DateCreated intentionally NOT overwritten — preserves when the line was first posted.
             }
         }
