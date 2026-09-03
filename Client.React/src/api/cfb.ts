@@ -20,8 +20,8 @@ export async function getCfbSlates(season: number): Promise<CfbSlateDto[]> {
   return res.json();
 }
 
-export async function getCfbSpreads(cfbSlateId: number): Promise<CfbSpreadDto[]> {
-  const res = await fetch(`${BASE}/spreads/${cfbSlateId}`);
+export async function getCfbSpreads(leagueId: number, cfbSlateId: number): Promise<CfbSpreadDto[]> {
+  const res = await fetch(`${BASE}/spreads/${leagueId}/${cfbSlateId}`);
   if (!res.ok) return [];
   return res.json();
 }

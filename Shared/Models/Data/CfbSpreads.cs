@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace FourPlayWebApp.Shared.Models.Data;
 
 [ExcludeFromCodeCoverage]
-public class CfbSpreads {
+public class CfbSpreads : IOddsRow {
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
     public int CfbSlateId { get; set; }

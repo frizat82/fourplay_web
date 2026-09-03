@@ -343,5 +343,43 @@ namespace FourPlayWebApp.Server.UnitTests
 
             Assert.Null(calculator.GetDateCreated("KC"));
         }
+
+        // frizat: CFB's spread-juice-display bug (picks/scores pages showed the raw Vegas spread
+        // with no league tease applied, unlike NFL) was fixed by making this same SpreadCalculator
+        // — not a CFB-only duplicate — serve both sports. These tests prove the shared arithmetic
+        // (GetSpread/GetOverUnder/DidUserWinPick) behaves identically for CfbSpreads via the
+        // pre-resolved-juice constructor that CfbPicksController.GetSpreads uses; only *which*
+        // tier-resolution scheme produces that juice value differs per sport (NFL: week number via
+        // the other constructor; CFB: slate number via CfbLeaderboardService.JuiceForSlate).
+        private static List<CfbSpreads> CreateMockCfbSpreads() {
+            return [
+                new CfbSpreads {
+                    HomeTeam = "ORE", AwayTeam = "OSU",
+                    HomeTeamSpread = -7.0, AwayTeamSpread = 7.0, OverUnder = 50.5,
+                }
+            ];
+        }
+
+        [Fact]
+        public void GetSpread_CfbSpreadsWithPreResolvedJuice_AppliesJuiceToBothSides()
+        {
+            var calculator = new SpreadCalculator(CreateMockCfbSpreads(), juice: 0.5);
+
+            Assert.Equal(-6.5, calculator.GetSpread("ORE"));
+            Assert.Equal(7.5, calculator.GetSpread("OSU"));
+        }
+
+        [Fact]
+        public void DidUserWinPick_CfbSpreadsWithPreResolvedJuice_UsesJuiceAdjustedSpread()
+        {
+            // ORE is -7 raw; with +1 juice the effective spread is -6.
+            var calculator = new SpreadCalculator(CreateMockCfbSpreads(), juice: 1.0);
+
+            // Wins by exactly 6 -> push against the juiced -6 line, not a win.
+            Assert.False(calculator.DidUserWinPick("ORE", 27, 21, PickType.Spread));
+
+            // Wins by 7 -> covers the juiced -6 line (would only push against the raw -7 line).
+            Assert.True(calculator.DidUserWinPick("ORE", 28, 21, PickType.Spread));
+        }
     }
 }

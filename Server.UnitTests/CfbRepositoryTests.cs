@@ -164,6 +164,45 @@ public class CfbRepositoryTests
         Assert.Equal(capturedAt, saved.CapturedAtUtc);
     }
 
+    [Fact]
+    public async Task GetLatestRankingsForWeekAsync_ReturnsOnlyMatchingSeasonAndWeek()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetLatestRankingsForWeekAsync_ReturnsOnlyMatchingSeasonAndWeek));
+        var repo = new CfbRepository(factory);
+
+        await repo.AddRankingsAsync([
+            new CfbRanking { Season = 2026, EspnWeekNumber = 1, EspnEventId = 1, TeamAbbreviation = "ALA", CuratedRank = 3 },
+            new CfbRanking { Season = 2026, EspnWeekNumber = 2, EspnEventId = 2, TeamAbbreviation = "UGA", CuratedRank = 1 }, // different week
+            new CfbRanking { Season = 2025, EspnWeekNumber = 1, EspnEventId = 3, TeamAbbreviation = "ORE", CuratedRank = 2 }, // different season
+        ]);
+
+        var result = await repo.GetLatestRankingsForWeekAsync(2026, 1);
+
+        Assert.Single(result);
+        Assert.Equal(3, result["ALA"]);
+    }
+
+    [Fact]
+    public async Task GetLatestRankingsForWeekAsync_ResolvesToTheMostRecentlyCapturedRank()
+    {
+        // CfbRanking is append-only — CfbRankingCaptureJob's earlier run and CfbSpreadJob's later
+        // run both capture the same team-week. The join in GetLatestRankingsForWeekAsync should
+        // resolve to the later (most recent) capture, not the first or an arbitrary one.
+        var factory = new DbContextFactoryStub(nameof(GetLatestRankingsForWeekAsync_ResolvesToTheMostRecentlyCapturedRank));
+        var repo = new CfbRepository(factory);
+        var earlier = new DateTimeOffset(2026, 8, 25, 9, 0, 0, TimeSpan.Zero);
+        var later = new DateTimeOffset(2026, 8, 27, 9, 0, 0, TimeSpan.Zero);
+
+        await repo.AddRankingsAsync([
+            new CfbRanking { Season = 2026, EspnWeekNumber = 1, EspnEventId = 1, TeamAbbreviation = "ALA", CuratedRank = 5, CapturedAtUtc = earlier },
+            new CfbRanking { Season = 2026, EspnWeekNumber = 1, EspnEventId = 1, TeamAbbreviation = "ALA", CuratedRank = 3, CapturedAtUtc = later },
+        ]);
+
+        var result = await repo.GetLatestRankingsForWeekAsync(2026, 1);
+
+        Assert.Equal(3, result["ALA"]);
+    }
+
     // frizat-bo1: CfbScores.GameStatus was a raw string ("StatusFinal", "StatusInProgress", ...) —
     // migrated to reuse the existing TypeName enum (the same one ESPN status parsing already uses
     // everywhere else) rather than either a loose string or a brand-new duplicate enum.
