@@ -14,6 +14,7 @@ import QueryErrorAlert from '../components/QueryErrorAlert';
 import SpreadRelease from '../components/SpreadRelease';
 import GameCardGridSkeleton from '../components/GameCardSkeleton';
 import TeamHelmet from '../components/sports/TeamHelmet';
+import RankBadge from '../components/sports/RankBadge';
 import UserPicksMatrix from '../components/UserPicksMatrix';
 import PickDialog from '../components/PickDialog';
 import FieldPosition from '../components/FieldPosition';
@@ -21,6 +22,7 @@ import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { isGameDecided, isGameFinal, isGameLive, spreadLabel } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
+import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
 
@@ -172,6 +174,10 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
   const users = useMemo(() => Array.from(new Set((data?.allPicks ?? []).map(p => p.userName))), [data?.allPicks]);
 
+  // /code-review: this re-derives on every render otherwise, including live-game poll/SSE ticks
+  // that don't actually change data.games — memoized like matrixSpreads below.
+  const sortedGames = useMemo(() => sortGamesByTimeThenRank(data?.games ?? []), [data?.games]);
+
   /** Build spread result map for UserPicksMatrix from GameView cover data */
   const matrixSpreads = useMemo(() => {
     const result: Record<string, { isWinner: boolean; isOverWinner: boolean; isUnderWinner: boolean; spread: number | null; over: number | null; under: number | null }> = {};
@@ -213,10 +219,10 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   const oddsNotReady = !data.hasOdds && isCurrentWeek;
 
   const games = showOnlyMyPicks
-    ? (data.games ?? []).filter(g =>
+    ? sortedGames.filter(g =>
         didUserPick(g.id, g.homeTeam) || didUserPick(g.id, g.awayTeam) ||
         didUserPick(g.id, g.homeTeam, 'Over') || didUserPick(g.id, g.homeTeam, 'Under'))
-    : (data.games ?? []);
+    : sortedGames;
 
   const isPostSeason = data.isPostSeason;
 
@@ -325,6 +331,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
                       {/* Away team pick row */}
                       <Stack direction="row" alignItems="center" sx={{ mt: 2, gap: 1.5, px: 1 }}>
+                        <RankBadge rank={game.awayRank} />
                         <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.awayTeam}</Typography>
                         <Box sx={{ flexGrow: 1 }} />
                         <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
@@ -356,6 +363,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
                       {/* Home team pick row */}
                       <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1.5, px: 1 }}>
+                        <RankBadge rank={game.homeRank} />
                         <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.homeTeam}</Typography>
                         <Box sx={{ flexGrow: 1 }} />
                         <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>

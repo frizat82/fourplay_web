@@ -33,6 +33,9 @@ export interface CfbSpreadDto {
   overUnder: number;
   gameTime: string;
   dateCreated: string;
+  // AP Top 25 rank (1-25), null when unranked. NFL has no equivalent (no polls).
+  homeTeamRank: number | null;
+  awayTeamRank: number | null;
 }
 
 export interface CfbScoreDto {

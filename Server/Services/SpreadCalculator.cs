@@ -5,10 +5,40 @@ using FourPlayWebApp.Shared.Models.Enum;
 
 
 namespace FourPlayWebApp.Server.Services;
-public class SpreadCalculator(List<NflSpreads> odds, LeagueJuiceMapping juiceMapping, int week) : ISpreadCalculator {
+
+// Shared by NFL and CFB (SpreadCalculatorBuilder / CfbPicksController.GetSpreads): applies a
+// league's configured tease ("juice") to the raw Vegas spread/total and determines pick outcomes.
+// The two sports resolve that juice amount from different tier boundaries — NFL from week number
+// (the constructor below), CFB from slate number (CfbLeaderboardService.JuiceForSlate) — but once
+// resolved, the arithmetic is identical, so it lives in one place rather than two.
+public class SpreadCalculator : ISpreadCalculator {
+    private readonly IEnumerable<IOddsRow> odds;
+    private readonly double juice;
+
+    // NFL path: resolves juice from NFL's week-number tier boundaries.
+    public SpreadCalculator(IEnumerable<IOddsRow> odds, LeagueJuiceMapping juiceMapping, int week)
+        : this(odds, ResolveNflJuice(juiceMapping, week)) {
+    }
+
+    // Shared path: caller supplies an already-resolved tease amount (e.g. CFB's slate-based tiers).
+    public SpreadCalculator(IEnumerable<IOddsRow> odds, double juice) {
+        this.odds = odds;
+        this.juice = juice;
+    }
+
+    private static double ResolveNflJuice(LeagueJuiceMapping juiceMapping, int week) {
+        if (juiceMapping is null)
+            throw new NullReferenceException("League Spread not configured");
+        return week switch {
+            <= 18 => juiceMapping.Juice,
+            < 21 => juiceMapping.JuiceDivisional,
+            21 => juiceMapping.JuiceConference,
+            _ => 0
+        };
+    }
 
     public bool DoOddsExist() {
-        return odds.Count > 0;
+        return odds.Any();
     }
 
     public double? GetOverUnder(string teamAbbr, PickType pickType) {
@@ -19,8 +49,8 @@ public class SpreadCalculator(List<NflSpreads> odds, LeagueJuiceMapping juiceMap
         if (pickType == PickType.Spread)
             return null;
         if (pickType == PickType.Over)
-            return spread - CalculateLeagueSpread();
-        return spread + CalculateLeagueSpread();
+            return spread - juice;
+        return spread + juice;
     }
 
     public double? GetSpread(string teamAbbr) {
@@ -28,23 +58,12 @@ public class SpreadCalculator(List<NflSpreads> odds, LeagueJuiceMapping juiceMap
         var spread = GetSpreadFromAbbreviation(teamAbbr);
         if (spread is null)
             return null;
-        return spread + CalculateLeagueSpread();
+        return spread + juice;
     }
 
     public DateTimeOffset? GetDateCreated(string teamAbbr) {
         var spread = odds.FirstOrDefault(x => x.HomeTeam == teamAbbr || x.AwayTeam == teamAbbr);
         return spread?.DateCreated;
-    }
-
-    public double CalculateLeagueSpread() {
-        if (juiceMapping is null)
-            throw new NullReferenceException("League Spread not configured");
-        return week switch {
-            <= 18 => juiceMapping.Juice,
-            < 21 => juiceMapping.JuiceDivisional,
-            21 => juiceMapping.JuiceConference,
-            _ => 0
-        };
     }
 
     private bool DidUserWinSpread(string team, int pickTeamScore, int otherTeamScore) {
