@@ -40,7 +40,9 @@ function cfbSpread(
   homeTeam: string,
   awayTeam: string,
   homeTeamSpread: number,
-  overUnder: number
+  overUnder: number,
+  homeTeamRank: number | null = null,
+  awayTeamRank: number | null = null
 ): CfbSpreadDto {
   return {
     id: cfbSlateId * 10 + homeTeam.length,
@@ -52,6 +54,8 @@ function cfbSpread(
     overUnder,
     gameTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
     dateCreated: new Date().toISOString(),
+    homeTeamRank,
+    awayTeamRank,
   };
 }
 
@@ -85,7 +89,7 @@ export async function setupCfbRoutes(page: Page, options: SetupCfbRoutesOptions 
   };
 
   const spreads: CfbSpreadDto[] = [
-    cfbSpread(TEST_SLATE_ID, 'OSU', 'MICH', -6.5, 51.5),
+    cfbSpread(TEST_SLATE_ID, 'OSU', 'MICH', -6.5, 51.5, 3, null),
     cfbSpread(TEST_SLATE_ID, 'ALA', 'UGA', -3.5, 48.5),
   ];
 

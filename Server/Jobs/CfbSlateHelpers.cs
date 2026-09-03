@@ -15,6 +15,12 @@ internal static class CfbSlateHelpers {
     public static bool HasRankedTeam(IEnumerable<Competitor> competitors) =>
         competitors.Any(c => c.CuratedRank?.Current is > 0 and <= 25);
 
+    // Displayable rank (1-25) for a single competitor, or null when unranked/absent — the
+    // per-team counterpart to HasRankedTeam's any-team-in-the-game check. Feeds
+    // CfbSpreads.HomeTeamRank/AwayTeamRank so Picks/Scores pages can show a ranked team's rank.
+    public static int? RankOf(Competitor c) =>
+        c.CuratedRank?.Current is > 0 and <= 25 ? c.CuratedRank.Current : null;
+
     // MACtion — MAC is the only FBS conference that schedules Tue/Wed games; excluded from the
     // league regardless of ranking. Day-of-week check only (ESPN's scoreboard feed as consumed by
     // this app carries no conference field to match on directly). Converts to Eastern before

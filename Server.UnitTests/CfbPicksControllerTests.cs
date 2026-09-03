@@ -402,6 +402,25 @@ public class CfbPicksControllerTests
     }
 
     [Fact]
+    public async Task GetSpreads_IncludesTeamRanksInResponse()
+    {
+        var spread = MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU");
+        spread.HomeTeamRank = 5;
+        spread.AwayTeamRank = null; // unranked
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([spread]);
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 0 });
+
+        var result = await BuildController().GetSpreads(1, 1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbSpreadDto>>(ok.Value).ToList();
+        var dto = Assert.Single(returned);
+        Assert.Equal(5, dto.HomeTeamRank);
+        Assert.Null(dto.AwayTeamRank);
+    }
+
+    [Fact]
     public async Task GetSpreads_ReturnsForbid_WhenUserNotInLeague()
     {
         _leagueRepo.UserExistsInLeagueAsync(UserId, 1).Returns(false);

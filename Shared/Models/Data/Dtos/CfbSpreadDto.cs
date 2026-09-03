@@ -10,4 +10,7 @@ public class CfbSpreadDto {
     public double         OverUnder      { get; set; }
     public DateTimeOffset GameTime       { get; set; }
     public DateTimeOffset DateCreated    { get; set; }
+    // AP Top 25 rank (1-25), null when unranked — see CfbSpreads.HomeTeamRank/AwayTeamRank.
+    public int?           HomeTeamRank   { get; set; }
+    public int?           AwayTeamRank   { get; set; }
 }

@@ -73,6 +73,9 @@ export interface GameView {
    *  doesn't carry it — NFL's spreadBatch endpoint returns computed, juice-adjusted odds rather
    *  than the raw NflSpreads entity, so it isn't available there today. */
   spreadPostedAt?: string | null;
+  /** AP Top 25 rank (1-25), null/undefined when unranked. CFB-only — NFL has no polls. */
+  homeRank?: number | null;
+  awayRank?: number | null;
 }
 
 export interface PickView {

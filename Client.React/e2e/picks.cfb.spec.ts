@@ -16,6 +16,14 @@ test.describe('CFB Picks page (authenticated)', () => {
     await expect(page.getByRole('button', { name: /^Pick \w/i }).first()).toBeVisible({ timeout: 5000 });
   });
 
+  // OSU is seeded ranked #3 (setupCfbRoutes's cfbSpread fixture); the other three teams are unranked.
+  test('shows AP rank next to a ranked team', async ({ page }) => {
+    await mockCfbAuth(page, { navigateTo: '/picks' });
+
+    await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('#3')).toBeVisible({ timeout: 5000 });
+  });
+
   test('shows pick buttons for upcoming games', async ({ page }) => {
     await mockCfbAuth(page, { navigateTo: '/picks' });
 

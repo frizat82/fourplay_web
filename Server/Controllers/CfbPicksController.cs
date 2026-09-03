@@ -85,6 +85,8 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             OverUnder      = s.OverUnder,
             GameTime       = s.GameTime,
             DateCreated    = s.DateCreated,
+            HomeTeamRank   = s.HomeTeamRank,
+            AwayTeamRank   = s.AwayTeamRank,
         });
         return Ok(dtos);
     }

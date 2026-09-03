@@ -103,6 +103,8 @@ function buildGamesFromEspn(
       homeCovers: computeHomeCovers(status, sp.homeTeamSpread, hs, as_),
       overWins: computeOverWins(status, sp.overUnder, hs, as_),
       spreadPostedAt: sp.dateCreated,
+      homeRank: sp.homeTeamRank,
+      awayRank: sp.awayTeamRank,
       // No hardcoded fallback — matches NFL exactly. Real situation data comes from
       // situationMap (built from getCfbLiveGames(), see fetchCfbEspnData) when ESPN provides it;
       // otherwise honestly null rather than showing a fabricated down/distance.

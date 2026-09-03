@@ -267,6 +267,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
                   spreadPostedAt={game.spreadPostedAt}
                   homeRecord={!isPostSeasonSlate ? game.homeRecord : undefined}
                   awayRecord={!isPostSeasonSlate ? game.awayRecord : undefined}
+                  homeRank={game.homeRank}
+                  awayRank={game.awayRank}
                   weatherDisplayValue={game.weather?.displayValue}
                   weatherConditionId={game.weather?.conditionId}
                   weatherTemperatureF={game.weather?.temperatureF}
