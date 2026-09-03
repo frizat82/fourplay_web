@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { getLeagueJuice } from '../api/league';
 
 /**
@@ -9,21 +9,18 @@ import { getLeagueJuice } from '../api/league';
  * (e.g. "OG FourPlayaz" showing 2020-2024, "CFB Beta Testers" showing 2025). One shared hook —
  * not a per-sport fix — since the bug and the fix are identical for NFL and CFB.
  * Falls back to `fallbackMinSeason` while loading or when the league has no juice mapping yet.
+ *
+ * Backed by the app's shared React Query cache (not a local useEffect/fetch) so visiting
+ * Picks, Scores, and Leaderboard for the same league in one session shares a single request
+ * instead of each page independently re-fetching the same rarely-changing data.
  */
 export function useLeagueMinSeason(leagueId: number | null, fallbackMinSeason: number): number {
-  const [minSeason, setMinSeason] = useState(fallbackMinSeason);
+  const { data } = useQuery({
+    queryKey: ['leagueJuice', leagueId],
+    queryFn: () => getLeagueJuice(leagueId!),
+    enabled: leagueId != null,
+  });
 
-  useEffect(() => {
-    if (leagueId == null) { setMinSeason(fallbackMinSeason); return; }
-    let ignore = false;
-    void getLeagueJuice(leagueId)
-      .then((mappings) => {
-        if (ignore) return;
-        setMinSeason(mappings.length > 0 ? Math.min(...mappings.map((m) => m.season)) : fallbackMinSeason);
-      })
-      .catch(() => { if (!ignore) setMinSeason(fallbackMinSeason); });
-    return () => { ignore = true; };
-  }, [leagueId, fallbackMinSeason]);
-
-  return minSeason;
+  if (!data || data.length === 0) return fallbackMinSeason;
+  return Math.min(...data.map((m) => m.season));
 }

@@ -1,4 +1,5 @@
 import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 
 vi.mock('../api/league', () => ({ getLeagueJuice: vi.fn() }));
@@ -16,6 +17,16 @@ function makeJuiceMapping(season: number): LeagueJuiceMappingDto {
   };
 }
 
+// A fresh QueryClient per render — the hook's cache key is ['leagueJuice', leagueId], so a
+// shared client across tests using the same leagueId would return a stale cached result instead
+// of the test's own mock. retry: false keeps a rejected fetch settling immediately.
+function renderWithClient(leagueId: number | null, fallbackMinSeason: number) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return renderHook(() => useLeagueMinSeason(leagueId, fallbackMinSeason), {
+    wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  });
+}
+
 describe('useLeagueMinSeason', () => {
   beforeEach(() => {
     mockedGetLeagueJuice.mockReset();
@@ -24,7 +35,7 @@ describe('useLeagueMinSeason', () => {
   it('resolves to the league\'s own earliest juice-mapping season', async () => {
     mockedGetLeagueJuice.mockResolvedValue([makeJuiceMapping(2023), makeJuiceMapping(2022), makeJuiceMapping(2024)]);
 
-    const { result } = renderHook(() => useLeagueMinSeason(1, 2020));
+    const { result } = renderWithClient(1, 2020);
 
     await waitFor(() => expect(result.current).toBe(2022));
   });
@@ -32,7 +43,7 @@ describe('useLeagueMinSeason', () => {
   it('falls back to fallbackMinSeason when the league has no juice mapping yet', async () => {
     mockedGetLeagueJuice.mockResolvedValue([]);
 
-    const { result } = renderHook(() => useLeagueMinSeason(1, 2020));
+    const { result } = renderWithClient(1, 2020);
 
     await waitFor(() => expect(mockedGetLeagueJuice).toHaveBeenCalledWith(1));
     expect(result.current).toBe(2020);
@@ -41,14 +52,14 @@ describe('useLeagueMinSeason', () => {
   it('falls back to fallbackMinSeason when the fetch fails', async () => {
     mockedGetLeagueJuice.mockRejectedValue(new Error('network error'));
 
-    const { result } = renderHook(() => useLeagueMinSeason(1, 2020));
+    const { result } = renderWithClient(1, 2020);
 
     await waitFor(() => expect(mockedGetLeagueJuice).toHaveBeenCalledWith(1));
     expect(result.current).toBe(2020);
   });
 
   it('returns fallbackMinSeason immediately when there is no league selected, without fetching', () => {
-    const { result } = renderHook(() => useLeagueMinSeason(null, 2020));
+    const { result } = renderWithClient(null, 2020);
 
     expect(result.current).toBe(2020);
     expect(mockedGetLeagueJuice).not.toHaveBeenCalled();
@@ -58,10 +69,14 @@ describe('useLeagueMinSeason', () => {
     mockedGetLeagueJuice.mockImplementation((leagueId: number) =>
       Promise.resolve(leagueId === 1 ? [makeJuiceMapping(2022)] : [makeJuiceMapping(2025)])
     );
-
-    const { result, rerender } = renderHook(({ leagueId }) => useLeagueMinSeason(leagueId, 2020), {
-      initialProps: { leagueId: 1 },
-    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result, rerender } = renderHook(
+      ({ leagueId }) => useLeagueMinSeason(leagueId, 2020),
+      {
+        initialProps: { leagueId: 1 },
+        wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+      },
+    );
     await waitFor(() => expect(result.current).toBe(2022));
 
     rerender({ leagueId: 2 });

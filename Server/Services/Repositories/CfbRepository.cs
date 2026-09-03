@@ -62,14 +62,11 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         await using var db = await dbFactory.CreateDbContextAsync();
         var spreadList = spreads.ToList();
         var slateIds = spreadList.Select(s => s.CfbSlateId).ToHashSet();
-        var existingMap = await db.CfbSpreads
-            .Where(s => slateIds.Contains(s.CfbSlateId))
-            .ToDictionaryAsync(s => (s.CfbSlateId, s.HomeTeam));
-
-        foreach (var spread in spreadList) {
-            if (!existingMap.TryGetValue((spread.CfbSlateId, spread.HomeTeam), out var existing))
-                db.CfbSpreads.Add(spread);
-            else {
+        await UpsertByKeyAsync(
+            db.CfbSpreads, spreadList,
+            s => (s.CfbSlateId, s.HomeTeam),
+            db.CfbSpreads.Where(s => slateIds.Contains(s.CfbSlateId)),
+            (existing, spread) => {
                 existing.AwayTeam         = spread.AwayTeam;
                 existing.HomeTeamSpread   = spread.HomeTeamSpread;
                 existing.AwayTeamSpread   = spread.AwayTeamSpread;
@@ -77,8 +74,7 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
                 existing.GameTime         = spread.GameTime;
                 existing.IsLeagueEligible = spread.IsLeagueEligible;
                 // DateCreated intentionally NOT overwritten — preserves when the line was first posted.
-            }
-        }
+            });
         await db.SaveChangesAsync();
     }
 
@@ -104,21 +100,19 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         var rankingList = rankings.ToList();
         if (rankingList.Count == 0) return;
 
-        var seasons = rankingList.Select(r => r.Season).ToHashSet();
+        // Every caller (CfbRankingCaptureJob's whole-season sweep, CfbSpreadJob's single-slate
+        // capture) only ever produces rankings for one season per call — no need for a HashSet.
+        var season = rankingList[0].Season;
         var weeks = rankingList.Select(r => r.EspnWeekNumber).ToHashSet();
-        var existingMap = await db.CfbRankings
-            .Where(r => seasons.Contains(r.Season) && weeks.Contains(r.EspnWeekNumber))
-            .ToDictionaryAsync(r => (r.Season, r.EspnWeekNumber, r.TeamAbbreviation));
-
-        foreach (var ranking in rankingList) {
-            if (!existingMap.TryGetValue((ranking.Season, ranking.EspnWeekNumber, ranking.TeamAbbreviation), out var existing))
-                db.CfbRankings.Add(ranking);
-            else {
+        await UpsertByKeyAsync(
+            db.CfbRankings, rankingList,
+            r => (r.Season, r.EspnWeekNumber, r.TeamAbbreviation),
+            db.CfbRankings.Where(r => r.Season == season && weeks.Contains(r.EspnWeekNumber)),
+            (existing, ranking) => {
                 existing.CuratedRank   = ranking.CuratedRank;
                 existing.EspnEventId   = ranking.EspnEventId;
                 existing.CapturedAtUtc = ranking.CapturedAtUtc;
-            }
-        }
+            });
         await db.SaveChangesAsync();
     }
 
@@ -159,22 +153,39 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         await using var db = await dbFactory.CreateDbContextAsync();
         var scoreList = scores.ToList();
         var slateIds = scoreList.Select(s => s.CfbSlateId).ToHashSet();
-        var existingMap = await db.CfbScores
-            .Where(s => slateIds.Contains(s.CfbSlateId))
-            .ToDictionaryAsync(s => (s.CfbSlateId, s.HomeTeam));
-
-        foreach (var score in scoreList) {
-            if (!existingMap.TryGetValue((score.CfbSlateId, score.HomeTeam), out var existing))
-                db.CfbScores.Add(score);
-            else {
+        await UpsertByKeyAsync(
+            db.CfbScores, scoreList,
+            s => (s.CfbSlateId, s.HomeTeam),
+            db.CfbScores.Where(s => slateIds.Contains(s.CfbSlateId)),
+            (existing, score) => {
                 existing.HomeTeamScore       = score.HomeTeamScore;
                 existing.AwayTeamScore       = score.AwayTeamScore;
                 existing.GameStatus          = score.GameStatus;
                 existing.WeatherDisplayValue = score.WeatherDisplayValue;
                 existing.WeatherConditionId  = score.WeatherConditionId;
                 existing.WeatherTemperatureF = score.WeatherTemperatureF;
-            }
-        }
+            });
         await db.SaveChangesAsync();
+    }
+
+    // Shared "insert new / update in place" upsert behind UpsertAsync, UpsertCfbScoresAsync, and
+    // AddRankingsAsync — they differ only in entity type, composite key, the pre-filtered
+    // existing-rows query (each caller narrows it to just the rows that could possibly collide),
+    // and which fields carry over on update.
+    private static async Task UpsertByKeyAsync<TEntity, TKey>(
+        DbSet<TEntity> dbSet,
+        List<TEntity> items,
+        Func<TEntity, TKey> keySelector,
+        IQueryable<TEntity> existingRows,
+        Action<TEntity, TEntity> applyUpdate)
+        where TEntity : class
+        where TKey : notnull {
+        var existingMap = await existingRows.ToDictionaryAsync(keySelector);
+        foreach (var item in items) {
+            if (!existingMap.TryGetValue(keySelector(item), out var existing))
+                dbSet.Add(item);
+            else
+                applyUpdate(existing, item);
+        }
     }
 }

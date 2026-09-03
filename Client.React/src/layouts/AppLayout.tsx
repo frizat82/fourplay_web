@@ -97,7 +97,7 @@ export default function AppLayout() {
   // from one always drops a standalone-mode install into the regular browser (see utils/pwa.ts).
   // Not fixable via routing; the switch-sport controls below just say so up front instead of
   // surprising the user with an unexpected app-to-browser jump.
-  const [inStandalonePwa] = useState(isStandalonePwa);
+  const inStandalonePwa = isStandalonePwa();
   const otherSportOpensInBrowser = inStandalonePwa ? ' (opens in your browser)' : '';
 
   const handleNavClick = (to: string) => {

@@ -1,10 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { alpha, ThemeProvider } from '@mui/material';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import LeaderboardPage from '../pages/LeaderboardPage';
 import { vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { createLeaderboardEntry, createLeaderboardWeekResult } from '../test/fixtures';
+import { createLeaderboardEntry, createLeaderboardWeekResult, mockLeagueJuiceEmpty } from '../test/fixtures';
 import type { SportAdapter } from '../services/sportAdapter';
 import { createAppTheme } from '../app/theme';
 
@@ -46,11 +47,7 @@ beforeEach(() => {
     id: 1, leagueId: 1, leagueName: 'Demo League', season: 2023,
     juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2023-01-01T00:00:00Z',
   });
-  // Default: no juice-mapping history returned, so useLeagueMinSeason falls back to
-  // adapter.weekSelectorConfig.minSeason — every pre-existing test in this file was written
-  // against that sport-wide default, not any particular league's own history.
-  mockedGetLeagueJuice.mockReset();
-  mockedGetLeagueJuice.mockResolvedValue([]);
+  mockLeagueJuiceEmpty(mockedGetLeagueJuice);
 });
 
 const mockAdapter: SportAdapter = {
@@ -67,16 +64,24 @@ const mockAdapter: SportAdapter = {
 };
 
 function renderPage(mode: 'light' | 'dark' = 'light') {
-  return render(
-    <ThemeProvider theme={createAppTheme(mode)}>
-      <MemoryRouter initialEntries={['/leaderboard']}>
-        <Routes>
-          <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
-          <Route path="/leaguepicker" element={<div>League Picker</div>} />
-        </Routes>
-      </MemoryRouter>
-    </ThemeProvider>
-  );
+  // useLeagueMinSeason (via LeaderboardPage) now goes through React Query — a fresh client per
+  // render so cached ['leagueJuice', leagueId] results never leak between tests.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider theme={createAppTheme(mode)}>
+          <MemoryRouter initialEntries={['/leaderboard']}>
+            <Routes>
+              <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
+              <Route path="/leaguepicker" element={<div>League Picker</div>} />
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>
+    ),
+    queryClient,
+  };
 }
 
 describe('LeaderboardPage', () => {
@@ -291,7 +296,7 @@ describe('LeaderboardPage — season selector', () => {
     mockedGetLeaderboard.mockResolvedValueOnce([
       createLeaderboardEntry({ userId: '123', userName: 'LeagueOneUser', rank: '1', total: 5, weekResults: [] }),
     ]);
-    const { rerender } = renderPage();
+    const { rerender, queryClient } = renderPage();
     await screen.findByText('LeagueOneUser');
 
     let resolveLeagueTwo!: (value: ReturnType<typeof createLeaderboardEntry>[]) => void;
@@ -299,14 +304,16 @@ describe('LeaderboardPage — season selector', () => {
 
     sessionState.currentLeague = 2;
     rerender(
-      <ThemeProvider theme={createAppTheme('light')}>
-        <MemoryRouter initialEntries={['/leaderboard']}>
-          <Routes>
-            <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
-            <Route path="/leaguepicker" element={<div>League Picker</div>} />
-          </Routes>
-        </MemoryRouter>
-      </ThemeProvider>,
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider theme={createAppTheme('light')}>
+          <MemoryRouter initialEntries={['/leaderboard']}>
+            <Routes>
+              <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
+              <Route path="/leaguepicker" element={<div>League Picker</div>} />
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
     );
 
     // The old league's data must not still be on screen while the new league loads.
@@ -325,20 +332,22 @@ describe('LeaderboardPage — season selector', () => {
     mockedGetLeaderboard.mockResolvedValueOnce([
       createLeaderboardEntry({ userId: '1', userName: 'LeagueOneUser', rank: '1', total: 1, weekResults: [] }),
     ]);
-    const { rerender } = renderPage();
+    const { rerender, queryClient } = renderPage();
     await screen.findByText('LeagueOneUser');
 
     const rerenderWithLeague = (leagueId: number) => {
       sessionState.currentLeague = leagueId;
       rerender(
-        <ThemeProvider theme={createAppTheme('light')}>
-          <MemoryRouter initialEntries={['/leaderboard']}>
-            <Routes>
-              <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
-              <Route path="/leaguepicker" element={<div>League Picker</div>} />
-            </Routes>
-          </MemoryRouter>
-        </ThemeProvider>,
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider theme={createAppTheme('light')}>
+            <MemoryRouter initialEntries={['/leaderboard']}>
+              <Routes>
+                <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
+                <Route path="/leaguepicker" element={<div>League Picker</div>} />
+              </Routes>
+            </MemoryRouter>
+          </ThemeProvider>
+        </QueryClientProvider>,
       );
     };
 

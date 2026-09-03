@@ -22,10 +22,17 @@ public class CfbLeaderboardService(
         if (leagueId == 0) return leaderboard;
 
         try {
-            var leagueUsers = await leagueRepository.GetLeagueUserMappingsAsync(leagueId);
-            var juiceMapping = await leagueRepository.GetLeagueJuiceMappingAsync(leagueId, season);
-            var slates = (await cfbRepository.GetSlatesForSeasonAsync(season))
-                .OrderBy(s => s.SlateNumber).ToList();
+            // Four independent lookups (no data dependency between them, each on its own
+            // DbContext via the repository pattern) — kick them all off before awaiting instead
+            // of paying for four sequential round-trips.
+            var leagueUsersTask = leagueRepository.GetLeagueUserMappingsAsync(leagueId);
+            var juiceMappingTask = leagueRepository.GetLeagueJuiceMappingAsync(leagueId, season);
+            var slatesTask = cfbRepository.GetSlatesForSeasonAsync(season);
+            var currentSlateTask = currentSlateService.GetCurrentSlateAsync();
+
+            var leagueUsers = await leagueUsersTask;
+            var juiceMapping = await juiceMappingTask;
+            var slates = (await slatesTask).OrderBy(s => s.SlateNumber).ToList();
 
             // CfbSlates is fully seeded for the whole season up front (CfbSlateSeederJob), unlike
             // NFL's NflScores rows, which only exist once a game is FINAL — so NFL's leaderboard
@@ -33,7 +40,7 @@ public class CfbLeaderboardService(
             // showing every future slate as a missed week. Uses the same shared "what's current"
             // resolver NflCurrentWeekService/CfbCurrentSlateService both already go through
             // (SeasonWindowResolver), not a CFB-only reimplementation.
-            var currentSlate = await currentSlateService.GetCurrentSlateAsync();
+            var currentSlate = await currentSlateTask;
             if (currentSlate is not null) {
                 if (currentSlate.Season == season)
                     slates = slates.Where(s => s.SlateNumber <= currentSlate.SlateNumber).ToList();
