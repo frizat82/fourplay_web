@@ -38,6 +38,7 @@ vi.mock('../api/espn', () => ({
 vi.mock('../api/league', () => ({
   doOddsExist: vi.fn(), getLeaguePicks: vi.fn(), spreadBatch: vi.fn(),
   addPicks: vi.fn(), getUserPicks: vi.fn(), getNflCurrentWeek: vi.fn(),
+  getLeagueJuice: vi.fn(),
 }));
 vi.mock('../api/cfb', () => ({
   getCfbCurrentSlate: vi.fn(), getCfbSlates: vi.fn(), getCfbSpreads: vi.fn(),
@@ -49,7 +50,7 @@ const toastPush = vi.fn();
 vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 
 import { getLiveGames, getWeekScores, getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
-import { doOddsExist, getLeaguePicks, spreadBatch, getNflCurrentWeek } from '../api/league';
+import { doOddsExist, getLeaguePicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbAllPicks } from '../api/cfb';
 
 const mockedGetLiveGames = vi.mocked(getLiveGames);
@@ -57,6 +58,9 @@ const mockedGetWeekScores = vi.mocked(getWeekScores);
 const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetLeaguePicks = vi.mocked(getLeaguePicks);
 const mockedGetNflCurrentWeek = vi.mocked(getNflCurrentWeek);
+// useLeagueMinSeason falls back to adapter.weekSelectorConfig.minSeason when this resolves
+// empty — every pre-existing test in this file was written against that sport-wide default.
+const mockedGetLeagueJuice = vi.mocked(getLeagueJuice);
 const mockedGetCfbSlates = vi.mocked(getCfbSlates);
 const mockedGetCfbSpreads = vi.mocked(getCfbSpreads);
 const mockedGetCfbScores = vi.mocked(getCfbScores);
@@ -98,6 +102,7 @@ const setupDefaults = async (options?: {
   mockedDoOddsExist.mockResolvedValue(options?.oddsExist ?? true);
   mockedGetLeaguePicks.mockResolvedValue(options?.picks ?? []);
   mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
+  mockedGetLeagueJuice.mockResolvedValue([]);
 };
 
 const renderWithClient = (ui: React.ReactElement, client?: QueryClient) => {
@@ -118,6 +123,7 @@ describe('ScoresPage', () => {
   beforeEach(() => {
     sessionState.currentLeague = 1;
     vi.clearAllMocks();
+    mockedGetLeagueJuice.mockResolvedValue([]);
   });
 
   it('shows no league message when no league selected', async () => {

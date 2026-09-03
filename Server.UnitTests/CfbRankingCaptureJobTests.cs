@@ -83,8 +83,10 @@ public class CfbRankingCaptureJobTests
     }
 
     [Fact]
-    public async Task Execute_PersistsRankingForBothRankedCompetitors()
+    public async Task Execute_PersistsRankingOnlyForTheRankedCompetitor_NotTheUnrankedOne()
     {
+        // "Rankings" now means one row per (season, week, ranked team) — CuratedRank=99 (ESPN's
+        // unranked sentinel) is not a rank, so it's never persisted at all, not even as a row.
         var slate = BuildSlate();
         _repo.GetSlatesForSeasonAsync(2026).Returns([slate]);
         _fetcher.FetchForSlateAsync(slate).Returns(BuildScoreboard(homeRank: 3, awayRank: 99));
@@ -95,8 +97,9 @@ public class CfbRankingCaptureJobTests
         await BuildJob().Execute(_context);
 
         var rankings = saved!.ToList();
-        Assert.Contains(rankings, r => r.TeamAbbreviation == "ORE" && r.CuratedRank == 3);
-        Assert.Contains(rankings, r => r.TeamAbbreviation == "OSU" && r.CuratedRank == 99);
+        Assert.Single(rankings);
+        Assert.Equal("ORE", rankings[0].TeamAbbreviation);
+        Assert.Equal(3, rankings[0].CuratedRank);
     }
 
     [Fact]

@@ -32,12 +32,12 @@ vi.mock('../components/sports/TeamHelmet', () => ({
 vi.mock('../components/WeatherIcon', () => ({ default: () => null }));
 
 // ─── NFL regression ──────────────────────────────────────────────────────────
-vi.mock('../api/league', () => ({ addPicks: vi.fn(), doOddsExist: vi.fn(), getUserPicks: vi.fn(), spreadBatch: vi.fn(), getNflCurrentWeek: vi.fn() }));
+vi.mock('../api/league', () => ({ addPicks: vi.fn(), doOddsExist: vi.fn(), getUserPicks: vi.fn(), spreadBatch: vi.fn(), getNflCurrentWeek: vi.fn(), getLeagueJuice: vi.fn() }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
 
 import { getWeekScores } from '../api/espn';
-import { doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek } from '../api/league';
+import { doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
 import { createCompetition, createScores, createSpreadResponse } from '../test/fixtures';
@@ -62,6 +62,7 @@ describe('NFL PicksPage — GameCard layout regression', () => {
     }});
     vi.mocked(getAllJerseys).mockResolvedValue({});
     vi.mocked(getNextSpreadJob).mockResolvedValue(null);
+    vi.mocked(getLeagueJuice).mockResolvedValue([]);
   });
 
   it('renders Pick buttons (GameCard pick mode)', async () => {
@@ -106,6 +107,7 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
     vi.mocked(getCfbLiveGames).mockResolvedValue([]);
     vi.mocked(getCfbScores).mockResolvedValue([]);
     vi.mocked(getCfbUserPicks).mockResolvedValue([]);
+    vi.mocked(getLeagueJuice).mockResolvedValue([]);
   });
 
   it('renders Pick buttons (GameCard pick mode)', async () => {

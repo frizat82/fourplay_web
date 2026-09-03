@@ -15,6 +15,10 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Changed: NFL league platform cost is now $200 base / $20 per head (CFB unchanged at $100 / $10)
 - Removed: the Share button on the Scores page — it only ever linked to the site itself, nothing worth sharing
 - Added: a daily catch-up job for CFB rankings capture, so a missed Monday run or a Tuesday CFP release doesn't leave a week's eligibility data stale
+- Fixed: the CFB leaderboard showed every remaining week of an in-progress season as a missed pick instead of stopping at the current week, matching NFL's behavior
+- Fixed: the season selector on Picks, Scores, and Leaderboard offered years before a league had even started (e.g. a brand-new league showing 2020) — it's now bounded by that league's own earliest configured season
+- Fixed: CFB AP Top 25 rankings could be stored more than once per team per week — now one row per team per week, as intended
+- Changed: tapping "Switch to CFB/NFL" from an installed home-screen app now shows it will open in the regular browser, since each sport is a separate installed app on iOS
 
 ## 2026-09-02
 

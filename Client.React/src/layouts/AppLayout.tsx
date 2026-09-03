@@ -23,6 +23,7 @@ import {
 } from '@mui/material';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -46,6 +47,7 @@ import { useAuth } from '../services/auth';
 import { useSportContext } from '../services/sport';
 import { useThemeMode } from '../services/theme';
 import { isAdmin } from '../utils/auth';
+import { isStandalonePwa } from '../utils/pwa';
 import PendingInviteBanner from '../components/PendingInviteBanner';
 import VersionFooter from '../components/VersionFooter';
 
@@ -91,6 +93,13 @@ export default function AppLayout() {
     return `${protocol}//${otherHost}${portSuffix}`;
   };
 
+  // NFL and CFB are separate origins, so each is its own installed PWA — a cross-origin link
+  // from one always drops a standalone-mode install into the regular browser (see utils/pwa.ts).
+  // Not fixable via routing; the switch-sport controls below just say so up front instead of
+  // surprising the user with an unexpected app-to-browser jump.
+  const [inStandalonePwa] = useState(isStandalonePwa);
+  const otherSportOpensInBrowser = inStandalonePwa ? ' (opens in your browser)' : '';
+
   const handleNavClick = (to: string) => {
     if (isMobile) setOpen(false);
     navigate(to);
@@ -135,6 +144,11 @@ export default function AppLayout() {
           <Button variant="contained" href={getOtherSportUrl()}>
             Go to {isCfb ? 'NFL' : 'CFB'} site
           </Button>
+          {inStandalonePwa && (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+              Opens in your browser — this installed app can only show {isCfb ? 'CFB' : 'NFL'}.
+            </Typography>
+          )}
         </>
       ) : (
         <Typography color="text.secondary">
@@ -177,9 +191,12 @@ export default function AppLayout() {
               <Chip
                 component="a"
                 href={getOtherSportUrl()}
-                icon={<SwapHorizIcon />}
+                // A distinct "leaves the app" icon when installed standalone — always visible,
+                // unlike a hover title/tooltip, which a one-tap mobile navigation never shows.
+                icon={inStandalonePwa ? <OpenInNewIcon /> : <SwapHorizIcon />}
                 label={otherSport}
-                aria-label={`Switch to ${otherSport} site`}
+                title={inStandalonePwa ? 'Opens in your browser, outside this installed app' : undefined}
+                aria-label={`Switch to ${otherSport} site${otherSportOpensInBrowser}`}
                 clickable
                 variant="outlined"
                 sx={{

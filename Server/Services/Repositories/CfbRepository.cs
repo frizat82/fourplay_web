@@ -96,34 +96,37 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         return await db.CfbSpreads.Where(s => s.CfbSlateId == cfbSlateId).ToListAsync();
     }
 
+    // Rank doesn't change once captured for a week, so a later capture (CfbRankingCaptureJob,
+    // then CfbSpreadJob riding along with its odds fetch) overwrites the same row rather than
+    // appending a new one — enforced by the unique index on (Season, EspnWeekNumber, TeamAbbreviation).
     public async Task AddRankingsAsync(IEnumerable<CfbRanking> rankings) {
         await using var db = await dbFactory.CreateDbContextAsync();
-        db.CfbRankings.AddRange(rankings);
+        var rankingList = rankings.ToList();
+        if (rankingList.Count == 0) return;
+
+        var seasons = rankingList.Select(r => r.Season).ToHashSet();
+        var weeks = rankingList.Select(r => r.EspnWeekNumber).ToHashSet();
+        var existingMap = await db.CfbRankings
+            .Where(r => seasons.Contains(r.Season) && weeks.Contains(r.EspnWeekNumber))
+            .ToDictionaryAsync(r => (r.Season, r.EspnWeekNumber, r.TeamAbbreviation));
+
+        foreach (var ranking in rankingList) {
+            if (!existingMap.TryGetValue((ranking.Season, ranking.EspnWeekNumber, ranking.TeamAbbreviation), out var existing))
+                db.CfbRankings.Add(ranking);
+            else {
+                existing.CuratedRank   = ranking.CuratedRank;
+                existing.EspnEventId   = ranking.EspnEventId;
+                existing.CapturedAtUtc = ranking.CapturedAtUtc;
+            }
+        }
         await db.SaveChangesAsync();
     }
 
-    // CfbRanking is append-only (CfbRankingCaptureJob's earlier run and CfbSpreadJob's later run
-    // both capture the same team-week), so "the" rank for a team is its most recently captured
-    // row. Resolved with a join against each team's own max(CapturedAtUtc) rather than pulling
-    // every capture into memory and reducing there.
     public async Task<Dictionary<string, int>> GetLatestRankingsForWeekAsync(int season, int espnWeekNumber) {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var weekRankings = db.CfbRankings.Where(r => r.Season == season && r.EspnWeekNumber == espnWeekNumber);
-        var latestPerTeam = weekRankings
-            .GroupBy(r => r.TeamAbbreviation)
-            .Select(g => new { TeamAbbreviation = g.Key, CapturedAtUtc = g.Max(r => r.CapturedAtUtc) });
-
-        var latest = await weekRankings
-            .Join(latestPerTeam,
-                r => new { r.TeamAbbreviation, r.CapturedAtUtc },
-                l => new { l.TeamAbbreviation, l.CapturedAtUtc },
-                (r, l) => r)
-            .ToListAsync();
-
-        // GroupBy defends against a duplicate-timestamp tie (two captures for the same team in
-        // the same instant) matching more than one row in the join above — ToDictionary would
-        // otherwise throw on the duplicate key.
-        return latest.GroupBy(r => r.TeamAbbreviation).ToDictionary(g => g.Key, g => g.First().CuratedRank);
+        return await db.CfbRankings
+            .Where(r => r.Season == season && r.EspnWeekNumber == espnWeekNumber)
+            .ToDictionaryAsync(r => r.TeamAbbreviation, r => r.CuratedRank);
     }
 
     public async Task<IEnumerable<CfbScores>> GetScoresForSlateAsync(int cfbSlateId) {

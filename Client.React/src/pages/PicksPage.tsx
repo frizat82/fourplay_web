@@ -20,6 +20,7 @@ import type { SportAdapter, GameView, PickType, WeekState } from '../services/sp
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useToast } from '../services/toast';
 import { isGameDecided } from '../utils/gameHelpers';
+import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 
 // Pick key: "gameId|team|pickType" — stable across NFL and CFB
 function pickKey(gameId: string, team: string, pickType: string) {
@@ -81,6 +82,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const isPostSeason = weekState?.isPostSeason ?? data?.isPostSeason ?? false;
   const maxWeek = currentBounds?.maxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
   const maxSeason = currentBounds?.maxSeason ?? new Date().getFullYear();
+  const minSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
 
   const existingPicks = useMemo(
     () => new Set((data?.userPicks ?? []).map(p => pickKey(p.gameId, p.team, p.pickType))),
@@ -203,6 +205,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
           {...adapter.weekSelectorConfig}
           maxRegularSeasonWeek={maxWeek}
           maxSeason={maxSeason}
+          minSeason={minSeason}
           isCurrent={isCurrentWeek}
         />
         {!isCurrentWeek && (
