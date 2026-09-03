@@ -174,6 +174,10 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
   const users = useMemo(() => Array.from(new Set((data?.allPicks ?? []).map(p => p.userName))), [data?.allPicks]);
 
+  // /code-review: this re-derives on every render otherwise, including live-game poll/SSE ticks
+  // that don't actually change data.games — memoized like matrixSpreads below.
+  const sortedGames = useMemo(() => sortGamesByTimeThenRank(data?.games ?? []), [data?.games]);
+
   /** Build spread result map for UserPicksMatrix from GameView cover data */
   const matrixSpreads = useMemo(() => {
     const result: Record<string, { isWinner: boolean; isOverWinner: boolean; isUnderWinner: boolean; spread: number | null; over: number | null; under: number | null }> = {};
@@ -214,7 +218,6 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   // selector entirely).
   const oddsNotReady = !data.hasOdds && isCurrentWeek;
 
-  const sortedGames = sortGamesByTimeThenRank(data.games ?? []);
   const games = showOnlyMyPicks
     ? sortedGames.filter(g =>
         didUserPick(g.id, g.homeTeam) || didUserPick(g.id, g.awayTeam) ||

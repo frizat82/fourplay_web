@@ -157,6 +157,20 @@ describe('sortGamesByTimeThenRank', () => {
     expect(result.map(g => g.id)).toEqual(['bothRanked', 'oneRanked']);
   });
 
+  // /code-review catch: Infinity - Infinity is NaN, an unspecified Array.sort comparator
+  // result — a typical CFB slate has several unranked games in the same TV window, so this is
+  // the common case, not an edge case.
+  it('does not produce NaN comparator results for two unranked games at the same kickoff time', () => {
+    const sameTime = '2026-09-05T20:00:00Z';
+    const unranked1 = makeGameAt('u1', sameTime);
+    const unranked2 = makeGameAt('u2', sameTime);
+
+    const result = sortGamesByTimeThenRank([unranked1, unranked2]);
+
+    expect(result).toHaveLength(2);
+    expect(result.map(g => g.id).sort()).toEqual(['u1', 'u2']);
+  });
+
   it('never mutates the input array', () => {
     const games = [makeGameAt('b', '2026-09-05T20:00:00Z'), makeGameAt('a', '2026-09-05T17:00:00Z')];
     const original = [...games];

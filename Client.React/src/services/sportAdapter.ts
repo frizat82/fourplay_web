@@ -57,13 +57,22 @@ export function revealPicksForStartedGames(allPicks: PickView[], games: GameView
  * so the rank tiebreaker is inert there and this reduces to a pure time sort.
  */
 export function sortGamesByTimeThenRank(games: GameView[]): GameView[] {
-  const bestRank = (g: GameView): number => {
+  // null, not Infinity, for "no rank" — Infinity - Infinity is NaN, an unspecified
+  // Array.sort comparator result (ECMA-262 leaves ordering undefined for a non-total-order
+  // comparator), which two unranked games at the same kickoff time would hit constantly.
+  const bestRank = (g: GameView): number | null => {
     const ranks = [g.homeRank, g.awayRank].filter((r): r is number => r != null);
-    return ranks.length > 0 ? Math.min(...ranks) : Infinity;
+    return ranks.length > 0 ? Math.min(...ranks) : null;
   };
   return [...games].sort((a, b) => {
     const timeDiff = new Date(a.gameTime).getTime() - new Date(b.gameTime).getTime();
-    return timeDiff !== 0 ? timeDiff : bestRank(a) - bestRank(b);
+    if (timeDiff !== 0) return timeDiff;
+    const rankA = bestRank(a);
+    const rankB = bestRank(b);
+    if (rankA === rankB) return 0; // both unranked, or (impossible in practice) tied rank
+    if (rankA === null) return 1;
+    if (rankB === null) return -1;
+    return rankA - rankB;
   });
 }
 
