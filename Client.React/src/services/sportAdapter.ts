@@ -49,6 +49,24 @@ export function revealPicksForStartedGames(allPicks: PickView[], games: GameView
   return allPicks.filter(p => p.userId === userId || startedIds.has(p.gameId));
 }
 
+/**
+ * Kickoff time ascending; among games at the same kickoff time, the best (lowest-numbered) AP
+ * rank of either team first, unranked/no-rank games last. Shared by PicksPage and ScoresPage —
+ * both render games through this one function, so it applies identically to both sports. CFB is
+ * the only adapter that ever populates homeRank/awayRank; NFL's games always have both undefined,
+ * so the rank tiebreaker is inert there and this reduces to a pure time sort.
+ */
+export function sortGamesByTimeThenRank(games: GameView[]): GameView[] {
+  const bestRank = (g: GameView): number => {
+    const ranks = [g.homeRank, g.awayRank].filter((r): r is number => r != null);
+    return ranks.length > 0 ? Math.min(...ranks) : Infinity;
+  };
+  return [...games].sort((a, b) => {
+    const timeDiff = new Date(a.gameTime).getTime() - new Date(b.gameTime).getTime();
+    return timeDiff !== 0 ? timeDiff : bestRank(a) - bestRank(b);
+  });
+}
+
 export interface GameView {
   id: string;
   homeTeam: string;

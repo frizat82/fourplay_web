@@ -17,6 +17,7 @@ import GameCardGridSkeleton from '../components/GameCardSkeleton';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import type { SportAdapter, GameView, PickType, WeekState } from '../services/sportAdapter';
+import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useToast } from '../services/toast';
 import { isGameDecided } from '../utils/gameHelpers';
 
@@ -72,7 +73,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     }
   }, [isCurrentWeek, data]);
 
-  const games = useMemo(() => data?.games ?? [], [data]);
+  const games = useMemo(() => sortGamesByTimeThenRank(data?.games ?? []), [data]);
   const hasOdds = data?.hasOdds ?? false;
   const requiredPicks = data?.requiredPicks ?? 4;
   const season = weekState?.season ?? data?.season ?? new Date().getFullYear();
