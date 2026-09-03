@@ -32,6 +32,9 @@ export interface GameCardProps {
   awayRecord?: string;
   homeJerseyUrl?: string;
   awayJerseyUrl?: string;
+  // AP Top 25 rank (CFB only — undefined/null hides it)
+  homeRank?: number | null;
+  awayRank?: number | null;
   // Weather
   weatherDisplayValue?: string | null;
   weatherConditionId?: string | null;
@@ -77,6 +80,7 @@ export default function GameCard({
   locked = false,
   onPickHome, onPickAway,
   homeRecord, awayRecord,
+  homeRank, awayRank,
   homeJerseyUrl, awayJerseyUrl,
   weatherDisplayValue, weatherConditionId, weatherTemperatureF,
   isPostSeason = false,
@@ -156,6 +160,15 @@ export default function GameCard({
     );
   };
 
+  // AP Top 25 rank — CFB only, shown only when the team is actually ranked (null/undefined hides
+  // it entirely rather than rendering an "unranked" placeholder).
+  const renderRank = (rank: number | null | undefined) =>
+    rank != null && (
+      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+        #{rank}
+      </Typography>
+    );
+
   const renderTeamLogo = (abbr: string, jerseyUrl: string | undefined) => (
     <Box textAlign="center">
       {jerseyUrl
@@ -173,6 +186,7 @@ export default function GameCard({
         {/* Away team row */}
         <Stack direction="row" alignItems="center" sx={{ gap: 1 }}>
           {renderTeamLogo(awayTeam, awayJerseyUrl)}
+          {renderRank(awayRank)}
           {!isPostSeason && awayRecord && (
             <Typography variant="subtitle2">{awayRecord}</Typography>
           )}
@@ -216,6 +230,7 @@ export default function GameCard({
             panels rather than one continuous list, which was the "HUGE"/disjointed feel. */}
         <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1 }}>
           {renderTeamLogo(homeTeam, homeJerseyUrl)}
+          {renderRank(homeRank)}
           {!isPostSeason && homeRecord && (
             <Typography variant="subtitle2">{homeRecord}</Typography>
           )}

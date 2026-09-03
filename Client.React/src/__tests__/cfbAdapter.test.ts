@@ -30,6 +30,7 @@ const spread: CfbSpreadDto = {
   id: 1, cfbSlateId: 10, homeTeam: 'MICH', awayTeam: 'PSU',
   homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5,
   gameTime: '2025-10-11T20:00:00Z', dateCreated: '2025-10-09T14:00:00Z',
+  homeTeamRank: 5, awayTeamRank: null,
 };
 
 /**
@@ -87,6 +88,8 @@ describe('cfbAdapter', () => {
       expect(game.gameStatus).toBe('final');
       expect(game.id).toBe('MICH');
       expect(game.spreadPostedAt).toBe('2025-10-09T14:00:00Z');
+      expect(game.homeRank).toBe(5);
+      expect(game.awayRank).toBeNull();
     });
 
     it('always sets hasOdds=true when spreads exist', async () => {

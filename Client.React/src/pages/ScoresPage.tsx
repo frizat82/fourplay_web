@@ -325,6 +325,11 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
                       {/* Away team pick row */}
                       <Stack direction="row" alignItems="center" sx={{ mt: 2, gap: 1.5, px: 1 }}>
+                        {game.awayRank != null && (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                            #{game.awayRank}
+                          </Typography>
+                        )}
                         <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.awayTeam}</Typography>
                         <Box sx={{ flexGrow: 1 }} />
                         <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
@@ -356,6 +361,11 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
                       {/* Home team pick row */}
                       <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1.5, px: 1 }}>
+                        {game.homeRank != null && (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                            #{game.homeRank}
+                          </Typography>
+                        )}
                         <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.homeTeam}</Typography>
                         <Box sx={{ flexGrow: 1 }} />
                         <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>
