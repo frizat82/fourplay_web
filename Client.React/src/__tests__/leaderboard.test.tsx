@@ -28,13 +28,14 @@ const sessionState = {
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/auth', () => ({ useAuth: () => ({ user: { userId: '123', name: 'TestUser', claims: [] } }) }));
 vi.mock('../api/leaderboard', () => ({ getLeaderboard: vi.fn() }));
-vi.mock('../api/league', () => ({ getLeagueJuiceForSeason: vi.fn() }));
+vi.mock('../api/league', () => ({ getLeagueJuiceForSeason: vi.fn(), getLeagueJuice: vi.fn() }));
 
 import { getLeaderboard } from '../api/leaderboard';
-import { getLeagueJuiceForSeason } from '../api/league';
+import { getLeagueJuiceForSeason, getLeagueJuice } from '../api/league';
 
 const mockedGetLeaderboard = vi.mocked(getLeaderboard);
 const mockedGetLeagueJuiceForSeason = vi.mocked(getLeagueJuiceForSeason);
+const mockedGetLeagueJuice = vi.mocked(getLeagueJuice);
 
 // frizat-ugs: every existing test in this file exercises a season whose Juice IS configured —
 // default the mock to "configured" globally so only the new not-configured tests need to
@@ -45,6 +46,11 @@ beforeEach(() => {
     id: 1, leagueId: 1, leagueName: 'Demo League', season: 2023,
     juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2023-01-01T00:00:00Z',
   });
+  // Default: no juice-mapping history returned, so useLeagueMinSeason falls back to
+  // adapter.weekSelectorConfig.minSeason — every pre-existing test in this file was written
+  // against that sport-wide default, not any particular league's own history.
+  mockedGetLeagueJuice.mockReset();
+  mockedGetLeagueJuice.mockResolvedValue([]);
 });
 
 const mockAdapter: SportAdapter = {
@@ -219,7 +225,7 @@ describe('LeaderboardPage — season selector', () => {
     expect(screen.getByText('2021 Season')).toBeInTheDocument();
   });
 
-  it('offers every season from adapter.weekSelectorConfig.minSeason through the current season', async () => {
+  it('offers every season from adapter.weekSelectorConfig.minSeason through the current season, when the league has no juice history', async () => {
     renderPage();
     await screen.findByRole('table');
 
@@ -228,6 +234,26 @@ describe('LeaderboardPage — season selector', () => {
     expect(screen.getByRole('option', { name: '2020 Season' })).toBeInTheDocument(); // mockAdapter.weekSelectorConfig.minSeason
     expect(screen.queryByRole('option', { name: '2019 Season' })).not.toBeInTheDocument();
     expect(screen.queryByRole('option', { name: '2024 Season' })).not.toBeInTheDocument();
+  });
+
+  it('floors the season range at the league\'s own earliest juice-mapping season, not the sport-wide default', async () => {
+    // frizat nitpick: a brand-new league (e.g. "OG FourPlayaz" on NFL, "CFB Beta Testers" on CFB)
+    // showed years before it ever existed, because the selector's floor was a hardcoded per-sport
+    // constant instead of that league's own history. One shared hook (useLeagueMinSeason) fixes
+    // both sports identically.
+    mockedGetLeagueJuice.mockResolvedValue([
+      { id: 1, leagueId: 1, leagueName: 'Demo League', season: 2022, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2022-01-01T00:00:00Z' },
+      { id: 2, leagueId: 1, leagueName: 'Demo League', season: 2023, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2023-01-01T00:00:00Z' },
+    ]);
+
+    renderPage();
+    await screen.findByRole('table');
+
+    await userEvent.click(screen.getByRole('combobox'));
+    expect(screen.getByRole('option', { name: '2023 Season' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '2022 Season' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '2021 Season' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '2020 Season' })).not.toBeInTheDocument(); // sport-wide default, below the league's own floor
   });
 
   it('disables the season selector while a season change is loading, preventing overlapping requests', async () => {

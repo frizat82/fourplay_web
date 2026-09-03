@@ -31,6 +31,7 @@ import type { SportAdapter } from '../services/sportAdapter';
 import { stickyColumnSx } from '../utils/tableStyles';
 import { useShareLink } from '../utils/useShareLink';
 import { useShareImage } from '../utils/useShareImage';
+import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 
 interface LeaderboardPageProps {
   adapter: SportAdapter;
@@ -123,10 +124,12 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
     return () => { ignore = true; };
   }, [currentLeague, season]);
 
+  const leagueMinSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
+
   const seasonOptions = useMemo(() => {
     if (maxSeason == null) return [];
-    return buildDescendingSeasonRange(adapter.weekSelectorConfig.minSeason, maxSeason);
-  }, [maxSeason, adapter.weekSelectorConfig.minSeason]);
+    return buildDescendingSeasonRange(leagueMinSeason, maxSeason);
+  }, [maxSeason, leagueMinSeason]);
 
   const maxWeek = useMemo(() => {
     if (leaderboard.length === 0) return 0;

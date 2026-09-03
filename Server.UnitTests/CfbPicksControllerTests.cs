@@ -408,9 +408,8 @@ public class CfbPicksControllerTests
     public async Task GetSpreads_IncludesTeamRanksInResponse()
     {
         // Rank is read back from CfbRanking via GetLatestRankingsForWeekAsync
-        // (CfbRankingCaptureJob/CfbSpreadJob already capture it there) — "most recent capture
-        // wins" is resolved by that repository method's own join, not here; see
-        // CfbRepositoryTests for that behavior.
+        // (CfbRankingCaptureJob/CfbSpreadJob already capture it there, upserting one row per
+        // team/week) — not resolved here; see CfbRepositoryTests for the upsert behavior.
         var spread = MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU");
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([spread]);
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(espnWeekNumber: 3));
