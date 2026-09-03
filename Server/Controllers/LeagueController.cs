@@ -743,7 +743,7 @@ public class LeagueController(
         var count = season.HasValue
             ? await repo.GetLeagueMemberCountAsync(leagueId, season.Value, league!.LeagueType)
             : await repo.GetLeagueMemberCountAsync(leagueId);
-        return Ok(new LeagueCostDto(count, ComputeLeagueCost(count)));
+        return Ok(new LeagueCostDto(count, ComputeLeagueCost(count, league!.LeagueType)));
     }
 
     [HttpGet("all-leagues-cost")]
@@ -761,12 +761,16 @@ public class LeagueController(
             var count = counts.GetValueOrDefault(l.Id, 0);
             return new AdminLeagueCostDto(
                 l.Id, l.LeagueName, owners.GetValueOrDefault(l.OwnerUserId, l.OwnerUserId),
-                l.LeagueType, count, ComputeLeagueCost(count));
+                l.LeagueType, count, ComputeLeagueCost(count, l.LeagueType));
         }).ToList());
     }
 
-    private static decimal ComputeLeagueCost(int memberCount) {
-        const int baseCost = 100, baseMembers = 10, perHead = 10;
+    // NFL moved to $200 base / $20 per head; CFB pricing is unchanged. Applied uniformly across all
+    // seasons (no historical cutoff) per explicit product decision — this is a live formula, not a
+    // per-season snapshot, so changing these constants re-prices every season's cost display.
+    private static decimal ComputeLeagueCost(int memberCount, LeagueType leagueType) {
+        var (baseCost, perHead) = leagueType == LeagueType.Nfl ? (200, 20) : (100, 10);
+        const int baseMembers = 10;
         return baseCost + Math.Max(0, memberCount - baseMembers) * perHead;
     }
 
