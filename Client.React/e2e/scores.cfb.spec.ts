@@ -47,4 +47,13 @@ test.describe('CFB Scores page (authenticated)', () => {
     await expect(alaBadge).toBeVisible({ timeout: 5000 });
     await expect(alaBadge.locator('.MuiBadge-badge')).toHaveText('1', { timeout: 5000 });
   });
+
+  // OSU is seeded ranked #3 (setupCfbRoutes's cfbSpread fixture); MICH/ALA/UGA are unranked.
+  test('shows AP rank next to a ranked team, and no rank badge for unranked teams', async ({ page }) => {
+    await mockCfbAuth(page, { navigateTo: '/scores', ...scoresOptions });
+
+    await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('#3')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/^#(?!3)\d+$/)).toHaveCount(0);
+  });
 });

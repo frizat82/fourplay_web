@@ -1,8 +1,32 @@
 using FourPlayWebApp.Server.Jobs;
+using FourPlayWebApp.Shared.Models;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
 public class CfbSlateHelpersTests {
+    private static Competitor MakeCompetitor(int? curatedRank) => new() {
+        HomeAway = HomeAway.Home, Score = 0, Team = new EspnTeam { Abbreviation = "X" }, Records = [],
+        CuratedRank = curatedRank is { } r ? new CuratedRankInfo { Current = r } : null,
+    };
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(25)]
+    public void RankOf_RankedTeam_ReturnsRank(int rank) {
+        Assert.Equal(rank, CfbSlateHelpers.RankOf(MakeCompetitor(rank)));
+    }
+
+    [Fact]
+    public void RankOf_UnrankedSentinel99_ReturnsNull() {
+        Assert.Null(CfbSlateHelpers.RankOf(MakeCompetitor(99)));
+    }
+
+    [Fact]
+    public void RankOf_NoCuratedRank_ReturnsNull() {
+        Assert.Null(CfbSlateHelpers.RankOf(MakeCompetitor(null)));
+    }
+
     // Tuesday 7:00pm ET = 23:00 UTC (EDT, UTC-4) — a typical MACtion weeknight kickoff.
     [Fact]
     public void IsMidweekGame_TuesdayEt_ReturnsTrue() {

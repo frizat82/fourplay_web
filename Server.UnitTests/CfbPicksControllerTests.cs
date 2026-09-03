@@ -27,6 +27,8 @@ public class CfbPicksControllerTests
         _leagueRepo = Substitute.For<ILeagueRepository>();
         // Default: caller is a member of league 1 — individual tests override to test the guard.
         _leagueRepo.UserExistsInLeagueAsync(Arg.Any<string>(), 1).Returns(true);
+        // Default: no rankings captured — individual rank tests override.
+        _cfbRepo.GetLatestRankingsForWeekAsync(Arg.Any<int>(), Arg.Any<int>()).Returns(new Dictionary<string, int>());
     }
 
     private CfbPicksController BuildController(string userId = UserId, bool isAdmin = false)
@@ -44,9 +46,10 @@ public class CfbPicksControllerTests
         return ctrl;
     }
 
-    private static CfbSlates MakeSlate(int id = 1, int slateNumber = 1) => new()
+    private static CfbSlates MakeSlate(int id = 1, int slateNumber = 1, int? espnWeekNumber = 1) => new()
     {
         Id = id, Season = 2025, SlateNumber = slateNumber, Label = "Week 1", SlateType = "RegularSeason",
+        EspnWeekNumber = espnWeekNumber,
     };
 
     // frizat: a team plays at most one game per slate, so (CfbSlateId, HomeTeam) — not an ESPN id
@@ -342,6 +345,7 @@ public class CfbPicksControllerTests
     }
 
     // ── GetSpreads — serving-layer eligibility filter (frizat-9m0) ──────────
+    // ── GetSpreads — league juice on the displayed spread (shared SpreadCalculator) ─────────
 
     [Fact]
     public async Task GetSpreads_ReturnsOnlyLeagueEligibleSpreads()
@@ -350,13 +354,121 @@ public class CfbPicksControllerTests
             MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU", isLeagueEligible: true),
             MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "TOL", "BALLST", isLeagueEligible: false),
         ]);
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 0 });
 
-        var result = await BuildController().GetSpreads(1);
+        var result = await BuildController().GetSpreads(1, 1);
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        var returned = Assert.IsAssignableFrom<IEnumerable<CfbSpreads>>(ok.Value).ToList();
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbSpreadDto>>(ok.Value).ToList();
         Assert.Single(returned);
         Assert.Equal("ORE", returned[0].HomeTeam);
+    }
+
+    [Fact]
+    public async Task GetSpreads_AppliesLeagueJuiceToBothSidesOfTheSpread()
+    {
+        // Slate 1 -> regular-season tier -> Juice (not JuiceDivisional/JuiceConference).
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU"),
+        ]);
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(slateNumber: 1));
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 3 });
+
+        var result = await BuildController().GetSpreads(1, 1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbSpreadDto>>(ok.Value).ToList();
+        var spread = Assert.Single(returned);
+        // MakeSpread leaves HomeTeamSpread/AwayTeamSpread at their default (0) raw values.
+        Assert.Equal(3, spread.HomeTeamSpread);
+        Assert.Equal(3, spread.AwayTeamSpread);
+    }
+
+    [Fact]
+    public async Task GetSpreads_UsesSlateNumberTierForJuice_NotRegularSeasonJuice()
+    {
+        // Slate 16 -> quarterfinal tier -> JuiceDivisional.
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU"),
+        ]);
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(slateNumber: 16));
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(
+            new LeagueJuiceMapping { Juice = 3, JuiceDivisional = 10, JuiceConference = 6 });
+
+        var result = await BuildController().GetSpreads(1, 1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbSpreadDto>>(ok.Value).ToList();
+        var spread = Assert.Single(returned);
+        Assert.Equal(10, spread.HomeTeamSpread);
+    }
+
+    [Fact]
+    public async Task GetSpreads_IncludesTeamRanksInResponse()
+    {
+        // Rank is read back from CfbRanking via GetLatestRankingsForWeekAsync
+        // (CfbRankingCaptureJob/CfbSpreadJob already capture it there) — "most recent capture
+        // wins" is resolved by that repository method's own join, not here; see
+        // CfbRepositoryTests for that behavior.
+        var spread = MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU");
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([spread]);
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(espnWeekNumber: 3));
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 0 });
+        _cfbRepo.GetLatestRankingsForWeekAsync(2025, 3).Returns(new Dictionary<string, int> {
+            ["ORE"] = 5,
+            ["OSU"] = 99, // unranked
+        });
+
+        var result = await BuildController().GetSpreads(1, 1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbSpreadDto>>(ok.Value).ToList();
+        var dto = Assert.Single(returned);
+        Assert.Equal(5, dto.HomeTeamRank);
+        Assert.Null(dto.AwayTeamRank);
+    }
+
+    [Fact]
+    public async Task GetSpreads_HasNullRanks_WhenSlateHasNoEspnWeekNumber()
+    {
+        var spread = MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU");
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([spread]);
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(espnWeekNumber: null));
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 0 });
+
+        var result = await BuildController().GetSpreads(1, 1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.Single(Assert.IsAssignableFrom<IEnumerable<CfbSpreadDto>>(ok.Value));
+        Assert.Null(dto.HomeTeamRank);
+        Assert.Null(dto.AwayTeamRank);
+        await _cfbRepo.DidNotReceive().GetLatestRankingsForWeekAsync(Arg.Any<int>(), Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task GetSpreads_ReturnsForbid_WhenUserNotInLeague()
+    {
+        _leagueRepo.UserExistsInLeagueAsync(UserId, 1).Returns(false);
+
+        var result = await BuildController().GetSpreads(1, 1);
+
+        Assert.IsType<ForbidResult>(result);
+    }
+
+    [Fact]
+    public async Task GetSpreads_AdminCanViewRegardlessOfMembership()
+    {
+        _leagueRepo.UserExistsInLeagueAsync(Arg.Any<string>(), 1).Returns(false);
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU"),
+        ]);
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 0 });
+
+        var result = await BuildController("admin-001", isAdmin: true).GetSpreads(1, 1);
+
+        Assert.IsType<OkObjectResult>(result);
     }
 
     // ── GetScores — serving-layer eligibility filter (frizat-9m0) ───────────

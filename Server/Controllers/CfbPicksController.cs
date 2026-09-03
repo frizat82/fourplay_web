@@ -1,5 +1,7 @@
 using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Jobs;
+using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
@@ -48,10 +50,57 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     // frizat-9m0: the full FBS slate is persisted for audit (see CfbSpreadJob), but only
     // league-eligible games (ranked-either-side or CFP, excluding MAC Tue/Wed) are ever served —
     // the filter moved here, from ingestion, so the historical data underneath stays complete.
-    [HttpGet("spreads/{cfbSlateId}")]
-    public async Task<IActionResult> GetSpreads(int cfbSlateId) {
-        var spreads = await cfbRepo.GetSpreadsForSlateAsync(cfbSlateId);
-        return Ok(spreads.WhereLeagueEligible());
+    //
+    // Applies the league's configured juice to the displayed spread via the same SpreadCalculator
+    // NFL's LeagueController.GetSpreadBatch uses (see CLAUDE.md's NFL/CFB sharing rule) — this
+    // endpoint used to return the raw spread with no tease added at all. Juice is resolved from
+    // slate number (CfbLeaderboardService.JuiceForSlate), CFB's counterpart to NFL's week-number
+    // tiers; that resolution is the one genuine sport-specific difference, everything else is shared.
+    [HttpGet("spreads/{leagueId:int}/{cfbSlateId:int}")]
+    public async Task<IActionResult> GetSpreads(int leagueId, int cfbSlateId) {
+        if (!User.IsInRole(AppRoles.Administrator) && !await leagueRepo.UserExistsInLeagueAsync(CurrentUserId, leagueId))
+            return Forbid();
+
+        var slateTask = cfbRepo.GetSlateByIdAsync(cfbSlateId);
+        var spreadsTask = cfbRepo.GetSpreadsForSlateAsync(cfbSlateId);
+        await Task.WhenAll(slateTask, spreadsTask);
+
+        var slate = slateTask.Result;
+        var eligibleSpreads = spreadsTask.Result.WhereLeagueEligible().ToList();
+
+        var juice = 0.0;
+        var latestRankByTeam = new Dictionary<string, int>();
+        if (slate is not null) {
+            var juiceMappingTask = leagueRepo.GetLeagueJuiceMappingAsync(leagueId, slate.Season);
+            // CfbRankingCaptureJob/CfbSpreadJob already capture every team's AP rank into
+            // CfbRanking — read it back here rather than this endpoint keeping its own second
+            // copy (that duplication is exactly what caused a real bug: an earlier version of
+            // this PR denormalized rank onto CfbSpreads and its upsert forgot to keep it updated).
+            var rankingsTask = slate.EspnWeekNumber is int espnWeek
+                ? cfbRepo.GetLatestRankingsForWeekAsync(slate.Season, espnWeek)
+                : Task.FromResult(new Dictionary<string, int>());
+            await Task.WhenAll(juiceMappingTask, rankingsTask);
+
+            var juiceMapping = juiceMappingTask.Result ?? new LeagueJuiceMapping();
+            juice = CfbLeaderboardService.JuiceForSlate(slate.SlateNumber, juiceMapping);
+            latestRankByTeam = rankingsTask.Result;
+        }
+
+        var calculator = new SpreadCalculator(eligibleSpreads, juice);
+        var dtos = eligibleSpreads.Select(s => new CfbSpreadDto {
+            Id             = s.Id,
+            CfbSlateId     = s.CfbSlateId,
+            HomeTeam       = s.HomeTeam,
+            AwayTeam       = s.AwayTeam,
+            HomeTeamSpread = calculator.GetSpread(s.HomeTeam) ?? s.HomeTeamSpread,
+            AwayTeamSpread = calculator.GetSpread(s.AwayTeam) ?? s.AwayTeamSpread,
+            OverUnder      = s.OverUnder,
+            GameTime       = s.GameTime,
+            DateCreated    = s.DateCreated,
+            HomeTeamRank   = CfbSlateHelpers.RankOf(latestRankByTeam.GetValueOrDefault(s.HomeTeam, 99)),
+            AwayTeamRank   = CfbSlateHelpers.RankOf(latestRankByTeam.GetValueOrDefault(s.AwayTeam, 99)),
+        });
+        return Ok(dtos);
     }
 
     [HttpGet("scores/{cfbSlateId}")]

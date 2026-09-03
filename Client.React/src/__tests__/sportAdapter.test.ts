@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { revealPicksForStartedGames } from '../services/sportAdapter';
+import { revealPicksForStartedGames, sortGamesByTimeThenRank } from '../services/sportAdapter';
 import type { GameView, PickView } from '../services/sportAdapter';
 
 function makeGame(id: string, status: GameView['gameStatus']): GameView {
@@ -116,5 +116,76 @@ describe('revealPicksForStartedGames', () => {
     const result = revealPicksForStartedGames(picks, [futureGame], ME);
     expect(result).toHaveLength(1);
     expect(result[0].userId).toBe(ME);
+  });
+});
+
+// Shared by Picks and Scores pages (both render the exact same GameView[] via this one
+// function) — CFB populates homeRank/awayRank, NFL never does, so the rank tiebreaker is
+// naturally a no-op there and games just stay in kickoff-time order.
+describe('sortGamesByTimeThenRank', () => {
+  function makeGameAt(id: string, isoTime: string, homeRank: number | null = null, awayRank: number | null = null): GameView {
+    return { ...makeGame(id, 'scheduled'), gameTime: isoTime, homeRank, awayRank };
+  }
+
+  it('sorts by kickoff time ascending', () => {
+    const early = makeGameAt('early', '2026-09-05T17:00:00Z');
+    const late = makeGameAt('late', '2026-09-05T20:00:00Z');
+
+    const result = sortGamesByTimeThenRank([late, early]);
+
+    expect(result.map(g => g.id)).toEqual(['early', 'late']);
+  });
+
+  it('breaks a same-kickoff-time tie by best (lowest-numbered) rank', () => {
+    const sameTime = '2026-09-05T20:00:00Z';
+    const unranked = makeGameAt('unranked', sameTime);
+    const ranked17 = makeGameAt('ranked17', sameTime, 17, null);
+    const ranked3 = makeGameAt('ranked3', sameTime, null, 3);
+
+    const result = sortGamesByTimeThenRank([unranked, ranked17, ranked3]);
+
+    expect(result.map(g => g.id)).toEqual(['ranked3', 'ranked17', 'unranked']);
+  });
+
+  it('uses the better of the two teams ranks in a matchup', () => {
+    const sameTime = '2026-09-05T20:00:00Z';
+    const bothRanked = makeGameAt('bothRanked', sameTime, 10, 2); // best = 2
+    const oneRanked = makeGameAt('oneRanked', sameTime, 5, null); // best = 5
+
+    const result = sortGamesByTimeThenRank([oneRanked, bothRanked]);
+
+    expect(result.map(g => g.id)).toEqual(['bothRanked', 'oneRanked']);
+  });
+
+  // /code-review catch: Infinity - Infinity is NaN, an unspecified Array.sort comparator
+  // result — a typical CFB slate has several unranked games in the same TV window, so this is
+  // the common case, not an edge case.
+  it('does not produce NaN comparator results for two unranked games at the same kickoff time', () => {
+    const sameTime = '2026-09-05T20:00:00Z';
+    const unranked1 = makeGameAt('u1', sameTime);
+    const unranked2 = makeGameAt('u2', sameTime);
+
+    const result = sortGamesByTimeThenRank([unranked1, unranked2]);
+
+    expect(result).toHaveLength(2);
+    expect(result.map(g => g.id).sort()).toEqual(['u1', 'u2']);
+  });
+
+  it('never mutates the input array', () => {
+    const games = [makeGameAt('b', '2026-09-05T20:00:00Z'), makeGameAt('a', '2026-09-05T17:00:00Z')];
+    const original = [...games];
+
+    sortGamesByTimeThenRank(games);
+
+    expect(games).toEqual(original);
+  });
+
+  it('is a no-op ordering-wise for NFL games (rank always undefined) — pure time sort', () => {
+    const early = makeGame('early', 'scheduled');
+    const late = { ...makeGame('late', 'scheduled'), gameTime: new Date(Date.now() + 7_200_000).toISOString() };
+
+    const result = sortGamesByTimeThenRank([late, early]);
+
+    expect(result.map(g => g.id)).toEqual(['early', 'late']);
   });
 });

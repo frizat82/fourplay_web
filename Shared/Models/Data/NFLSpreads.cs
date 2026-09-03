@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace FourPlayWebApp.Shared.Models.Data;
 [ExcludeFromCodeCoverage]
-public class NflSpreads {
+public class NflSpreads : IOddsRow {
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
     public int Season { get; set; }
