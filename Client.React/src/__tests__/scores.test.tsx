@@ -149,30 +149,14 @@ describe('ScoresPage', () => {
     expect(screen.getAllByText(/Week 5/i).length).toBeGreaterThan(0);
   });
 
-  it('Share button calls navigator.share with the week in the title and the page url', async () => {
-    const shareMock = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
+  // frizat: the Scores page's Share button only ever shared window.location.href — a bare link to
+  // the site, no actual content. Removed; the Leaderboard's Share button (ShareableStandingsCard,
+  // a branded standings image) is the one that's worth sharing and stays.
+  it('has no Share button', async () => {
     await setupDefaults({ week: 5 });
     await renderPage();
 
-    await userEvent.click(screen.getByRole('button', { name: /^share$/i }));
-
-    await waitFor(() => expect(shareMock).toHaveBeenCalledWith(
-      expect.objectContaining({ title: expect.stringMatching(/week 5/i), url: window.location.href })
-    ));
-  });
-
-  it('Share button uses the postseason round name, not "Week N", during the playoffs', async () => {
-    const shareMock = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
-    await setupDefaults({ week: 1, postSeason: true });
-    await renderPage();
-
-    await userEvent.click(screen.getByRole('button', { name: /^share$/i }));
-
-    await waitFor(() => expect(shareMock).toHaveBeenCalledWith(
-      expect.objectContaining({ title: expect.stringMatching(/wild card/i), url: window.location.href })
-    ));
+    expect(screen.queryByRole('button', { name: /^share$/i })).not.toBeInTheDocument();
   });
 
   it('shows postseason wild card title', async () => {

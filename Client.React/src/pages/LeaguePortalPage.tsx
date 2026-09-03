@@ -67,7 +67,6 @@ import {
 } from '../api/league';
 import type { LeagueInfoDto, LeagueJuiceMappingDto, LeagueCostDto, UserSummaryDto } from '../types/admin';
 import type { LeagueUserMappingDto } from '../types/league';
-import { computeLeagueCost } from '../utils/leagueHelpers';
 import { stickyColumnSx } from '../utils/tableStyles';
 
 const CURRENT_SEASON = new Date().getFullYear();
@@ -737,7 +736,9 @@ interface MembersTabProps {
 
 function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
-  const cost = computeLeagueCost(count);
+  // Server-computed — the formula differs by sport (and, per policy, could change again), so this
+  // must not be re-derived client-side. See LeagueController.ComputeLeagueCost.
+  const cost = costDto?.cost ?? 0;
   const { share, copy } = useShareLink();
 
   const inviteUrl = inviteLink ? `${window.location.origin}/join/${inviteLink.token}` : '';
