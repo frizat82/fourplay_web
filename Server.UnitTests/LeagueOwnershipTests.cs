@@ -299,7 +299,7 @@ public class LeagueOwnershipTests
     public async Task GetLeagueCost_ReturnsCorrectCostForBaseTier()
     {
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
-        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
         repo.GetLeagueMemberCountAsync(1).Returns(8);
 
         var result = await ctrl.GetLeagueCost(1) as OkObjectResult;
@@ -307,14 +307,28 @@ public class LeagueOwnershipTests
         Assert.NotNull(result);
         var dto = Assert.IsType<LeagueCostDto>(result.Value);
         Assert.Equal(8, dto.MemberCount);
-        Assert.Equal(100m, dto.Cost);
+        Assert.Equal(200m, dto.Cost);
     }
 
     [Fact]
     public async Task GetLeagueCost_ReturnsCorrectCostForOverage()
     {
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
-        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueMemberCountAsync(1).Returns(12);
+
+        var result = await ctrl.GetLeagueCost(1) as OkObjectResult;
+
+        var dto = Assert.IsType<LeagueCostDto>(result!.Value);
+        Assert.Equal(240m, dto.Cost);  // $200 + 2 * $20
+    }
+
+    [Fact]
+    public async Task GetLeagueCost_ReturnsBaseTierCost_ForCfbLeague()
+    {
+        // CFB pricing is unchanged — only NFL moved to $200 base / $20 per head.
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Cfb });
         repo.GetLeagueMemberCountAsync(1).Returns(12);
 
         var result = await ctrl.GetLeagueCost(1) as OkObjectResult;
@@ -334,7 +348,7 @@ public class LeagueOwnershipTests
 
         var dto = Assert.IsType<LeagueCostDto>(result!.Value);
         Assert.Equal(15, dto.MemberCount);
-        Assert.Equal(150m, dto.Cost); // $100 + 5 * $10
+        Assert.Equal(300m, dto.Cost); // $200 + 5 * $20
         await repo.DidNotReceive().GetLeagueMemberCountAsync(1);
     }
 
@@ -434,7 +448,7 @@ public class LeagueOwnershipTests
         var nfl = dtos.Single(d => d.LeagueId == 1);
         Assert.Equal("nfl-owner", nfl.OwnerUserName);
         Assert.Equal(15, nfl.MemberCount);
-        Assert.Equal(150m, nfl.Cost); // $100 + 5 * $10
+        Assert.Equal(300m, nfl.Cost); // $200 + 5 * $20
         var cfb = dtos.Single(d => d.LeagueId == 2);
         Assert.Equal("cfb-owner", cfb.OwnerUserName);
         Assert.Equal(8, cfb.MemberCount);
@@ -458,7 +472,7 @@ public class LeagueOwnershipTests
 
         var dtos = Assert.IsAssignableFrom<IEnumerable<AdminLeagueCostDto>>(result!.Value).ToList();
         Assert.Equal(0, dtos[0].MemberCount);
-        Assert.Equal(100m, dtos[0].Cost);
+        Assert.Equal(200m, dtos[0].Cost); // NFL league — $200 base tier
     }
 
     [Fact]
