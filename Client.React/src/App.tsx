@@ -60,6 +60,7 @@ import AdminJobManagerPage from './pages/admin/JobManagerPage';
 import AdminUserManagementPage from './pages/admin/UserManagementPage';
 import AdminInvitationsPage from './pages/admin/InvitationsPage';
 import AdminLeagueCostsPage from './pages/admin/LeagueCostsPage';
+import AdminChangelogPage from './pages/admin/ChangelogPage';
 import LogoutPage from './pages/LogoutPage';
 import AuthPage from './pages/AuthPage';
 import RulesPage from './pages/RulesPage';
@@ -142,6 +143,15 @@ export default function App() {
           element={
             <RequireAdmin>
               <AdminLeagueCostsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/changelog"
+          caseSensitive={false}
+          element={
+            <RequireAdmin>
+              <AdminChangelogPage />
             </RequireAdmin>
           }
         />
