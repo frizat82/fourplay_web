@@ -69,7 +69,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         var eligibleSpreads = spreadsTask.Result.WhereLeagueEligible().ToList();
 
         var juice = 0.0;
-        var rankByTeam = new Dictionary<string, int?>();
+        var latestRankByTeam = new Dictionary<string, int>();
         if (slate is not null) {
             var juiceMappingTask = leagueRepo.GetLeagueJuiceMappingAsync(leagueId, slate.Season);
             // CfbRankingCaptureJob/CfbSpreadJob already capture every team's AP rank into
@@ -77,18 +77,13 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             // copy (that duplication is exactly what caused a real bug: an earlier version of
             // this PR denormalized rank onto CfbSpreads and its upsert forgot to keep it updated).
             var rankingsTask = slate.EspnWeekNumber is int espnWeek
-                ? cfbRepo.GetRankingsForWeekAsync(slate.Season, espnWeek)
-                : Task.FromResult<IEnumerable<CfbRanking>>([]);
+                ? cfbRepo.GetLatestRankingsForWeekAsync(slate.Season, espnWeek)
+                : Task.FromResult(new Dictionary<string, int>());
             await Task.WhenAll(juiceMappingTask, rankingsTask);
 
             var juiceMapping = juiceMappingTask.Result ?? new LeagueJuiceMapping();
             juice = CfbLeaderboardService.JuiceForSlate(slate.SlateNumber, juiceMapping);
-
-            // CfbRanking is append-only (captured at schedule-known time, then again at spread
-            // lock) — take each team's most recently captured rank.
-            rankByTeam = rankingsTask.Result
-                .GroupBy(r => r.TeamAbbreviation)
-                .ToDictionary(g => g.Key, g => CfbSlateHelpers.RankOf(g.OrderByDescending(r => r.CapturedAtUtc).First().CuratedRank));
+            latestRankByTeam = rankingsTask.Result;
         }
 
         var calculator = new SpreadCalculator(eligibleSpreads, juice);
@@ -102,8 +97,8 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             OverUnder      = s.OverUnder,
             GameTime       = s.GameTime,
             DateCreated    = s.DateCreated,
-            HomeTeamRank   = rankByTeam.GetValueOrDefault(s.HomeTeam),
-            AwayTeamRank   = rankByTeam.GetValueOrDefault(s.AwayTeam),
+            HomeTeamRank   = CfbSlateHelpers.RankOf(latestRankByTeam.GetValueOrDefault(s.HomeTeam, 99)),
+            AwayTeamRank   = CfbSlateHelpers.RankOf(latestRankByTeam.GetValueOrDefault(s.AwayTeam, 99)),
         });
         return Ok(dtos);
     }

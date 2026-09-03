@@ -165,9 +165,9 @@ public class CfbRepositoryTests
     }
 
     [Fact]
-    public async Task GetRankingsForWeekAsync_ReturnsOnlyMatchingSeasonAndWeek()
+    public async Task GetLatestRankingsForWeekAsync_ReturnsOnlyMatchingSeasonAndWeek()
     {
-        var factory = new DbContextFactoryStub(nameof(GetRankingsForWeekAsync_ReturnsOnlyMatchingSeasonAndWeek));
+        var factory = new DbContextFactoryStub(nameof(GetLatestRankingsForWeekAsync_ReturnsOnlyMatchingSeasonAndWeek));
         var repo = new CfbRepository(factory);
 
         await repo.AddRankingsAsync([
@@ -176,19 +176,19 @@ public class CfbRepositoryTests
             new CfbRanking { Season = 2025, EspnWeekNumber = 1, EspnEventId = 3, TeamAbbreviation = "ORE", CuratedRank = 2 }, // different season
         ]);
 
-        var result = (await repo.GetRankingsForWeekAsync(2026, 1)).ToList();
+        var result = await repo.GetLatestRankingsForWeekAsync(2026, 1);
 
         Assert.Single(result);
-        Assert.Equal("ALA", result[0].TeamAbbreviation);
+        Assert.Equal(3, result["ALA"]);
     }
 
     [Fact]
-    public async Task GetRankingsForWeekAsync_ReturnsEveryCaptureForATeam_NotJustTheLatest()
+    public async Task GetLatestRankingsForWeekAsync_ResolvesToTheMostRecentlyCapturedRank()
     {
         // CfbRanking is append-only — CfbRankingCaptureJob's earlier run and CfbSpreadJob's later
-        // run both capture the same team-week. Reducing to "the latest" is the caller's job
-        // (CfbPicksController.GetSpreads), not this read method's.
-        var factory = new DbContextFactoryStub(nameof(GetRankingsForWeekAsync_ReturnsEveryCaptureForATeam_NotJustTheLatest));
+        // run both capture the same team-week. The join in GetLatestRankingsForWeekAsync should
+        // resolve to the later (most recent) capture, not the first or an arbitrary one.
+        var factory = new DbContextFactoryStub(nameof(GetLatestRankingsForWeekAsync_ResolvesToTheMostRecentlyCapturedRank));
         var repo = new CfbRepository(factory);
         var earlier = new DateTimeOffset(2026, 8, 25, 9, 0, 0, TimeSpan.Zero);
         var later = new DateTimeOffset(2026, 8, 27, 9, 0, 0, TimeSpan.Zero);
@@ -198,9 +198,9 @@ public class CfbRepositoryTests
             new CfbRanking { Season = 2026, EspnWeekNumber = 1, EspnEventId = 1, TeamAbbreviation = "ALA", CuratedRank = 3, CapturedAtUtc = later },
         ]);
 
-        var result = (await repo.GetRankingsForWeekAsync(2026, 1)).ToList();
+        var result = await repo.GetLatestRankingsForWeekAsync(2026, 1);
 
-        Assert.Equal(2, result.Count);
+        Assert.Equal(3, result["ALA"]);
     }
 
     // frizat-bo1: CfbScores.GameStatus was a raw string ("StatusFinal", "StatusInProgress", ...) —
