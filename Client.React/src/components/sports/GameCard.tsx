@@ -1,6 +1,7 @@
 import { Box, Button, Card, CardContent, Chip, Stack, Typography } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import TeamHelmet from './TeamHelmet';
+import RankBadge from './RankBadge';
 import WeatherIcon from '../WeatherIcon';
 import { isGameFinal, isGameLive, spreadLabel } from '../../utils/gameHelpers';
 import { toLocalDisplay } from '../../utils/time';
@@ -32,6 +33,9 @@ export interface GameCardProps {
   awayRecord?: string;
   homeJerseyUrl?: string;
   awayJerseyUrl?: string;
+  // AP Top 25 rank (CFB only — undefined/null hides it)
+  homeRank?: number | null;
+  awayRank?: number | null;
   // Weather
   weatherDisplayValue?: string | null;
   weatherConditionId?: string | null;
@@ -77,6 +81,7 @@ export default function GameCard({
   locked = false,
   onPickHome, onPickAway,
   homeRecord, awayRecord,
+  homeRank, awayRank,
   homeJerseyUrl, awayJerseyUrl,
   weatherDisplayValue, weatherConditionId, weatherTemperatureF,
   isPostSeason = false,
@@ -173,6 +178,7 @@ export default function GameCard({
         {/* Away team row */}
         <Stack direction="row" alignItems="center" sx={{ gap: 1 }}>
           {renderTeamLogo(awayTeam, awayJerseyUrl)}
+          <RankBadge rank={awayRank} />
           {!isPostSeason && awayRecord && (
             <Typography variant="subtitle2">{awayRecord}</Typography>
           )}
@@ -216,6 +222,7 @@ export default function GameCard({
             panels rather than one continuous list, which was the "HUGE"/disjointed feel. */}
         <Stack direction="row" alignItems="center" sx={{ mt: 1.5, gap: 1 }}>
           {renderTeamLogo(homeTeam, homeJerseyUrl)}
+          <RankBadge rank={homeRank} />
           {!isPostSeason && homeRecord && (
             <Typography variant="subtitle2">{homeRecord}</Typography>
           )}

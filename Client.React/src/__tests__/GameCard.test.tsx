@@ -58,6 +58,17 @@ describe('GameCard', () => {
     expect(screen.getByText('5-5')).toBeInTheDocument();
   });
 
+  it('renders homeRank and awayRank when a team is ranked', () => {
+    render(<GameCard {...baseProps} homeRank={3} awayRank={17} />);
+    expect(screen.getByText('#3')).toBeInTheDocument();
+    expect(screen.getByText('#17')).toBeInTheDocument();
+  });
+
+  it('does not render a rank badge for an unranked team', () => {
+    render(<GameCard {...baseProps} homeRank={null} awayRank={undefined} />);
+    expect(screen.queryByText(/^#/)).not.toBeInTheDocument();
+  });
+
   it('suppresses records when isPostSeason=true', () => {
     render(
       <GameCard {...baseProps} homeRecord="8-2" awayRecord="5-5" isPostSeason={true} />

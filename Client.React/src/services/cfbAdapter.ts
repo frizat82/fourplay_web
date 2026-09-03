@@ -103,6 +103,8 @@ function buildGamesFromEspn(
       homeCovers: computeHomeCovers(status, sp.homeTeamSpread, hs, as_),
       overWins: computeOverWins(status, sp.overUnder, hs, as_),
       spreadPostedAt: sp.dateCreated,
+      homeRank: sp.homeTeamRank,
+      awayRank: sp.awayTeamRank,
       // No hardcoded fallback — matches NFL exactly. Real situation data comes from
       // situationMap (built from getCfbLiveGames(), see fetchCfbEspnData) when ESPN provides it;
       // otherwise honestly null rather than showing a fabricated down/distance.
@@ -154,7 +156,7 @@ async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores 
 
 async function loadSlate(leagueId: number, _userId: string, slateId: number, slate: CfbSlateDto): Promise<{ games: GameView[]; userPicks: PickView[] }> {
   const [spreads, picks, dbScores, { espn, situations }] = await Promise.all([
-    getCfbSpreads(slateId),
+    getCfbSpreads(leagueId, slateId),
     getCfbUserPicks(leagueId, slateId),
     getCfbDbScores(slateId),
     fetchCfbEspnData(slate),
@@ -183,7 +185,7 @@ export function createCfbAdapter(): SportAdapter {
 
   async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
     const [spreads, allPickDtos, dbScores, { espn, situations }] = await Promise.all([
-      getCfbSpreads(slate.id),
+      getCfbSpreads(leagueId, slate.id),
       getCfbAllPicks(leagueId, slate.id),
       getCfbDbScores(slate.id),
       fetchCfbEspnData(slate),
@@ -260,7 +262,7 @@ export function createCfbAdapter(): SportAdapter {
       await deleteCfbPicks(leagueId, slate.id);
       const [fresh, spreads] = await Promise.all([
         getCfbUserPicks(leagueId, slate.id),
-        getCfbSpreads(slate.id),
+        getCfbSpreads(leagueId, slate.id),
       ]);
       const teamToHomeTeam = buildTeamToHomeTeamMap(spreads);
       return fresh.map(p => cfbPickToPickView(p, teamToHomeTeam));
