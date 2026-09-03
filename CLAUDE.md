@@ -85,6 +85,7 @@ When fixing a bug: grep existing tests for old wrong values before shipping. Whe
 - `PicksPage`, `ScoresPage`, `LeaderboardPage` are sport-agnostic via `adapter: SportAdapter` — keep them that way. Put sport-specific logic in the adapter, not the page.
 - When fixing a bug on one sport's path, **always check the other sport's equivalent** before shipping — open the CFB controller/adapter/service when you fix the NFL one, and vice versa.
 - Duplicated logic between NFL and CFB paths is a P0 bug magnet — it has repeatedly caused diverging guards and status-parsing bugs.
+- **State the sharing decision up front, before writing code — don't wait to be asked.** When a fix or feature request only names one sport (or one of any other pair of sibling call sites, e.g. two pages driven by the same adapter pattern), explicitly check whether the other side already has equivalent logic. If it does, say so and generalize the existing implementation (a shared interface/base class/parameterized function) rather than writing a new sport-specific copy — even for a narrowly-scoped bug report. Only build a one-off when the difference is genuinely sport-specific, and isolate just that difference behind the shared code.
 
 ---
 
