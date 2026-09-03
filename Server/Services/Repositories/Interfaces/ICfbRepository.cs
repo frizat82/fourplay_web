@@ -19,4 +19,5 @@ public interface ICfbRepository : ISpreadRepository<CfbSpreads> {
     Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync();
     Task AddWeekConfigsAsync(IEnumerable<CfbSeasonWeekConfig> configs);
     Task AddRankingsAsync(IEnumerable<CfbRanking> rankings);
+    Task<IEnumerable<CfbRanking>> GetRankingsForWeekAsync(int season, int espnWeekNumber);
 }

@@ -781,9 +781,6 @@ namespace FourPlayWebApp.Server.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int?>("AwayTeamRank")
-                        .HasColumnType("integer");
-
                     b.Property<double>("AwayTeamSpread")
                         .HasColumnType("double precision");
 
@@ -801,9 +798,6 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<string>("HomeTeam")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int?>("HomeTeamRank")
-                        .HasColumnType("integer");
 
                     b.Property<double>("HomeTeamSpread")
                         .HasColumnType("double precision");

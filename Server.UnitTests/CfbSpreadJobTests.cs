@@ -159,42 +159,6 @@ public class CfbSpreadJobTests
         Assert.Equal(slate.Id, spread.CfbSlateId);
     }
 
-    // ── Team rank persisted onto CfbSpreads (Picks/Scores rank display) ────────
-
-    [Fact]
-    public async Task Execute_RankedHomeTeam_PersistsRankOnSpread()
-    {
-        SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99));
-        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
-
-        IEnumerable<CfbSpreads>? saved = null;
-        await _repo.UpsertAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
-
-        await BuildJob().Execute(_context);
-
-        var spread = saved!.Single();
-        Assert.Equal(5, spread.HomeTeamRank);
-        Assert.Null(spread.AwayTeamRank); // 99 = unranked sentinel, not a displayable rank
-    }
-
-    [Fact]
-    public async Task Execute_BothTeamsUnranked_PersistsNullRanksOnSpread()
-    {
-        SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
-        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
-
-        IEnumerable<CfbSpreads>? saved = null;
-        await _repo.UpsertAsync(Arg.Do<IEnumerable<CfbSpreads>>(s => saved = s));
-
-        await BuildJob().Execute(_context);
-
-        var spread = saved!.Single();
-        Assert.Null(spread.HomeTeamRank);
-        Assert.Null(spread.AwayTeamRank);
-    }
-
     [Fact]
     public async Task Execute_WhenOddsUnavailable_SkipsGame()
     {

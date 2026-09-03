@@ -27,6 +27,8 @@ public class CfbPicksControllerTests
         _leagueRepo = Substitute.For<ILeagueRepository>();
         // Default: caller is a member of league 1 — individual tests override to test the guard.
         _leagueRepo.UserExistsInLeagueAsync(Arg.Any<string>(), 1).Returns(true);
+        // Default: no rankings captured — individual rank tests override.
+        _cfbRepo.GetRankingsForWeekAsync(Arg.Any<int>(), Arg.Any<int>()).Returns(new List<CfbRanking>());
     }
 
     private CfbPicksController BuildController(string userId = UserId, bool isAdmin = false)
@@ -44,9 +46,10 @@ public class CfbPicksControllerTests
         return ctrl;
     }
 
-    private static CfbSlates MakeSlate(int id = 1, int slateNumber = 1) => new()
+    private static CfbSlates MakeSlate(int id = 1, int slateNumber = 1, int? espnWeekNumber = 1) => new()
     {
         Id = id, Season = 2025, SlateNumber = slateNumber, Label = "Week 1", SlateType = "RegularSeason",
+        EspnWeekNumber = espnWeekNumber,
     };
 
     // frizat: a team plays at most one game per slate, so (CfbSlateId, HomeTeam) — not an ESPN id
@@ -404,12 +407,16 @@ public class CfbPicksControllerTests
     [Fact]
     public async Task GetSpreads_IncludesTeamRanksInResponse()
     {
+        // Rank is read back from CfbRanking (CfbRankingCaptureJob/CfbSpreadJob already capture it
+        // there) — not stored a second time on CfbSpreads.
         var spread = MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU");
-        spread.HomeTeamRank = 5;
-        spread.AwayTeamRank = null; // unranked
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([spread]);
-        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(espnWeekNumber: 3));
         _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 0 });
+        _cfbRepo.GetRankingsForWeekAsync(2025, 3).Returns([
+            new CfbRanking { Season = 2025, EspnWeekNumber = 3, EspnEventId = 1, TeamAbbreviation = "ORE", CuratedRank = 5 },
+            new CfbRanking { Season = 2025, EspnWeekNumber = 3, EspnEventId = 1, TeamAbbreviation = "OSU", CuratedRank = 99 }, // unranked
+        ]);
 
         var result = await BuildController().GetSpreads(1, 1);
 
@@ -418,6 +425,44 @@ public class CfbPicksControllerTests
         var dto = Assert.Single(returned);
         Assert.Equal(5, dto.HomeTeamRank);
         Assert.Null(dto.AwayTeamRank);
+    }
+
+    [Fact]
+    public async Task GetSpreads_UsesTheMostRecentlyCapturedRank_WhenATeamWasCapturedTwice()
+    {
+        // CfbRanking is append-only — CfbRankingCaptureJob's earlier run and CfbSpreadJob's later
+        // run both capture the same team-week. The later capture should win.
+        var spread = MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU");
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([spread]);
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(espnWeekNumber: 3));
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 0 });
+        _cfbRepo.GetRankingsForWeekAsync(2025, 3).Returns([
+            new CfbRanking { Season = 2025, EspnWeekNumber = 3, EspnEventId = 1, TeamAbbreviation = "ORE", CuratedRank = 8, CapturedAtUtc = DateTimeOffset.UtcNow.AddDays(-3) },
+            new CfbRanking { Season = 2025, EspnWeekNumber = 3, EspnEventId = 1, TeamAbbreviation = "ORE", CuratedRank = 4, CapturedAtUtc = DateTimeOffset.UtcNow },
+        ]);
+
+        var result = await BuildController().GetSpreads(1, 1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.Single(Assert.IsAssignableFrom<IEnumerable<CfbSpreadDto>>(ok.Value));
+        Assert.Equal(4, dto.HomeTeamRank);
+    }
+
+    [Fact]
+    public async Task GetSpreads_HasNullRanks_WhenSlateHasNoEspnWeekNumber()
+    {
+        var spread = MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU");
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([spread]);
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(espnWeekNumber: null));
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 0 });
+
+        var result = await BuildController().GetSpreads(1, 1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.Single(Assert.IsAssignableFrom<IEnumerable<CfbSpreadDto>>(ok.Value));
+        Assert.Null(dto.HomeTeamRank);
+        Assert.Null(dto.AwayTeamRank);
+        await _cfbRepo.DidNotReceive().GetRankingsForWeekAsync(Arg.Any<int>(), Arg.Any<int>());
     }
 
     [Fact]

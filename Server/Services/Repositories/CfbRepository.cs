@@ -76,8 +76,6 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
                 existing.OverUnder        = spread.OverUnder;
                 existing.GameTime         = spread.GameTime;
                 existing.IsLeagueEligible = spread.IsLeagueEligible;
-                existing.HomeTeamRank     = spread.HomeTeamRank;
-                existing.AwayTeamRank     = spread.AwayTeamRank;
                 // DateCreated intentionally NOT overwritten — preserves when the line was first posted.
             }
         }
@@ -102,6 +100,13 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         await using var db = await dbFactory.CreateDbContextAsync();
         db.CfbRankings.AddRange(rankings);
         await db.SaveChangesAsync();
+    }
+
+    public async Task<IEnumerable<CfbRanking>> GetRankingsForWeekAsync(int season, int espnWeekNumber) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.CfbRankings
+            .Where(r => r.Season == season && r.EspnWeekNumber == espnWeekNumber)
+            .ToListAsync();
     }
 
     public async Task<IEnumerable<CfbScores>> GetScoresForSlateAsync(int cfbSlateId) {

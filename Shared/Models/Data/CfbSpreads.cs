@@ -20,9 +20,4 @@ public class CfbSpreads : IOddsRow {
     // MAC-only game, computed once at ingestion from that week's CfbRanking rows. The full FBS
     // slate is always persisted regardless of this flag — it only gates what's served to users.
     public bool IsLeagueEligible { get; set; }
-
-    // AP Top 25 rank (1-25) captured at the same time as IsLeagueEligible — null when unranked
-    // (ESPN's 99 sentinel) or absent. NFL has no equivalent (no polls); CFB-only by design.
-    public int? HomeTeamRank { get; set; }
-    public int? AwayTeamRank { get; set; }
 }
