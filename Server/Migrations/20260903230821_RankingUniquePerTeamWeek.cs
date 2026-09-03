@@ -17,13 +17,17 @@ namespace FourPlayWebApp.Server.Migrations
             migrationBuilder.Sql(@"
                 DELETE FROM ""CfbRankings"" WHERE ""CuratedRank"" NOT BETWEEN 1 AND 25;
 
-                DELETE FROM ""CfbRankings"" a
-                USING ""CfbRankings"" b
-                WHERE a.""Season"" = b.""Season""
-                  AND a.""EspnWeekNumber"" = b.""EspnWeekNumber""
-                  AND a.""TeamAbbreviation"" = b.""TeamAbbreviation""
-                  AND (a.""CapturedAtUtc"" < b.""CapturedAtUtc""
-                       OR (a.""CapturedAtUtc"" = b.""CapturedAtUtc"" AND a.""Id"" < b.""Id""));
+                DELETE FROM ""CfbRankings""
+                WHERE ""Id"" IN (
+                    SELECT ""Id"" FROM (
+                        SELECT ""Id"", ROW_NUMBER() OVER (
+                            PARTITION BY ""Season"", ""EspnWeekNumber"", ""TeamAbbreviation""
+                            ORDER BY ""CapturedAtUtc"" DESC, ""Id"" DESC
+                        ) AS rn
+                        FROM ""CfbRankings""
+                    ) ranked
+                    WHERE rn > 1
+                );
             ");
 
             migrationBuilder.DropIndex(

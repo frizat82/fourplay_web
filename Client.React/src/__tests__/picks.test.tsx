@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PicksPage from '../pages/PicksPage';
 import { createNflAdapter } from '../services/nflAdapter';
-import { createCompetition, createCurrentWeek, createPick, createScores, createSpreadResponse } from '../test/fixtures';
+import { createCompetition, createCurrentWeek, createPick, createScores, createSpreadResponse, mockLeagueJuiceEmpty } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -54,8 +54,6 @@ const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetUserPicks = vi.mocked(getUserPicks);
 const mockedSpreadBatch = vi.mocked(spreadBatch);
 const mockedAddPicks = vi.mocked(addPicks);
-// useLeagueMinSeason falls back to adapter.weekSelectorConfig.minSeason when this resolves
-// empty — every pre-existing test in this file was written against that sport-wide default.
 const mockedGetLeagueJuice = vi.mocked(getLeagueJuice);
 const mockedGetAllJerseys = vi.mocked(getAllJerseys);
 const mockedGetNextSpreadJob = vi.mocked(getNextSpreadJob);
@@ -141,8 +139,7 @@ describe('PicksPage', () => {
     mockedAddPicks.mockReset();
     mockedGetAllJerseys.mockReset();
     mockedGetNextSpreadJob.mockReset();
-    mockedGetLeagueJuice.mockReset();
-    mockedGetLeagueJuice.mockResolvedValue([]);
+    mockLeagueJuiceEmpty(mockedGetLeagueJuice);
   });
 
   it('shows no league message when no league selected', async () => {
