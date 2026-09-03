@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '../api/version';
 
@@ -14,7 +15,7 @@ const POLL_INTERVAL_MS = 5 * 60 * 1000;
 export function useVersionCheck() {
   const clientSha = import.meta.env.VITE_APP_VERSION;
 
-  const { data } = useQuery({
+  const { data, refetch } = useQuery({
     queryKey: ['version-check'],
     queryFn: getVersion,
     enabled: !!clientSha,
@@ -25,5 +26,30 @@ export function useVersionCheck() {
     retry: false,
   });
 
-  return { mismatch: !!data && !!clientSha && data.sha !== clientSha };
+  const mismatch = !!data && !!clientSha && data.sha !== clientSha;
+
+  // refetchInterval above only runs while the document has focus — TanStack Query's default. An
+  // installed iOS (or Android) home-screen web app almost never gets a real page reload on
+  // reopen; it resumes the same suspended session instead, so a build backgrounded across a
+  // deploy can miss every scheduled poll tick and never surface the update banner. Force an
+  // immediate check the moment the app becomes visible again rather than waiting up to
+  // POLL_INTERVAL_MS for the next tick. Read `mismatch` via a ref, not the effect's own closure,
+  // so the listener doesn't need to be torn down and re-added on every fetch.
+  const mismatchRef = useRef(mismatch);
+  useEffect(() => {
+    mismatchRef.current = mismatch;
+  }, [mismatch]);
+
+  useEffect(() => {
+    if (!clientSha) return;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !mismatchRef.current) {
+        void refetch();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [clientSha, refetch]);
+
+  return { mismatch };
 }
