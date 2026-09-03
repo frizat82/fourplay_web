@@ -71,10 +71,8 @@ public class CfbSpreadJob(
             if (comp is null || comp.Status.Type.Name != TypeName.StatusScheduled) continue;
 
             var eventId = int.Parse(evt.Id);
-            var homeComp = comp.Competitors.FirstOrDefault(c => c.HomeAway == HomeAway.Home);
-            var awayComp = comp.Competitors.FirstOrDefault(c => c.HomeAway == HomeAway.Away);
-            var home = homeComp?.Team.Abbreviation ?? "";
-            var away = awayComp?.Team.Abbreviation ?? "";
+            var home = comp.Competitors.FirstOrDefault(c => c.HomeAway == HomeAway.Home)?.Team.Abbreviation ?? "";
+            var away = comp.Competitors.FirstOrDefault(c => c.HomeAway == HomeAway.Away)?.Team.Abbreviation ?? "";
 
             var isEligible = isCfp
                 || (CfbSlateHelpers.HasRankedTeam(comp.Competitors) && !CfbSlateHelpers.IsMidweekGame(comp.Date));
@@ -93,8 +91,6 @@ public class CfbSpreadJob(
                     OverUnder     = parsed.Value.OverUnder,
                     GameTime      = comp.Date,
                     IsLeagueEligible = isEligible,
-                    HomeTeamRank  = homeComp is not null ? CfbSlateHelpers.RankOf(homeComp) : null,
-                    AwayTeamRank  = awayComp is not null ? CfbSlateHelpers.RankOf(awayComp) : null,
                 });
             } catch (Exception ex) {
                 Log.Error(ex, "CfbSpreadJob: error fetching odds for event {EventId}", eventId);

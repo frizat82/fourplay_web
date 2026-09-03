@@ -69,9 +69,26 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         var eligibleSpreads = spreadsTask.Result.WhereLeagueEligible().ToList();
 
         var juice = 0.0;
+        var rankByTeam = new Dictionary<string, int?>();
         if (slate is not null) {
-            var juiceMapping = await leagueRepo.GetLeagueJuiceMappingAsync(leagueId, slate.Season) ?? new LeagueJuiceMapping();
+            var juiceMappingTask = leagueRepo.GetLeagueJuiceMappingAsync(leagueId, slate.Season);
+            // CfbRankingCaptureJob/CfbSpreadJob already capture every team's AP rank into
+            // CfbRanking — read it back here rather than this endpoint keeping its own second
+            // copy (that duplication is exactly what caused a real bug: an earlier version of
+            // this PR denormalized rank onto CfbSpreads and its upsert forgot to keep it updated).
+            var rankingsTask = slate.EspnWeekNumber is int espnWeek
+                ? cfbRepo.GetRankingsForWeekAsync(slate.Season, espnWeek)
+                : Task.FromResult<IEnumerable<CfbRanking>>([]);
+            await Task.WhenAll(juiceMappingTask, rankingsTask);
+
+            var juiceMapping = juiceMappingTask.Result ?? new LeagueJuiceMapping();
             juice = CfbLeaderboardService.JuiceForSlate(slate.SlateNumber, juiceMapping);
+
+            // CfbRanking is append-only (captured at schedule-known time, then again at spread
+            // lock) — take each team's most recently captured rank.
+            rankByTeam = rankingsTask.Result
+                .GroupBy(r => r.TeamAbbreviation)
+                .ToDictionary(g => g.Key, g => CfbSlateHelpers.RankOf(g.OrderByDescending(r => r.CapturedAtUtc).First().CuratedRank));
         }
 
         var calculator = new SpreadCalculator(eligibleSpreads, juice);
@@ -85,8 +102,8 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             OverUnder      = s.OverUnder,
             GameTime       = s.GameTime,
             DateCreated    = s.DateCreated,
-            HomeTeamRank   = s.HomeTeamRank,
-            AwayTeamRank   = s.AwayTeamRank,
+            HomeTeamRank   = rankByTeam.GetValueOrDefault(s.HomeTeam),
+            AwayTeamRank   = rankByTeam.GetValueOrDefault(s.AwayTeam),
         });
         return Ok(dtos);
     }
