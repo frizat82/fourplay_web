@@ -62,7 +62,13 @@ public class CfbRankingCaptureJobTests
                 new Competitor { HomeAway = HomeAway.Away, Score = 0, Team = new EspnTeam { Abbreviation = awayAbbr }, Records = [],
                     CuratedRank = awayRank is { } ar ? new CuratedRankInfo { Current = ar } : null },
             ],
-            Status = new EspnStatus { Type = new StatusType { Name = status } },
+            Status = new EspnStatus { Type = new StatusType { Name = status, Description = status switch {
+                TypeName.StatusFinal => Description.Final,
+                TypeName.StatusHalftime => Description.Halftime,
+                TypeName.StatusInProgress => Description.InProgress,
+                TypeName.StatusScheduled => Description.Scheduled,
+                _ => Description.EndOfPeriod,
+            } } },
             Odds = [],
         };
         return new EspnScores {
