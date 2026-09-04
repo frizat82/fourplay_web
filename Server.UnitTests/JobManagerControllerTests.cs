@@ -174,16 +174,60 @@ public class JobManagerControllerTests
     }
 
     // ── Functional: RunCfbScores happy path ───────────────────────────────────
+    // frizat-11t: the old fixed "CFB Scores Job" JobKey has never existed — CfbScoresJob is
+    // registered under 5 separately-keyed cron triggers ("CFB Scores Sat Noon"/"Sat 4pm"/"Sat
+    // 8pm"/"Sat Midnight"/"Sun 6am"), same shape as RunCfbSpreads' per-week jobs. Must find one via
+    // the same soonest-job lookup, not a hardcoded key that silently 400s every time it's clicked.
 
     [Fact]
     public async Task RunCfbScores_ReturnsOk_WhenSchedulerSucceeds()
     {
         var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        scheduler.TriggerJob(new JobKey("CFB Scores Job")).Returns(Task.CompletedTask);
+        SetupSchedulerWithJobs(scheduler, ("CFB Scores Sat Noon", DateTimeOffset.UtcNow.AddDays(1)));
+        scheduler.TriggerJob(new JobKey("CFB Scores Sat Noon")).Returns(Task.CompletedTask);
 
         var result = await controller.RunCfbScores();
 
         Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("CFB Scores Sat Noon"));
+    }
+
+    [Fact]
+    public async Task RunCfbScores_ReturnsNotFound_WhenNoCfbScoresJobExists()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        scheduler.GetJobGroupNames().Returns(new List<string>());
+
+        var result = await controller.RunCfbScores();
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task RunCfbScores_IgnoresNflJobs()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("NFL Scores Thu 10am", DateTimeOffset.UtcNow.AddDays(1)));
+
+        var result = await controller.RunCfbScores();
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task RunCfbScores_PicksSoonestJob_NotArbitraryMatch()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler,
+            ("CFB Scores Sun 6am", DateTimeOffset.UtcNow.AddDays(2)),
+            ("CFB Scores Sat Noon", DateTimeOffset.UtcNow.AddDays(1)));
+        scheduler.TriggerJob(new JobKey("CFB Scores Sat Noon")).Returns(Task.CompletedTask);
+
+        var result = await controller.RunCfbScores();
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("CFB Scores Sat Noon"));
+        await scheduler.DidNotReceive().TriggerJob(new JobKey("CFB Scores Sun 6am"));
     }
 
     // ── Functional: DeleteJob happy path ──────────────────────────────────────
@@ -299,7 +343,12 @@ public class JobManagerControllerTests
         Assert.IsType<NotFoundResult>(result);
     }
 
-    // ── Functional: RunScores — no scores job ────────────────────────────────
+    // ── Functional: RunScores ─────────────────────────────────────────────────
+    // frizat-11t: the old unscoped Contains("Scores") lookup could pick either sport's job
+    // depending on enumeration order — NFL and CFB scores jobs are BOTH registered under multiple
+    // separately-keyed cron triggers whose names all contain "Scores" ("NFL Scores Thu 10am" /
+    // "CFB Scores Sat Noon" etc). Must be scoped to "NFL Scores " and pick the soonest, same as
+    // RunCfbScores/RunSpreads/RunCfbSpreads.
 
     [Fact]
     public async Task RunScores_ReturnsNotFound_WhenNoScoresJobExists()
@@ -310,6 +359,51 @@ public class JobManagerControllerTests
         var result = await controller.RunScores();
 
         Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task RunScores_ReturnsOk_WhenSchedulerSucceeds()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler, ("NFL Scores Thu 10am", DateTimeOffset.UtcNow.AddDays(1)));
+        scheduler.TriggerJob(new JobKey("NFL Scores Thu 10am")).Returns(Task.CompletedTask);
+
+        var result = await controller.RunScores();
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("NFL Scores Thu 10am"));
+    }
+
+    [Fact]
+    public async Task RunScores_IgnoresCfbJobs_EvenWhenSooner()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler,
+            ("CFB Scores Sat Noon", DateTimeOffset.UtcNow.AddHours(1)),
+            ("NFL Scores Thu 10am", DateTimeOffset.UtcNow.AddDays(1)));
+        scheduler.TriggerJob(new JobKey("NFL Scores Thu 10am")).Returns(Task.CompletedTask);
+
+        var result = await controller.RunScores();
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("NFL Scores Thu 10am"));
+        await scheduler.DidNotReceive().TriggerJob(new JobKey("CFB Scores Sat Noon"));
+    }
+
+    [Fact]
+    public async Task RunScores_PicksSoonestJob_NotArbitraryMatch()
+    {
+        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
+        SetupSchedulerWithJobs(scheduler,
+            ("NFL Scores Tue 1am", DateTimeOffset.UtcNow.AddDays(5)),
+            ("NFL Scores Thu 10am", DateTimeOffset.UtcNow.AddDays(1)));
+        scheduler.TriggerJob(new JobKey("NFL Scores Thu 10am")).Returns(Task.CompletedTask);
+
+        var result = await controller.RunScores();
+
+        Assert.IsType<OkObjectResult>(result);
+        await scheduler.Received(1).TriggerJob(new JobKey("NFL Scores Thu 10am"));
+        await scheduler.DidNotReceive().TriggerJob(new JobKey("NFL Scores Tue 1am"));
     }
 
     // ── Functional: GetAllJobsStatusAsync — category/description enrichment ───

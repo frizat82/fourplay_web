@@ -17,28 +17,23 @@ namespace FourPlayWebApp.Server.Controllers {
         [HttpPost("run-spreads")]
         public Task<IActionResult> RunSpreads([FromQuery] bool force = false) =>
             // Each in-scope week now registers its own one-time "NFL Spreads {season} Wk{n}"
-            // job (frizat-pxy) — TriggerSoonestSpreadJobAsync picks the SOONEST one, not an
+            // job (frizat-pxy) — TriggerSoonestJobAsync picks the SOONEST one, not an
             // arbitrary match; a plain Contains("Spreads") FirstOrDefault would grab whichever
             // week sorts first alphabetically ("Wk1" before "Wk10"), not the one coming up next.
-            TriggerSoonestSpreadJobAsync("NFL Spreads ", "Spread", force);
+            TriggerSoonestJobAsync("NFL Spreads ", "Spread", force);
         [Authorize(Roles = "Administrator")]
         [HttpPost("run-scores")]
-        public async Task<IActionResult> RunScores() {
-            try {
-                var scheduler = await schedulerFactory.GetScheduler();
-                var allJobs = await GetAllJobsStatusAsync();
-                var jobName = allJobs.FirstOrDefault(job =>
-                    job.JobName.Contains("Scores", StringComparison.OrdinalIgnoreCase));
-                if (jobName is null)
-                    return NotFound();
-                await scheduler.TriggerJob(new JobKey(jobName.JobName));
-                Log.Information("Started Scores Job");
-                return Ok(new MessageResponseDto("Started Scores Job"));
-            }
-            catch (Exception e) {
-                return BadRequest(e.Message);
-            }
-        }
+        public Task<IActionResult> RunScores() =>
+            // frizat-11t: NflScoresJob is registered under 7 separately-keyed cron triggers ("NFL
+            // Scores Thu 10am", "NFL Scores Fri 1am", ...), all containing "Scores" — same for CFB's
+            // 5 triggers ("CFB Scores Sat Noon", ...). The old unscoped Contains("Scores")
+            // FirstOrDefault could pick either sport's job depending on enumeration order. Scoped to
+            // "NFL Scores " and soonest-first, same pattern as the spread jobs — though unlike the
+            // per-week spread jobs, "soonest" carries no real meaning here: every trigger for a given
+            // sport runs the exact same Execute() regardless of which cron fired it, so any matching
+            // job would do. Reusing the soonest-first helper is just convenient shared plumbing, not
+            // picking a semantically "correct" job the way it does for spreads.
+            TriggerSoonestJobAsync("NFL Scores ", "Scores", force: false);
         [Authorize(Roles = "Administrator")]
         [HttpPost("run-users")]
         public async Task<IActionResult> RunUserJob() {
@@ -71,20 +66,15 @@ namespace FourPlayWebApp.Server.Controllers {
             // The fixed "CFB Spread Job" JobKey this used to trigger no longer exists — CFB
             // spreads now run via per-week "CFB Spreads {season} Wk{n}" triggers (frizat-9m0),
             // same reasoning as RunSpreads above: pick the soonest one, not an arbitrary match.
-            TriggerSoonestSpreadJobAsync("CFB Spreads ", "CFB Spread", force);
+            TriggerSoonestJobAsync("CFB Spreads ", "CFB Spread", force);
         [Authorize(Roles = "Administrator")]
         [HttpPost("run-cfb-scores")]
-        public async Task<IActionResult> RunCfbScores() {
-            try {
-                var scheduler = await schedulerFactory.GetScheduler();
-                await scheduler.TriggerJob(new JobKey("CFB Scores Job"));
-                Log.Information("Started CFB Scores Job");
-                return Ok(new MessageResponseDto("Started CFB Scores Job"));
-            }
-            catch (Exception e) {
-                return BadRequest(e.Message);
-            }
-        }
+        public Task<IActionResult> RunCfbScores() =>
+            // frizat-11t: the fixed "CFB Scores Job" JobKey this used to trigger has never
+            // existed — CfbScoresJob runs via 5 separately-keyed cron triggers ("CFB Scores Sat
+            // Noon"/"Sat 4pm"/"Sat 8pm"/"Sat Midnight"/"Sun 6am"), same shape as the per-week
+            // spread jobs. Pick the soonest one, not a hardcoded key that always 400s.
+            TriggerSoonestJobAsync("CFB Scores ", "CFB Scores", force: false);
 
         [Authorize(Roles = "Administrator")]
         [HttpGet("get-jobs")]
@@ -188,11 +178,12 @@ namespace FourPlayWebApp.Server.Controllers {
         }
 
 
-        // Shared by RunSpreads/RunCfbSpreads: picks the soonest not-yet-fired per-week job whose
-        // name starts with jobNamePrefix and triggers it, optionally bypassing the sport's
-        // lock-time write guard (SpreadLockGuard) via force=true. force is deliberately not the
-        // default — logged distinctly so an early write via this path is always auditable.
-        private async Task<IActionResult> TriggerSoonestSpreadJobAsync(string jobNamePrefix, string sportLabel, bool force) {
+        // Shared by RunSpreads/RunCfbSpreads/RunScores/RunCfbScores: picks the soonest not-yet-fired
+        // job whose name starts with jobNamePrefix and triggers it, optionally bypassing the spread
+        // jobs' lock-time write guard (SpreadLockGuard) via force=true. force is deliberately not
+        // the default — logged distinctly so an early write via this path is always auditable.
+        // Scores jobs don't have a lock-time guard, so their callers always pass force: false.
+        private async Task<IActionResult> TriggerSoonestJobAsync(string jobNamePrefix, string sportLabel, bool force) {
             try {
                 var scheduler = await schedulerFactory.GetScheduler();
                 var allJobs = await GetAllJobsStatusAsync();
