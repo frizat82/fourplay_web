@@ -152,6 +152,36 @@ public class EspnJsonConverterTests
         Assert.Equal(Description.Scheduled, statusType!.Description);
     }
 
+    // TypeName's first member (StatusFinal) is ordinal 0 — which is also C#'s default value for a
+    // TypeName field that's never actually set. Our controllers re-serialize this enum as a raw
+    // number (not our custom converter's string form — see EspnController), and the frontend
+    // hardcodes STATUS_FINAL = 0 and checks isGameOver() BEFORE isGameStarted() (gameHelpers.ts's
+    // toGameStatus). So a StatusType whose Name was never populated from JSON — e.g. ESPN's
+    // response is missing the "name" key entirely, which the converter never even sees since
+    // Read() is only invoked for a property that's present — would silently render as "Final" for
+    // a game that hasn't even kicked off, with no exception anywhere. `required` makes System.Text.Json
+    // track whether the property was actually set during deserialization, independent of the
+    // custom converter, and throw JsonException if it wasn't — turning a silent wrong answer into
+    // a loud, logged failure (which PeriodicRefreshCache/the direct fetch path already handle safely
+    // by falling back to "scheduled" rather than showing a fabricated result).
+    [Fact]
+    public void StatusType_MissingNameProperty_ThrowsInsteadOfDefaultingToFinal()
+    {
+        const string json = """{"id":"1","state":"pre","completed":false,"description":"Scheduled","detail":"","shortDetail":""}""";
+
+        Assert.Throws<System.Text.Json.JsonException>(() =>
+            System.Text.Json.JsonSerializer.Deserialize<StatusType>(json, EspnApiServiceJsonConverter.Settings));
+    }
+
+    [Fact]
+    public void StatusType_MissingDescriptionProperty_ThrowsInsteadOfDefaultingToFinal()
+    {
+        const string json = """{"id":"1","name":"STATUS_SCHEDULED","state":"pre","completed":false,"detail":"","shortDetail":""}""";
+
+        Assert.Throws<System.Text.Json.JsonException>(() =>
+            System.Text.Json.JsonSerializer.Deserialize<StatusType>(json, EspnApiServiceJsonConverter.Settings));
+    }
+
     // The real-world failure mode: one game with an unrecognized status must not break every OTHER
     // game in the same scoreboard payload — this is what actually broke, not just the isolated
     // converter (System.Text.Json aborts the whole object graph on any single property throwing).

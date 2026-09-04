@@ -67,7 +67,13 @@ public class CfbCacheServiceTests
     private static EspnScores BuildScoreboard(TypeName status = TypeName.StatusInProgress, int homeScore = 14, int awayScore = 7) =>
         new() {
             Events = [new Event { Id = "1", Competitions = [new Competition {
-                Status = new EspnStatus { Type = new StatusType { Name = status } },
+                Status = new EspnStatus { Type = new StatusType { Name = status, Description = status switch {
+                    TypeName.StatusFinal => Description.Final,
+                    TypeName.StatusHalftime => Description.Halftime,
+                    TypeName.StatusInProgress => Description.InProgress,
+                    TypeName.StatusScheduled => Description.Scheduled,
+                    _ => Description.EndOfPeriod,
+                } } },
                 Competitors = [
                     new Competitor { HomeAway = HomeAway.Home, Score = homeScore, Team = new EspnTeam { Abbreviation = "IND" }, Records = [] },
                     new Competitor { HomeAway = HomeAway.Away, Score = awayScore, Team = new EspnTeam { Abbreviation = "ATL" }, Records = [] },

@@ -180,14 +180,23 @@ public class StatusType
     [JsonPropertyName("id")]
     [JsonConverter(typeof(StringToLongConverter))]
     public long Id { get; set; }
+    // required: TypeName.StatusFinal is ordinal 0 — also C#'s default value for an unset TypeName
+    // field, and the frontend's isGameOver() check treats a raw wire value of 0 as "Final" before
+    // it even checks whether the game has started (gameHelpers.ts's toGameStatus). If ESPN's JSON
+    // ever omits "name" outright, System.Text.Json never even invokes TypeNameConverter (Read() only
+    // runs for a property that's present) and Name would otherwise silently stay at its default —
+    // rendering a not-yet-started game as "Final" with no error anywhere. `required` makes the
+    // deserializer track whether this property was actually set and throw JsonException if not,
+    // so a genuinely missing field fails loudly instead of lying.
     [JsonPropertyName("name")]
-    public TypeName Name { get; set; }
+    public required TypeName Name { get; set; }
     [JsonPropertyName("state")]
     public State State { get; set; }
     [JsonPropertyName("completed")]
     public bool Completed { get; set; }
+    // Same rationale as Name above: Description.Final is also ordinal 0.
     [JsonPropertyName("description")]
-    public Description Description { get; set; }
+    public required Description Description { get; set; }
     [JsonPropertyName("detail")]
     public string Detail { get; set; }
     [JsonPropertyName("shortDetail")]

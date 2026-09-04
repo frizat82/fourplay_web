@@ -81,7 +81,13 @@ public class NflScoresJobTests
             },
             Status = new EspnStatus
             {
-                Type = new StatusType { Name = statusName, Completed = isFinal }
+                Type = new StatusType { Name = statusName, Completed = isFinal, Description = statusName switch {
+                    TypeName.StatusFinal => Description.Final,
+                    TypeName.StatusHalftime => Description.Halftime,
+                    TypeName.StatusInProgress => Description.InProgress,
+                    TypeName.StatusScheduled => Description.Scheduled,
+                    _ => Description.EndOfPeriod,
+                } }
             },
             Odds = Array.Empty<Odd>()
         };
