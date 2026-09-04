@@ -11,12 +11,20 @@ public class CfbApiService(HttpClient httpClient) : ICfbApiService {
     // EspnContractTests + EspnJsonConverterTests, frizat-703.5).
     private static readonly JsonSerializerOptions _opts = EspnApiServiceJsonConverter.Settings;
 
-    // Week-based query: seasontype=2 for regular/conf-champs, seasontype=3 for CFP rounds.
-    // Fixes the broken groups=80 date-range approach — one call per slate, no date iteration.
-    public async Task<EspnScores?> GetScoresByWeekAsync(int week, bool isPostSeason) {
-        var seasonType = isPostSeason ? 3 : 2;
-        var limit = isPostSeason ? 50 : 100;
-        var url = $"/apis/site/v2/sports/football/college-football/scoreboard?week={week}&seasontype={seasonType}&limit={limit}";
+    // Date-range query (frizat-11t), scoped to the control table's own WeekStartDate/WeekEndDate —
+    // NOT the old groups=80 date-range approach the previous week-based query's comment referenced
+    // (that one silently ignored ESPN's Top-25 group filter). ESPN's own week=N bucketing doesn't
+    // respect our slate boundaries — e.g. a team's early/"week 0" opener can land in the same
+    // week=N response as their real week-N game, so "one game per team per slate" wasn't actually
+    // true under the week-based query. dates=yyyyMMdd-yyyyMMdd scoped to our own slate window makes
+    // that invariant hold for real, same reasoning as GetCfpGamesAsync's downstream date filter.
+    // Regular season/conf-champs only — no isPostSeason branch, since CFP already has its own
+    // correct, dedicated mechanism below (week=999 + downstream date filter) that this doesn't
+    // need to duplicate or unify with; adding a postseason branch here that no caller would ever
+    // exercise would just be dead code implying an equivalence that doesn't exist.
+    public async Task<EspnScores?> GetScoresByDateRangeAsync(DateOnly startDate, DateOnly endDate) {
+        var dates = $"{startDate:yyyyMMdd}-{endDate:yyyyMMdd}";
+        var url = $"/apis/site/v2/sports/football/college-football/scoreboard?dates={dates}&seasontype=2&limit=100";
         var response = await httpClient.GetAsync(url);
         if (!response.IsSuccessStatusCode) return null;
         var json = await response.Content.ReadAsStringAsync();
