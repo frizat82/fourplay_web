@@ -7,6 +7,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 ## 2026-09-04
 
 - Fixed: the page background retiled every screen-height down any page taller than one viewport (Rules, Changelog, and others), creating a visible seam every scroll — root cause of the repeated "background looks inconsistent" reports; fixed once at the CSS source instead of per-page
+- Fixed: returning to the installed iOS home-screen app from the Safari sheet opened by "Switch to CFB/NFL" could leave the top bar rendered under the Dynamic Island/status bar until the next reload
 
 ## 2026-09-03
 
