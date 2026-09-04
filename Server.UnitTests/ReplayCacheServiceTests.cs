@@ -16,7 +16,7 @@ namespace FourPlayWebApp.Server.UnitTests;
 public class ReplayCacheServiceTests {
     private static EspnScores Snapshot(string label) => new() {
         Events = [new Event { Id = "1", Competitions = [new Competition {
-            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled } },
+            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Description = Description.Scheduled } },
             Competitors = [], Odds = [],
         }] }],
         // Season used purely to distinguish snapshots by identity in these tests.

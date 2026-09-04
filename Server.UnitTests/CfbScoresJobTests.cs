@@ -60,7 +60,13 @@ public class CfbScoresJobTests
                 new Competitor { HomeAway = HomeAway.Home, Score = homeScore, Team = new EspnTeam { Abbreviation = homeAbbr }, Records = [] },
                 new Competitor { HomeAway = HomeAway.Away,  Score = awayScore, Team = new EspnTeam { Abbreviation = awayAbbr }, Records = [] },
             ],
-            Status = new EspnStatus { Type = new StatusType { Name = status } },
+            Status = new EspnStatus { Type = new StatusType { Name = status, Description = status switch {
+                TypeName.StatusFinal => Description.Final,
+                TypeName.StatusHalftime => Description.Halftime,
+                TypeName.StatusInProgress => Description.InProgress,
+                TypeName.StatusScheduled => Description.Scheduled,
+                _ => Description.EndOfPeriod,
+            } } },
             Odds = [],
         };
         return new EspnScores {
