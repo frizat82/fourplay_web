@@ -66,6 +66,45 @@ reads poorly somewhere:
   ```
   See `GameCard.tsx`'s `lockedFillSx` for the live implementation.
 
+## Page background gradient (`global.css` `body`) — three bugs, one subsystem
+
+The site background — two decorative radial highlights plus a `linear-gradient(180deg, var(--bg-1), var(--bg-2))`
+— has caused the "background looks inconsistent while scrolling" report **three separate times**
+(2026-09-02, 09-03, 09-04), each a genuinely different bug in the same area. Read this before
+touching `global.css`'s `body` rule, `theme.ts`'s `MuiPaper`/`MuiCard` overrides, or the
+`--bg-1`/`--bg-2`/`background.paper` color trio, so the next report doesn't require re-deriving
+all three from scratch:
+
+1. **Dark-mode elevation overlay** (theme.ts `MuiPaper` styleOverrides). MUI bakes a translucent
+   white gradient onto elevated (non-`outlined`) dark-mode `Paper`/`Card` as a stand-in for a drop
+   shadow — an outer elevated `Card` wrapping inner `Paper variant="outlined"` sections rendered
+   visibly lighter than them. Fixed via `backgroundImage: isDark ? 'none' : undefined` on
+   `MuiPaper`'s root override (cascades to `Card` too, since `Card` extends `Paper` — don't add a
+   separate `MuiCard` override for this).
+2. **`--bg-2` / `background.paper` color collision.** These are two independently-maintained color
+   systems (`global.css` CSS custom properties vs. `theme.ts`'s MUI palette) with no shared source
+   of truth. They drifted into the exact same hex value once, so cards near the bottom of the page
+   gradient (where it settles at `--bg-2`) became invisible against the page. **Never let `--bg-2`
+   (dark or light) equal `theme.ts`'s `background.paper` for that mode** — keep a visible gap
+   between them, verified by rendering a page long enough to actually reach the gradient's bottom.
+3. **Background retiling every viewport height** (the deep one — root cause of most reports,
+   including making bug 2 look worse than it was). `html, body { height: 100% }` pins `body`'s own
+   box to exactly `100vh` even though real page content scrolls far past that. With no
+   `background-repeat` set (CSS default: `repeat`), every layer — both radial highlights included —
+   retiled every exact `100vh` down the page: a real seam at every tile boundary, invisible on any
+   page shorter than one screen (which is why a quick check on a short page always looked "fixed").
+   Worse on mobile, where a shorter viewport means more tile boundaries fit in a normal scroll, and
+   the two asymmetric radial highlights (anchored top-left vs. top-right) re-draw at each one and
+   visibly drift apart. Fixed by giving `body` a `background-color: var(--bg-2)` base layer (so
+   there's never a gap, seam-free by construction since it matches the gradient's own end color)
+   plus `background-image` holding the gradients with `background-repeat: no-repeat` and
+   `background-size: 100% 100vh`, so they render exactly once at the top as originally intended.
+
+**Before shipping any future fix in this area**: render (screenshot or pixel-sample) a page long
+enough to scroll past one full viewport, in both themes — a short page or a single-viewport
+screenshot cannot catch any of these three. `python3`/`PIL` pixel-sampling a vertical strip outside
+any card, looking for a sudden channel jump, is the fastest way to confirm a seam is really gone.
+
 ## Layout: numeric columns need explicit centering
 
 A fixed-width column showing numbers of varying digit width (e.g. a spread like `-3.5` vs
