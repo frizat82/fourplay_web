@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ScoresPage from '../pages/ScoresPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCfbAdapter } from '../services/cfbAdapter';
-import { createCurrentWeek, createPick, createScores, createSpreadResponse, createCompetition } from '../test/fixtures';
+import { createCurrentWeek, createPick, createScores, createSpreadResponse, createCompetition, mockLeagueJuiceEmpty } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -38,6 +38,7 @@ vi.mock('../api/espn', () => ({
 vi.mock('../api/league', () => ({
   doOddsExist: vi.fn(), getLeaguePicks: vi.fn(), spreadBatch: vi.fn(),
   addPicks: vi.fn(), getUserPicks: vi.fn(), getNflCurrentWeek: vi.fn(),
+  getLeagueJuice: vi.fn(),
 }));
 vi.mock('../api/cfb', () => ({
   getCfbCurrentSlate: vi.fn(), getCfbSlates: vi.fn(), getCfbSpreads: vi.fn(),
@@ -49,7 +50,7 @@ const toastPush = vi.fn();
 vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 
 import { getLiveGames, getWeekScores, getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
-import { doOddsExist, getLeaguePicks, spreadBatch, getNflCurrentWeek } from '../api/league';
+import { doOddsExist, getLeaguePicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbAllPicks } from '../api/cfb';
 
 const mockedGetLiveGames = vi.mocked(getLiveGames);
@@ -57,6 +58,7 @@ const mockedGetWeekScores = vi.mocked(getWeekScores);
 const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetLeaguePicks = vi.mocked(getLeaguePicks);
 const mockedGetNflCurrentWeek = vi.mocked(getNflCurrentWeek);
+const mockedGetLeagueJuice = vi.mocked(getLeagueJuice);
 const mockedGetCfbSlates = vi.mocked(getCfbSlates);
 const mockedGetCfbSpreads = vi.mocked(getCfbSpreads);
 const mockedGetCfbScores = vi.mocked(getCfbScores);
@@ -98,6 +100,7 @@ const setupDefaults = async (options?: {
   mockedDoOddsExist.mockResolvedValue(options?.oddsExist ?? true);
   mockedGetLeaguePicks.mockResolvedValue(options?.picks ?? []);
   mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
+  mockLeagueJuiceEmpty(mockedGetLeagueJuice);
 };
 
 const renderWithClient = (ui: React.ReactElement, client?: QueryClient) => {

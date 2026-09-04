@@ -227,6 +227,14 @@ export async function setupCfbRoutes(page: Page, options: SetupCfbRoutesOptions 
       return;
     }
 
+    // useLeagueMinSeason (Picks/Scores/Leaderboard season selectors) reads this on every page —
+    // empty history so it falls back to cfbAdapter's own sport-wide minSeason, same as before
+    // that hook existed, rather than falling through to a real (nonexistent-in-CI) backend.
+    if (url.match(/\/api\/league\/\d+\/juice$/) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      return;
+    }
+
     // ── Invite link / misc league bits some layouts probe on every page ─────
     if (url.match(/\/api\/league\/\d+\/invite-link$/) && method === 'GET') {
       void route.fulfill({ status: 404 });

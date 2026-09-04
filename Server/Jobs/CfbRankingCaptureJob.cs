@@ -14,9 +14,9 @@ namespace FourPlayWebApp.Server.Jobs;
 // Waiting until lock time meant eligibility data was only as fresh as the latest lock.
 //
 // CfbSpreadJob keeps its own (later) ranking capture too — it's "free" (rides along with the odds
-// fetch already being made) and adds real audit value (did a team's rank move between
-// schedule-known and spread-locked). CfbRanking is append-only by design, so two captures over the
-// week is more complete history, not redundant noise.
+// fetch already being made) and lets a rank move between schedule-known and spread-locked time
+// win: AddRankingsAsync upserts one row per (Season, EspnWeekNumber, TeamAbbreviation), so the
+// later capture simply overwrites the earlier one rather than appending a second row.
 [DisallowConcurrentExecution]
 public class CfbRankingCaptureJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, TimeProvider timeProvider) : IJob {
     private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;

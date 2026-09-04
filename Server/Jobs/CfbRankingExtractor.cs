@@ -17,7 +17,7 @@ internal static class CfbRankingExtractor {
 
             var eventId = int.Parse(evt.Id);
             rankings.AddRange(comp.Competitors
-                .Where(c => c.CuratedRank is not null)
+                .Where(c => CfbSlateHelpers.RankOf(c) is not null)
                 .Select(c => new CfbRanking {
                     Season           = slate.Season,
                     EspnWeekNumber   = slate.EspnWeekNumber ?? 0,
