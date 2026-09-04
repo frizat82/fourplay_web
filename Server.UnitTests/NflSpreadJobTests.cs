@@ -91,7 +91,13 @@ public class NflSpreadJobTests
             },
             Status = new EspnStatus
             {
-                Type = new StatusType { Name = statusName, Completed = false }
+                Type = new StatusType { Name = statusName, Completed = false, Description = statusName switch {
+                    TypeName.StatusFinal => Description.Final,
+                    TypeName.StatusHalftime => Description.Halftime,
+                    TypeName.StatusInProgress => Description.InProgress,
+                    TypeName.StatusScheduled => Description.Scheduled,
+                    _ => Description.EndOfPeriod,
+                } }
             },
             Odds = Array.Empty<Odd>()
         };
@@ -422,7 +428,7 @@ public class NflSpreadJobTests
                                 new Competitor { Id = "2", HomeAway = HomeAway.Away, Score = 0,
                                     Team = new EspnTeam { Abbreviation = "BUF" }, Records = Array.Empty<EspnRecord>() }
                             },
-                            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled } },
+                            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Description = Description.Scheduled } },
                             Odds = Array.Empty<Odd>()
                         }
                     }
@@ -445,7 +451,7 @@ public class NflSpreadJobTests
                                 new Competitor { Id = "4", HomeAway = HomeAway.Away, Score = 0,
                                     Team = new EspnTeam { Abbreviation = "DAL" }, Records = Array.Empty<EspnRecord>() }
                             },
-                            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled } },
+                            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Description = Description.Scheduled } },
                             Odds = Array.Empty<Odd>()
                         }
                     }
