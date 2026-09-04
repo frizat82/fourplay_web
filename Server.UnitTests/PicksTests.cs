@@ -98,7 +98,7 @@ public class PicksTests
                                 new Competitor { Team = new EspnTeam { Abbreviation = "BUF" }, HomeAway = HomeAway.Home },
                                 new Competitor { Team = new EspnTeam { Abbreviation = "MIA" }, HomeAway = HomeAway.Away }
                             ],
-                            Status = new EspnStatus { Type = new StatusType { Completed = false } },
+                            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Description = Description.Scheduled, Completed = false } },
                             Odds = []
                         }
                     ]
@@ -393,7 +393,7 @@ public class PicksTests
                             new Competitor { Team = new EspnTeam { Abbreviation = "BUF" }, HomeAway = HomeAway.Home },
                             new Competitor { Team = new EspnTeam { Abbreviation = "MIA" }, HomeAway = HomeAway.Away }
                         ],
-                        Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Completed = false } },
+                        Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Description = Description.Scheduled, Completed = false } },
                         Odds = []
                     }
                 ]
@@ -412,7 +412,7 @@ public class PicksTests
                             new Competitor { Team = new EspnTeam { Abbreviation = "DAL" }, HomeAway = HomeAway.Home },
                             new Competitor { Team = new EspnTeam { Abbreviation = "NYG" }, HomeAway = HomeAway.Away }
                         ],
-                        Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusInProgress, Completed = false } },
+                        Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusInProgress, Description = Description.InProgress, Completed = false } },
                         Odds = []
                     }
                 ]
@@ -591,7 +591,7 @@ public class PicksTests
                                 new Competitor { Team = new EspnTeam { Abbreviation = "BUF" }, HomeAway = HomeAway.Home },
                                 new Competitor { Team = new EspnTeam { Abbreviation = "MIA" }, HomeAway = HomeAway.Away }
                             ],
-                            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Completed = false } },
+                            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Description = Description.Scheduled, Completed = false } },
                             Odds = []
                         }
                     ]
