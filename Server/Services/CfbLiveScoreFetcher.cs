@@ -16,11 +16,15 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
     public async Task<EspnScores?> FetchForSlateAsync(CfbSlates slate) {
         // CfbSeasonWeekConfig.EspnWeekNumber is non-nullable, and both known producers of CfbSlates
         // rows (CfbSlateSeederJob, DemoDataSeeder) always copy a real week number through — so every
-        // slate in practice carries one, and this app only ever makes week-based ESPN queries, never
-        // date-range "scoreboard" calls. CfbSlates.EspnWeekNumber itself is still nullable at the
-        // model/DB level though, so a future producer could leave it unset — a missing value here
-        // means the control table wasn't seeded correctly, not a case to silently paper over with a
-        // date-range fallback. Checked up front so it applies uniformly to the DB-first branch below
+        // slate in practice carries one. frizat-11t: the regular-season ESPN fetch itself no longer
+        // uses EspnWeekNumber (it queries by slate.StartDate/EndDate instead — see
+        // FetchRegularSeasonAsync — because ESPN's own week=N bucketing doesn't respect our slate's own
+        // date window and can return a team's game from an entirely different slate). EspnWeekNumber
+        // is still required here as the natural key CfbRanking rows and CfbPicksController's ranking
+        // lookup are keyed on (Season, EspnWeekNumber, TeamAbbreviation) — a missing value still means
+        // the control table wasn't seeded correctly, not a case to silently paper over. CfbSlates.
+        // EspnWeekNumber itself is still nullable at the model/DB level though, so a future producer
+        // could leave it unset. Checked up front so it applies uniformly to the DB-first branch below
         // too — /code-review caught that branch silently defaulting a missing value to week 0
         // instead of applying this same guard.
         if (!slate.EspnWeekNumber.HasValue) {
@@ -79,7 +83,7 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
 
         var result = CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat)
             ? await FetchCfpAsync(slate)
-            : await FetchRankedWeekAsync(slate);
+            : await FetchRegularSeasonAsync(slate);
 
         // Replay mode only (DEMO_REPLAY_MODE=true) — ReplayCacheService is a Singleton registered
         // only then, so this resolves null (a no-op) in every other environment. The replay
@@ -121,14 +125,32 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
         return events.Length == 0 ? null : WithEvents(scoreboard, events);
     }
 
-    private async Task<EspnScores?> FetchRankedWeekAsync(CfbSlates slate) {
-        // Regular season / conf-champs: full FBS week, no rank filter (frizat-9m0) — every game is
+    private async Task<EspnScores?> FetchRegularSeasonAsync(CfbSlates slate) {
+        // Regular season / conf-champs: full FBS slate, no rank filter (frizat-9m0) — every game is
         // persisted for the audit trail; CfbSpreadJob computes IsLeagueEligible from rank + day of
         // week separately, gating what's *served* to users without dropping data at ingestion.
-        var scoreboard = await cfbApi.GetScoresByWeekAsync(slate.EspnWeekNumber!.Value, isPostSeason: false);
+        //
+        // frizat-11t: queries ESPN by our own slate.StartDate/EndDate, not slate.EspnWeekNumber —
+        // ESPN's week=N scoreboard bucket doesn't respect our slate's date boundaries (e.g. a team's
+        // early "week 0" opener can land in the same week=N response as their real week-N game),
+        // which silently broke the "one game per team per slate" assumption the frontend's live-score
+        // join relies on. Scoping the ESPN call to our own control-table dates instead makes that
+        // assumption hold in practice (verified live). The downstream filter below is defense in
+        // depth on top of that, not a substitute for it — /code-review's point: this fix's whole
+        // premise is "don't fully trust ESPN's own bucketing," so don't trust the dates= query param
+        // to be honored perfectly either (e.g. a timezone-boundary edge case on a late-night/West
+        // Coast kickoff). Same date-window filter FetchCfpAsync already applies above.
+        var scoreboard = await cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate);
         if (scoreboard?.Events is null) return null;
 
-        return scoreboard.Events.Length == 0 ? null : WithEvents(scoreboard, scoreboard.Events);
+        var events = scoreboard.Events.Where(e => {
+            var comp = e.Competitions.FirstOrDefault();
+            return comp is not null
+                && comp.Date.Date >= slate.StartDate.ToDateTime(TimeOnly.MinValue).Date
+                && comp.Date.Date <= slate.EndDate.ToDateTime(TimeOnly.MaxValue).Date;
+        }).ToArray();
+
+        return events.Length == 0 ? null : WithEvents(scoreboard, events);
     }
 
     private static EspnScores WithEvents(EspnScores source, Event[] events) => new() {
