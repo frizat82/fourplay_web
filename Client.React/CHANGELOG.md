@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-04
+
+- Fixed: the page background retiled every screen-height down any page taller than one viewport (Rules, Changelog, and others), creating a visible seam every scroll — root cause of the repeated "background looks inconsistent" reports; fixed once at the CSS source instead of per-page
+
 ## 2026-09-03
 
 - Fixed: CFB Picks and Scores pages showed the raw Vegas spread with no league juice (tease) applied, unlike NFL — both sports now share the same spread-plus-juice calculator
@@ -15,6 +19,11 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Changed: NFL league platform cost is now $200 base / $20 per head (CFB unchanged at $100 / $10)
 - Removed: the Share button on the Scores page — it only ever linked to the site itself, nothing worth sharing
 - Added: a daily catch-up job for CFB rankings capture, so a missed Monday run or a Tuesday CFP release doesn't leave a week's eligibility data stale
+- Fixed: the CFB leaderboard showed every remaining week of an in-progress season as a missed pick instead of stopping at the current week, matching NFL's behavior
+- Fixed: the season selector on Picks, Scores, and Leaderboard offered years before a league had even started (e.g. a brand-new league showing 2020) — it's now bounded by that league's own earliest configured season
+- Fixed: CFB AP Top 25 rankings could be stored more than once per team per week — now one row per team per week, as intended
+- Changed: tapping "Switch to CFB/NFL" from an installed home-screen app now shows it will open in the regular browser, since each sport is a separate installed app on iOS
+- Fixed: in dark mode, cards could blend almost invisibly into the page background near the bottom of a long page (most visible on the Changelog page) because the page background's own color matched card backgrounds exactly — they're now always visibly distinct
 
 ## 2026-09-02
 

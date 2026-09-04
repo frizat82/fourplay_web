@@ -183,23 +183,30 @@ public class CfbRepositoryTests
     }
 
     [Fact]
-    public async Task GetLatestRankingsForWeekAsync_ResolvesToTheMostRecentlyCapturedRank()
+    public async Task AddRankingsAsync_UpsertsInPlace_WhenTheSameTeamWeekIsCapturedAgain()
     {
-        // CfbRanking is append-only — CfbRankingCaptureJob's earlier run and CfbSpreadJob's later
-        // run both capture the same team-week. The join in GetLatestRankingsForWeekAsync should
-        // resolve to the later (most recent) capture, not the first or an arbitrary one.
-        var factory = new DbContextFactoryStub(nameof(GetLatestRankingsForWeekAsync_ResolvesToTheMostRecentlyCapturedRank));
+        // CfbRankingCaptureJob's earlier run and CfbSpreadJob's later run both capture the same
+        // team-week. AddRankingsAsync must overwrite the existing row (rank doesn't change once
+        // captured for a week) rather than appending a second row and violating the unique index
+        // on (Season, EspnWeekNumber, TeamAbbreviation).
+        var factory = new DbContextFactoryStub(nameof(AddRankingsAsync_UpsertsInPlace_WhenTheSameTeamWeekIsCapturedAgain));
         var repo = new CfbRepository(factory);
         var earlier = new DateTimeOffset(2026, 8, 25, 9, 0, 0, TimeSpan.Zero);
         var later = new DateTimeOffset(2026, 8, 27, 9, 0, 0, TimeSpan.Zero);
 
         await repo.AddRankingsAsync([
             new CfbRanking { Season = 2026, EspnWeekNumber = 1, EspnEventId = 1, TeamAbbreviation = "ALA", CuratedRank = 5, CapturedAtUtc = earlier },
-            new CfbRanking { Season = 2026, EspnWeekNumber = 1, EspnEventId = 1, TeamAbbreviation = "ALA", CuratedRank = 3, CapturedAtUtc = later },
+        ]);
+        await repo.AddRankingsAsync([
+            new CfbRanking { Season = 2026, EspnWeekNumber = 1, EspnEventId = 2, TeamAbbreviation = "ALA", CuratedRank = 3, CapturedAtUtc = later },
         ]);
 
-        var result = await repo.GetLatestRankingsForWeekAsync(2026, 1);
+        var all = await factory.CreateDbContext().CfbRankings.Where(r => r.TeamAbbreviation == "ALA").ToListAsync();
+        Assert.Single(all);
+        Assert.Equal(3, all[0].CuratedRank);
+        Assert.Equal(2, all[0].EspnEventId);
 
+        var result = await repo.GetLatestRankingsForWeekAsync(2026, 1);
         Assert.Equal(3, result["ALA"]);
     }
 
