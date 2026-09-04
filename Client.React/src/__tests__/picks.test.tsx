@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PicksPage from '../pages/PicksPage';
 import { createNflAdapter } from '../services/nflAdapter';
-import { createCompetition, createCurrentWeek, createPick, createScores, createSpreadResponse } from '../test/fixtures';
+import { createCompetition, createCurrentWeek, createPick, createScores, createSpreadResponse, mockLeagueJuiceEmpty } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -37,12 +37,13 @@ vi.mock('../api/league', () => ({
   getUserPicks: vi.fn(),
   spreadBatch: vi.fn(),
   getNflCurrentWeek: vi.fn(),
+  getLeagueJuice: vi.fn(),
 }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
 
 import { getScores, loadScoresWithRetry, getWeekScores } from '../api/espn';
-import { addPicks, doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek } from '../api/league';
+import { addPicks, doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
 
@@ -53,6 +54,7 @@ const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetUserPicks = vi.mocked(getUserPicks);
 const mockedSpreadBatch = vi.mocked(spreadBatch);
 const mockedAddPicks = vi.mocked(addPicks);
+const mockedGetLeagueJuice = vi.mocked(getLeagueJuice);
 const mockedGetAllJerseys = vi.mocked(getAllJerseys);
 const mockedGetNextSpreadJob = vi.mocked(getNextSpreadJob);
 const mockedGetNflCurrentWeek = vi.mocked(getNflCurrentWeek);
@@ -137,6 +139,7 @@ describe('PicksPage', () => {
     mockedAddPicks.mockReset();
     mockedGetAllJerseys.mockReset();
     mockedGetNextSpreadJob.mockReset();
+    mockLeagueJuiceEmpty(mockedGetLeagueJuice);
   });
 
   it('shows no league message when no league selected', async () => {

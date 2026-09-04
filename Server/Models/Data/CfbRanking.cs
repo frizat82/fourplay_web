@@ -1,8 +1,10 @@
 namespace FourPlayWebApp.Server.Models.Data;
 
-// Append-only audit trail of AP Top 25 rank at the moment CfbSpreadJob fetched a week's scoreboard —
-// written for every competitor, ranked or not, so the full weekly rank picture is preserved even
-// for teams that never became league-eligible (frizat-9m0). ESPN uses 99 for unranked.
+// One row per (Season, EspnWeekNumber, TeamAbbreviation) — AP Top 25 rank does not change once
+// captured for a given week, so later captures (CfbRankingCaptureJob, then CfbSpreadJob riding
+// along with its odds fetch) upsert this row rather than appending a new one. Only genuinely
+// ranked teams (1-25) get a row at all; ESPN's 99 "unranked" sentinel is filtered out before it
+// ever reaches this table (see CfbRankingExtractor / CfbSlateHelpers.RankOf).
 public class CfbRanking {
     public int Id { get; set; }
     public int Season { get; set; }

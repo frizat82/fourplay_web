@@ -255,8 +255,10 @@ public class CfbSpreadJobTests
     }
 
     [Fact]
-    public async Task Execute_PersistsRankingForBothCompetitors()
+    public async Task Execute_PersistsRankingOnlyForTheRankedCompetitor()
     {
+        // "Rankings" now means one row per (season, week, ranked team) — CuratedRank=99 (ESPN's
+        // unranked sentinel) is not a rank, so it's never persisted at all, not even as a row.
         SetCurrentSlate(BuildSlate());
         _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU", homeRank: 3, awayRank: 99));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
@@ -267,10 +269,10 @@ public class CfbSpreadJobTests
         await BuildJob().Execute(_context);
 
         var rankings = saved!.ToList();
-        Assert.Equal(2, rankings.Count);
-        Assert.Contains(rankings, r => r.TeamAbbreviation == "ORE" && r.CuratedRank == 3);
-        Assert.Contains(rankings, r => r.TeamAbbreviation == "OSU" && r.CuratedRank == 99);
-        Assert.All(rankings, r => Assert.Equal(401677183, r.EspnEventId));
+        Assert.Single(rankings);
+        Assert.Equal("ORE", rankings[0].TeamAbbreviation);
+        Assert.Equal(3, rankings[0].CuratedRank);
+        Assert.Equal(401677183, rankings[0].EspnEventId);
     }
 
     [Fact]
@@ -283,7 +285,7 @@ public class CfbSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _repo.Received(1).AddRankingsAsync(Arg.Is<IEnumerable<CfbRanking>>(r => r.Count() == 2));
+        await _repo.Received(1).AddRankingsAsync(Arg.Is<IEnumerable<CfbRanking>>(r => r.Count() == 1));
     }
 
     // -----------------------------------------------------------------------

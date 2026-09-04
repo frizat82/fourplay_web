@@ -402,9 +402,15 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
     }
 
     const mockJuiceMapping = { id: 1, leagueId: TEST_LEAGUE_ID, season: TEST_SEASON, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5 };
+    // useLeagueMinSeason (Picks/Scores/Leaderboard season selectors) reads this same list
+    // endpoint and floors the selector at the earliest season returned — include one matching
+    // nflAdapter's own sport-wide default (2020) so existing e2e specs that navigate a few
+    // seasons back keep working, on top of the single current-season mapping other tests assert
+    // on (leaguePortal.spec.ts's juice-values test).
+    const mockJuiceMappingHistory = [mockJuiceMapping, { ...mockJuiceMapping, id: 0, season: 2020 }];
 
     if (url.match(/\/api\/league\/\d+\/juice$/) && method === 'GET') {
-      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([mockJuiceMapping]) });
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockJuiceMappingHistory) });
       return;
     }
 

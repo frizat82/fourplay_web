@@ -332,7 +332,19 @@ public class LeaderboardServiceTests {
 
     // ─── CFB Leaderboard Tests ────────────────────────────────────────────────
 
-    private static (ILeagueRepository repo, ICfbRepository cfbRepo, ICfbPicksRepository picksRepo)
+    // Defaults to "current slate = slate 20 of season 2025" — past every SlateNumber any existing
+    // single-slate test uses, so the new current-slate clamp (frizat: leaderboard nitpicks) is a
+    // no-op for all of them unless a test overrides currentSlateService itself.
+    private static ICfbCurrentSlateService BuildCurrentSlateService(int? season = 2025, int slateNumber = 20) {
+        var svc = Substitute.For<ICfbCurrentSlateService>();
+        svc.GetCurrentSlateAsync().Returns(season is int s
+            ? new CfbSlateInfo(999, s, slateNumber, "Stub", "RegularSeason",
+                DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today), null, DateTime.UtcNow)
+            : null);
+        return svc;
+    }
+
+    private static (ILeagueRepository repo, ICfbRepository cfbRepo, ICfbPicksRepository picksRepo, ICfbCurrentSlateService currentSlateService)
         BuildCfbMocks(string userId, int leagueId = 1, int slateId = 1, int slateNumber = 1) {
         var user = new ApplicationUser { Id = userId, UserName = "Alice" };
         var leagueInfo = new LeagueInfo { Id = leagueId, LeagueName = "CFB Test", OwnerUserId = userId };
@@ -358,15 +370,15 @@ public class LeaderboardServiceTests {
             new CfbPicks { UserId = userId, LeagueId = leagueId, CfbSlateId = slateId, Team = "IU", PickType = PickType.Spread, Season = 2025 }
         ]);
 
-        return (leagueRepo, cfbRepo, picksRepo);
+        return (leagueRepo, cfbRepo, picksRepo, BuildCurrentSlateService());
     }
 
     [Fact]
     public async Task CfbBuildLeaderboard_ReturnsWon_WhenAllPicksBeatSpread() {
         var userId = Guid.NewGuid().ToString();
         // slateNumber=19 = CFP National Championship → requires 1 pick, so 1 winning pick → Won
-        var (leagueRepo, cfbRepo, picksRepo) = BuildCfbMocks(userId, slateNumber: 19);
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+        var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId, slateNumber: 19);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
 
         var result = await service.BuildLeaderboard(1, 2025);
 
@@ -377,14 +389,14 @@ public class LeaderboardServiceTests {
     [Fact]
     public async Task CfbBuildLeaderboard_ReturnsLost_WhenPickLosesSpread() {
         var userId = Guid.NewGuid().ToString();
-        var (leagueRepo, cfbRepo, picksRepo) = BuildCfbMocks(userId);
+        var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId);
 
         // Override scores: IU loses badly — 7 to 35, so IU 7 + (-7+5) = 5; 5 - 35 = -30 < 0 → loss
         cfbRepo.GetScoresForSlateAsync(1).Returns((IEnumerable<CfbScores>)[
             new CfbScores { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 7, AwayTeamScore = 35, GameStatus = TypeName.StatusFinal }
         ]);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
         var result = await service.BuildLeaderboard(1, 2025);
 
         Assert.Equal(WeekResult.Lost, result[0].WeekResults[0].WeekResult);
@@ -393,7 +405,7 @@ public class LeaderboardServiceTests {
     [Fact]
     public async Task CfbBuildLeaderboard_ReturnsMissingPicks_WhenUserHasFewerPicksThanGames() {
         var userId = Guid.NewGuid().ToString();
-        var (leagueRepo, cfbRepo, picksRepo) = BuildCfbMocks(userId);
+        var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId);
 
         // Add a second game that the user did NOT pick
         cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
@@ -401,13 +413,89 @@ public class LeaderboardServiceTests {
             new CfbSpreads { Id = 2, CfbSlateId = 1, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true },
         ]);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
         var result = await service.BuildLeaderboard(1, 2025);
 
         Assert.Equal(WeekResult.MissingPicks, result[0].WeekResults[0].WeekResult);
     }
 
-    private static (ILeagueRepository repo, ICfbRepository cfbRepo, ICfbPicksRepository picksRepo)
+    // ─── CFB Leaderboard — clamp to current slate (frizat: "shows week 18 and all missed picks"
+    // even for slates that haven't happened yet — CfbSlates is fully seeded ahead of time for the
+    // whole season, unlike NFL's NflScores which only exist once a game is final) ────────────────
+
+    [Fact]
+    public async Task CfbBuildLeaderboard_ExcludesSlatesAfterTheCurrentOne() {
+        var userId = Guid.NewGuid().ToString();
+        var (leagueRepo, cfbRepo, picksRepo, _) = BuildCfbMocks(userId, slateNumber: 1);
+        var futureSlate = new CfbSlates { Id = 2, Season = 2025, SlateNumber = 2, SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(7)), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(13)) };
+        cfbRepo.GetSlatesForSeasonAsync(2025).Returns([
+            new CfbSlates { Id = 1, Season = 2025, SlateNumber = 1, SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
+            futureSlate,
+        ]);
+        // Current slate is still slate 1 — slate 2 hasn't happened yet.
+        var currentSlateService = BuildCurrentSlateService(season: 2025, slateNumber: 1);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        Assert.Single(result[0].WeekResults); // only slate 1, slate 2 excluded
+        Assert.Equal(1, result[0].WeekResults[0].Week);
+    }
+
+    [Fact]
+    public async Task CfbBuildLeaderboard_DoesNotClamp_ForAFullyCompletedPastSeason() {
+        var userId = Guid.NewGuid().ToString();
+        var (leagueRepo, cfbRepo, picksRepo, _) = BuildCfbMocks(userId, slateNumber: 1);
+        cfbRepo.GetSlatesForSeasonAsync(2025).Returns([
+            new CfbSlates { Id = 1, Season = 2025, SlateNumber = 1, SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
+            new CfbSlates { Id = 2, Season = 2025, SlateNumber = 2, SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(7)), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(13)) },
+        ]);
+        cfbRepo.GetSpreadsForSlateAsync(2).Returns((IEnumerable<CfbSpreads>)[]);
+        cfbRepo.GetScoresForSlateAsync(2).Returns((IEnumerable<CfbScores>)[]);
+        picksRepo.GetUserPicksAsync(1, 2, userId).Returns((IEnumerable<CfbPicks>)[]);
+        // "Now" is season 2026 — 2025 is fully in the past, so every one of its slates should
+        // still show, not be clamped to whatever slate 2025 last resolved to.
+        var currentSlateService = BuildCurrentSlateService(season: 2026, slateNumber: 1);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        Assert.Equal(2, result[0].WeekResults.Length);
+    }
+
+    [Fact]
+    public async Task CfbBuildLeaderboard_ReturnsEmpty_ForASeasonThatHasNotStartedYet() {
+        var userId = Guid.NewGuid().ToString();
+        var (leagueRepo, cfbRepo, picksRepo, _) = BuildCfbMocks(userId, slateNumber: 1);
+        // "Now" is season 2025 — 2026 hasn't started, so nothing should show for it yet.
+        var currentSlateService = BuildCurrentSlateService(season: 2025, slateNumber: 1);
+        leagueRepo.GetLeagueJuiceMappingAsync(1, 2026).Returns(new LeagueJuiceMapping { Id = 2, LeagueId = 1, Season = 2026, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
+        cfbRepo.GetSlatesForSeasonAsync(2026).Returns([
+            new CfbSlates { Id = 3, Season = 2026, SlateNumber = 1, SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
+        ]);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var result = await service.BuildLeaderboard(1, 2026);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task CfbBuildLeaderboard_DoesNotClamp_WhenCurrentSlateCannotBeResolved() {
+        // Fail open, same philosophy as the rest of this codebase's "no data yet" handling —
+        // a null current slate (e.g. pre-launch, no slates seeded anywhere) must not hide every
+        // real slate that DOES exist for the requested season.
+        var userId = Guid.NewGuid().ToString();
+        var (leagueRepo, cfbRepo, picksRepo, _) = BuildCfbMocks(userId, slateNumber: 1);
+        var currentSlateService = BuildCurrentSlateService(season: null);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        Assert.Single(result[0].WeekResults);
+    }
+
+    private static (ILeagueRepository repo, ICfbRepository cfbRepo, ICfbPicksRepository picksRepo, ICfbCurrentSlateService currentSlateService)
         BuildCfbMultiUserMocks(IReadOnlyList<string> winnerIds, IReadOnlyList<string> loserIds,
             int slateNumber = 19, int weeklyCost = 5) {
         // winnerIds pick IU (home, spread=-7): 28-7+juice-14>0 always (decisive win at any juice≥0).
@@ -454,7 +542,7 @@ public class LeaderboardServiceTests {
                 new CfbPicks { CfbSlateId = slateId, Team = "OSU", PickType = PickType.Spread, Season = 2025 }
             ]);
 
-        return (leagueRepo, cfbRepo, picksRepo);
+        return (leagueRepo, cfbRepo, picksRepo, BuildCurrentSlateService(slateNumber: slateNumber));
     }
 
     // Slates 18 (Semifinals) and 19 (Championship) must both use JuiceConference, not 0.
@@ -465,7 +553,7 @@ public class LeaderboardServiceTests {
     [InlineData(19)]
     public async Task CfbBuildLeaderboard_SemiAndChampionshipUseConferenceTease(int slateNumber) {
         var userId = Guid.NewGuid().ToString();
-        var (leagueRepo, cfbRepo, picksRepo) = BuildCfbMocks(userId, slateNumber: slateNumber);
+        var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId, slateNumber: slateNumber);
 
         cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
             new CfbSpreads { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -10, AwayTeamSpread = 10, OverUnder = 50, IsLeagueEligible = true }
@@ -474,7 +562,7 @@ public class LeaderboardServiceTests {
             new CfbScores { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 20, GameStatus = TypeName.StatusFinal }
         ]);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
         var result = await service.BuildLeaderboard(1, 2025);
 
         // 28 + (-10) + JuiceConference(6) - 20 = 4 > 0 → Won
@@ -489,9 +577,9 @@ public class LeaderboardServiceTests {
         int winnerCount, int loserCount, int weeklyCost, long expectedWinnerScore, long expectedLoserScore) {
         var winnerIds = Enumerable.Range(0, winnerCount).Select(_ => Guid.NewGuid().ToString()).ToList();
         var loserIds  = Enumerable.Range(0, loserCount).Select(_ => Guid.NewGuid().ToString()).ToList();
-        var (leagueRepo, cfbRepo, picksRepo) = BuildCfbMultiUserMocks(winnerIds, loserIds, weeklyCost: weeklyCost);
+        var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMultiUserMocks(winnerIds, loserIds, weeklyCost: weeklyCost);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
         var result = await service.BuildLeaderboard(1, 2025);
 
         Assert.Equal(winnerCount + loserCount, result.Count);
@@ -507,7 +595,8 @@ public class LeaderboardServiceTests {
         var leagueRepo = Substitute.For<ILeagueRepository>();
         var cfbRepo = Substitute.For<ICfbRepository>();
         var picksRepo = Substitute.For<ICfbPicksRepository>();
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo);
+        var currentSlateService = Substitute.For<ICfbCurrentSlateService>();
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
 
         var result = await service.BuildLeaderboard(0, 2025);
 

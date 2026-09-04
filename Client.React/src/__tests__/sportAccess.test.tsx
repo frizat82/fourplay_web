@@ -185,4 +185,49 @@ describe('Sport access control', () => {
       expect(screen.queryByRole('link', { name: /switch to nfl/i })).not.toBeInTheDocument();
     });
   });
+
+  // frizat nitpick: tapping "Switch to CFB" from an installed iOS PWA silently drops the user
+  // into Safari, out of standalone mode — a platform constraint (each sport is a separate origin,
+  // so a separate installed PWA) that no routing change can fix. The controls just say so up
+  // front now, so it isn't a surprise.
+  describe('Switch-sport copy inside an installed standalone PWA', () => {
+    let originalMatchMedia: typeof window.matchMedia;
+
+    beforeEach(() => {
+      originalMatchMedia = window.matchMedia;
+      window.matchMedia = ((query: string) => ({
+        matches: query === '(display-mode: standalone)',
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      })) as typeof window.matchMedia;
+    });
+
+    afterEach(() => {
+      window.matchMedia = originalMatchMedia;
+    });
+
+    it('flags the toolbar quick-switch link as opening in the browser', () => {
+      renderLayout();
+      expect(screen.getByRole('link', { name: /switch to cfb site \(opens in your browser\)/i })).toBeInTheDocument();
+    });
+
+    it('adds an explanatory caption under the empty-state "Go to {sport} site" button', () => {
+      Object.assign(sportContext, { sport: 'CFB', isCfb: true, isNfl: false });
+      Object.assign(sessionState, { hasNflAccess: true, hasCfbAccess: false, currentLeague: null });
+      renderLayout();
+      expect(screen.getByRole('link', { name: /go to nfl/i })).toBeInTheDocument();
+      expect(screen.getByText(/opens in your browser/i)).toBeInTheDocument();
+    });
+
+    it('does not flag the toolbar quick-switch link when not running as a standalone PWA', () => {
+      window.matchMedia = originalMatchMedia;
+      renderLayout();
+      expect(screen.getByRole('link', { name: /^switch to cfb site$/i })).toBeInTheDocument();
+    });
+  });
 });

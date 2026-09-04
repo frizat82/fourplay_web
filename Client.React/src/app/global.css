@@ -16,7 +16,16 @@
 
 [data-theme='dark'] {
   --bg-1: #0f1729;
-  --bg-2: #1a2440;
+  /* Was #1a2440 — byte-for-byte identical to theme.ts's dark-mode background.paper. On a page
+     long enough to scroll well past the first viewport (e.g. the ever-growing Changelog), the
+     bottom of this gradient reached that exact color, so every Paper/Card down there visually
+     vanished into the page background — reported as "the background color is bad" (same
+     complaint category as the elevation-overlay bug fixed in theme.ts's MuiPaper override, but a
+     different cause: this is a page-background/surface color collision, not an elevation
+     artifact). Darkened just enough to stay clearly distinct from background.paper everywhere
+     in the gradient, while still lighter than --bg-1 so the top-to-bottom brightening look
+     survives. */
+  --bg-2: #121a2f;
   --bg-3: #1e3a5f;
   --ink-1: #e2e8f0;
   --ink-2: #94a3b8;
