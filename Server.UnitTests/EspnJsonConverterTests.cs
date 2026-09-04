@@ -109,4 +109,106 @@ public class EspnJsonConverterTests
         Assert.Equal(HomeAway.Away, competitors.Single(c => c.Team.Abbreviation == "ATL").HomeAway);
         Assert.Equal(EspnRecordType.HomeRecord, competitors.Single(c => c.Team.Abbreviation == "IND").Records.Single().Type);
     }
+
+    // TypeNameConverter/DescriptionConverter previously threw on any status.type.name/description
+    // value outside our known 5 — but ESPN's real wire values also include things like
+    // STATUS_POSTPONED, STATUS_DELAYED, STATUS_CANCELED, STATUS_RAIN_DELAY, and STATUS_FORFEIT for
+    // weather/scheduling edge cases. Because System.Text.Json aborts the ENTIRE deserialization on
+    // any single property throwing, one game anywhere in a week's scoreboard entering one of these
+    // states broke live status/scores for every OTHER game in that week too — PeriodicRefreshCache
+    // (see PeriodicRefreshCache.cs) then silently keeps serving its last successfully-parsed
+    // snapshot indefinitely, which is how a game already showed as stuck-"Final" days after actually
+    // being scheduled: an unrelated game's odd status froze the whole week's cache at an earlier,
+    // now-stale snapshot. Unknown/unusual statuses must fall back to Scheduled — "not decided yet"
+    // is the only safe default; anything else risks showing a false Final (revealing a fake result,
+    // wrongly locking picks) or a false Live/other state.
+    [Theory]
+    [InlineData("STATUS_POSTPONED")]
+    [InlineData("STATUS_DELAYED")]
+    [InlineData("STATUS_CANCELED")]
+    [InlineData("STATUS_RAIN_DELAY")]
+    [InlineData("STATUS_FORFEIT")]
+    [InlineData("STATUS_SOME_FUTURE_ESPN_VALUE_WE_DONT_KNOW_ABOUT_YET")]
+    public void TypeNameConverter_FallsBackToScheduled_ForUnrecognizedWireValues(string wireValue)
+    {
+        var json = $$"""{"id":"1","name":"{{wireValue}}","state":"pre","completed":false,"description":"Postponed","detail":"","shortDetail":""}""";
+
+        var statusType = System.Text.Json.JsonSerializer.Deserialize<StatusType>(json, EspnApiServiceJsonConverter.Settings);
+
+        Assert.Equal(TypeName.StatusScheduled, statusType!.Name);
+    }
+
+    [Theory]
+    [InlineData("Postponed")]
+    [InlineData("Delayed")]
+    [InlineData("Canceled")]
+    [InlineData("Some future ESPN description we don't know about yet")]
+    public void DescriptionConverter_FallsBackToScheduled_ForUnrecognizedWireValues(string wireValue)
+    {
+        var json = $$"""{"id":"1","name":"STATUS_SCHEDULED","state":"pre","completed":false,"description":"{{wireValue}}","detail":"","shortDetail":""}""";
+
+        var statusType = System.Text.Json.JsonSerializer.Deserialize<StatusType>(json, EspnApiServiceJsonConverter.Settings);
+
+        Assert.Equal(Description.Scheduled, statusType!.Description);
+    }
+
+    // The real-world failure mode: one game with an unrecognized status must not break every OTHER
+    // game in the same scoreboard payload — this is what actually broke, not just the isolated
+    // converter (System.Text.Json aborts the whole object graph on any single property throwing).
+    [Fact]
+    public async Task CfbApiService_GetScoresByWeekAsync_OneGameWithUnrecognizedStatus_DoesNotBreakOtherGames()
+    {
+        const string payload = """
+            {
+              "events": [
+                {
+                  "id": "1",
+                  "date": "2025-11-01T00:00Z",
+                  "competitions": [
+                    {
+                      "id": "1",
+                      "date": "2025-11-01T00:00Z",
+                      "status": {
+                        "clock": 0, "displayClock": "0:00", "period": 0,
+                        "type": { "id": "9", "name": "STATUS_POSTPONED", "state": "pre", "completed": false, "description": "Postponed", "detail": "Postponed", "shortDetail": "Postponed" }
+                      },
+                      "competitors": [
+                        { "id": "1", "homeAway": "home", "team": { "abbreviation": "USC" }, "score": "0", "records": [] },
+                        { "id": "2", "homeAway": "away", "team": { "abbreviation": "FRES" }, "score": "0", "records": [] }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "2",
+                  "date": "2025-11-01T00:00Z",
+                  "competitions": [
+                    {
+                      "id": "2",
+                      "date": "2025-11-01T00:00Z",
+                      "status": {
+                        "clock": 0, "displayClock": "0:00", "period": 2,
+                        "type": { "id": "2", "name": "STATUS_IN_PROGRESS", "state": "in", "completed": false, "description": "In Progress", "detail": "In Progress", "shortDetail": "In Progress" }
+                      },
+                      "competitors": [
+                        { "id": "3", "homeAway": "home", "team": { "abbreviation": "OU" }, "score": "14", "records": [] },
+                        { "id": "4", "homeAway": "away", "team": { "abbreviation": "UTEP" }, "score": "7", "records": [] }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+        var httpClient = new HttpClient(new StubHttpMessageHandler(payload)) { BaseAddress = new Uri("http://site.api.espn.com") };
+        var service = new CfbApiService(httpClient);
+
+        var scores = await service.GetScoresByWeekAsync(week: 1, isPostSeason: false);
+
+        Assert.Equal(2, scores!.Events!.Length);
+        var uscComp = scores.Events.Single(e => e.Competitions[0].Competitors.Any(c => c.Team.Abbreviation == "USC")).Competitions[0];
+        Assert.Equal(TypeName.StatusScheduled, uscComp.Status.Type.Name); // postponed falls back to scheduled, not Final
+        var utepComp = scores.Events.Single(e => e.Competitions[0].Competitors.Any(c => c.Team.Abbreviation == "UTEP")).Competitions[0];
+        Assert.Equal(TypeName.StatusInProgress, utepComp.Status.Type.Name); // the other game parses normally, unaffected
+    }
 }

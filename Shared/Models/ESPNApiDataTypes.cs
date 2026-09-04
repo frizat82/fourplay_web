@@ -394,7 +394,13 @@ internal class DescriptionConverter : JsonConverter<Description>
             "In Progress" => Description.InProgress,
             "Scheduled" => Description.Scheduled,
             "End of Period" => Description.EndOfPeriod,
-            _ => throw new Exception("Cannot unmarshal type Description")
+            // ESPN's real wire vocabulary also includes values we don't model (Postponed, Delayed,
+            // Canceled, etc.) for weather/scheduling edge cases. System.Text.Json aborts the ENTIRE
+            // deserialization on any single converter throwing, so one game with an unrecognized
+            // description would previously break every other game in the same week's payload
+            // (see PeriodicRefreshCache, which then silently serves the last successful snapshot
+            // forever). "Scheduled" — not decided yet — is the only safe fallback.
+            _ => Description.Scheduled
         };
 
     public override void Write(Utf8JsonWriter writer, Description value, JsonSerializerOptions options) =>
@@ -421,7 +427,11 @@ internal class TypeNameConverter : JsonConverter<TypeName>
             "STATUS_IN_PROGRESS" => TypeName.StatusInProgress,
             "STATUS_SCHEDULED" => TypeName.StatusScheduled,
             "STATUS_END_PERIOD" => TypeName.StatusEndPeriod,
-            _ => throw new Exception("Cannot unmarshal type TypeName")
+            // Same rationale as DescriptionConverter above: ESPN's real wire vocabulary includes
+            // status names we don't model (STATUS_POSTPONED, STATUS_DELAYED, STATUS_CANCELED,
+            // STATUS_RAIN_DELAY, STATUS_FORFEIT, etc.). Falling back to Scheduled instead of
+            // throwing keeps one unusual game from breaking deserialization of the whole week.
+            _ => TypeName.StatusScheduled
         };
 
     public override void Write(Utf8JsonWriter writer, TypeName value, JsonSerializerOptions options) =>
