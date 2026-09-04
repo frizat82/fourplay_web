@@ -9,6 +9,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: the page background retiled every screen-height down any page taller than one viewport (Rules, Changelog, and others), creating a visible seam every scroll — root cause of the repeated "background looks inconsistent" reports; fixed once at the CSS source instead of per-page
 - Fixed: returning to the installed iOS home-screen app from the Safari sheet opened by "Switch to CFB/NFL" could leave the top bar rendered under the Dynamic Island/status bar until the next reload
 - Fixed: a CFB or NFL game with an unusual ESPN status (postponed, delayed, canceled, rain delay, forfeit) could get stuck showing an incorrect status like Final for every other game that week too, since one unrecognized status previously broke parsing for the entire week's scoreboard
+- Fixed: a CFB or NFL game could silently show as Final before it even started if ESPN's response was ever missing the status field outright — that field now fails loudly and falls back to Scheduled instead of defaulting to Final
 
 ## 2026-09-03
 

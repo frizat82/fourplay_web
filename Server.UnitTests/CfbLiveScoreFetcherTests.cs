@@ -50,7 +50,13 @@ public class CfbLiveScoreFetcherTests {
                 new Competitor { HomeAway = HomeAway.Home, Score = 41, Team = new EspnTeam { Abbreviation = homeAbbr }, Records = [] },
                 new Competitor { HomeAway = HomeAway.Away, Score = 21, Team = new EspnTeam { Abbreviation = awayAbbr }, Records = [] },
             ],
-            Status = new EspnStatus { Type = new StatusType { Name = status } },
+            Status = new EspnStatus { Type = new StatusType { Name = status, Description = status switch {
+                TypeName.StatusFinal => Description.Final,
+                TypeName.StatusHalftime => Description.Halftime,
+                TypeName.StatusInProgress => Description.InProgress,
+                TypeName.StatusScheduled => Description.Scheduled,
+                _ => Description.EndOfPeriod,
+            } } },
             Odds = [],
         };
         return new EspnScores {
@@ -67,7 +73,7 @@ public class CfbLiveScoreFetcherTests {
                 new Competitor { HomeAway = HomeAway.Home, Score = 28, Team = new EspnTeam { Abbreviation = "OSU" }, Records = [], CuratedRank = new CuratedRankInfo { Current = homeRank } },
                 new Competitor { HomeAway = HomeAway.Away, Score = 14, Team = new EspnTeam { Abbreviation = "NEB" }, Records = [], CuratedRank = new CuratedRankInfo { Current = awayRank } },
             ],
-            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusFinal } },
+            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusFinal, Description = Description.Final } },
             Odds = [],
         };
         return new EspnScores {

@@ -28,7 +28,7 @@ public class LiveGameDtoTests
                 new Competitor { Id = homeId, HomeAway = HomeAway.Home, Team = new EspnTeam { Abbreviation = homeAbbr }, Score = 0, Records = [] },
                 new Competitor { Id = awayId, HomeAway = HomeAway.Away, Team = new EspnTeam { Abbreviation = awayAbbr }, Score = 0, Records = [] },
             ],
-            Status = new EspnStatus { Type = new StatusType { Completed = completed } },
+            Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusInProgress, Description = Description.InProgress, Completed = completed } },
             Odds = [],
             Situation = possessionId is null ? null : new EspnSitutation
             {
