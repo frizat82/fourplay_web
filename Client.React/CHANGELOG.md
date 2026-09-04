@@ -10,6 +10,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: returning to the installed iOS home-screen app from the Safari sheet opened by "Switch to CFB/NFL" could leave the top bar rendered under the Dynamic Island/status bar until the next reload
 - Fixed: a CFB or NFL game with an unusual ESPN status (postponed, delayed, canceled, rain delay, forfeit) could get stuck showing an incorrect status like Final for every other game that week too, since one unrecognized status previously broke parsing for the entire week's scoreboard
 - Fixed: a CFB or NFL game could silently show as Final before it even started if ESPN's response was ever missing the status field outright — that field now fails loudly and falls back to Scheduled instead of defaulting to Final
+- Fixed: a CFB team with two games landing in ESPN's same weekly scoreboard fetch (e.g. an early-season opener plus that week's real game) could briefly show the wrong game's score and status, since the live fetch queried ESPN by its own week number instead of our own scheduled date range
+- Fixed: the admin Job Manager's "run now" button for CFB scores was broken and always failed; the NFL scores button had a related bug where it could trigger the wrong sport's job
 
 ## 2026-09-03
 

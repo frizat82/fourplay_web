@@ -77,7 +77,10 @@ public class EspnContractTests
     [Fact]
     public async Task CfbScoreboard_RegularSeasonWeek_DeserializesRealWireShape()
     {
-        var scores = await BuildCfbApiService().GetScoresByWeekAsync(10, isPostSeason: false);
+        // frizat-11t: date-range now, not week=N — 2025 season Week 10's real window (matches
+        // DemoDataSeeder's CfbSlates seed row for the same week).
+        var scores = await BuildCfbApiService().GetScoresByDateRangeAsync(
+            new DateOnly(2025, 10, 25), new DateOnly(2025, 11, 1));
 
         Assert.NotNull(scores);
         Assert.NotEmpty(scores!.Events);

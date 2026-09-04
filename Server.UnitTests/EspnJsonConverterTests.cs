@@ -94,7 +94,7 @@ public class EspnJsonConverterTests
         """;
 
     [Fact]
-    public async Task CfbApiService_GetScoresByWeekAsync_DeserializesRealWireValuesWithoutThrowing()
+    public async Task CfbApiService_GetScoresByDateRangeAsync_DeserializesRealWireValuesWithoutThrowing()
     {
         var httpClient = new HttpClient(new StubHttpMessageHandler(MinimalCfbScoreboardJson))
         {
@@ -102,7 +102,7 @@ public class EspnJsonConverterTests
         };
         var service = new CfbApiService(httpClient);
 
-        var scores = await service.GetScoresByWeekAsync(week: 10, isPostSeason: false);
+        var scores = await service.GetScoresByDateRangeAsync(new DateOnly(2025, 10, 25), new DateOnly(2025, 11, 1));
 
         var competitors = scores!.Events!.Single().Competitions.Single().Competitors;
         Assert.Equal(HomeAway.Home, competitors.Single(c => c.Team.Abbreviation == "IND").HomeAway);
@@ -186,7 +186,7 @@ public class EspnJsonConverterTests
     // game in the same scoreboard payload — this is what actually broke, not just the isolated
     // converter (System.Text.Json aborts the whole object graph on any single property throwing).
     [Fact]
-    public async Task CfbApiService_GetScoresByWeekAsync_OneGameWithUnrecognizedStatus_DoesNotBreakOtherGames()
+    public async Task CfbApiService_GetScoresByDateRangeAsync_OneGameWithUnrecognizedStatus_DoesNotBreakOtherGames()
     {
         const string payload = """
             {
@@ -233,7 +233,7 @@ public class EspnJsonConverterTests
         var httpClient = new HttpClient(new StubHttpMessageHandler(payload)) { BaseAddress = new Uri("http://site.api.espn.com") };
         var service = new CfbApiService(httpClient);
 
-        var scores = await service.GetScoresByWeekAsync(week: 1, isPostSeason: false);
+        var scores = await service.GetScoresByDateRangeAsync(new DateOnly(2025, 9, 1), new DateOnly(2025, 9, 7));
 
         Assert.Equal(2, scores!.Events!.Length);
         var uscComp = scores.Events.Single(e => e.Competitions[0].Competitors.Any(c => c.Team.Abbreviation == "USC")).Competitions[0];
