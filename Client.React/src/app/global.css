@@ -16,7 +16,16 @@
 
 [data-theme='dark'] {
   --bg-1: #0f1729;
-  --bg-2: #1a2440;
+  /* Was #1a2440 — byte-for-byte identical to theme.ts's dark-mode background.paper. On a page
+     long enough to scroll well past the first viewport (e.g. the ever-growing Changelog), the
+     bottom of this gradient reached that exact color, so every Paper/Card down there visually
+     vanished into the page background — reported as "the background color is bad" (same
+     complaint category as the elevation-overlay bug fixed in theme.ts's MuiPaper override, but a
+     different cause: this is a page-background/surface color collision, not an elevation
+     artifact). Darkened just enough to stay clearly distinct from background.paper everywhere
+     in the gradient, while still lighter than --bg-1 so the top-to-bottom brightening look
+     survives. */
+  --bg-2: #121a2f;
   --bg-3: #1e3a5f;
   --ink-1: #e2e8f0;
   --ink-2: #94a3b8;
@@ -39,18 +48,37 @@ body {
   margin: 0;
   font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
   color: var(--ink-1);
-  background: radial-gradient(80% 50% at 10% -10%, rgba(203, 213, 245, 0.25), transparent 60%),
+  /* `html, body { height: 100% }` above pins body's own box to exactly one viewport tall (100vh)
+     even though its content grows the page far past that — html/body backgrounds are painted
+     across the whole scrollable canvas per spec, but their SIZING/repeat area is still that
+     nominal 100vh box. With no background-repeat set (default: repeat), every layer here —
+     including the two decorative radial highlights — retiled every exact 900px/one-viewport-
+     height down the page: a real, visible seam at every tile boundary on any page taller than
+     one screen (Rules, Changelog, My Leagues, ...). This is the actual root cause behind every
+     "background looks inconsistent while scrolling" report so far, including the elevation-
+     overlay and bg-2/card-color-collision fixes elsewhere in this file/theme.ts — those were
+     each real too, but this is the one that made it happen on every long page, repeatedly.
+     Fix: background-color carries the flat color for anything below the first viewport (it
+     matches --bg-2, the gradient's own bottom stop, so the seam is invisible even where the
+     gradient does end); background-image holds the decorative layers, explicitly sized to one
+     viewport and never repeated, so they only ever render once, at the top, as originally
+     intended — not deliberately tiled and never in any later loop */
+  background-color: var(--bg-2);
+  background-image: radial-gradient(80% 50% at 10% -10%, rgba(203, 213, 245, 0.25), transparent 60%),
     radial-gradient(70% 45% at 90% -20%, rgba(253, 230, 138, 0.1), transparent 55%),
     linear-gradient(180deg, var(--bg-1), var(--bg-2));
+  background-repeat: no-repeat;
+  background-size: 100% 100vh;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.3s ease, color 0.3s ease;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 [data-theme='dark'] body {
-  background: radial-gradient(80% 50% at 10% -10%, rgba(30, 58, 95, 0.5), transparent 60%),
+  background-color: var(--bg-2);
+  background-image: radial-gradient(80% 50% at 10% -10%, rgba(30, 58, 95, 0.5), transparent 60%),
     radial-gradient(70% 45% at 90% -20%, rgba(253, 230, 138, 0.04), transparent 55%),
     linear-gradient(180deg, var(--bg-1), var(--bg-2));
 }

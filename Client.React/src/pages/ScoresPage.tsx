@@ -23,6 +23,7 @@ import { useAuth } from '../services/auth';
 import { isGameDecided, isGameFinal, isGameLive, spreadLabel } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
+import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
 
@@ -123,6 +124,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
   const maxWeek = currentWeekSnapshot?.maxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
   const maxSeason = currentWeekSnapshot?.maxSeason ?? new Date().getFullYear();
+  const minSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
 
   // Selecting the week that IS the current week (from the dropdown, not the "Current Week"
   // button) routes back to the live query instead of a one-off historical fetch — the historical
@@ -241,6 +243,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
           {...adapter.weekSelectorConfig}
           maxRegularSeasonWeek={maxWeek}
           maxSeason={maxSeason}
+          minSeason={minSeason}
           isCurrent={isCurrentWeek}
         />
         {!isCurrentWeek && (
