@@ -48,6 +48,7 @@ import { useSportContext } from '../services/sport';
 import { useThemeMode } from '../services/theme';
 import { isAdmin } from '../utils/auth';
 import { isStandalonePwa } from '../utils/pwa';
+import { useSafeAreaRefresh } from '../utils/useSafeAreaRefresh';
 import PendingInviteBanner from '../components/PendingInviteBanner';
 import VersionFooter from '../components/VersionFooter';
 
@@ -85,6 +86,7 @@ export default function AppLayout() {
   const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
   const location = useLocation();
+  useSafeAreaRefresh();
 
   const getOtherSportUrl = () => {
     const { hostname, port, protocol } = window.location;
