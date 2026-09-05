@@ -1,6 +1,7 @@
 import { http } from './http';
 import type {
   ChangePasswordRequest,
+  ChangeUsernameRequest,
   ConfirmEmailRequest,
   CreateUserRequest,
   CreateUserResponse,
@@ -54,6 +55,10 @@ export async function resetPassword(payload: ResetPasswordRequest) {
 
 export async function changePassword(payload: ChangePasswordRequest) {
   await http.post('/api/auth/change-password', payload);
+}
+
+export async function changeUsername(payload: ChangeUsernameRequest) {
+  await http.post('/api/auth/change-username', payload);
 }
 
 export async function doesUserExist(email: string) {

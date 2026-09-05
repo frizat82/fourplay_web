@@ -56,6 +56,11 @@ export interface ChangePasswordRequest {
   password: string;
 }
 
+export interface ChangeUsernameRequest {
+  currentPassword: string;
+  newUsername: string;
+}
+
 export interface RequestEmailConfirmation {
   email: string;
   confirmationUrl: string;
