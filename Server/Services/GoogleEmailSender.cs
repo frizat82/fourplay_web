@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Models.Identity;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.Extensions.Logging;
@@ -9,7 +10,7 @@ using System.Text.Json;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class GoogleEmailSender(ILogger<GoogleEmailSender> logger, IHttpClientFactory httpClientFactory)
+public class GoogleEmailSender(ILogger<GoogleEmailSender> logger, IHttpClientFactory httpClientFactory, IWebHostEnvironment environment)
     : IEmailSender<ApplicationUser>, IEmailSender {
 
     private readonly string? _fromEmail    = Environment.GetEnvironmentVariable("FOURPLAY_EMAIL_USER");
@@ -17,9 +18,41 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger, IHttpClientFac
     private readonly string? _clientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET");
     private readonly string? _refreshToken = Environment.GetEnvironmentVariable("GOOGLE_REFRESH_TOKEN");
 
+    // frizat: an unattended cron (LeagueJuiceReminderJob) was emailing a real inbox from the demo
+    // league seeded on dev, and local /full-test-local real-mode runs send real email too — the
+    // owner decided neither is wanted.
+    //
+    // /code-review caught a real gap in an earlier version of this check: it suppressed only when
+    // environment.IsDevelopment() was true OR RAILWAY_ENVIRONMENT_NAME=="development" — but this
+    // repo's own documented local-run command (`dotnet run --no-launch-profile ...`, used in
+    // CLAUDE.md/start-demo.sh) deliberately skips launchSettings.json, so ASPNETCORE_ENVIRONMENT
+    // is never set locally and .NET defaults IsDevelopment() to false. That earlier version would
+    // have sent real email on every ordinary local run — the exact incident this fix exists to
+    // prevent. Fixed by inverting to a fail-safe allow-list instead of a fail-open deny-list: this
+    // app is ONLY ever deployed via Railway (dev + prod, both in the same project/service — see
+    // CLAUDE.md's Hosting section), so RAILWAY_ENVIRONMENT_NAME is always present when actually
+    // deployed and always absent when running on a developer's own machine. Real email now
+    // requires an explicit "production" value; every other case (missing entirely, "development",
+    // or anything unexpected) suppresses. environment.IsDevelopment() is kept as an extra guard in
+    // case RAILWAY_ENVIRONMENT_NAME is ever misconfigured while genuinely running locally.
+    private bool IsProductionEnvironment =>
+        string.Equals(Environment.GetEnvironmentVariable("RAILWAY_ENVIRONMENT_NAME"), "production", StringComparison.OrdinalIgnoreCase)
+        && !environment.IsDevelopment();
+
     #region Public Email Sender Methods
 
     public async Task SendEmailAsync(string toEmail, string subject, string htmlBody) {
+        if (!IsProductionEnvironment) {
+            // Log the full body (not just recipient/subject) so /full-test-local's auth-lifecycle
+            // checks stay executable without a real inbox — confirmation/reset links AND reset
+            // codes (SendPasswordResetCodeAsync has no link to grep for) are both visible in the
+            // raw HTML, so a tester copies whichever one they need straight out of the console.
+            logger.LogInformation(
+                "📧 Email suppressed (non-production environment): {Email} ({Subject})\n{Body}",
+                toEmail, subject, htmlBody);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_fromEmail) || string.IsNullOrWhiteSpace(_clientId)
             || string.IsNullOrWhiteSpace(_clientSecret) || string.IsNullOrWhiteSpace(_refreshToken)) {
             logger.LogError("Gmail API credentials not configured. Set FOURPLAY_EMAIL_USER, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN.");
@@ -106,10 +139,16 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger, IHttpClientFac
 
     private async Task SendViaGmailApiAsync(string toEmail, string subject, string htmlBody, string accessToken) {
         // RFC 2822 MIME message — Gmail API requires base64url encoding of the raw message
+        // RFC 2822 headers are 7-bit ASCII only — a subject with any non-ASCII character (e.g.
+        // an em-dash) sent raw here isn't a valid header and gets mis-decoded by mail clients as
+        // mojibake ("Ã¢Â€Â"" for an em-dash). RFC 2047 encoded-word syntax is the correct fix;
+        // the body doesn't need this since it's declared UTF-8 via Content-Type below.
+        var encodedSubject = $"=?UTF-8?B?{Convert.ToBase64String(Encoding.UTF8.GetBytes(subject))}?=";
+
         var mime = new StringBuilder();
         mime.AppendLine($"From: IV League <{_fromEmail}>");
         mime.AppendLine($"To: {toEmail}");
-        mime.AppendLine($"Subject: {subject}");
+        mime.AppendLine($"Subject: {encodedSubject}");
         mime.AppendLine("MIME-Version: 1.0");
         mime.AppendLine("Content-Type: text/html; charset=utf-8");
         mime.AppendLine();

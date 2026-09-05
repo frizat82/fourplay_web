@@ -441,6 +441,10 @@ public class AuthController(
     }
     [HttpPost("change-password")]
     [Authorize]
+    // /code-review: ChangePasswordAsync's own current-password check has no rate limit or
+    // lockout, same gap ChangeUsername's CheckPasswordAsync had — both get Login's "auth"
+    // policy (5/min/IP) for consistency, not just the newer endpoint.
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("auth")]
     public async Task<ActionResult<string>> ChangePassword([FromBody] ChangePassword model)
     {
         if (string.IsNullOrWhiteSpace(model.Password))
@@ -455,16 +459,74 @@ public class AuthController(
         if (!result.Succeeded)
             return BadRequest("Invalid request.");
 
-        // Revoke all outstanding refresh tokens (other devices logged out).
-        // Then re-issue a fresh pair so this caller stays logged in.
-        await refreshTokenService.RevokeAllUserTokensAsync(userId!);
+        await RotateSessionCookiesAsync(user, userId!);
+        return Ok(new OkResponseDto());
+    }
+
+    [HttpPost("change-username")]
+    [Authorize]
+    // /code-review: CheckPasswordAsync has no rate limit or lockout of its own (unlike Login's
+    // PasswordSignInAsync), so a hijacked/left-open session could otherwise brute-force the
+    // account password with unlimited attempts — the same "auth" policy Login uses (5/min/IP).
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("auth")]
+    public async Task<ActionResult<string>> ChangeUsername([FromBody] ChangeUsername model)
+    {
+        // /code-review: CurrentPassword must be validated before CheckPasswordAsync — Identity's
+        // PasswordHasher.VerifyHashedPassword throws ArgumentNullException on a null password.
+        if (string.IsNullOrWhiteSpace(model.CurrentPassword) || string.IsNullOrWhiteSpace(model.NewUsername))
+            return BadRequest("Invalid request.");
+
+        var newUsername = model.NewUsername.Trim();
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await userManager.FindByIdAsync(userId!);
+        if (user == null)
+            return BadRequest("Invalid request.");
+
+        // /code-review: a no-op rename (re-submitting the current username) previously still
+        // reached RotateSessionCookiesAsync below, silently logging the user out on every other
+        // device even though nothing about the account actually changed. Nothing to verify or
+        // rotate when the value isn't actually changing.
+        if (string.Equals(user.UserName, newUsername, StringComparison.OrdinalIgnoreCase))
+            return Ok(new OkResponseDto());
+
+        // SetUserNameAsync has no password parameter of its own — unlike ChangePasswordAsync,
+        // it will happily rename the account without proof of ownership. Since the username is
+        // also the login credential, a briefly-hijacked/left-open session could otherwise lock
+        // the real owner out permanently.
+        if (!await userManager.CheckPasswordAsync(user, model.CurrentPassword))
+            return BadRequest("Current password is incorrect.");
+
+        IdentityResult result;
+        try {
+            result = await userManager.SetUserNameAsync(user, newUsername);
+        } catch (DbUpdateException) {
+            // /code-review: SetUserNameAsync's app-level uniqueness check (a SELECT) isn't
+            // atomic with the write — a genuine race between two renames to the same username
+            // can still hit the DB's unique index on NormalizedUserName. Same friendly message
+            // as the non-racy duplicate path below, not an unhandled 500.
+            return BadRequest($"Username '{newUsername}' is already taken.");
+        }
+        if (!result.Succeeded)
+            return BadRequest(string.Join(Environment.NewLine, result.Errors.Select(x => x.Description)));
+
+        await RotateSessionCookiesAsync(user, userId!);
+        return Ok(new OkResponseDto());
+    }
+
+    // Shared by ChangePassword/ChangeUsername (/code-review: was a byte-for-byte duplicated
+    // block in both): revokes all outstanding refresh tokens (other devices logged out), then
+    // re-issues a fresh JWT + refresh token pair so this caller stays logged in — with the
+    // mutation just made (new password, new username, ...) reflected immediately, no forced
+    // re-login needed.
+    private async Task RotateSessionCookiesAsync(ApplicationUser user, string userId)
+    {
+        await refreshTokenService.RevokeAllUserTokensAsync(userId);
         var (jwt, jwtExpires) = await jwtTokenService.GenerateAccessTokenAsync(user, rememberMe: false);
         Response.Cookies.Append("AuthToken", jwt ?? string.Empty, BuildCookieOptions(jwtExpires));
         var newRefresh = await refreshTokenService.IssueTokenAsync(user, _refreshTokenLifetime);
         if (newRefresh is not null)
             Response.Cookies.Append("RefreshToken", newRefresh.Token, BuildCookieOptions(newRefresh.Expires));
-
-        return Ok(new OkResponseDto());
     }
     [HttpPost("request-email-confirmation")]
     [AllowAnonymous]

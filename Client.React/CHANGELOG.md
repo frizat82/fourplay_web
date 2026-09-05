@@ -4,6 +4,11 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-05
+
+- Added: users can now change their own username from the Account page, without needing to contact an admin
+- Fixed: email subject lines with special characters (e.g. an em-dash) could render as garbled text in the received email
+
 ## 2026-09-04
 
 - Fixed: the page background retiled every screen-height down any page taller than one viewport (Rules, Changelog, and others), creating a visible seam every scroll — root cause of the repeated "background looks inconsistent" reports; fixed once at the CSS source instead of per-page
