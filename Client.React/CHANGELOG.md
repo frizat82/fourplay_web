@@ -12,6 +12,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: a CFB or NFL game could silently show as Final before it even started if ESPN's response was ever missing the status field outright — that field now fails loudly and falls back to Scheduled instead of defaulting to Final
 - Fixed: a CFB team with two games landing in ESPN's same weekly scoreboard fetch (e.g. an early-season opener plus that week's real game) could briefly show the wrong game's score and status, since the live fetch queried ESPN by its own week number instead of our own scheduled date range
 - Fixed: the admin Job Manager's "run now" button for CFB scores was broken and always failed; the NFL scores button had a related bug where it could trigger the wrong sport's job
+- Fixed: "Switch to CFB/NFL" from an installed home-screen app always dropped into the browser with no way back into the app — this control is now hidden inside an installed app (it's still on the regular website); each sport's installed home-screen icon is now labeled distinctly instead of both reading "IV League"
 
 ## 2026-09-03
 
