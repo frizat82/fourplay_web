@@ -23,7 +23,6 @@ import {
 } from '@mui/material';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -96,11 +95,13 @@ export default function AppLayout() {
   };
 
   // NFL and CFB are separate origins, so each is its own installed PWA — a cross-origin link
-  // from one always drops a standalone-mode install into the regular browser (see utils/pwa.ts).
-  // Not fixable via routing; the switch-sport controls below just say so up front instead of
-  // surprising the user with an unexpected app-to-browser jump.
+  // from one always drops a standalone-mode install into the regular browser, on every platform
+  // (see utils/pwa.ts). Not fixable via routing or an in-app dialog, so the switch-sport controls
+  // below are hidden entirely in standalone mode rather than showing a control whose only
+  // possible action is an unexpected app-to-browser jump. This control is only ever shown to
+  // users who already have access to both sports (hasOther), so hiding it doesn't hide the other
+  // sport's existence from anyone — they already know it exists.
   const inStandalonePwa = isStandalonePwa();
-  const otherSportOpensInBrowser = inStandalonePwa ? ' (opens in your browser)' : '';
 
   const handleNavClick = (to: string) => {
     if (isMobile) setOpen(false);
@@ -143,14 +144,15 @@ export default function AppLayout() {
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Your account has {isCfb ? 'NFL' : 'CFB'} leagues but not {isCfb ? 'CFB' : 'NFL'}.
           </Typography>
+          {/* /code-review: unlike the toolbar chip (a convenience shortcut on an otherwise fully
+              functional page), this is the ONLY link on this screen — there's no nav, no content,
+              nothing else to do here. Hiding it in standalone mode would strand a user who
+              installed the wrong sport's PWA with a dead end and no way out. Keep it visible
+              always, even though it still has to open the system browser (same platform
+              constraint as the toolbar chip). */}
           <Button variant="contained" href={getOtherSportUrl()}>
             Go to {isCfb ? 'NFL' : 'CFB'} site
           </Button>
-          {inStandalonePwa && (
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-              Opens in your browser — this installed app can only show {isCfb ? 'CFB' : 'NFL'}.
-            </Typography>
-          )}
         </>
       ) : (
         <Typography color="text.secondary">
@@ -189,16 +191,13 @@ export default function AppLayout() {
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} alignItems="center">
-            {hasOther && !noAccessContent && (
+            {hasOther && !noAccessContent && !inStandalonePwa && (
               <Chip
                 component="a"
                 href={getOtherSportUrl()}
-                // A distinct "leaves the app" icon when installed standalone — always visible,
-                // unlike a hover title/tooltip, which a one-tap mobile navigation never shows.
-                icon={inStandalonePwa ? <OpenInNewIcon /> : <SwapHorizIcon />}
+                icon={<SwapHorizIcon />}
                 label={otherSport}
-                title={inStandalonePwa ? 'Opens in your browser, outside this installed app' : undefined}
-                aria-label={`Switch to ${otherSport} site${otherSportOpensInBrowser}`}
+                aria-label={`Switch to ${otherSport} site`}
                 clickable
                 variant="outlined"
                 sx={{
