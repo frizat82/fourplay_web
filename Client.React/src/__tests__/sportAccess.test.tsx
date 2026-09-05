@@ -186,11 +186,14 @@ describe('Sport access control', () => {
     });
   });
 
-  // frizat nitpick: tapping "Switch to CFB" from an installed iOS PWA silently drops the user
-  // into Safari, out of standalone mode — a platform constraint (each sport is a separate origin,
-  // so a separate installed PWA) that no routing change can fix. The controls just say so up
-  // front now, so it isn't a surprise.
-  describe('Switch-sport copy inside an installed standalone PWA', () => {
+  // frizat: tapping "Switch to CFB" from an installed iOS/Android PWA always drops the user into
+  // the system browser, out of standalone mode — a platform constraint (each sport is a separate
+  // origin, so a separate installed PWA, and neither iOS nor Android lets a plain web link hand
+  // off to a different origin's installed app) that no routing change or in-app dialog can fix.
+  // The control is only ever shown to users who already have access to both sports (`hasOther`),
+  // so hiding it in standalone mode doesn't hide the other sport's existence from anyone — it just
+  // removes a control whose only possible action is an unexpected app-to-browser jump.
+  describe('Switch-sport controls inside an installed standalone PWA', () => {
     let originalMatchMedia: typeof window.matchMedia;
 
     beforeEach(() => {
@@ -211,20 +214,22 @@ describe('Sport access control', () => {
       window.matchMedia = originalMatchMedia;
     });
 
-    it('flags the toolbar quick-switch link as opening in the browser', () => {
+    it('hides the toolbar quick-switch control entirely when running as a standalone PWA', () => {
       renderLayout();
-      expect(screen.getByRole('link', { name: /switch to cfb site \(opens in your browser\)/i })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /switch to cfb/i })).not.toBeInTheDocument();
     });
 
-    it('adds an explanatory caption under the empty-state "Go to {sport} site" button', () => {
+    // /code-review: unlike the toolbar chip, this button is the ONLY link on the "no access"
+    // empty-state screen — hiding it in standalone mode would strand a user who installed the
+    // wrong sport's PWA with no way out. It stays visible in every mode.
+    it('still shows the empty-state "Go to {sport} site" button when running as a standalone PWA', () => {
       Object.assign(sportContext, { sport: 'CFB', isCfb: true, isNfl: false });
       Object.assign(sessionState, { hasNflAccess: true, hasCfbAccess: false, currentLeague: null });
       renderLayout();
       expect(screen.getByRole('link', { name: /go to nfl/i })).toBeInTheDocument();
-      expect(screen.getByText(/opens in your browser/i)).toBeInTheDocument();
     });
 
-    it('does not flag the toolbar quick-switch link when not running as a standalone PWA', () => {
+    it('still shows the toolbar quick-switch link when not running as a standalone PWA', () => {
       window.matchMedia = originalMatchMedia;
       renderLayout();
       expect(screen.getByRole('link', { name: /^switch to cfb site$/i })).toBeInTheDocument();
