@@ -95,6 +95,7 @@ export interface GameView {
   awayLogo?: string;
   situation?: import('../types/liveGame').GameSituation | null;
   homeCovers?: boolean | null;  // null = not final / no odds
+  awayCovers?: boolean | null;  // computed independently — NOT !homeCovers (teased spreads aren't mirror images)
   overWins?: boolean | null;
   /** When the spread was first posted (DateCreated). Undefined where the adapter's spread source
    *  doesn't carry it — NFL's spreadBatch endpoint returns computed, juice-adjusted odds rather
