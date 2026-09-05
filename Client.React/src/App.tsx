@@ -54,6 +54,7 @@ import InvalidUserPage from './pages/account/InvalidUserPage';
 import LockoutPage from './pages/account/LockoutPage';
 import ManageAccountPage from './pages/account/ManageAccountPage';
 import ChangePasswordPage from './pages/account/ChangePasswordPage';
+import ChangeUsernamePage from './pages/account/ChangeUsernamePage';
 import NotFoundPage from './pages/NotFoundPage';
 import { RequireAdmin, RequireAuth } from './services/auth';
 import AdminJobManagerPage from './pages/admin/JobManagerPage';
@@ -157,6 +158,7 @@ export default function App() {
         />
         <Route path="/account/manage" element={<ManageAccountPage />} />
         <Route path="/account/manage/changepassword" caseSensitive={false} element={<ChangePasswordPage />} />
+        <Route path="/account/manage/changeusername" caseSensitive={false} element={<ChangeUsernamePage />} />
         <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
         <Route path="/league/manage" element={<LeaguePortalPage />} />
       </Route>
