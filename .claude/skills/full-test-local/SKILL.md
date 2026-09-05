@@ -7,20 +7,27 @@ description: Full local real-mode test — Docker Postgres + backend in real mod
 
 Everything in this checklist is verifiable **locally**, against a Docker Postgres +
 backend running with `DEMO_MODE` unset (real mode, not the seeded demo/UAT stack). It
-uses real ESPN calls and real Gmail-API email sending (creds already in
-`.env.backend`), but no shared infrastructure — nothing here depends on a hosted
+uses real ESPN calls, but no shared infrastructure — nothing here depends on a hosted
 staging environment, because **there currently is no such environment**: the `dev`
 Railway environment was deliberately converted to a permanent `DEMO_MODE=true` UAT
 stack (see `frizat-67l`), so it can't be used for real-mode testing anymore.
+
+**Email is intentionally suppressed everywhere in dev, including here.**
+`GoogleEmailSender` no-ops and logs instead of calling the Gmail API whenever
+`IWebHostEnvironment.IsDevelopment()` is true (every local run, real-mode or not) — a
+real inbox is never used for local testing. Verify email-triggering steps below via
+the backend console/log line `📧 Email suppressed (non-production environment):
+{email} ({subject})`, which includes the full HTML body underneath — copy the
+confirmation/reset/invite link (or reset code) straight out of it instead of an
+actual inbox.
 
 This is the gate for a `dev`→`main` cutover as far as anything agent-executable goes.
 What's left over — genuine HTTPS-only checks and the live game-week cycle — lives in
 `/prod-smoke-test` instead; that skill is much shorter and mostly human-executed.
 
 **Setup:** run the backend locally via Docker Compose with `DEMO_MODE` unset (or
-`false`) so it hits real ESPN/odds endpoints and sends real email through the Gmail
-API credentials already configured in `.env.backend`. Use a real inbox (a Gmail alias
-like `you+test@gmail.com` works) for any step that needs to receive an email.
+`false`) so it hits real ESPN/odds endpoints. Gmail API credentials are still read
+from `.env.backend` for completeness, but won't actually be used locally — see above.
 
 ---
 
@@ -37,17 +44,17 @@ relaxes both locally. See `/prod-smoke-test`.
 
 ## Phase B — Auth lifecycle
 
-- [ ] Register a brand-new account with a real email → confirmation email arrives (real send via Gmail API) → link confirms
+- [ ] Register a brand-new account → confirmation link appears in the suppressed-email log line → link confirms
 - [ ] Login works; unknown username and wrong password return identical responses (enumeration check)
 - [ ] 6 rapid failed logins → rate limited (429), then recovers
 - [ ] Leave a tab idle past JWT expiry → refresh rotation silently re-auths (no logout, no loop)
-- [ ] Forgot-password → email arrives → reset → **old session's next request is rejected** (token revocation, mon.7)
+- [ ] Forgot-password → reset link appears in the suppressed-email log line → reset → **old session's next request is rejected** (token revocation, mon.7)
 - [ ] Change-password from a second device → first device is logged out
 
 ## Phase C — League + commissioner
 
 - [ ] Admin creates a 2026 league; sets Juice / JuiceDivisional / JuiceConference / WeeklyCost
-- [ ] Owner invites a couple of test accounts by email → invite emails arrive → each joins via link
+- [ ] Owner invites a couple of test accounts by email → invite links appear in the suppressed-email log → each joins via link
 - [ ] Non-member probing a foreign leagueId via API gets 403 (membership guard, mon.6)
 - [ ] League switcher chip works at a 390px viewport; a single-league user sees no confusion
 - [ ] Commissioner portal accessible to owner, denied to member
