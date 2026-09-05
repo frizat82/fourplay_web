@@ -34,8 +34,10 @@ function isDecided(game: GameView): boolean {
 function teamWins(game: GameView, team: string, pickType: PickType): boolean | null {
   if (!isDecided(game)) return null;
   if (pickType === 'Spread') {
-    if (game.homeCovers == null) return null;
-    return team === game.homeTeam ? game.homeCovers : !game.homeCovers;
+    // Teased spreads add juice per-team (see SpreadCalculator.GetSpread) — home/away spreads
+    // aren't mirror images, so the away side's result must come from its own computed value,
+    // never from negating homeCovers.
+    return team === game.homeTeam ? (game.homeCovers ?? null) : (game.awayCovers ?? null);
   }
   if (game.overWins == null) return null;
   return pickType === 'Over' ? game.overWins : !game.overWins;
@@ -184,10 +186,10 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   const matrixSpreads = useMemo(() => {
     const result: Record<string, { isWinner: boolean; isOverWinner: boolean; isUnderWinner: boolean; spread: number | null; over: number | null; under: number | null }> = {};
     for (const game of (data?.games ?? [])) {
-      if (game.homeCovers == null) continue; // not final
+      if (game.homeCovers == null || game.awayCovers == null) continue; // not final
       const ov = game.overWins ?? false;
       result[game.homeTeam] = { isWinner: game.homeCovers, isOverWinner: ov, isUnderWinner: !ov, spread: game.homeSpread, over: game.overUnder, under: game.overUnder };
-      result[game.awayTeam] = { isWinner: !game.homeCovers, isOverWinner: ov, isUnderWinner: !ov, spread: game.awaySpread, over: game.overUnder, under: game.overUnder };
+      result[game.awayTeam] = { isWinner: game.awayCovers ?? false, isOverWinner: ov, isUnderWinner: !ov, spread: game.awaySpread, over: game.overUnder, under: game.overUnder };
     }
     return result;
   }, [data?.games]);
@@ -311,6 +313,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                 const isFinal = isGameFinal(game.gameStatus);
                 const isLive = isGameLive(game.gameStatus);
                 const hc = game.homeCovers ?? null;
+                const ac = game.awayCovers ?? null;
                 const ov = game.overWins ?? null;
 
                 return (
@@ -354,7 +357,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                               only "not decided yet"; `invisible` above still hides the pick-count bubble
                               when nobody picked, but the button itself stays colored by outcome. */}
                           <IconButton
-                            color={(isFinal || isLive) ? (hc === false ? 'success' : hc === true ? 'error' : 'inherit') : 'inherit'}
+                            color={(isFinal || isLive) ? (ac === true ? 'success' : ac === false ? 'error' : 'inherit') : 'inherit'}
                             disabled={!isFinal && !isLive}
                             onClick={() => showDialog(game, game.awayTeam, 'Spread')}
                             size="small"
