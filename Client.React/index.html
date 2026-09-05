@@ -6,12 +6,35 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.json" />
+    <!-- NFL (ivleague.xyz) and CFB (cfb.ivleague.xyz) are separate origins sharing this one
+         build/index.html, so which manifest/home-screen title applies has to be picked at
+         runtime by hostname, not baked into a static tag — otherwise both sports' installed
+         home-screen icons would be indistinguishable ("IV League" for both). This duplicates the
+         same hostname check src/services/sport.tsx's detectSport() and AppLayout.tsx's
+         getOtherSportUrl() already do — deliberately, not an oversight: this script runs before
+         any JS module loads (it has to append the manifest link ASAP), so it can't import either
+         of those. Keep the `cfb.` prefix check here in sync with theirs if that logic ever changes.
+         manifest.json (NFL) and manifest.cfb.json (CFB) are intentionally near-duplicates —
+         name/short_name differ, everything else (icons, theme_color, background_color) must
+         match. JSON can't hold a same-file comment, so if you change one, change the other. -->
+    <script>
+      (function () {
+        var isCfb = location.hostname.startsWith('cfb.');
+        var manifestLink = document.createElement('link');
+        manifestLink.rel = 'manifest';
+        manifestLink.href = isCfb ? '/manifest.cfb.json' : '/manifest.json';
+        document.head.appendChild(manifestLink);
+
+        var titleMeta = document.createElement('meta');
+        titleMeta.name = 'apple-mobile-web-app-title';
+        titleMeta.content = isCfb ? 'IV League CFB' : 'IV League NFL';
+        document.head.appendChild(titleMeta);
+      })();
+    </script>
     <!-- Mobile optimization for iOS and Android -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes, maximum-scale=5" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="IV League" />
     <meta name="theme-color" content="#1a2847" />
 
 
