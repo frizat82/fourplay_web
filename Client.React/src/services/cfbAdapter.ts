@@ -1,6 +1,6 @@
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
-import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeOverWins, getCfbRequiredPicks, isGameLive } from '../utils/gameHelpers';
+import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeAwayCovers, computeOverWins, getCfbRequiredPicks, isGameLive } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
@@ -101,6 +101,7 @@ function buildGamesFromEspn(
       gameStatus: status,
       gameTime: sp.gameTime,
       homeCovers: computeHomeCovers(status, sp.homeTeamSpread, hs, as_),
+      awayCovers: computeAwayCovers(status, sp.awayTeamSpread, hs, as_),
       overWins: computeOverWins(status, sp.overUnder, hs, as_),
       spreadPostedAt: sp.dateCreated,
       homeRank: sp.homeTeamRank,

@@ -70,7 +70,8 @@ const mockedGetCfbCurrentSlate = vi.mocked(getCfbCurrentSlate);
 
 
 // BUF home (24-10), spread -7: homeCovers = 24+(-7)=17 > 10 ✓ (BUF covers → green)
-// MIA away: !homeCovers → red; Over at 47.5: 24+10=34 < 47.5 → Under wins
+// MIA away, spread +7 (mirror of -7 in this default fixture): awayCovers = 10+7=17 > 24 is false
+// → red. Over at 47.5: 24+10=34 < 47.5 → Under wins
 const SPREAD_RESPONSES = {
   BUF: createSpreadResponse('BUF', -7, 47.5, 47.5),
   MIA: createSpreadResponse('MIA', 7, 47.5, 47.5),
@@ -281,6 +282,25 @@ describe('ScoresPage', () => {
     await setupDefaults({ picks, gameStarted: true });
     const { getByTestId } = await renderPage();
     expect(getByTestId('badge-MIA-spread')).toHaveAttribute('data-tone', 'error');
+  });
+
+  // frizat: reported live bug (CFB Scores page, UTEP @ OU final 0-51) — the away team backdoor
+  // covered its own teased spread but showed a loss icon anyway. This league's juice is applied
+  // independently to each team's spread (SpreadCalculator.GetSpread), so home/away spreads aren't
+  // mirror images once juice is nonzero — an away pick can cover its OWN line even when the home
+  // team also covers its own line. Deriving away's result as `!homeCovers` gets this backwards.
+  it('spread badge is success for an away pick that backdoor-covers its own teased spread, even though the home team also covers (asymmetric juiced spreads)', async () => {
+    // BUF (home) -7, wins 24-10: 24-7=17 > 10 → BUF covers.
+    // MIA (away) +20 (a teased line, NOT the mirror of -7), loses 10-24: 10+20=30 > 24 → MIA ALSO
+    // covers its own line. If away were derived as !homeCovers, this would wrongly show 'error'.
+    const picks = [createPick({ team: 'MIA', userName: 'OtherUser', userId: '456' })];
+    await setupDefaults({ picks, gameStarted: true });
+    mockedSpreadBatch.mockResolvedValue({
+      responses: { ...SPREAD_RESPONSES, MIA: createSpreadResponse('MIA', 20, 47.5, 47.5) },
+    });
+    const { getByTestId } = await renderPage();
+    expect(getByTestId('badge-BUF-spread')).toHaveAttribute('data-tone', 'success');
+    expect(getByTestId('badge-MIA-spread')).toHaveAttribute('data-tone', 'success');
   });
 
   it('current user picks always show info badge regardless of result', async () => {

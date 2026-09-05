@@ -253,14 +253,36 @@ export function getPickLabel(pickType: PickType) {
  * hasn't started or spread data isn't available.
  * Works for final, in-progress, and halftime.
  */
+// This league's spread is "teased" (juice added per-team, see SpreadCalculator.GetSpread on the
+// backend) — home/away spreads are NOT mirror images of each other once juice is nonzero, so one
+// side's cover can't be derived by negating the other's. Each must be computed independently from
+// its own spread, sharing this one guard/formula so they can't drift apart.
+function computeCovers(
+  status: GameStatusValue,
+  teamSpread: number | null,
+  teamScore: number | null,
+  opponentScore: number | null,
+): boolean | null {
+  if (!isGameDecided(status) || teamSpread == null || teamScore == null || opponentScore == null) return null;
+  return (teamScore + teamSpread) > opponentScore;
+}
+
 export function computeHomeCovers(
   status: GameStatusValue,
   homeSpread: number | null,
   homeScore: number | null,
   awayScore: number | null,
 ): boolean | null {
-  if (!isGameDecided(status) || homeSpread == null || homeScore == null || awayScore == null) return null;
-  return (homeScore + homeSpread) > awayScore;
+  return computeCovers(status, homeSpread, homeScore, awayScore);
+}
+
+export function computeAwayCovers(
+  status: GameStatusValue,
+  awaySpread: number | null,
+  homeScore: number | null,
+  awayScore: number | null,
+): boolean | null {
+  return computeCovers(status, awaySpread, awayScore, homeScore);
 }
 
 /**
