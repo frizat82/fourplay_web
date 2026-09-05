@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using System.Security.Claims;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -564,6 +565,283 @@ public class AuthControllerTests
 
         Assert.IsType<OkObjectResult>(result.Result);
         // New AuthToken cookie must be set
+        var authCookie = controller.HttpContext.Response.Headers["Set-Cookie"]
+            .FirstOrDefault(h => h is not null && h.StartsWith("AuthToken="));
+        Assert.NotNull(authCookie);
+        Assert.Contains("brand.new.jwt", authCookie);
+    }
+
+    // ── ChangeUsername — mirrors ChangePassword, plus an explicit current-password
+    // check up front (SetUserNameAsync has no password parameter of its own, unlike
+    // ChangePasswordAsync) since this changes the login credential itself. ──────
+
+    // /code-review: Identity's PasswordHasher.VerifyHashedPassword throws
+    // ArgumentNullException on a null provided password — CheckPasswordAsync must never
+    // be called with an unvalidated CurrentPassword.
+    [Fact]
+    public async Task ChangeUsername_NullCurrentPassword_ReturnsBadRequest_NeverCallsCheckPassword()
+    {
+        const string userId = "user-99";
+        var user = BuildUser(id: userId);
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+
+        var controller = BuildController(userManager: userManager, principal: BuildPrincipal(userId));
+
+        var result = await controller.ChangeUsername(new ChangeUsername
+        {
+            CurrentPassword = null!,
+            NewUsername = "newname",
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await userManager.DidNotReceiveWithAnyArgs().CheckPasswordAsync(default!, default!);
+    }
+
+    // /code-review: re-submitting the current username unchanged must not revoke sessions on
+    // other devices — verified via CheckPasswordAsync/SetUserNameAsync never even being called.
+    [Fact]
+    public async Task ChangeUsername_SameAsCurrentUsername_ReturnsOk_DoesNotRotateTokens()
+    {
+        const string userId = "user-99";
+        var user = BuildUser(id: userId, userName: "testuser");
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+
+        var refreshService = Substitute.For<IRefreshTokenService>();
+        var controller = BuildController(
+            userManager: userManager,
+            refreshTokenService: refreshService,
+            principal: BuildPrincipal(userId));
+
+        // Case-insensitive re-submission, exercising the OrdinalIgnoreCase comparison too.
+        var result = await controller.ChangeUsername(new ChangeUsername
+        {
+            CurrentPassword = "Correct!1",
+            NewUsername = "TestUser",
+        });
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        await userManager.DidNotReceiveWithAnyArgs().CheckPasswordAsync(default!, default!);
+        await userManager.DidNotReceiveWithAnyArgs().SetUserNameAsync(default!, default!);
+        await refreshService.DidNotReceiveWithAnyArgs().RevokeAllUserTokensAsync(default!);
+    }
+
+    // /code-review: SetUserNameAsync's app-level uniqueness check isn't atomic with the DB
+    // write — a genuine race can still hit the unique index and throw DbUpdateException.
+    // Must produce the same friendly "already taken" 400 as the non-racy duplicate path,
+    // not an unhandled 500 (mirrors DeleteUser's existing DbUpdateException handling).
+    [Fact]
+    public async Task ChangeUsername_ConcurrentDuplicateHitsDbConstraint_ReturnsBadRequest_NotUnhandled500()
+    {
+        const string userId = "user-99";
+        var user = BuildUser(id: userId);
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+        userManager.CheckPasswordAsync(user, Arg.Any<string>()).Returns(true);
+        userManager.SetUserNameAsync(user, "taken")
+                   .ThrowsAsync(new DbUpdateException("duplicate key value violates unique constraint"));
+
+        var controller = BuildController(userManager: userManager, principal: BuildPrincipal(userId));
+
+        var result = await controller.ChangeUsername(new ChangeUsername
+        {
+            CurrentPassword = "Correct!1",
+            NewUsername = "taken",
+        });
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("already taken", badRequest.Value!.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    // /code-review: leading/trailing whitespace passes IsNullOrWhiteSpace but produces a
+    // confusing stored username the user must retype exactly to log in with.
+    [Fact]
+    public async Task ChangeUsername_Success_TrimsWhitespaceFromNewUsername()
+    {
+        const string userId = "user-99";
+        var user = BuildUser(id: userId);
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+        userManager.CheckPasswordAsync(user, Arg.Any<string>()).Returns(true);
+        userManager.SetUserNameAsync(user, "newname").Returns(IdentityResult.Success);
+
+        var controller = BuildController(userManager: userManager, principal: BuildPrincipal(userId));
+
+        await controller.ChangeUsername(new ChangeUsername
+        {
+            CurrentPassword = "Correct!1",
+            NewUsername = "  newname  ",
+        });
+
+        await userManager.Received(1).SetUserNameAsync(user, "newname");
+    }
+
+    [Fact]
+    public void ChangeUsername_HasRateLimitingAttribute()
+    {
+        var method = typeof(AuthController).GetMethod("ChangeUsername");
+        Assert.NotNull(method);
+        var attr = method!.GetCustomAttributes(
+            typeof(Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute), inherit: false)
+            .Cast<Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>()
+            .SingleOrDefault();
+        Assert.NotNull(attr);
+        Assert.Equal("auth", attr!.PolicyName);
+    }
+
+    // /code-review: ChangePassword has the identical gap (CheckPasswordAsync-equivalent —
+    // ChangePasswordAsync's own internal verification — has no rate limit or lockout, unlike
+    // Login), so it gets the same fix for consistency, not just the new endpoint.
+    [Fact]
+    public void ChangePassword_HasRateLimitingAttribute()
+    {
+        var method = typeof(AuthController).GetMethod("ChangePassword");
+        Assert.NotNull(method);
+        var attr = method!.GetCustomAttributes(
+            typeof(Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute), inherit: false)
+            .Cast<Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>()
+            .SingleOrDefault();
+        Assert.NotNull(attr);
+        Assert.Equal("auth", attr!.PolicyName);
+    }
+
+    [Fact]
+    public async Task ChangeUsername_MissingUserIdClaim_ReturnsBadRequest()
+    {
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
+
+        var emptyPrincipal = new ClaimsPrincipal(new ClaimsIdentity());
+        var controller = BuildController(userManager: userManager, principal: emptyPrincipal);
+
+        var result = await controller.ChangeUsername(new ChangeUsername
+        {
+            CurrentPassword = "Old!1",
+            NewUsername = "newname",
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task ChangeUsername_WrongCurrentPassword_ReturnsBadRequest_NeverCallsSetUserName()
+    {
+        const string userId = "user-99";
+        var user = BuildUser(id: userId);
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+        userManager.CheckPasswordAsync(user, Arg.Any<string>()).Returns(false);
+
+        var controller = BuildController(userManager: userManager, principal: BuildPrincipal(userId));
+
+        var result = await controller.ChangeUsername(new ChangeUsername
+        {
+            CurrentPassword = "WrongPassword!1",
+            NewUsername = "newname",
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await userManager.DidNotReceiveWithAnyArgs().SetUserNameAsync(default!, default!);
+    }
+
+    [Fact]
+    public async Task ChangeUsername_DuplicateUsername_ReturnsBadRequestWithIdentityErrorMessage()
+    {
+        const string userId = "user-99";
+        var user = BuildUser(id: userId);
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+        userManager.CheckPasswordAsync(user, Arg.Any<string>()).Returns(true);
+        userManager.SetUserNameAsync(user, "taken")
+                   .Returns(IdentityResult.Failed(new IdentityError
+                   {
+                       Code = "DuplicateUserName",
+                       Description = "Username 'taken' is already taken.",
+                   }));
+
+        var controller = BuildController(userManager: userManager, principal: BuildPrincipal(userId));
+
+        var result = await controller.ChangeUsername(new ChangeUsername
+        {
+            CurrentPassword = "Correct!1",
+            NewUsername = "taken",
+        });
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("already taken", badRequest.Value!.ToString());
+    }
+
+    [Fact]
+    public async Task ChangeUsername_Success_RevokesAllUserTokens()
+    {
+        const string userId = "user-99";
+        var user = BuildUser(id: userId);
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+        userManager.CheckPasswordAsync(user, Arg.Any<string>()).Returns(true);
+        userManager.SetUserNameAsync(user, "newname").Returns(IdentityResult.Success);
+
+        var refreshService = Substitute.For<IRefreshTokenService>();
+        refreshService.IssueTokenAsync(user, Arg.Any<TimeSpan>())
+                      .Returns(new FourPlayWebApp.Server.Models.Identity.RefreshToken
+                      {
+                          Token = "new-refresh", UserId = userId,
+                          Expires = DateTimeOffset.UtcNow.AddDays(14)
+                      });
+
+        var jwtService = Substitute.For<IJwtTokenService>();
+        jwtService.GenerateAccessTokenAsync(user, Arg.Any<bool>())
+                  .Returns(("new.jwt", DateTime.UtcNow.AddHours(1)));
+
+        var controller = BuildController(
+            userManager: userManager,
+            refreshTokenService: refreshService,
+            jwtTokenService: jwtService,
+            principal: BuildPrincipal(userId));
+
+        await controller.ChangeUsername(new ChangeUsername
+        {
+            CurrentPassword = "Correct!1", NewUsername = "newname"
+        });
+
+        await refreshService.Received(1).RevokeAllUserTokensAsync(userId);
+    }
+
+    [Fact]
+    public async Task ChangeUsername_Success_ReissuesNewTokenSoCallerStaysLoggedIn()
+    {
+        const string userId = "user-99";
+        var user = BuildUser(id: userId);
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+        userManager.CheckPasswordAsync(user, Arg.Any<string>()).Returns(true);
+        userManager.SetUserNameAsync(user, "newname").Returns(IdentityResult.Success);
+
+        var fakeRefresh = new FourPlayWebApp.Server.Models.Identity.RefreshToken
+        {
+            Token = "brand-new-refresh", UserId = userId,
+            Expires = DateTimeOffset.UtcNow.AddDays(14)
+        };
+        var refreshService = Substitute.For<IRefreshTokenService>();
+        refreshService.IssueTokenAsync(user, Arg.Any<TimeSpan>()).Returns(fakeRefresh);
+
+        var jwtService = Substitute.For<IJwtTokenService>();
+        jwtService.GenerateAccessTokenAsync(user, Arg.Any<bool>())
+                  .Returns(("brand.new.jwt", DateTime.UtcNow.AddHours(1)));
+
+        var controller = BuildController(
+            userManager: userManager,
+            refreshTokenService: refreshService,
+            jwtTokenService: jwtService,
+            principal: BuildPrincipal(userId));
+
+        var result = await controller.ChangeUsername(new ChangeUsername
+        {
+            CurrentPassword = "Correct!1", NewUsername = "newname"
+        });
+
+        Assert.IsType<OkObjectResult>(result.Result);
         var authCookie = controller.HttpContext.Response.Headers["Set-Cookie"]
             .FirstOrDefault(h => h is not null && h.StartsWith("AuthToken="));
         Assert.NotNull(authCookie);
