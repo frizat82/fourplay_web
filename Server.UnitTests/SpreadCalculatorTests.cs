@@ -381,5 +381,35 @@ namespace FourPlayWebApp.Server.UnitTests
             // Wins by 7 -> covers the juiced -6 line (would only push against the raw -7 line).
             Assert.True(calculator.DidUserWinPick("ORE", 28, 21, PickType.Spread));
         }
+
+        // frizat: sibling regression to the home/away covers bug (ScoresPage derived a team's
+        // spread result by negating the other side's) — Over/Under has the exact same shape.
+        // GetOverUnder returns a DIFFERENT number per pick type once juice is nonzero (raw - juice
+        // for Over, raw + juice for Under), so a frontend that collapses these into one value and
+        // derives Under by negating Over gets it wrong. These tests pin the raw arithmetic; the
+        // no-negation-shortcut expectation itself is asserted below in DidUserWinPick_*.
+        [Fact]
+        public void GetOverUnder_WithNonzeroJuice_OverAndUnderAreDifferentValues()
+        {
+            // ORE/OSU raw O/U is 50.5. With juice 3: Over threshold = 47.5, Under threshold = 53.5.
+            var calculator = new SpreadCalculator(CreateMockCfbSpreads(), juice: 3.0);
+
+            Assert.Equal(47.5, calculator.GetOverUnder("ORE", PickType.Over));
+            Assert.Equal(53.5, calculator.GetOverUnder("ORE", PickType.Under));
+        }
+
+        [Fact]
+        public void DidUserWinPick_NonzeroJuice_BothOverAndUnderCanWinTheSameGame()
+        {
+            // Raw O/U 50.5, juice 3 -> Over threshold 47.5, Under threshold 53.5. A total of 50
+            // falls strictly between them: Over wins (50 > 47.5) AND Under wins (50 < 53.5) at the
+            // same time — juice can make both sides of a game "win" simultaneously, exactly like
+            // the home/away backdoor-cover case. Negating one pick type's result to get the other's
+            // would wrongly report exactly one of these as a loss.
+            var calculator = new SpreadCalculator(CreateMockCfbSpreads(), juice: 3.0);
+
+            Assert.True(calculator.DidUserWinPick("ORE", 30, 20, PickType.Over));
+            Assert.True(calculator.DidUserWinPick("ORE", 30, 20, PickType.Under));
+        }
     }
 }

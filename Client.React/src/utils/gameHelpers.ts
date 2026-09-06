@@ -253,27 +253,64 @@ export function getPickLabel(pickType: PickType) {
  * hasn't started or spread data isn't available.
  * Works for final, in-progress, and halftime.
  */
+// This league's spread is "teased" (juice added per-team, see SpreadCalculator.GetSpread on the
+// backend) — home/away spreads are NOT mirror images of each other once juice is nonzero, so one
+// side's cover can't be derived by negating the other's. Each must be computed independently from
+// its own spread, sharing this one guard/formula so they can't drift apart.
+function computeCovers(
+  status: GameStatusValue,
+  teamSpread: number | null,
+  teamScore: number | null,
+  opponentScore: number | null,
+): boolean | null {
+  if (!isGameDecided(status) || teamSpread == null || teamScore == null || opponentScore == null) return null;
+  return (teamScore + teamSpread) > opponentScore;
+}
+
 export function computeHomeCovers(
   status: GameStatusValue,
   homeSpread: number | null,
   homeScore: number | null,
   awayScore: number | null,
 ): boolean | null {
-  if (!isGameDecided(status) || homeSpread == null || homeScore == null || awayScore == null) return null;
-  return (homeScore + homeSpread) > awayScore;
+  return computeCovers(status, homeSpread, homeScore, awayScore);
 }
 
-/**
- * Returns whether the total is over the over/under line, or null if unavailable.
- */
-export function computeOverWins(
+export function computeAwayCovers(
   status: GameStatusValue,
-  overUnder: number | null,
+  awaySpread: number | null,
   homeScore: number | null,
   awayScore: number | null,
 ): boolean | null {
-  if (!isGameDecided(status) || overUnder == null || homeScore == null || awayScore == null) return null;
-  return (homeScore + awayScore) > overUnder;
+  return computeCovers(status, awaySpread, awayScore, homeScore);
+}
+
+/**
+ * Returns whether the total is over the Over threshold, or null if unavailable.
+ * The league's juice is applied independently per pick type (SpreadCalculator.GetOverUnder on the
+ * backend: Over threshold = rawTotal - juice, Under threshold = rawTotal + juice) — these are NOT
+ * the same number once juice is nonzero, so computeUnderWins below must never be derived by
+ * negating this result (same reasoning as computeHomeCovers/computeAwayCovers above).
+ */
+export function computeOverWins(
+  status: GameStatusValue,
+  overThreshold: number | null,
+  homeScore: number | null,
+  awayScore: number | null,
+): boolean | null {
+  if (!isGameDecided(status) || overThreshold == null || homeScore == null || awayScore == null) return null;
+  return (homeScore + awayScore) > overThreshold;
+}
+
+/** Returns whether the total is under the Under threshold, or null if unavailable. */
+export function computeUnderWins(
+  status: GameStatusValue,
+  underThreshold: number | null,
+  homeScore: number | null,
+  awayScore: number | null,
+): boolean | null {
+  if (!isGameDecided(status) || underThreshold == null || homeScore == null || awayScore == null) return null;
+  return (homeScore + awayScore) < underThreshold;
 }
 
 export function isHomeAway(value: HomeAway, expected: 'home' | 'away') {

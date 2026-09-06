@@ -87,18 +87,25 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         }
 
         var calculator = new SpreadCalculator(eligibleSpreads, juice);
-        var dtos = eligibleSpreads.Select(s => new CfbSpreadDto {
-            Id             = s.Id,
-            CfbSlateId     = s.CfbSlateId,
-            HomeTeam       = s.HomeTeam,
-            AwayTeam       = s.AwayTeam,
-            HomeTeamSpread = calculator.GetSpread(s.HomeTeam) ?? s.HomeTeamSpread,
-            AwayTeamSpread = calculator.GetSpread(s.AwayTeam) ?? s.AwayTeamSpread,
-            OverUnder      = s.OverUnder,
-            GameTime       = s.GameTime,
-            DateCreated    = s.DateCreated,
-            HomeTeamRank   = CfbSlateHelpers.RankOf(latestRankByTeam.GetValueOrDefault(s.HomeTeam, 99)),
-            AwayTeamRank   = CfbSlateHelpers.RankOf(latestRankByTeam.GetValueOrDefault(s.AwayTeam, 99)),
+        var dtos = eligibleSpreads.Select(s => {
+            // One raw lookup instead of two GetOverUnder(..., Over)/GetOverUnder(..., Under)
+            // calls — both would otherwise re-scan the same odds row for the same team abbr,
+            // differing only in the trailing +/- juice already known here.
+            var rawOverUnder = calculator.GetOverUnderFromAbbreviation(s.HomeTeam);
+            return new CfbSpreadDto {
+                Id             = s.Id,
+                CfbSlateId     = s.CfbSlateId,
+                HomeTeam       = s.HomeTeam,
+                AwayTeam       = s.AwayTeam,
+                HomeTeamSpread = calculator.GetSpread(s.HomeTeam) ?? s.HomeTeamSpread,
+                AwayTeamSpread = calculator.GetSpread(s.AwayTeam) ?? s.AwayTeamSpread,
+                Over           = rawOverUnder - juice ?? s.OverUnder,
+                Under          = rawOverUnder + juice ?? s.OverUnder,
+                GameTime       = s.GameTime,
+                DateCreated    = s.DateCreated,
+                HomeTeamRank   = CfbSlateHelpers.RankOf(latestRankByTeam.GetValueOrDefault(s.HomeTeam, 99)),
+                AwayTeamRank   = CfbSlateHelpers.RankOf(latestRankByTeam.GetValueOrDefault(s.AwayTeam, 99)),
+            };
         });
         return Ok(dtos);
     }

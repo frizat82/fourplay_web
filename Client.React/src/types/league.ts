@@ -30,7 +30,10 @@ export interface CfbSpreadDto {
   awayTeam: string;
   homeTeamSpread: number;
   awayTeamSpread: number;
-  overUnder: number;
+  // Over and Under are independently juiced and NOT the same number once juice is nonzero —
+  // same reasoning as homeTeamSpread/awayTeamSpread above.
+  over: number;
+  under: number;
   gameTime: string;
   dateCreated: string;
   // AP Top 25 rank (1-25), null when unranked. NFL has no equivalent (no polls).
