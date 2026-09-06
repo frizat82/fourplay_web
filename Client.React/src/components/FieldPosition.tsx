@@ -12,13 +12,18 @@ export default function FieldPosition({ situation }: FieldPositionProps) {
   if (!situation) return <Box sx={{ mt: 1, height: 24 + 4 + 20, mx: 1 }} />;
 
   const { yardLine, isHomePossession, isRedZone, downDistanceText } = situation;
-  const fieldColor = isRedZone ? 'error.dark' : 'success.dark';
   // yardLine is a fixed coordinate measured from the HOME team's own goal, regardless of which
   // team currently has the ball (confirmed against a live game: away team with the ball at their
   // own 33 rendered as yardLine=67, i.e. 100 minus their distance from the home team's goal). The
   // home team is always drawn on the right in this layout, so this conversion is unconditional —
   // isHomePossession only decides the arrow's direction, never the position.
   const ballPositionPercent = 100 - yardLine;
+  // The actual red zone is the 20 yards nearest whichever goal the ball is closest to — not the
+  // whole field. yardLine<=20 is near the home goal (right side, local% 80-100); yardLine>=80 is
+  // near the away goal (left side, local% 0-20). These are mutually exclusive by construction. If
+  // isRedZone is true but yardLine falls in neither range (inconsistent upstream data), show no
+  // stripe rather than guessing a side.
+  const redZoneStripeLeft = yardLine <= 20 ? 80 : yardLine >= 80 ? 0 : null;
 
   return (
     <Box sx={{ mt: 1 }}>
@@ -31,7 +36,21 @@ export default function FieldPosition({ situation }: FieldPositionProps) {
         <Box sx={{ width: '8%', bgcolor: 'success.main', flexShrink: 0 }} />
 
         {/* Playing field */}
-        <Box sx={{ flex: 1, position: 'relative', bgcolor: fieldColor }}>
+        <Box sx={{ flex: 1, position: 'relative', bgcolor: 'success.dark' }}>
+          {/* Red zone stripe — behind the yard markers/ball marker so it doesn't obscure them */}
+          {isRedZone && redZoneStripeLeft !== null && (
+            <Box
+              data-testid="red-zone-stripe"
+              sx={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: `${redZoneStripeLeft}%`,
+                width: '20%',
+                bgcolor: 'error.dark',
+              }}
+            />
+          )}
           {/* Yard markers */}
           {YARD_MARKERS.map(yard => (
             <Box
