@@ -26,9 +26,12 @@ const slate: CfbSlateDto = {
   id: 10, season: 2026, slateNumber: 8, label: 'Week 8',
   slateType: 'RegularSeason', startDate: '2026-10-20', endDate: '2026-10-26',
 };
+// Over/Under are deliberately asymmetric (not a mirror pair) — the backend juices each
+// independently (SpreadCalculator.GetOverUnder), so this fixture must not use equal values,
+// otherwise a regression that collapses them back into one shared number would go unnoticed.
 const spread: CfbSpreadDto = {
   id: 1, cfbSlateId: 10, homeTeam: 'MICH', awayTeam: 'PSU',
-  homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5,
+  homeTeamSpread: -3.5, awayTeamSpread: 3.5, over: 40.5, under: 48.5,
   gameTime: '2025-10-11T20:00:00Z', dateCreated: '2025-10-09T14:00:00Z',
   homeTeamRank: 5, awayTeamRank: null,
 };
@@ -82,7 +85,8 @@ describe('cfbAdapter', () => {
       expect(game.awayTeam).toBe('PSU');
       expect(game.homeSpread).toBe(-3.5);
       expect(game.awaySpread).toBe(3.5);
-      expect(game.overUnder).toBe(44.5);
+      expect(game.overThreshold).toBe(40.5);
+      expect(game.underThreshold).toBe(48.5);
       expect(game.homeScore).toBe(27);
       expect(game.awayScore).toBe(13);
       expect(game.gameStatus).toBe('final');

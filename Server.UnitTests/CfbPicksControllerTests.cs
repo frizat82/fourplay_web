@@ -54,10 +54,10 @@ public class CfbPicksControllerTests
 
     // frizat: a team plays at most one game per slate, so (CfbSlateId, HomeTeam) — not an ESPN id
     // — is what uniquely identifies a game, mirroring NflSpreads' (Season, NflWeek, HomeTeam).
-    private static CfbSpreads MakeSpread(DateTimeOffset gameTime, string home = "ORE", string away = "OSU", bool isLeagueEligible = true) => new()
+    private static CfbSpreads MakeSpread(DateTimeOffset gameTime, string home = "ORE", string away = "OSU", bool isLeagueEligible = true, double overUnder = 0) => new()
     {
         CfbSlateId = 1, HomeTeam = home, AwayTeam = away, GameTime = gameTime,
-        IsLeagueEligible = isLeagueEligible,
+        IsLeagueEligible = isLeagueEligible, OverUnder = overUnder,
     };
 
     // /code-review + live CI failure: this endpoint used to return the raw CfbPicks entity
@@ -383,6 +383,29 @@ public class CfbPicksControllerTests
         // MakeSpread leaves HomeTeamSpread/AwayTeamSpread at their default (0) raw values.
         Assert.Equal(3, spread.HomeTeamSpread);
         Assert.Equal(3, spread.AwayTeamSpread);
+    }
+
+    // frizat: sibling bug to the spread-juice one above, found while auditing for other test gaps
+    // after the ScoresPage home/away-covers negation bug — this endpoint juiced HomeTeamSpread/
+    // AwayTeamSpread (lines above) but passed OverUnder straight through raw/unjuiced, unlike NFL's
+    // GetSpreadBatch which juices both Over and Under independently via SpreadCalculator.GetOverUnder.
+    [Fact]
+    public async Task GetSpreads_AppliesLeagueJuiceToOverAndUnderIndependently()
+    {
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
+            MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU", overUnder: 50.5),
+        ]);
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(slateNumber: 1));
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 3 });
+
+        var result = await BuildController().GetSpreads(1, 1);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var returned = Assert.IsAssignableFrom<IEnumerable<CfbSpreadDto>>(ok.Value).ToList();
+        var spread = Assert.Single(returned);
+        // Raw O/U 50.5, juice 3 -> Over threshold 47.5, Under threshold 53.5 (NOT the same number).
+        Assert.Equal(47.5, spread.Over);
+        Assert.Equal(53.5, spread.Under);
     }
 
     [Fact]
