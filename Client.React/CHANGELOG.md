@@ -6,6 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-09-06
 
+- Fixed: the live field position ball marker was still on the wrong side whenever the away team had the ball (a follow-up correction to the same-day fix below) — the field-position yard line is a fixed coordinate measured from the home team's own goal regardless of possession, not from whichever team currently has the ball
 - Fixed: live field position ball marker rendered on the wrong side of the field whenever the home team had possession, since the home team's own goal is on the right of the on-screen bar but the marker position was never mirrored for it
 
 ## 2026-09-05
