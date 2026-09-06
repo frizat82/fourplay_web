@@ -51,7 +51,11 @@ function cfbSpread(
     awayTeam,
     homeTeamSpread,
     awayTeamSpread: -homeTeamSpread,
-    overUnder,
+    // Over/Under are independently juiced and not necessarily equal (see CfbSpreadDto) — this
+    // mock helper only takes one caller-supplied number, so both fields use it (a symmetric,
+    // zero-juice case), same as most spreads in this fixture already assume awayTeamSpread=-homeTeamSpread.
+    over: overUnder,
+    under: overUnder,
     gameTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
     dateCreated: new Date().toISOString(),
     homeTeamRank,

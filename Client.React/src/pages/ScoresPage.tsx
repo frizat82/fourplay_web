@@ -39,8 +39,9 @@ function teamWins(game: GameView, team: string, pickType: PickType): boolean | n
     // never from negating homeCovers.
     return team === game.homeTeam ? (game.homeCovers ?? null) : (game.awayCovers ?? null);
   }
-  if (game.overWins == null) return null;
-  return pickType === 'Over' ? game.overWins : !game.overWins;
+  // Over/Under thresholds are juiced independently (see computeOverWins/computeUnderWins) — the
+  // Under result must come from its own computed value, never from negating overWins.
+  return pickType === 'Over' ? (game.overWins ?? null) : (game.underWins ?? null);
 }
 
 function badgeColor(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): 'success' | 'error' | 'info' | 'default' {
@@ -188,8 +189,9 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     for (const game of (data?.games ?? [])) {
       if (game.homeCovers == null || game.awayCovers == null) continue; // not final
       const ov = game.overWins ?? false;
-      result[game.homeTeam] = { isWinner: game.homeCovers, isOverWinner: ov, isUnderWinner: !ov, spread: game.homeSpread, over: game.overUnder, under: game.overUnder };
-      result[game.awayTeam] = { isWinner: game.awayCovers ?? false, isOverWinner: ov, isUnderWinner: !ov, spread: game.awaySpread, over: game.overUnder, under: game.overUnder };
+      const uv = game.underWins ?? false;
+      result[game.homeTeam] = { isWinner: game.homeCovers, isOverWinner: ov, isUnderWinner: uv, spread: game.homeSpread, over: game.overThreshold, under: game.underThreshold };
+      result[game.awayTeam] = { isWinner: game.awayCovers ?? false, isOverWinner: ov, isUnderWinner: uv, spread: game.awaySpread, over: game.overThreshold, under: game.underThreshold };
     }
     return result;
   }, [data?.games]);
@@ -315,6 +317,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                 const hc = game.homeCovers ?? null;
                 const ac = game.awayCovers ?? null;
                 const ov = game.overWins ?? null;
+                const uv = game.underWins ?? null;
 
                 return (
                   <Grid size={{ xs: 12, md: 6, lg: 4 }} key={game.id}>
@@ -393,7 +396,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                       </Stack>
 
                       {/* Postseason O/U row */}
-                      {isPostSeason && game.overUnder != null && (
+                      {isPostSeason && game.overThreshold != null && game.underThreshold != null && (
                         <Stack data-testid="over-under-controls" direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2.5, px: 1, gap: 1 }}>
                           <Badge data-testid={`badge-${game.homeTeam}-over`} color={didUserPick(game.id, game.homeTeam, 'Over') ? 'info' : badgeColor(game, game.homeTeam, 'Over')} overlap="circular"
                             badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Over')}
@@ -410,13 +413,16 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                               state (same redundant-signal issue as the shield icon this page dropped
                               elsewhere). The arrows are just Over/Under labels now; the badges are the signal. */}
                           <ArrowCircleUpIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
-                          <Typography variant="subtitle1" sx={{ minWidth: 36, textAlign: 'center' }}>{game.overUnder}</Typography>
+                          {/* Over and Under are independently juiced and not necessarily the same
+                              number (see gameHelpers.ts's computeOverWins/computeUnderWins) — show
+                              both rather than a single shared value. */}
+                          <Typography variant="subtitle1" sx={{ minWidth: 56, textAlign: 'center' }}>{game.overThreshold}/{game.underThreshold}</Typography>
                           <ArrowCircleDownIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
                           <Badge data-testid={`badge-${game.homeTeam}-under`} color={didUserPick(game.id, game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
                             badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Under')}
                             invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}>
                             <IconButton size="small"
-                              color={(isFinal || isLive) ? (!ov ? 'success' : ov === true ? 'error' : 'inherit') : 'inherit'}
+                              color={(isFinal || isLive) ? (uv ? 'success' : uv === false ? 'error' : 'inherit') : 'inherit'}
                               disabled={!isFinal && !isLive}
                               onClick={() => showDialog(game, game.homeTeam, 'Under')}>
                               <PersonIcon />

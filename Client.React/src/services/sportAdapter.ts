@@ -82,7 +82,10 @@ export interface GameView {
   awayTeam: string;
   homeSpread: number | null;
   awaySpread: number | null;
-  overUnder: number | null;
+  // Over and Under are independently juiced (see gameHelpers.ts's computeOverWins/
+  // computeUnderWins) and are NOT the same number once juice is nonzero.
+  overThreshold: number | null;
+  underThreshold: number | null;
   homeScore: number | null;
   awayScore: number | null;
   gameStatus: GameStatusValue;
@@ -97,6 +100,7 @@ export interface GameView {
   homeCovers?: boolean | null;  // null = not final / no odds
   awayCovers?: boolean | null;  // computed independently — NOT !homeCovers (teased spreads aren't mirror images)
   overWins?: boolean | null;
+  underWins?: boolean | null;  // computed independently — NOT !overWins (see computeUnderWins)
   /** When the spread was first posted (DateCreated). Undefined where the adapter's spread source
    *  doesn't carry it — NFL's spreadBatch endpoint returns computed, juice-adjusted odds rather
    *  than the raw NflSpreads entity, so it isn't available there today. */
