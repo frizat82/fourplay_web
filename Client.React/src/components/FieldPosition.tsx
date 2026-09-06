@@ -13,10 +13,12 @@ export default function FieldPosition({ situation }: FieldPositionProps) {
 
   const { yardLine, isHomePossession, isRedZone, downDistanceText } = situation;
   const fieldColor = isRedZone ? 'error.dark' : 'success.dark';
-  // yardLine is measured from the possessing team's own goal. The away team is always drawn on
-  // the left and the home team on the right, so a home possession's own goal is on the right —
-  // mirror the position, or the ball renders on the opposite side of the field from reality.
-  const ballPositionPercent = isHomePossession ? 100 - yardLine : yardLine;
+  // yardLine is a fixed coordinate measured from the HOME team's own goal, regardless of which
+  // team currently has the ball (confirmed against a live game: away team with the ball at their
+  // own 33 rendered as yardLine=67, i.e. 100 minus their distance from the home team's goal). The
+  // home team is always drawn on the right in this layout, so this conversion is unconditional —
+  // isHomePossession only decides the arrow's direction, never the position.
+  const ballPositionPercent = 100 - yardLine;
 
   return (
     <Box sx={{ mt: 1 }}>
