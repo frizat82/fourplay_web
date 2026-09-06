@@ -8,6 +8,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 - Added: users can now change their own username from the Account page, without needing to contact an admin
 - Fixed: email subject lines with special characters (e.g. an em-dash) could render as garbled text in the received email
+- Fixed: on the Scores page, an away team that "backdoor covered" its own teased spread (e.g. lost the game outright but by less than its spread) could show a red loss icon instead of green — the away result was being derived by inverting the home team's result, which only works when spreads are mirror images, but this league's tease makes them asymmetric
+- Fixed: postseason Over/Under picks had the same issue as the spread backdoor-cover bug above — the Under result was derived by inverting the Over result, and CFB additionally showed the raw untaxed total instead of the teased one; the Picks page also showed the same single number for both the Over and Under buttons instead of each side's real line
 
 ## 2026-09-04
 

@@ -7,7 +7,10 @@ public class CfbSpreadDto {
     public string         AwayTeam       { get; set; } = string.Empty;
     public double         HomeTeamSpread { get; set; }
     public double         AwayTeamSpread { get; set; }
-    public double         OverUnder      { get; set; }
+    // Over and Under are independently juiced (SpreadCalculator.GetOverUnder) and are NOT the
+    // same number once juice is nonzero — same reasoning as HomeTeamSpread/AwayTeamSpread above.
+    public double         Over           { get; set; }
+    public double         Under          { get; set; }
     public DateTimeOffset GameTime       { get; set; }
     public DateTimeOffset DateCreated    { get; set; }
     // AP Top 25 rank (1-25), null when unranked — read back from CfbRanking by

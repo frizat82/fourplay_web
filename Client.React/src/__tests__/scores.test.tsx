@@ -70,7 +70,8 @@ const mockedGetCfbCurrentSlate = vi.mocked(getCfbCurrentSlate);
 
 
 // BUF home (24-10), spread -7: homeCovers = 24+(-7)=17 > 10 ✓ (BUF covers → green)
-// MIA away: !homeCovers → red; Over at 47.5: 24+10=34 < 47.5 → Under wins
+// MIA away, spread +7 (mirror of -7 in this default fixture): awayCovers = 10+7=17 > 24 is false
+// → red. Over at 47.5: 24+10=34 < 47.5 → Under wins
 const SPREAD_RESPONSES = {
   BUF: createSpreadResponse('BUF', -7, 47.5, 47.5),
   MIA: createSpreadResponse('MIA', 7, 47.5, 47.5),
@@ -203,6 +204,27 @@ describe('ScoresPage', () => {
     expect(screen.getAllByTestId('ArrowCircleDownIcon').length).toBeGreaterThan(0);
   });
 
+  // frizat: found while auditing for other gaps after the home/away covers negation bug — Over/
+  // Under thresholds are juiced independently (SpreadCalculator.GetOverUnder), so they aren't
+  // necessarily the same number. The Under badge used to be derived by negating the Over result
+  // (`!ov`), which broke exactly like the home/away case once the two thresholds diverge.
+  it('shows both Over and Under badges as success when the total falls between two independently juiced thresholds, even though the old negation logic could only show one as a win', async () => {
+    // BUF 24, MIA 10 -> total 34. Over threshold 30 (34>30 -> wins) and Under threshold 40
+    // (34<40 -> ALSO wins) simultaneously — negating Over's result to get Under's would wrongly
+    // report Under as a loss here.
+    await setupDefaults({ week: 1, postSeason: true, gameStarted: true });
+    mockedSpreadBatch.mockResolvedValue({
+      responses: { ...SPREAD_RESPONSES, BUF: createSpreadResponse('BUF', -7, 30, 40) },
+    });
+    const { getByTestId } = await renderPage();
+    // Over/Under badges have no data-tone attribute (unlike the Spread badges) — assert on the
+    // IconButton's own color class instead, same pattern used elsewhere in this file.
+    const overButton = within(getByTestId('badge-BUF-over')).getByRole('button');
+    const underButton = within(getByTestId('badge-BUF-under')).getByRole('button');
+    expect(overButton.className).toMatch(/colorSuccess/);
+    expect(underButton.className).toMatch(/colorSuccess/);
+  });
+
   // frizat: /style-guide audit — each pick-result row encoded win/loss three redundant ways at
   // once: this shield icon (shape AND color both changed), the IconButton's own color, and the
   // Badge's color. Drop the standalone shield icon; the badge/icon-button pair alone is the
@@ -281,6 +303,25 @@ describe('ScoresPage', () => {
     await setupDefaults({ picks, gameStarted: true });
     const { getByTestId } = await renderPage();
     expect(getByTestId('badge-MIA-spread')).toHaveAttribute('data-tone', 'error');
+  });
+
+  // frizat: reported live bug (CFB Scores page, UTEP @ OU final 0-51) — the away team backdoor
+  // covered its own teased spread but showed a loss icon anyway. This league's juice is applied
+  // independently to each team's spread (SpreadCalculator.GetSpread), so home/away spreads aren't
+  // mirror images once juice is nonzero — an away pick can cover its OWN line even when the home
+  // team also covers its own line. Deriving away's result as `!homeCovers` gets this backwards.
+  it('spread badge is success for an away pick that backdoor-covers its own teased spread, even though the home team also covers (asymmetric juiced spreads)', async () => {
+    // BUF (home) -7, wins 24-10: 24-7=17 > 10 → BUF covers.
+    // MIA (away) +20 (a teased line, NOT the mirror of -7), loses 10-24: 10+20=30 > 24 → MIA ALSO
+    // covers its own line. If away were derived as !homeCovers, this would wrongly show 'error'.
+    const picks = [createPick({ team: 'MIA', userName: 'OtherUser', userId: '456' })];
+    await setupDefaults({ picks, gameStarted: true });
+    mockedSpreadBatch.mockResolvedValue({
+      responses: { ...SPREAD_RESPONSES, MIA: createSpreadResponse('MIA', 20, 47.5, 47.5) },
+    });
+    const { getByTestId } = await renderPage();
+    expect(getByTestId('badge-BUF-spread')).toHaveAttribute('data-tone', 'success');
+    expect(getByTestId('badge-MIA-spread')).toHaveAttribute('data-tone', 'success');
   });
 
   it('current user picks always show info badge regardless of result', async () => {
@@ -477,7 +518,7 @@ describe('ScoresPage', () => {
     // cache entries" is that once CFB's OWN query settles, ITS data (MICH/PSU) is what renders,
     // not that NFL's cache entry got clobbered or that a spinner necessarily appears.
     const cfbSlate = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
-    const cfbSpread = { id: 1, cfbSlateId: 1, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, overUnder: 44.5, gameTime: '2025-10-11T20:00:00Z', dateCreated: '2025-10-09T14:00:00Z', homeTeamRank: null, awayTeamRank: null };
+    const cfbSpread = { id: 1, cfbSlateId: 1, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, over: 44.5, under: 44.5, gameTime: '2025-10-11T20:00:00Z', dateCreated: '2025-10-09T14:00:00Z', homeTeamRank: null, awayTeamRank: null };
     mockedGetCfbCurrentSlate.mockResolvedValue(cfbSlate);
     mockedGetCfbSlates.mockResolvedValue([cfbSlate]);
     mockedGetCfbSpreads.mockResolvedValue([cfbSpread]);

@@ -14,7 +14,6 @@ export interface GameCardProps {
   awayTeam: string;
   homeSpread: number | null;
   awaySpread: number | null;
-  overUnder?: number;
   gameTime: string;
   mode: 'pick' | 'score';
   // Score display
@@ -254,8 +253,11 @@ export default function GameCard({
             sx={{ mt: 2, gap: 1 }}
           >
             {renderOverUnderButton('Over', overValue, overPickState, onPickOver)}
+            {/* Over and Under are independently juiced and not necessarily the same number
+                (see gameHelpers.ts's computeOverWins/computeUnderWins) — this used to show only
+                overValue for both sides, misrepresenting the actual Under line to the user. */}
             <Typography variant={spreadValueVariant} sx={spreadValueSx}>
-              {overValue}
+              {overValue}/{underValue}
             </Typography>
             {renderOverUnderButton('Under', underValue, underPickState, onPickUnder)}
           </Stack>
