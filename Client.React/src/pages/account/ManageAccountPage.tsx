@@ -44,9 +44,6 @@ export default function ManageAccountPage() {
           <Button variant="contained" onClick={() => navigate('/account/manage/changeusername')}>
             Change Username
           </Button>
-          <Button variant="outlined" onClick={() => navigate('/account/manage')}>
-            Manage Account
-          </Button>
         </Stack>
       </CardContent>
     </Card>
