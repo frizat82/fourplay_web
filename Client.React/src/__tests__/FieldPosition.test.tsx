@@ -48,6 +48,29 @@ describe('FieldPosition', () => {
     expect(screen.getByTestId('field-position-bar')).toHaveAttribute('data-redzone', 'false');
   });
 
+  it('renders the red zone stripe near the home goal when yardLine is 20 or less', () => {
+    render(<FieldPosition situation={buildSituation({ isRedZone: true, yardLine: 12 })} />);
+    const stripe = screen.getByTestId('red-zone-stripe');
+    expect(stripe).toHaveStyle({ left: '80%', width: '20%' });
+  });
+
+  it('renders the red zone stripe near the away goal when yardLine is 80 or more', () => {
+    render(<FieldPosition situation={buildSituation({ isRedZone: true, yardLine: 88 })} />);
+    const stripe = screen.getByTestId('red-zone-stripe');
+    expect(stripe).toHaveStyle({ left: '0%', width: '20%' });
+  });
+
+  it('does not render a red zone stripe when isRedZone is false', () => {
+    render(<FieldPosition situation={buildSituation({ isRedZone: false, yardLine: 12 })} />);
+    expect(screen.queryByTestId('red-zone-stripe')).toBeNull();
+  });
+
+  it('does not render a red zone stripe when isRedZone is true but yardLine is outside either zone', () => {
+    // Defensive: don't guess a side if upstream data is inconsistent (isRedZone true at midfield).
+    render(<FieldPosition situation={buildSituation({ isRedZone: true, yardLine: 50 })} />);
+    expect(screen.queryByTestId('red-zone-stripe')).toBeNull();
+  });
+
   it('positions the ball marker at 100 - yardLine regardless of home possession', () => {
     // Home team is drawn on the right, so their own goal is the right end zone: a yardLine of 9
     // (9 yards from the home team's own goal) must render near the right edge (91%), not the left.

@@ -584,4 +584,52 @@ describe('ScoresPage', () => {
     await waitFor(() => expect(screen.getByText(/Please select a league/i)).toBeInTheDocument());
     expect(document.querySelectorAll('.MuiSkeleton-root').length).toBe(0);
   });
+
+  describe('red zone card highlight', () => {
+    const setupLiveGame = async (isRedZone: boolean) => {
+      const liveComp = createCompetition({
+        homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10,
+        liveStatus: { name: 'status_in_progress', period: 2, displayClock: '5:00' },
+      });
+      mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(2));
+      mockedGetWeekScores.mockResolvedValue(createScores({
+        week: 2, postSeason: false,
+        events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
+      }));
+      mockedGetLiveGames.mockResolvedValue([{
+        homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10,
+        isCompleted: false, kickoffUtc: new Date().toISOString(),
+        situation: {
+          possessionTeam: 'BUF', isHomePossession: true, yardLine: 12, down: 1, distance: 10,
+          isRedZone, downDistanceText: '1st & 10 at BUF 12',
+        },
+      }]);
+      mockedDoOddsExist.mockResolvedValue(true);
+      mockedGetLeaguePicks.mockResolvedValue([]);
+      mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
+      await renderPage();
+      await waitFor(() => expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0));
+    };
+
+    it('outlines the game card in red when the live game is in the red zone', async () => {
+      await setupLiveGame(true);
+      const card = screen.getByTestId('game-card-BUFvsMIA');
+      expect(card).toHaveAttribute('data-redzone', 'true');
+    });
+
+    it('does not outline the game card when the live game is not in the red zone', async () => {
+      await setupLiveGame(false);
+      const card = screen.getByTestId('game-card-BUFvsMIA');
+      expect(card).toHaveAttribute('data-redzone', 'false');
+    });
+
+    it('does not outline a non-live game even if stale situation data says red zone', async () => {
+      // Final/scheduled games never show a red-zone outline — mirrors the existing isLive guard
+      // already used for rendering FieldPosition itself.
+      await setupDefaults();
+      await renderPage();
+      const card = screen.getByTestId('game-card-BUFvsMIA');
+      expect(card).toHaveAttribute('data-redzone', 'false');
+    });
+  });
 });
