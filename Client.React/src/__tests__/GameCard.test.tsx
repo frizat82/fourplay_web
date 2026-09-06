@@ -17,7 +17,6 @@ const baseProps = {
   awayTeam: 'BUF',
   homeSpread: -3,
   awaySpread: 3,
-  overUnder: 51.5,
   gameTime: '2023-10-22T17:00:00Z',
   mode: 'pick' as const,
 };
@@ -98,6 +97,26 @@ describe('GameCard', () => {
     );
     expect(screen.getByRole('button', { name: /^over$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^under$/i })).toBeInTheDocument();
+  });
+
+  // frizat: reported as part of the CFB Scores away-cover-negation audit — Over/Under thresholds
+  // are juiced independently (SpreadCalculator.GetOverUnder) and are NOT the same number once
+  // juice is nonzero. This card used to display a single shared value between the two buttons
+  // (always overValue), misrepresenting the actual Under line before a user even picks.
+  it('shows the Over and Under lines separately when they are not the same value', () => {
+    render(
+      <GameCard
+        {...baseProps}
+        isPostSeason={true}
+        overValue={40.5}
+        underValue={48.5}
+        overPickState="none"
+        underPickState="none"
+        onPickOver={vi.fn()}
+        onPickUnder={vi.fn()}
+      />
+    );
+    expect(screen.getByText('40.5/48.5')).toBeInTheDocument();
   });
 
   it('does not render O/U panel when isPostSeason=false', () => {

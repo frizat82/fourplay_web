@@ -11,7 +11,7 @@ import {
   getWeekFromEspnWeek, getEspnRequiredPicks,
   isPostSeason as isPostSeasonHelper,
   isGameOver, isGameStarted, toGameStatus,
-  computeHomeCovers, computeAwayCovers, computeOverWins,
+  computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins,
 } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, PickView, PickType } from './sportAdapter';
 import { revealPicksForStartedGames, memoizeOnce } from './sportAdapter';
@@ -29,7 +29,8 @@ function competitionToGameView(
   const awayScore = getAwayTeamScore(competition);
   const homeSpreadVal = spreadCache[homeAbbr]?.spread ?? null;
   const awaySpreadVal = spreadCache[awayAbbr]?.spread ?? null;
-  const overUnderVal = spreadCache[homeAbbr]?.over ?? null;
+  const overThresholdVal = spreadCache[homeAbbr]?.over ?? null;
+  const underThresholdVal = spreadCache[homeAbbr]?.under ?? null;
   const status = toGameStatus(competition);
   return {
     id: competition.id,
@@ -37,14 +38,16 @@ function competitionToGameView(
     awayTeam: awayAbbr,
     homeSpread: homeSpreadVal,
     awaySpread: awaySpreadVal,
-    overUnder: overUnderVal,
+    overThreshold: overThresholdVal,
+    underThreshold: underThresholdVal,
     homeScore,
     awayScore,
     gameStatus: status,
     gameTime: competition.date,
     homeCovers: computeHomeCovers(status, homeSpreadVal, homeScore, awayScore),
     awayCovers: computeAwayCovers(status, awaySpreadVal, homeScore, awayScore),
-    overWins: computeOverWins(status, overUnderVal, homeScore, awayScore),
+    overWins: computeOverWins(status, overThresholdVal, homeScore, awayScore),
+    underWins: computeUnderWins(status, underThresholdVal, homeScore, awayScore),
     weather: event.weather ? {
       displayValue: event.weather.displayValue,
       conditionId: event.weather.conditionId,
