@@ -282,8 +282,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
                   locked={locked}
                   onPickHome={() => homePickState !== 'none' ? unselectPick(game.id, game.homeTeam) : selectPick(game.id, game.homeTeam)}
                   onPickAway={() => awayPickState !== 'none' ? unselectPick(game.id, game.awayTeam) : selectPick(game.id, game.awayTeam)}
-                  overValue={isPostSeasonSlate ? game.overUnder : undefined}
-                  underValue={isPostSeasonSlate ? game.overUnder : undefined}
+                  overValue={isPostSeasonSlate ? game.overThreshold : undefined}
+                  underValue={isPostSeasonSlate ? game.underThreshold : undefined}
                   overPickState={overPickState}
                   underPickState={underPickState}
                   overUnderLocked={locked && overPickState === 'none'}
