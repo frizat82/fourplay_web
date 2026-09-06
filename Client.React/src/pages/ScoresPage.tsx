@@ -318,10 +318,15 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                 const ac = game.awayCovers ?? null;
                 const ov = game.overWins ?? null;
                 const uv = game.underWins ?? null;
+                const isCardRedZone = isLive && Boolean(game.situation?.isRedZone);
 
                 return (
                   <Grid size={{ xs: 12, md: 6, lg: 4 }} key={game.id}>
-                    <Paper className={''} sx={{ p: 2 }}>
+                    <Paper
+                      data-testid={`game-card-${game.id}`}
+                      data-redzone={String(isCardRedZone)}
+                      sx={[{ p: 2 }, isCardRedZone && { outline: '3px solid', outlineColor: 'error.main', outlineOffset: -1 }]}
+                    >
                       {/* Score header */}
                       <Stack direction="row" alignItems="center" justifyContent="space-between">
                         <TeamHelmet abbr={game.awayTeam} size={50} />
@@ -333,7 +338,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <TeamHelmet abbr={game.homeTeam} size={50} />
                       </Stack>
 
-                      {/* Field position (NFL only — situation is a full GameSituation object) */}
+                      {/* Field position — shared by both NFL and CFB adapters, which populate GameSituation identically */}
                       {isLive && game.situation != null && (
                         <FieldPosition situation={game.situation} />
                       )}
