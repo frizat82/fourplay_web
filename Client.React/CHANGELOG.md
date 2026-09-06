@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-06
+
+- Fixed: live field position ball marker rendered on the wrong side of the field whenever the home team had possession, since the home team's own goal is on the right of the on-screen bar but the marker position was never mirrored for it
+
 ## 2026-09-05
 
 - Added: users can now change their own username from the Account page, without needing to contact an admin
