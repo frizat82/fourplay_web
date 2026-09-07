@@ -4,6 +4,13 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-07
+
+- Fixed: the admin League Costs page's season dropdown was a hardcoded 4-year window unrelated to any real league's history, and could bill a league its flat base cost for seasons before it ever existed — the dropdown now only offers seasons from the earliest any league has actually been configured for, and leagues that didn't exist yet in the selected season are excluded from the cost table entirely
+- Fixed: the admin Changelog page's bullet text could visually overflow its card on long entries
+- Fixed: the invite-link Copy/Share/Revoke button row on the league page was spaced too tightly on mobile
+- Improved: sharing a league's invite link now includes the league's name and an inviting message instead of a bare url
+
 ## 2026-09-06
 
 - Added: live field position now highlights only the actual 20-yard red zone (near whichever goal the ball is closest to) instead of tinting the entire field, and the game card gets a red outline while a live game is in the red zone, so it's spottable at a glance across a list of games

@@ -432,8 +432,8 @@ public class LeagueOwnershipTests
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
         repo.GetAllLeaguesAsync().Returns(
         [
-            new LeagueInfo { Id = 1, LeagueName = "NFL League", OwnerUserId = "owner-nfl", LeagueType = LeagueType.Nfl },
-            new LeagueInfo { Id = 2, LeagueName = "CFB League", OwnerUserId = "owner-cfb", LeagueType = LeagueType.Cfb },
+            new LeagueInfo { Id = 1, LeagueName = "NFL League", OwnerUserId = "owner-nfl", LeagueType = LeagueType.Nfl, LeagueJuiceMappings = [new LeagueJuiceMapping { Season = 2024 }] },
+            new LeagueInfo { Id = 2, LeagueName = "CFB League", OwnerUserId = "owner-cfb", LeagueType = LeagueType.Cfb, LeagueJuiceMappings = [new LeagueJuiceMapping { Season = 2024 }] },
         ]);
         repo.GetLeagueMemberCountsAsync(2024).Returns(new Dictionary<int, int> { [1] = 15, [2] = 8 });
         repo.GetUsersAsync().Returns([
@@ -458,12 +458,16 @@ public class LeagueOwnershipTests
     [Fact]
     public async Task GetAllLeaguesCost_DefaultsMemberCountToZero_ForLeagueMissingFromCountsMap()
     {
-        // A league whose sport has no season-week-config rows for the requested season (e.g. a
-        // future season not seeded yet) — GetLeagueMemberCountsAsync omits it entirely rather than
-        // guessing; the endpoint must show $0/0 members, not throw a KeyNotFoundException.
+        // A league that DID exist in the requested season (configured back in 2024) but whose
+        // sport has no season-week-config rows for the requested season (e.g. a future season not
+        // seeded yet) — GetLeagueMemberCountsAsync omits it entirely rather than guessing; the
+        // endpoint must show $0/0 members, not throw a KeyNotFoundException. This is distinct from
+        // GetAllLeaguesCost_ExcludesLeague_WhenItDidNotExistInSelectedSeason below: a slow/unseeded
+        // season for an existing league still bills the base tier, but a league that didn't exist
+        // yet is excluded entirely rather than billed.
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
         repo.GetAllLeaguesAsync().Returns([
-            new LeagueInfo { Id = 1, LeagueName = "L", OwnerUserId = "owner-1", LeagueType = LeagueType.Nfl },
+            new LeagueInfo { Id = 1, LeagueName = "L", OwnerUserId = "owner-1", LeagueType = LeagueType.Nfl, LeagueJuiceMappings = [new LeagueJuiceMapping { Season = 2024 }] },
         ]);
         repo.GetLeagueMemberCountsAsync(2099).Returns(new Dictionary<int, int>());
         repo.GetUsersAsync().Returns([new ApplicationUser { Id = "owner-1", UserName = "owner" }]);
@@ -473,6 +477,43 @@ public class LeagueOwnershipTests
         var dtos = Assert.IsAssignableFrom<IEnumerable<AdminLeagueCostDto>>(result!.Value).ToList();
         Assert.Equal(0, dtos[0].MemberCount);
         Assert.Equal(200m, dtos[0].Cost); // NFL league — $200 base tier
+    }
+
+    [Fact]
+    public async Task GetAllLeaguesCost_ExcludesLeague_WhenItDidNotExistInSelectedSeason()
+    {
+        // A league first configured in 2026 didn't exist yet in 2024 — it must be excluded from
+        // the response entirely, not shown with a phantom base cost.
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetAllLeaguesAsync().Returns([
+            new LeagueInfo { Id = 1, LeagueName = "New League", OwnerUserId = "owner-1", LeagueType = LeagueType.Nfl, LeagueJuiceMappings = [new LeagueJuiceMapping { Season = 2026 }] },
+        ]);
+        repo.GetLeagueMemberCountsAsync(2024).Returns(new Dictionary<int, int>());
+        repo.GetUsersAsync().Returns([new ApplicationUser { Id = "owner-1", UserName = "owner" }]);
+
+        var result = await ctrl.GetAllLeaguesCost(2024) as OkObjectResult;
+
+        var dtos = Assert.IsAssignableFrom<IEnumerable<AdminLeagueCostDto>>(result!.Value).ToList();
+        Assert.Empty(dtos);
+    }
+
+    [Fact]
+    public async Task GetAllLeaguesCost_IncludesLeague_WhenSelectedSeasonEqualsItsEarliestJuiceSeason()
+    {
+        // Boundary: a league's very first configured season must still be included (Season <=
+        // season, not strictly less-than).
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
+        repo.GetAllLeaguesAsync().Returns([
+            new LeagueInfo { Id = 1, LeagueName = "Brand New League", OwnerUserId = "owner-1", LeagueType = LeagueType.Nfl, LeagueJuiceMappings = [new LeagueJuiceMapping { Season = 2026 }] },
+        ]);
+        repo.GetLeagueMemberCountsAsync(2026).Returns(new Dictionary<int, int> { [1] = 12 });
+        repo.GetUsersAsync().Returns([new ApplicationUser { Id = "owner-1", UserName = "owner" }]);
+
+        var result = await ctrl.GetAllLeaguesCost(2026) as OkObjectResult;
+
+        var dtos = Assert.IsAssignableFrom<IEnumerable<AdminLeagueCostDto>>(result!.Value).ToList();
+        Assert.Single(dtos);
+        Assert.Equal(1, dtos[0].LeagueId);
     }
 
     [Fact]

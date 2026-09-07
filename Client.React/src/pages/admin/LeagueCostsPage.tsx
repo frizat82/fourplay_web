@@ -20,12 +20,23 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import PageHeader from '../../components/PageHeader';
 import { getAllLeaguesCost } from '../../api/league';
+import { useAllLeaguesMinSeason } from '../../utils/useAllLeaguesMinSeason';
+import { buildDescendingSeasonRange } from '../../utils/seasonRange';
 
 const CURRENT_YEAR = new Date().getFullYear();
-const SEASON_OPTIONS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
+// NFL's own sport-wide floor (nflAdapter.ts) — used only while useAllLeaguesMinSeason is
+// loading or if no league has been configured yet, never as the final bound.
+const FALLBACK_MIN_SEASON = 2020;
 
 export default function AdminLeagueCostsPage() {
-  const [season, setSeason] = useState(CURRENT_YEAR);
+  const [requestedSeason, setSeason] = useState(CURRENT_YEAR);
+  const minSeason = useAllLeaguesMinSeason(FALLBACK_MIN_SEASON);
+  const seasonOptions = buildDescendingSeasonRange(minSeason, CURRENT_YEAR + 1);
+  // Derived, not synced via a useEffect: if every configured league is newer than CURRENT_YEAR
+  // (e.g. only next season's leagues exist yet), minSeason can resolve above the initial
+  // requestedSeason once the query loads — clamp up so the Select's value and the cost query
+  // always match an actual option, without the extra render an effect-based sync would add.
+  const season = Math.max(requestedSeason, minSeason);
 
   const { data: costs, isLoading, isError, refetch } = useQuery({
     queryKey: ['all-leagues-cost', season],
@@ -45,7 +56,7 @@ export default function AdminLeagueCostsPage() {
           label="Season"
           onChange={(e) => setSeason(Number(e.target.value))}
         >
-          {SEASON_OPTIONS.map((year) => (
+          {seasonOptions.map((year) => (
             <MenuItem key={year} value={year}>{year}</MenuItem>
           ))}
         </Select>

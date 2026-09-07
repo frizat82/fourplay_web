@@ -550,6 +550,25 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
     expect(screen.getByRole('button', { name: /^share$/i })).toBeInTheDocument();
   });
 
+  it('sharing the invite link includes the league name and an inviting message, not just a bare url', async () => {
+    const originalShare = navigator.share;
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
+
+    mockedGetCurrentInviteLink.mockResolvedValue(makeInviteLink());
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^share$/i }));
+
+    await waitFor(() => expect(shareMock).toHaveBeenCalled());
+    const shareData = shareMock.mock.calls[0][0];
+    expect(shareData.text).toContain('Demo League'); // makeLeague()'s default leagueName
+    expect(shareData.url).toContain('/join/');
+
+    Object.defineProperty(navigator, 'share', { value: originalShare, configurable: true });
+  });
+
   it('shows the expired-link warning and no copy/share buttons when the link is expired', async () => {
     mockedGetCurrentInviteLink.mockResolvedValue(makeInviteLink({
       expiresAt: new Date(Date.now() - 1000).toISOString(),
