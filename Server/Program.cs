@@ -276,9 +276,20 @@ builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();
 builder.Services.AddScoped<ICfbRepository, CfbRepository>();
 builder.Services.AddScoped<ICfbPicksRepository, CfbPicksRepository>();
 builder.Services.AddSingleton<INflCurrentWeekService, NflCurrentWeekService>();
-// Injectable clock for NflSpreadJob/CfbSpreadJob's lock-time write guard (SpreadLockGuard) — lets
-// tests control "now" exactly instead of depending on the real wall clock.
-builder.Services.AddSingleton(TimeProvider.System);
+// Injectable clock for NflSpreadJob/CfbSpreadJob's lock-time write guard (SpreadLockGuard), and
+// for NflCurrentWeekService/CfbCurrentSlateService's "what's current" resolution — lets tests
+// control "now" exactly instead of depending on the real wall clock. In DEMO_MODE (but NOT
+// DEMO_REPLAY_MODE — see below) this is frozen at DemoDataSeeder.DemoFrozenNow instead of the
+// real clock, so "current week/slate" always resolves against whatever season the seeder
+// actually populated — otherwise the real wall clock crossing a real NFL/CFB season rollover
+// mid-CI-run silently strands the demo dataset on a season with no data (frizat-tf2). Replay mode
+// deliberately keeps the real clock: SeedReplayGameSpreadAsync already self-heals its own
+// NflSeasonWeekConfigs/NflSpreads rows relative to real DateTimeOffset.UtcNow on every startup
+// specifically so they always resolve as "current" regardless of wall-clock time — freezing the
+// clock there would make that self-healing row look permanently in the future/past instead.
+builder.Services.AddSingleton(isDemoMode
+    ? new FrozenTimeProvider(DemoDataSeeder.DemoFrozenNow)
+    : TimeProvider.System);
 builder.Services.AddScoped<ICfbCurrentSlateService, CfbCurrentSlateService>();
 builder.Services.AddSingleton<ICfbLiveScoreFetcher, CfbLiveScoreFetcher>();
 builder.Services.AddScoped<NflSpreadScheduleSource>();

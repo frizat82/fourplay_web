@@ -23,7 +23,7 @@ public class CfbCurrentSlateServiceTests
         EndDate = end,
     };
 
-    private static CfbCurrentSlateService BuildService(List<CfbSlates> slates, CfbSeasonWeekConfig? matchingConfig = null) {
+    private static CfbCurrentSlateService BuildService(List<CfbSlates> slates, CfbSeasonWeekConfig? matchingConfig = null, TimeProvider? timeProvider = null) {
         var repo = Substitute.For<ICfbRepository>();
         repo.GetAllSlatesAsync().Returns(slates);
         // One config per slate (across all seasons), so whichever slate the resolver picks as
@@ -39,7 +39,7 @@ public class CfbCurrentSlateServiceTests
                     SpreadLockDatetime = DateTime.UtcNow,
                 }).ToList();
         repo.GetAllWeekConfigsAsync().Returns(allConfigs);
-        return new CfbCurrentSlateService(repo);
+        return new CfbCurrentSlateService(repo, timeProvider ?? TimeProvider.System);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public class CfbCurrentSlateServiceTests
             new() { Season = 2026, IvLeagueWeekNumber = 4, InScopeIvLeague = true, SpreadLockDatetime = now.AddDays(5) },  // 5 days out
         });
 
-        var result = await new CfbCurrentSlateService(repo).GetCurrentSlateAsync();
+        var result = await new CfbCurrentSlateService(repo, TimeProvider.System).GetCurrentSlateAsync();
 
         Assert.Equal(3, result!.SlateNumber);
     }
@@ -122,7 +122,7 @@ public class CfbCurrentSlateServiceTests
             new() { Season = 2026, IvLeagueWeekNumber = 4, InScopeIvLeague = true, SpreadLockDatetime = now.AddDays(1) }, // only 1 day out
         });
 
-        var result = await new CfbCurrentSlateService(repo).GetCurrentSlateAsync();
+        var result = await new CfbCurrentSlateService(repo, TimeProvider.System).GetCurrentSlateAsync();
 
         Assert.Equal(4, result!.SlateNumber);
     }
@@ -144,7 +144,7 @@ public class CfbCurrentSlateServiceTests
             new() { Season = 2026, IvLeagueWeekNumber = 99, InScopeIvLeague = false, SpreadLockDatetime = DateTime.UtcNow }, // e.g. bowl dead week
         });
 
-        var result = await new CfbCurrentSlateService(repo).GetCurrentSlateAsync();
+        var result = await new CfbCurrentSlateService(repo, TimeProvider.System).GetCurrentSlateAsync();
 
         Assert.Equal(1, result!.SlateNumber);
     }
@@ -167,9 +167,31 @@ public class CfbCurrentSlateServiceTests
         var slate = Slate(2026, 1, today.AddDays(-1), today.AddDays(1));
         repo.GetAllSlatesAsync().Returns(new List<CfbSlates> { slate });
         repo.GetAllWeekConfigsAsync().Returns(new List<CfbSeasonWeekConfig>());
-        var svc = new CfbCurrentSlateService(repo);
+        var svc = new CfbCurrentSlateService(repo, TimeProvider.System);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.GetCurrentSlateAsync());
+    }
+
+    // frizat-tf2: GetCurrentSlateAsync must resolve "current" against an injected TimeProvider
+    // (used to freeze the clock in DEMO_MODE — see DemoDataSeeder.DemoFrozenNow), not the real
+    // wall clock. Two slates are constructed so a real-clock read (long past both locks by now)
+    // would resolve to slate 18, while the frozen clock correctly stays on slate 17.
+    [Fact]
+    public async Task GetCurrentSlateAsync_UsesInjectedClock_NotRealWallClock() {
+        var frozen = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var today = DateOnly.FromDateTime(frozen.UtcDateTime);
+        var slate17 = Slate(2025, 17, today.AddDays(-10), today.AddDays(-3));
+        var slate18 = Slate(2025, 18, today.AddDays(10), today.AddDays(17));
+        var repo = Substitute.For<ICfbRepository>();
+        repo.GetAllSlatesAsync().Returns(new List<CfbSlates> { slate17, slate18 });
+        repo.GetAllWeekConfigsAsync().Returns(new List<CfbSeasonWeekConfig> {
+            new() { Season = 2025, IvLeagueWeekNumber = 17, InScopeIvLeague = true, SpreadLockDatetime = frozen.UtcDateTime.AddDays(-10) },
+            new() { Season = 2025, IvLeagueWeekNumber = 18, InScopeIvLeague = true, SpreadLockDatetime = frozen.UtcDateTime.AddDays(10) },
+        });
+
+        var result = await new CfbCurrentSlateService(repo, new FakeTimeProvider(frozen)).GetCurrentSlateAsync();
+
+        Assert.Equal(17, result!.SlateNumber);
     }
 
     [Fact]
