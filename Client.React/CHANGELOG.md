@@ -10,6 +10,10 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: the admin Changelog page's bullet text could visually overflow its card on long entries
 - Fixed: the invite-link Copy/Share/Revoke button row on the league page was spaced too tightly on mobile
 - Improved: sharing a league's invite link now includes the league's name and an inviting message instead of a bare url
+- Fixed: CFB scores could go unsynced for a full week if a game finished Sunday afternoon or later — the fetch schedule now covers the same Sunday/Monday window NFL already does
+- Fixed: a league week's payout could be settled — showing a user as losing money — before all of that week's picked games had a final score
+- Fixed: a user who hadn't finished picking yet could be shown as having lost the week even before any of that week's games had started
+- Fixed: an NFL game's kickoff time in our records could go stale after a flex-schedule move or weather delay, since only the spread itself was ever locked — kickoff time now keeps refreshing so late-game picking windows are tracked correctly
 
 ## 2026-09-06
 
