@@ -14,6 +14,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: a league week's payout could be settled — showing a user as losing money — before all of that week's picked games had a final score
 - Fixed: a user who hadn't finished picking yet could be shown as having lost the week even before any of that week's games had started
 - Fixed: an NFL game's kickoff time in our records could go stale after a flex-schedule move or weather delay, since only the spread itself was ever locked — kickoff time now keeps refreshing so late-game picking windows are tracked correctly
+- Fixed: the demo environment's "current week/slate" could silently roll over into a new real NFL/CFB season with no demo data once the real calendar crossed that season's start, breaking Picks/Scores/Leaderboard in demo mode — demo now resolves "current" against a clock pinned to its own seeded data instead of the real wall clock
 
 ## 2026-09-06
 

@@ -23,6 +23,16 @@ public class DemoDataSeeder(
     private const int DemoSeason = 2025;
     private const int DemoWeek = 18;
 
+    // frizat-tf2: NflCurrentWeekService/CfbCurrentSlateService resolve "current" off the real
+    // wall clock against real-calendar SeasonWeekConfig rows shared with prod — once the real
+    // clock crosses a real season's early-activation window (see SeasonWindowResolver), "current"
+    // silently flips to a season this seeder never populates, stranding every demo/CI page that
+    // relies on implicit "current" resolution. In DEMO_MODE the app's TimeProvider is frozen at
+    // this value (Program.cs) instead of the real clock, so it always stays derived from data
+    // this seeder actually owns (the Super Bowl kickoff below) rather than a fresh literal that
+    // would just move the same failure to the next rollover.
+    public static DateTimeOffset DemoFrozenNow => SuperBowlGames[0].GameTime.AddDays(1);
+
     // frizat-703.6: the replayed game's own embedded season/week (see sample_espn_nfl_*.json).
     // The frontend derives "which week to show" entirely from the replay data's own season/week
     // fields, not from any separately-resolved "current week" — so the seeded spread must live

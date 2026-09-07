@@ -4,9 +4,9 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class CfbCurrentSlateService(ICfbRepository repo) : ICfbCurrentSlateService {
+public class CfbCurrentSlateService(ICfbRepository repo, TimeProvider timeProvider) : ICfbCurrentSlateService {
     public async Task<CfbSlateInfo?> GetCurrentSlateAsync() {
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var slates = (await repo.GetAllSlatesAsync()).ToList();
 
         // Every CfbSlates row is seeded FROM a CfbSeasonWeekConfig row (CfbSlateSeederJob sets
@@ -53,6 +53,6 @@ public class CfbCurrentSlateService(ICfbRepository repo) : ICfbCurrentSlateServi
         var slates = await repo.GetAllSlatesAsync();
         var windows = slates.Select(s => new SeasonWindowResolver.Window(
             s.Season, s.StartDate.ToDateTime(TimeOnly.MinValue), s.EndDate.ToDateTime(TimeOnly.MaxValue)));
-        return SeasonWindowResolver.IsSeasonActive(windows, DateTime.UtcNow);
+        return SeasonWindowResolver.IsSeasonActive(windows, timeProvider.GetUtcNow().UtcDateTime);
     }
 }
