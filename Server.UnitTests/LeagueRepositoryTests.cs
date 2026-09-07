@@ -30,6 +30,38 @@ public class LeagueRepositoryTests
         Assert.Equal(-3.5, saved.HomeTeamSpread);
     }
 
+    // frizat-tf1: a spread's odds freeze once real (non-zero) values are captured — a locked line
+    // shouldn't move after users have already picked against it — but GameTime must keep refreshing
+    // regardless, since NFL flex-scheduling or a weather delay can push a game's real kickoff later
+    // than whatever was true when the spread first posted. CfbRepository.UpsertAsync already
+    // refreshes GameTime unconditionally on every upsert; LeaderboardService's "has every game for
+    // this week started" check (used to decide whether an incomplete pick set is a genuine loss)
+    // depends on NflSpreads.GameTime staying accurate the same way.
+    [Fact]
+    public async Task UpsertAsync_RefreshesGameTime_EvenWhenSpreadIsAlreadyLockedIn()
+    {
+        var factory = new DbContextFactoryStub(nameof(UpsertAsync_RefreshesGameTime_EvenWhenSpreadIsAlreadyLockedIn));
+        var originalKickoff = new DateTimeOffset(2026, 9, 14, 13, 0, 0, TimeSpan.Zero);
+        var seedDb = factory.CreateDbContext();
+        seedDb.NflSpreads.Add(new NflSpreads {
+            Season = 2026, NflWeek = 3, HomeTeam = "A", AwayTeam = "B",
+            HomeTeamSpread = -3.5, AwayTeamSpread = 3.5, GameTime = originalKickoff,
+        });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        var flexedKickoff = originalKickoff.AddHours(3);
+        await repo.UpsertAsync([
+            // Same non-zero spread as before (a real re-fetch of an already-locked line) but with a
+            // later GameTime — simulates a flex/weather-delay reschedule.
+            new NflSpreads { Season = 2026, NflWeek = 3, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -7, AwayTeamSpread = 7, GameTime = flexedKickoff },
+        ]);
+
+        var saved = await factory.CreateDbContext().NflSpreads.SingleAsync(s => s.Season == 2026 && s.NflWeek == 3);
+        Assert.Equal(-3.5, saved.HomeTeamSpread); // spread itself stays locked
+        Assert.Equal(flexedKickoff, saved.GameTime); // but GameTime still refreshes
+    }
+
     [Fact]
     public async Task GetWeeksWithSpreadDataAsync_ReturnsSeasonWeekPairsWithSpreads()
     {

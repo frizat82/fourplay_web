@@ -14,7 +14,8 @@ public class CfbLeaderboardService(
     ILeagueRepository leagueRepository,
     ICfbRepository cfbRepository,
     ICfbPicksRepository cfbPicksRepository,
-    ICfbCurrentSlateService currentSlateService)
+    ICfbCurrentSlateService currentSlateService,
+    TimeProvider timeProvider)
     : ICfbLeaderboardService {
 
     public async Task<List<LeaderboardModel>> BuildLeaderboard(int leagueId, int season) {
@@ -52,6 +53,11 @@ public class CfbLeaderboardService(
             if (juiceMapping is null || leagueUsers.Count == 0 || slates.Count == 0)
                 return leaderboard;
 
+            // Captured once for the whole run rather than re-queried per user/slate — otherwise the
+            // wall clock ticking past a kickoff boundary mid-run could give different users a
+            // different MissingPicks/MissingGameResults verdict for the identical slate.
+            var now = timeProvider.GetUtcNow();
+
             foreach (var user in leagueUsers) {
                 var userModel = new LeaderboardModel {
                     User = user.User,
@@ -67,7 +73,7 @@ public class CfbLeaderboardService(
                     var picks = (await cfbPicksRepository.GetUserPicksAsync(leagueId, slate.Id, user.UserId)).ToList();
                     var juice = JuiceForSlate(slate.SlateNumber, juiceMapping);
 
-                    userModel.WeekResults[i] = EvaluateSlate(slate.SlateNumber, spreads, scores, picks, juice, user.UserId);
+                    userModel.WeekResults[i] = EvaluateSlate(slate.SlateNumber, spreads, scores, picks, juice, now);
                 }
 
                 leaderboard.Add(userModel);
@@ -89,11 +95,20 @@ public class CfbLeaderboardService(
     };
 
     private LeaderboardWeekResults EvaluateSlate(int slateNumber, List<CfbSpreads> spreads, List<CfbScores> scores,
-        List<CfbPicks> picks, double juice, string userId) {
+        List<CfbPicks> picks, double juice, DateTimeOffset now) {
         var result = new LeaderboardWeekResults { Week = slateNumber };
 
+        // A user can submit or change a pick for any individual game right up until that game's own
+        // kickoff (CfbPicksController.StartedTeams uses the identical GameTime <= now check) — so an
+        // incomplete pick set is only a genuine, terminal loss once every eligible game in this slate
+        // has already started. Until then it's no different from "not decided yet", so it reuses the
+        // exact MissingGameResults state (frizat-tf1: a real user was shown as losing a week before
+        // any of that week's games had even kicked off).
+        var allGamesStarted = GameHelpers.AllGamesStarted(spreads.Select(s => s.GameTime), now);
+        var incompletePicksResult = allGamesStarted ? WeekResult.MissingPicks : WeekResult.MissingGameResults;
+
         if (picks.Count == 0 && spreads.Count > 0) {
-            result.WeekResult = WeekResult.MissingPicks;
+            result.WeekResult = incompletePicksResult;
             return result;
         }
 
@@ -109,7 +124,7 @@ public class CfbLeaderboardService(
         if (!allWon) {
             result.WeekResult = WeekResult.Lost;
         } else if (picks.Count < GameHelpers.GetCfbRequiredPicks(slateNumber)) {
-            result.WeekResult = WeekResult.MissingPicks;
+            result.WeekResult = incompletePicksResult;
         } else if (picks.Any(pick => !scores.Any(s => s.HomeTeam == pick.Team || s.AwayTeam == pick.Team))) {
             result.WeekResult = WeekResult.MissingGameResults;
         } else {
@@ -145,8 +160,14 @@ public class CfbLeaderboardService(
         var currentWeeklyCost = baseWeeklyCost;
 
         for (int i = 0; i < slateCount; i++) {
-            var winners = leaderboard.Where(u => u.WeekResults[i].WeekResult == WeekResult.Won).Select(u => u.User.Id).ToList();
-            var losers = leaderboard.Where(u => u.WeekResults[i].WeekResult != WeekResult.Won).Select(u => u.User.Id).ToList();
+            // A user still waiting on a final score isn't a loser yet — settling their week now
+            // (and paying out based on an incomplete picture) would have to be silently re-computed
+            // once the score lands. Keeping both buckets empty routes this into the exact same
+            // "nobody's decided" branch below (Score=0, roll the pot) as an all-push week already
+            // does, rather than duplicating that branch as a separate special case.
+            var anyPending = LeaderboardSettlementHelper.IsWeekPending(leaderboard, i);
+            var winners = anyPending ? [] : leaderboard.Where(u => u.WeekResults[i].WeekResult == WeekResult.Won).Select(u => u.User.Id).ToList();
+            var losers = anyPending ? [] : leaderboard.Where(u => u.WeekResults[i].WeekResult != WeekResult.Won).Select(u => u.User.Id).ToList();
 
             if (winners.Count > 0 && losers.Count > 0) {
                 foreach (var user in leaderboard) {

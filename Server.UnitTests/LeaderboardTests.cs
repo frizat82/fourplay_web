@@ -61,7 +61,7 @@ public class LeaderboardServiceTests {
         var memoryCache = new MemoryCache(new MemoryCacheOptions());
         var scopeFactory = BuildScopeFactory(spreadCalculator);
 
-        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository);
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
 
         var result = await service.BuildLeaderboard(0, 2024);
 
@@ -85,7 +85,7 @@ public class LeaderboardServiceTests {
         var playoffResults = await FakePlayoffPicks(spreadCalculatorBuilder, dbContext, scores);
         // Create service and build leaderboard
         var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
-        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository);
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2024);
 
         // Assert: 3 playoff rounds (19 = Wild Card, 20 = Divisional, 21 = Conf. Championship)
@@ -110,7 +110,7 @@ public class LeaderboardServiceTests {
         await dbContext.SaveChangesAsync();
 
         var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
-        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository);
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
 
         var result = await service.BuildLeaderboard(1, 2024);
 
@@ -166,7 +166,7 @@ public class LeaderboardServiceTests {
 
         // Act
         var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
-        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository);
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
         var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 4);
 
         // Assert
@@ -268,7 +268,7 @@ public class LeaderboardServiceTests {
 
         // Act
         var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
-        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository);
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
         var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 4);
 
         // Assert
@@ -330,6 +330,99 @@ public class LeaderboardServiceTests {
         Assert.Equal(0, result.Sum(u => u.Total));
     }
 
+    // frizat-tf1: a user still awaiting a final score for the week isn't a loser yet — settling
+    // their week now (and paying out on an incomplete picture) would have to be silently
+    // re-computed once the score lands. Same fix as the CFB carve-out above, NFL side.
+    [Fact]
+    public async Task CalculateUserTotals_DoesNotSettle_WhenAnyUserHasMissingGameResultsForTheWeek() {
+        var dbFactory = new DbContextFactoryStub();
+        await dbFactory.PopulateUserTestData(2);
+        await dbFactory.PopulateScoresTestDataAsync(1);
+        var repository = new LeagueRepository(dbFactory);
+        var spreadCalculatorBuilder = new SpreadCalculatorBuilder(repository, new MemoryCache(new MemoryCacheOptions()));
+        var dbContext = await dbFactory.CreateDbContextAsync();
+
+        var league = dbContext.LeagueJuiceMapping.First();
+        league.WeeklyCost = 10;
+        await dbContext.SaveChangesAsync();
+
+        var users = dbContext.Users.Take(2).ToList();
+        var leaderboard = new List<LeaderboardModel> {
+            new() { User = users[0], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Won }] },
+            new() { User = users[1], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.MissingGameResults }] },
+        };
+
+        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
+        var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 1);
+
+        Assert.All(result, u => Assert.Equal(0, u.WeekResults[0].Score));
+        Assert.Equal(0, result.Sum(u => u.Total));
+    }
+
+    // frizat-tf1: picks can be submitted for any individual game right up until that game's own
+    // kickoff — an incomplete pick set must not be treated as a terminal loss while any of that
+    // week's games hasn't started yet (e.g. Thursday Night Football already final, Sunday's games
+    // still open). Mirrors the identical CFB fix above. Both callers below share the same fixed
+    // kickoff times and zero picks (required picks for week 1 is 4) — only the FakeTimeProvider
+    // they inject differs, which is what actually distinguishes the two scenarios.
+    private static readonly DateTimeOffset NflFinishedGameTime = new(2026, 9, 11, 20, 0, 0, TimeSpan.Zero); // Thu final
+    private static readonly DateTimeOffset NflPendingGameTime = new(2026, 9, 14, 13, 0, 0, TimeSpan.Zero);  // Sun, not started
+
+    private static (ILeagueRepository repo, ISpreadCalculatorBuilder spreadCalculatorBuilder) BuildNflKickoffMocks(string userId) {
+        var league = new LeagueInfo { Id = 1, LeagueName = "NFL Test", OwnerUserId = userId };
+        var mapping = new LeagueUserMapping { LeagueId = 1, League = league, User = new ApplicationUser { Id = userId, UserName = "Alice" }, UserId = userId };
+        var juice = new LeagueJuiceMapping { LeagueId = 1, Season = 2024, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
+
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetLeagueUserMappingsAsync(1).Returns([mapping]);
+        repo.GetLeagueJuiceMappingAsync(1).Returns([juice]);
+        repo.GetAllNflScoresForSeasonAsync(2024).Returns([
+            new NflScores { Season = 2024, NflWeek = 1, HomeTeam = "KC", AwayTeam = "BAL", HomeTeamScore = 27, AwayTeamScore = 20, GameTime = NflFinishedGameTime },
+        ]);
+        repo.GetAllNflSpreadsForSeasonAsync(2024).Returns([
+            new NflSpreads { Season = 2024, NflWeek = 1, HomeTeam = "KC", AwayTeam = "BAL", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 45, GameTime = NflFinishedGameTime },
+            new NflSpreads { Season = 2024, NflWeek = 1, HomeTeam = "SF", AwayTeam = "DAL", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 45, GameTime = NflPendingGameTime },
+        ]);
+        repo.GetUserNflPicksAsync(userId, 1, 2024, 1).Returns(new List<NflPicks>());
+
+        var spreadCalculatorBuilder = Substitute.For<ISpreadCalculatorBuilder>();
+        spreadCalculatorBuilder.WithLeagueId(Arg.Any<int>()).Returns(spreadCalculatorBuilder);
+        spreadCalculatorBuilder.WithWeek(Arg.Any<int>()).Returns(spreadCalculatorBuilder);
+        spreadCalculatorBuilder.WithSeason(Arg.Any<int>()).Returns(spreadCalculatorBuilder);
+        spreadCalculatorBuilder.BuildAsync().Returns(Substitute.For<ISpreadCalculator>());
+
+        return (repo, spreadCalculatorBuilder);
+    }
+
+    [Fact]
+    public async Task NflBuildLeaderboard_ReturnsMissingGameResults_NotMissingPicks_WhenGamesHaventStartedYet() {
+        var userId = Guid.NewGuid().ToString();
+        var (repo, spreadCalculatorBuilder) = BuildNflKickoffMocks(userId);
+
+        var timeProvider = new FakeTimeProvider(NflFinishedGameTime.AddHours(1)); // after Thu, before Sun
+        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repo, timeProvider);
+
+        var result = await service.BuildLeaderboard(1, 2024);
+
+        Assert.Equal(WeekResult.MissingGameResults, result[0].WeekResults[0].WeekResult);
+    }
+
+    [Fact]
+    public async Task NflBuildLeaderboard_ReturnsMissingPicks_OnceEveryGameHasKickedOff() {
+        var userId = Guid.NewGuid().ToString();
+        var (repo, spreadCalculatorBuilder) = BuildNflKickoffMocks(userId);
+
+        var timeProvider = new FakeTimeProvider(NflPendingGameTime.AddHours(1)); // after every kickoff
+        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repo, timeProvider);
+
+        var result = await service.BuildLeaderboard(1, 2024);
+
+        Assert.Equal(WeekResult.MissingPicks, result[0].WeekResults[0].WeekResult);
+    }
+
     // ─── CFB Leaderboard Tests ────────────────────────────────────────────────
 
     // Defaults to "current slate = slate 20 of season 2025" — past every SlateNumber any existing
@@ -378,7 +471,7 @@ public class LeaderboardServiceTests {
         var userId = Guid.NewGuid().ToString();
         // slateNumber=19 = CFP National Championship → requires 1 pick, so 1 winning pick → Won
         var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId, slateNumber: 19);
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
 
         var result = await service.BuildLeaderboard(1, 2025);
 
@@ -396,7 +489,7 @@ public class LeaderboardServiceTests {
             new CfbScores { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 7, AwayTeamScore = 35, GameStatus = TypeName.StatusFinal }
         ]);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2025);
 
         Assert.Equal(WeekResult.Lost, result[0].WeekResults[0].WeekResult);
@@ -407,16 +500,114 @@ public class LeaderboardServiceTests {
         var userId = Guid.NewGuid().ToString();
         var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId);
 
-        // Add a second game that the user did NOT pick
+        // Add a second game that the user did NOT pick. Neither game sets GameTime, which defaults
+        // to DateTimeOffset.MinValue — always in the past, so this is the "picking window already
+        // closed" case and MissingPicks (a genuine, terminal loss) is correct here.
         cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
             new CfbSpreads { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true },
             new CfbSpreads { Id = 2, CfbSlateId = 1, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true },
         ]);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2025);
 
         Assert.Equal(WeekResult.MissingPicks, result[0].WeekResults[0].WeekResult);
+    }
+
+    // frizat-tf1: a user can submit picks for any individual game right up until that game's own
+    // kickoff (CfbPicksController.StartedTeams uses the identical GameTime <= now check) — so an
+    // incomplete pick set must not be treated as a terminal loss while any of that slate's games
+    // hasn't started yet. Reported by a real user: shown as having lost a week before it was over.
+    [Fact]
+    public async Task CfbBuildLeaderboard_ReturnsMissingGameResults_NotMissingPicks_WhenGamesHaventStartedYet() {
+        var userId = Guid.NewGuid().ToString();
+        var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId);
+        var kickoff = new DateTimeOffset(2026, 9, 12, 19, 0, 0, TimeSpan.Zero);
+
+        // Second game the user did NOT pick, kicking off in the future relative to "now".
+        cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
+            new CfbSpreads { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true, GameTime = kickoff },
+            new CfbSpreads { Id = 2, CfbSlateId = 1, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true, GameTime = kickoff },
+        ]);
+
+        var timeProvider = new FakeTimeProvider(kickoff.AddHours(-1)); // one hour before kickoff
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, timeProvider);
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        Assert.Equal(WeekResult.MissingGameResults, result[0].WeekResults[0].WeekResult);
+    }
+
+    [Fact]
+    public async Task CfbBuildLeaderboard_ReturnsMissingPicks_OnceEveryGameHasKickedOff() {
+        var userId = Guid.NewGuid().ToString();
+        var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId);
+        var kickoff = new DateTimeOffset(2026, 9, 12, 19, 0, 0, TimeSpan.Zero);
+
+        cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
+            new CfbSpreads { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true, GameTime = kickoff },
+            new CfbSpreads { Id = 2, CfbSlateId = 1, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true, GameTime = kickoff },
+        ]);
+
+        var timeProvider = new FakeTimeProvider(kickoff.AddHours(1)); // one hour after kickoff
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, timeProvider);
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        Assert.Equal(WeekResult.MissingPicks, result[0].WeekResults[0].WeekResult);
+    }
+
+    // frizat-tf1: a user with 2 covering picks and 2 picks still awaiting a final score must not be
+    // financially settled as a loser for the week — reused from a real prod bug report where this
+    // showed a user losing money before their week was actually decided.
+    [Fact]
+    public async Task CfbCalculateTotals_DoesNotSettle_WhenAnyUserHasMissingGameResultsForTheWeek() {
+        const int leagueId = 1;
+        const int slateId = 1;
+        var decidedUserId = Guid.NewGuid().ToString();
+        var pendingUserId = Guid.NewGuid().ToString();
+        var leagueInfo = new LeagueInfo { Id = leagueId, LeagueName = "CFB Test", OwnerUserId = decidedUserId };
+        var userMappings = new List<LeagueUserMapping> {
+            new() { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = decidedUserId, UserName = "Decided" }, UserId = decidedUserId },
+            new() { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = pendingUserId, UserName = "Pending" }, UserId = pendingUserId },
+        };
+        var juiceMapping = new LeagueJuiceMapping { Id = 1, LeagueId = leagueId, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
+        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 19, SlateType = "Championship", Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+
+        var leagueRepo = Substitute.For<ILeagueRepository>();
+        leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns(userMappings);
+        leagueRepo.GetLeagueJuiceMappingAsync(leagueId, 2025).Returns(juiceMapping);
+
+        var cfbRepo = Substitute.For<ICfbRepository>();
+        cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
+        // Decided user picks IU (spread exists AND has a final score). Pending user picks MIC
+        // (spread exists, but no score row at all yet) — the exact shape of the real prod bug.
+        cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[
+            new CfbSpreads { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true },
+            new CfbSpreads { Id = 2, CfbSlateId = slateId, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true },
+        ]);
+        cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
+            new CfbScores { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal }
+        ]);
+
+        var picksRepo = Substitute.For<ICfbPicksRepository>();
+        picksRepo.GetUserPicksAsync(leagueId, slateId, decidedUserId).Returns((IEnumerable<CfbPicks>)[
+            new CfbPicks { UserId = decidedUserId, LeagueId = leagueId, CfbSlateId = slateId, Team = "IU", PickType = PickType.Spread, Season = 2025 }
+        ]);
+        // Pending user picked a DIFFERENT game with no score row at all — MissingGameResults.
+        picksRepo.GetUserPicksAsync(leagueId, slateId, pendingUserId).Returns((IEnumerable<CfbPicks>)[
+            new CfbPicks { UserId = pendingUserId, LeagueId = leagueId, CfbSlateId = slateId, Team = "MIC", PickType = PickType.Spread, Season = 2025 }
+        ]);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(),
+            leagueRepo, cfbRepo, picksRepo, BuildCurrentSlateService(slateNumber: 19), TimeProvider.System);
+        var result = await service.BuildLeaderboard(leagueId, 2025);
+
+        var decided = result.Single(u => u.User.Id == decidedUserId);
+        var pending = result.Single(u => u.User.Id == pendingUserId);
+        Assert.Equal(WeekResult.Won, decided.WeekResults[0].WeekResult);
+        Assert.Equal(WeekResult.MissingGameResults, pending.WeekResults[0].WeekResult);
+        // Neither user gets paid or charged for a week that isn't decided yet.
+        Assert.Equal(0, decided.WeekResults[0].Score);
+        Assert.Equal(0, pending.WeekResults[0].Score);
     }
 
     // ─── CFB Leaderboard — clamp to current slate (frizat: "shows week 18 and all missed picks"
@@ -435,7 +626,7 @@ public class LeaderboardServiceTests {
         // Current slate is still slate 1 — slate 2 hasn't happened yet.
         var currentSlateService = BuildCurrentSlateService(season: 2025, slateNumber: 1);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2025);
 
         Assert.Single(result[0].WeekResults); // only slate 1, slate 2 excluded
@@ -457,7 +648,7 @@ public class LeaderboardServiceTests {
         // still show, not be clamped to whatever slate 2025 last resolved to.
         var currentSlateService = BuildCurrentSlateService(season: 2026, slateNumber: 1);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2025);
 
         Assert.Equal(2, result[0].WeekResults.Length);
@@ -474,7 +665,7 @@ public class LeaderboardServiceTests {
             new CfbSlates { Id = 3, Season = 2026, SlateNumber = 1, SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
         ]);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2026);
 
         Assert.Empty(result);
@@ -489,7 +680,7 @@ public class LeaderboardServiceTests {
         var (leagueRepo, cfbRepo, picksRepo, _) = BuildCfbMocks(userId, slateNumber: 1);
         var currentSlateService = BuildCurrentSlateService(season: null);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2025);
 
         Assert.Single(result[0].WeekResults);
@@ -562,7 +753,7 @@ public class LeaderboardServiceTests {
             new CfbScores { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 20, GameStatus = TypeName.StatusFinal }
         ]);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2025);
 
         // 28 + (-10) + JuiceConference(6) - 20 = 4 > 0 → Won
@@ -579,7 +770,7 @@ public class LeaderboardServiceTests {
         var loserIds  = Enumerable.Range(0, loserCount).Select(_ => Guid.NewGuid().ToString()).ToList();
         var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMultiUserMocks(winnerIds, loserIds, weeklyCost: weeklyCost);
 
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2025);
 
         Assert.Equal(winnerCount + loserCount, result.Count);
@@ -596,7 +787,7 @@ public class LeaderboardServiceTests {
         var cfbRepo = Substitute.For<ICfbRepository>();
         var picksRepo = Substitute.For<ICfbPicksRepository>();
         var currentSlateService = Substitute.For<ICfbCurrentSlateService>();
-        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService);
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
 
         var result = await service.BuildLeaderboard(0, 2025);
 

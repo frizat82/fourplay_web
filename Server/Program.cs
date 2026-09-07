@@ -406,12 +406,20 @@ builder.Services.AddQuartz(q => {
         );
         q.ScheduleCstCronJob<CfbSpreadSchedulerJob>("CFB Spread Scheduler Daily", "Daily catch-up pass for CFB spread-lock triggers", "0 0 6 * * ?");
 
-        // CFB Scores — Saturday noon, 4pm, 8pm, midnight CST + Sunday 6am CST (covers all kickoff windows)
+        // CFB Scores — Saturday noon, 4pm, 8pm, midnight CST + Sunday 6am/12:30pm/7:40pm + Monday 6am
+        // CST. A CFB slate's own window can span the whole week (CfbSlates.StartDate/EndDate), not
+        // just Saturday, so this needs the same Sunday/Monday coverage NFL already has below for its
+        // Sunday late games + MNF — without it, a game that finishes Sunday afternoon/evening or later
+        // sits unsynced until the following Saturday's noon run (frizat-tf1: this is exactly what
+        // happened to a real user's CFB picks).
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat Noon", "Fetches CFB scores at Saturday noon kickoff window", "0 0 12 ? * SAT");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat 4pm", "Fetches CFB scores at Saturday afternoon kickoff window", "0 0 16 ? * SAT");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat 8pm", "Fetches CFB scores at Saturday evening kickoff window", "0 0 20 ? * SAT");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat Midnight", "Fetches CFB final scores late Saturday night", "0 0 0 ? * SUN");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 6am", "Fetches CFB overnight final scores Sunday morning", "0 0 6 ? * SUN");
+        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 12:30pm", "Fetches CFB scores at Sunday early kickoff window", "0 30 12 ? * SUN");
+        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 7:40pm", "Fetches CFB scores at Sunday evening kickoff window", "0 40 19 ? * SUN");
+        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Mon 6am", "Fetches CFB final scores that finished late Sunday night/Monday", "0 0 6 ? * MON");
 
         // League Juice reminder + auto-lock (frizat-ugs) — mirrors the spread schedulers above:
         // LeagueJuiceScheduleSource reads NflSeasonWeekConfig/CfbSeasonWeekConfig (never a

@@ -162,6 +162,14 @@ public static class GameHelpers {
     public static long GetHomeTeamScore(Competition competition) => GetTeamScore(GetHomeTeam(competition));
     public static long GetAwayTeamScore(Competition competition) => GetTeamScore(GetAwayTeam(competition));
     public static bool IsGameStarted(Competition competition) => competition.Status.Type.Name != TypeName.StatusScheduled;
+
+    // GameTime-based sibling of IsGameStarted(Competition) above — for CfbSpreads/NflSpreads rows,
+    // which have no live ESPN status to check. Used by CfbLeaderboardService/LeaderboardService to
+    // tell a terminal MissingPicks (every game for the week/slate has already kicked off) apart
+    // from a still-open picking window (MissingGameResults) — same GameTime <= now boundary
+    // CfbPicksController.StartedTeams already enforces for locking individual picks.
+    public static bool AllGamesStarted(IEnumerable<DateTimeOffset> gameTimes, DateTimeOffset now) =>
+        gameTimes.All(t => t <= now);
     public static bool IsGameOver(Competition competition) => competition.Status.Type.Name == TypeName.StatusFinal;
     public static long GetTeamScore(Competitor competitor) => competitor.Score;
     public static string GetTeamAbbr(Competitor competitor) => competitor.Team.Abbreviation;
