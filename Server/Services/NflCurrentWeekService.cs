@@ -3,7 +3,7 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class NflCurrentWeekService(ILeagueRepository repo, TimeProvider timeProvider) : INflCurrentWeekService {
+public class NflCurrentWeekService(ILeagueRepository repo, [FromKeyedServices(CurrentWeekClock.Key)] TimeProvider timeProvider) : INflCurrentWeekService {
     public async Task<NflWeekInfo> GetCurrentWeekAsync() {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var configs = await repo.GetNflSeasonWeekConfigsAsync();
