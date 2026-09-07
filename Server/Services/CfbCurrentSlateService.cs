@@ -4,7 +4,7 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class CfbCurrentSlateService(ICfbRepository repo, TimeProvider timeProvider) : ICfbCurrentSlateService {
+public class CfbCurrentSlateService(ICfbRepository repo, [FromKeyedServices(CurrentWeekClock.Key)] TimeProvider timeProvider) : ICfbCurrentSlateService {
     public async Task<CfbSlateInfo?> GetCurrentSlateAsync() {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var slates = (await repo.GetAllSlatesAsync()).ToList();
