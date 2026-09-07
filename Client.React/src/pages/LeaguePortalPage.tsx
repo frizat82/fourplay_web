@@ -504,6 +504,7 @@ export default function LeaguePortalPage() {
 
           {tab === 0 && (
             <MembersTab
+              leagueName={selectedLeague.leagueName}
               members={members}
               loading={loadingMembers}
               costDto={costDto}
@@ -716,6 +717,7 @@ export default function LeaguePortalPage() {
 }
 
 interface MembersTabProps {
+  leagueName: string;
   members: LeagueUserMappingDto[];
   loading: boolean;
   costDto: LeagueCostDto | null;
@@ -734,7 +736,7 @@ interface MembersTabProps {
   onCancelMembershipInvite: (id: number) => void;
 }
 
-function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
+function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   // Server-computed — the formula differs by sport (and, per policy, could change again), so this
   // must not be re-derived client-side. See LeagueController.ComputeLeagueCost.
@@ -804,11 +806,20 @@ function MembersTab({ members, loading, costDto, isAdmin: admin, onRemove, onInv
               </Typography>
             )}
             {!linkExpired && (
-              <Stack direction="row" spacing={1} flexWrap="wrap">
+              // spacing={2} + useFlexGap matches the button row above (line 759) — same reasoning:
+              // Stack's default margin-based spacing collapses to zero gap between wrapped lines
+              // on mobile, useFlexGap fixes that with real CSS `gap`.
+              <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap">
                 <Button size="small" startIcon={<ContentCopyIcon />} variant="outlined" onClick={() => void copy(inviteUrl)}>
                   Copy
                 </Button>
-                <Button size="small" startIcon={<IosShareIcon />} variant="contained" color="secondary" onClick={() => share('Join my league', inviteUrl)}>
+                <Button
+                  size="small"
+                  startIcon={<IosShareIcon />}
+                  variant="contained"
+                  color="secondary"
+                  onClick={() => share('Join my league', inviteUrl, `You're invited to join ${leagueName} — pick against your friends all season on IV League.`)}
+                >
                   Share
                 </Button>
                 <Button
