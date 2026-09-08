@@ -24,6 +24,7 @@ import { isGameDecided, isGameFinal, isGameLive, spreadLabel } from '../utils/ga
 import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
+import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
 
@@ -63,14 +64,6 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
   // null = live current week (polls in background); non-null = historical navigation
   const [weekState, setWeekState] = useState<WeekState | null>(null);
-  // The real navigable ceiling and the real "current week" identity — captured only from a
-  // current-week load, mirroring PicksPage's currentBounds. loadHistoricalScores returns
-  // maxWeek/maxSeason/season/week set to whatever is being VIEWED, not "today" — re-deriving
-  // either from the active query's data would collapse the selector's ceiling, or make selecting
-  // your own current week from the dropdown look like a historical navigation.
-  const [currentWeekSnapshot, setCurrentWeekSnapshot] = useState<
-    (WeekState & { maxWeek: number; maxSeason: number }) | null
-  >(null);
   const [isPageVisible, setIsPageVisible] = useState(true);
   const [showMatrixView, setShowMatrixView] = useState(false);
   const [showOnlyMyPicks, setShowOnlyMyPicks] = useState(false);
@@ -94,19 +87,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     placeholderData: keepPreviousData,
   });
 
-  useEffect(() => {
-    if (!isCurrentWeek || !data) return;
-    // data gets a new reference on every poll/SSE tick (scores/clock change), which would
-    // otherwise force this state — and everything derived from it below, including
-    // WeekYearSelector's props — to re-render on every tick even when nothing here actually
-    // changed. Bail out unless the fields this snapshot actually cares about moved.
-    setCurrentWeekSnapshot(prev =>
-      prev
-        && prev.season === data.season && prev.week === data.week && prev.isPostSeason === data.isPostSeason
-        && prev.maxWeek === data.maxWeek && prev.maxSeason === data.maxSeason
-        ? prev
-        : { season: data.season, week: data.week, isPostSeason: data.isPostSeason, maxWeek: data.maxWeek, maxSeason: data.maxSeason });
-  }, [isCurrentWeek, data]);
+  const { maxWeek: currentMaxWeek, maxSeason: currentMaxSeason, routeToCurrentIfMatches } =
+    useCurrentWeekNav(isCurrentWeek, data, setWeekState);
 
   // Page visibility — pause polling for a hidden tab rather than burn cycles/battery on it.
   useEffect(() => {
@@ -125,22 +107,9 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     return () => es.close();
   }, [isCurrentWeek, isPageVisible, leaguesLoaded, data?.hasActiveGames, adapter.sseUrl, refetch]);
 
-  const maxWeek = currentWeekSnapshot?.maxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
-  const maxSeason = currentWeekSnapshot?.maxSeason ?? new Date().getFullYear();
+  const maxWeek = currentMaxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
+  const maxSeason = currentMaxSeason ?? new Date().getFullYear();
   const minSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
-
-  // Selecting the week that IS the current week (from the dropdown, not the "Current Week"
-  // button) routes back to the live query instead of a one-off historical fetch — the historical
-  // path has no equivalent of hasActiveGames/SSE eligibility, so it would freeze live updates.
-  const routeToCurrentIfMatches = useCallback((candidate: WeekState): WeekState | null => {
-    if (currentWeekSnapshot
-      && candidate.season === currentWeekSnapshot.season
-      && candidate.week === currentWeekSnapshot.week
-      && candidate.isPostSeason === currentWeekSnapshot.isPostSeason) {
-      return null;
-    }
-    return candidate;
-  }, [currentWeekSnapshot]);
 
   const handleWeekChange = useCallback((week: number, meta?: { isPostSeason?: boolean }) => {
     const season = data?.season ?? new Date().getFullYear();
@@ -218,11 +187,11 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   );
   if (!data) return null;
 
-  // Current week with no odds yet still needs the WeekYearSelector below rendered — otherwise a
-  // visitor checking in before this week's spreads release has no way to browse to a different
-  // week/season at all (frizat: previously this was a full-page early return that skipped the
-  // selector entirely).
-  const oddsNotReady = !data.hasOdds && isCurrentWeek;
+  // No longer gated on isCurrentWeek — with navigation capped at the real current week
+  // (adapter.maxWeek), an odds-less week is simply unreachable once you've moved past it, so
+  // "no odds for the week I'm looking at" is the correct condition on its own (mirrors the
+  // identical PicksPage.tsx fix, frizat-8y4).
+  const oddsNotReady = !data.hasOdds;
 
   const games = showOnlyMyPicks
     ? sortedGames.filter(g =>
@@ -297,12 +266,6 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
             </Grid>
           ) : (
             <>
-              {!data?.hasOdds && (
-                <Grid size={12} sx={{ textAlign: 'center', py: 6 }}>
-                  <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
-                </Grid>
-              )}
               {data?.hasOdds && showOnlyMyPicks && games.length === 0 && (
                 <Grid size={12}>
                   <Paper sx={{ p: 4, textAlign: 'center' }}>
