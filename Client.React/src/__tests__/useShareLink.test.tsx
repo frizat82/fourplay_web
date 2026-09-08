@@ -88,4 +88,16 @@ describe('useShareLink', () => {
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://ivleague.com/scores'));
     expect(toastPush).toHaveBeenCalledWith('Link copied', 'info');
   });
+
+  it('share() falls back to copying the text message alongside the url when navigator.share is unavailable', async () => {
+    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+
+    const { result } = renderHook(() => useShareLink());
+    result.current.share('Join my league', 'https://ivleague.com/join/abc', "You're invited to join OG FourPlayaz.");
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      "You're invited to join OG FourPlayaz. https://ivleague.com/join/abc"
+    ));
+    expect(toastPush).toHaveBeenCalledWith('Link copied', 'info');
+  });
 });
