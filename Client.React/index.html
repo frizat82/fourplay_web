@@ -5,18 +5,21 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- NFL (ivleague.xyz) and CFB (cfb.ivleague.xyz) are separate origins sharing this one
-         build/index.html, so which manifest/home-screen title applies has to be picked at
+         build/index.html, so which manifest/home-screen icon/title applies has to be picked at
          runtime by hostname, not baked into a static tag — otherwise both sports' installed
-         home-screen icons would be indistinguishable ("IV League" for both). This duplicates the
-         same hostname check src/services/sport.tsx's detectSport() and AppLayout.tsx's
-         getOtherSportUrl() already do — deliberately, not an oversight: this script runs before
-         any JS module loads (it has to append the manifest link ASAP), so it can't import either
-         of those. Keep the `cfb.` prefix check here in sync with theirs if that logic ever changes.
+         home-screen icons would be indistinguishable ("IV League" for both, same crest with no
+         NFL/CFB badge). This duplicates the same hostname check src/services/sport.tsx's
+         detectSport() and AppLayout.tsx's getOtherSportUrl() already do — deliberately, not an
+         oversight: this script runs before any JS module loads (it has to append the manifest/
+         apple-touch-icon links ASAP), so it can't import either of those. Keep the `cfb.` prefix
+         check here in sync with theirs if that logic ever changes.
          manifest.json (NFL) and manifest.cfb.json (CFB) are intentionally near-duplicates —
-         name/short_name differ, everything else (icons, theme_color, background_color) must
-         match. JSON can't hold a same-file comment, so if you change one, change the other. -->
+         name/short_name/icons differ, everything else (theme_color, background_color) must
+         match. JSON can't hold a same-file comment, so if you change one, change the other.
+         apple-touch-icon-nfl.png/apple-touch-icon-cfb.png are the same base crest with a small
+         "NFL"/"CFB" badge composited on — see icon-192/512(-maskable)-{nfl,cfb}.png for the same
+         treatment used in the manifests above. -->
     <script>
       (function () {
         var isCfb = location.hostname.startsWith('cfb.');
@@ -24,6 +27,11 @@
         manifestLink.rel = 'manifest';
         manifestLink.href = isCfb ? '/manifest.cfb.json' : '/manifest.json';
         document.head.appendChild(manifestLink);
+
+        var appleTouchIconLink = document.createElement('link');
+        appleTouchIconLink.rel = 'apple-touch-icon';
+        appleTouchIconLink.href = isCfb ? '/apple-touch-icon-cfb.png' : '/apple-touch-icon-nfl.png';
+        document.head.appendChild(appleTouchIconLink);
 
         var titleMeta = document.createElement('meta');
         titleMeta.name = 'apple-mobile-web-app-title';
