@@ -25,6 +25,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Added: shared links now have a real title, description, and image for link previews in apps that build their own instead of using the share sheet's message
 - Fixed: the Picks and Scores pages let you navigate past the current week into weeks that hadn't opened yet, including showing clickable pick buttons for a week with no released spread — navigation is now capped at the real current week, and picks for any other week are rejected server-side
 - Fixed: clicking "My Picks" or "Scores" while already on that page didn't return you to the current week if you'd navigated away — it now always does
+- Fixed: on CFB, the Picks page still let you navigate past the current week all the way to the end of the season — the fix above only covered NFL; Picks now caps at the current week on both sports the same way Scores already did
 
 ## 2026-09-06
 
