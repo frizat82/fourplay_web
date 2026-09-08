@@ -16,6 +16,10 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: an NFL game's kickoff time in our records could go stale after a flex-schedule move or weather delay, since only the spread itself was ever locked — kickoff time now keeps refreshing so late-game picking windows are tracked correctly
 - Fixed: the demo environment's "current week/slate" could silently roll over into a new real NFL/CFB season with no demo data once the real calendar crossed that season's start, breaking Picks/Scores/Leaderboard in demo mode — demo now resolves "current" against a clock pinned to its own seeded data instead of the real wall clock
 
+## 2026-09-08
+
+- Added: the installed home-screen icon for each sport now shows a small NFL or CFB badge, so the two apps are distinguishable by icon alone instead of only by the label underneath
+
 ## 2026-09-06
 
 - Added: live field position now highlights only the actual 20-yard red zone (near whichever goal the ball is closest to) instead of tinting the entire field, and the game card gets a red outline while a live game is in the red zone, so it's spottable at a glance across a list of games
