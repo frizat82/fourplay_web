@@ -21,6 +21,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Added: the installed home-screen icon for each sport now shows a small NFL or CFB badge, so the two apps are distinguishable by icon alone instead of only by the label underneath
 - Fixed: sharing a league invite link on a browser without native share support (e.g. most desktop browsers) silently copied just the bare url to the clipboard, dropping the inviting message entirely
 - Added: shared links now have a real title, description, and image for link previews in apps that build their own instead of using the share sheet's message
+- Fixed: the Picks and Scores pages let you navigate past the current week into weeks that hadn't opened yet, including showing clickable pick buttons for a week with no released spread — navigation is now capped at the real current week, and picks for any other week are rejected server-side
+- Fixed: clicking "My Picks" or "Scores" while already on that page didn't return you to the current week if you'd navigated away — it now always does
 
 ## 2026-09-06
 

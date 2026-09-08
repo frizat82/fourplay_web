@@ -16,6 +16,13 @@ import {
 import type { SportAdapter, GameView, PickView, PickType } from './sportAdapter';
 import { revealPicksForStartedGames, memoizeOnce } from './sportAdapter';
 
+// Cap navigation at the real current week, not a hardcoded season length — once the season
+// moves into the postseason the full regular season (18) is legitimately browsable/complete;
+// mirrors cfbAdapter.ts's already-correct dynamic maxWeek.
+function maxWeekFor(isPostSeason: boolean, nflWeek: number): number {
+  return isPostSeason ? 18 : nflWeek;
+}
+
 function competitionToGameView(
   competition: Competition,
   event: Event,
@@ -173,7 +180,7 @@ export function createNflAdapter(): SportAdapter {
       const sc = await buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, hasOdds);
       const games: GameView[] = (data?.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const userPicks = picksResult.map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
-      return { season, week: weekNum, isPostSeason: postSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: 18, maxSeason: season };
+      return { season, week: weekNum, isPostSeason: postSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: maxWeekFor(postSeason, nflWeek), maxSeason: season };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
@@ -188,7 +195,7 @@ export function createNflAdapter(): SportAdapter {
       const sc = await buildSpreadCache(data.events, leagueId, season, nflWeek, hasOdds);
       const games: GameView[] = data.events.flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const userPicks = picksResult.map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
-      return { season, week, isPostSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(week, isPostSeason), maxWeek: 18, maxSeason: season };
+      return { season, week, isPostSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(week, isPostSeason), maxWeek: maxWeekFor(isPostSeason, nflWeek), maxSeason: season };
     },
 
     async submitPicks(leagueId, { season, week, isPostSeason }, picks) {
@@ -222,7 +229,7 @@ export function createNflAdapter(): SportAdapter {
       );
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
-      return { season, week: weekNum, isPostSeason: postSeason, games, allPicks: revealPicksForStartedGames(allPicks, games, userId), userPicks, hasOdds, hasActiveGames, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: 18, maxSeason: season };
+      return { season, week: weekNum, isPostSeason: postSeason, games, allPicks: revealPicksForStartedGames(allPicks, games, userId), userPicks, hasOdds, hasActiveGames, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: maxWeekFor(postSeason, nflWeek), maxSeason: season };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
@@ -238,7 +245,7 @@ export function createNflAdapter(): SportAdapter {
       const allPicksDtos = await getLeaguePicks(leagueId, season, nflWeek);
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
-      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds, hasActiveGames: false, requiredPicks: getEspnRequiredPicks(week, isPostSeason), maxWeek: 18, maxSeason: season };
+      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds, hasActiveGames: false, requiredPicks: getEspnRequiredPicks(week, isPostSeason), maxWeek: maxWeekFor(isPostSeason, nflWeek), maxSeason: season };
     },
   };
 }
