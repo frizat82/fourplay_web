@@ -19,6 +19,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 ## 2026-09-08
 
 - Added: the installed home-screen icon for each sport now shows a small NFL or CFB badge, so the two apps are distinguishable by icon alone instead of only by the label underneath
+- Fixed: a shared invite link could preview with no title, description, or image at all in apps like iOS Messages that build their own link preview instead of using the share sheet's message — the site now has a real preview by default
 
 ## 2026-09-06
 
