@@ -21,7 +21,10 @@ export function useShareLink() {
     if (typeof navigator.share === 'function') {
       shareViaNavigator(text ? { title, text, url } : { title, url });
     } else {
-      void copy(url);
+      // Without navigator.share, the only thing we can hand the user is the clipboard — so the
+      // message has to travel with the url here, or it's lost entirely (this was the actual bug:
+      // a browser/context lacking Web Share support silently copied the bare url with no message).
+      void copy(text ? `${text} ${url}` : url);
     }
   };
 
