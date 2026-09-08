@@ -18,6 +18,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-09-08
 
+- Fixed: a CFB game that kicked off Monday night had no scheduled fetch after it finished — scores now also refresh early Tuesday morning, matching the existing post-Monday-Night-Football fetch NFL already has
+- Improved: the leaderboard now settles already-decided users right away instead of showing everyone as $0 while a single pick is still pending — the still-in-progress week's column is labeled "Not Final" until every pick that week has a result
 - Added: the installed home-screen icon for each sport now shows a small NFL or CFB badge, so the two apps are distinguishable by icon alone instead of only by the label underneath
 - Fixed: sharing a league invite link on a browser without native share support (e.g. most desktop browsers) silently copied just the bare url to the clipboard, dropping the inviting message entirely
 - Added: shared links now have a real title, description, and image for link previews in apps that build their own instead of using the share sheet's message
