@@ -24,9 +24,9 @@ namespace FourPlayWebApp.Server.Controllers {
         [Authorize(Roles = "Administrator")]
         [HttpPost("run-scores")]
         public Task<IActionResult> RunScores() =>
-            // frizat-11t: NflScoresJob is registered under 7 separately-keyed cron triggers ("NFL
-            // Scores Thu 10am", "NFL Scores Fri 1am", ...), all containing "Scores" — same for CFB's
-            // 5 triggers ("CFB Scores Sat Noon", ...). The old unscoped Contains("Scores")
+            // frizat-11t: NflScoresJob is registered under several separately-keyed cron triggers
+            // ("NFL Scores Thu 10am", "NFL Scores Fri 1am", ...), all containing "Scores" — same
+            // for CFB's own set of triggers ("CFB Scores Sat Noon", ...). The old unscoped Contains("Scores")
             // FirstOrDefault could pick either sport's job depending on enumeration order. Scoped to
             // "NFL Scores " and soonest-first, same pattern as the spread jobs — though unlike the
             // per-week spread jobs, "soonest" carries no real meaning here: every trigger for a given
@@ -71,9 +71,9 @@ namespace FourPlayWebApp.Server.Controllers {
         [HttpPost("run-cfb-scores")]
         public Task<IActionResult> RunCfbScores() =>
             // frizat-11t: the fixed "CFB Scores Job" JobKey this used to trigger has never
-            // existed — CfbScoresJob runs via 5 separately-keyed cron triggers ("CFB Scores Sat
-            // Noon"/"Sat 4pm"/"Sat 8pm"/"Sat Midnight"/"Sun 6am"), same shape as the per-week
-            // spread jobs. Pick the soonest one, not a hardcoded key that always 400s.
+            // existed — CfbScoresJob runs via several separately-keyed cron triggers ("CFB Scores
+            // Sat Noon"/"Sat 4pm"/..., one per kickoff window across the week), same shape as the
+            // per-week spread jobs. Pick the soonest one, not a hardcoded key that always 400s.
             TriggerSoonestJobAsync("CFB Scores ", "CFB Scores", force: false);
 
         [Authorize(Roles = "Administrator")]

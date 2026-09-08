@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import ScoresPage from '../pages/ScoresPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCfbAdapter } from '../services/cfbAdapter';
@@ -108,7 +109,9 @@ const renderWithClient = (ui: React.ReactElement, client?: QueryClient) => {
   const queryClient = client ?? new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
-  return { ...render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>), queryClient };
+  // MemoryRouter — useCurrentWeekNav (shared by PicksPage/ScoresPage) reads useLocation() to
+  // reset back to the current week when AppLayout's nav-link click passes resetToCurrent state.
+  return { ...render(<QueryClientProvider client={queryClient}><MemoryRouter>{ui}</MemoryRouter></QueryClientProvider>), queryClient };
 };
 
 const renderPage = async () => {
@@ -426,9 +429,10 @@ describe('ScoresPage', () => {
       });
       mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(2));
       // getWeekScores now serves BOTH the current week (2, via loadCurrentScores) and historical
-      // navigation (week 5) — differentiate by the requested week, same as the real backend would.
-      mockedGetWeekScores.mockImplementation(async (week: number) => week === 5
-        ? makeScores(5, false, true)
+      // navigation (week 1 — a PAST week; navigation is capped at the real current week now, so
+      // this can no longer be a future week like the old week-5 version of this test used).
+      mockedGetWeekScores.mockImplementation(async (week: number) => week === 1
+        ? makeScores(1, false, true)
         : createScores({
             week: 2, postSeason: false,
             events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
@@ -440,11 +444,11 @@ describe('ScoresPage', () => {
       await renderPage();
       expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0);
 
-      // Navigate away to week 5 (a real historical fetch), then back to week 2 via the dropdown
+      // Navigate away to week 1 (a real historical fetch), then back to week 2 via the dropdown
       // — week 2 is literally the current week's own identity (setupDefaults default), so
       // returning to it must route back to weekState=null, not stay on the historical path.
       await user.click(screen.getAllByRole('combobox')[1]);
-      await user.click(screen.getByRole('option', { name: /week 5/i }));
+      await user.click(screen.getByRole('option', { name: /week 1/i }));
       await waitFor(() => expect(screen.getAllByText(/DAL/i).length).toBeGreaterThan(0));
 
       await user.click(screen.getAllByRole('combobox')[1]);
@@ -529,7 +533,7 @@ describe('ScoresPage', () => {
 
     rerender(
       <QueryClientProvider client={client}>
-        <ScoresPage adapter={createCfbAdapter()} />
+        <MemoryRouter><ScoresPage adapter={createCfbAdapter()} /></MemoryRouter>
       </QueryClientProvider>,
     );
 
@@ -577,7 +581,7 @@ describe('ScoresPage', () => {
     sessionState.currentLeague = null;
     rerender(
       <QueryClientProvider client={queryClient}>
-        <ScoresPage adapter={createNflAdapter()} />
+        <MemoryRouter><ScoresPage adapter={createNflAdapter()} /></MemoryRouter>
       </QueryClientProvider>,
     );
 

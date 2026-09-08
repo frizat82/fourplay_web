@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Controllers;
 using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
@@ -52,6 +53,18 @@ public class CfbPicksControllerTests
         EspnWeekNumber = espnWeekNumber,
     };
 
+    /// <summary>
+    /// Stubs the control-table "current slate" resolver AddPicks now checks against.
+    /// Defaults to matching every other test's slate id (1) and season (2025) so all
+    /// pre-existing tests (which all submit picks "for the current slate") keep passing.
+    /// </summary>
+    private static ICfbCurrentSlateService BuildCurrentSlateService(int slateId = 1, int season = 2025) {
+        var svc = Substitute.For<ICfbCurrentSlateService>();
+        svc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(slateId, season, 1, "Week 1", "RegularSeason",
+            DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(6)), null, DateTime.UtcNow.AddDays(-1)));
+        return svc;
+    }
+
     // frizat: a team plays at most one game per slate, so (CfbSlateId, HomeTeam) — not an ESPN id
     // — is what uniquely identifies a game, mirroring NflSpreads' (Season, NflWeek, HomeTeam).
     private static CfbSpreads MakeSpread(DateTimeOffset gameTime, string home = "ORE", string away = "OSU", bool isLeagueEligible = true, double overUnder = 0) => new()
@@ -98,7 +111,7 @@ public class CfbPicksControllerTests
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
         _repo.AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>()).Returns(Task.CompletedTask);
 
-        var result = await BuildController().AddPicks(request);
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.NotNull(ok.Value);
@@ -121,7 +134,7 @@ public class CfbPicksControllerTests
             Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
-        var result = await BuildController().AddPicks(request);
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
         await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
         Assert.IsType<OkObjectResult>(result);
@@ -139,7 +152,9 @@ public class CfbPicksControllerTests
             Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
-        var result = await BuildController().AddPicks(request);
+        // Membership is checked before the current-slate guard, so this never touches
+        // currentSlateService — an unconfigured substitute is enough to satisfy the signature.
+        var result = await BuildController().AddPicks(request, Substitute.For<ICfbCurrentSlateService>());
 
         Assert.IsType<ForbidResult>(result);
         await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
@@ -159,7 +174,10 @@ public class CfbPicksControllerTests
             Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
-        var result = await BuildController().AddPicks(request);
+        // currentSlateService is invoked concurrently with the slate lookup (both are fetched
+        // in the same Task.WhenAll), but the slate-existence check is evaluated first and wins
+        // regardless of what it returns — an unconfigured substitute (defaults to null) is fine.
+        var result = await BuildController().AddPicks(request, Substitute.For<ICfbCurrentSlateService>());
 
         Assert.IsType<BadRequestObjectResult>(result);
         await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
@@ -179,7 +197,7 @@ public class CfbPicksControllerTests
             Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
-        var result = await BuildController().AddPicks(request);
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("kicked off", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
@@ -199,7 +217,7 @@ public class CfbPicksControllerTests
             Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
-        var result = await BuildController().AddPicks(request);
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
         Assert.IsType<OkObjectResult>(result);
     }
@@ -218,7 +236,7 @@ public class CfbPicksControllerTests
             Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
-        var result = await BuildController().AddPicks(request);
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
         Assert.IsType<OkObjectResult>(result);
     }
@@ -245,10 +263,79 @@ public class CfbPicksControllerTests
             ]
         };
 
-        var result = await BuildController().AddPicks(request);
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("Too many picks", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+    }
+
+    // ── AddPicks — current-slate-only guard (frizat-8y4: nothing previously stopped a pick
+    // being submitted for a slate whose spread hasn't even released yet — worse than NFL's
+    // equivalent gap, since a spread-less future slate has empty startedTeams/ineligibleTeams
+    // and so had NO per-pick validation fire at all) ────────────────────────────────────────
+
+    [Fact]
+    public async Task AddPicks_WhenSlateIsNotTheCurrentSlate_ReturnsBadRequest()
+    {
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([]);
+        _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
+        var request = new AddCfbPicksRequest
+        {
+            LeagueId = 1, CfbSlateId = 1, Season = 2025,
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
+        };
+
+        // Request targets slate 1, but the control table says slate 2 is current.
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService(slateId: 2));
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Contains("current", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+    }
+
+    [Fact]
+    public async Task AddPicks_WhenSeasonIsNotTheCurrentSeason_ReturnsBadRequest()
+    {
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([]);
+        _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
+        var request = new AddCfbPicksRequest
+        {
+            LeagueId = 1, CfbSlateId = 1, Season = 2025,
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
+        };
+
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService(season: 2026));
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Contains("current", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+    }
+
+    [Fact]
+    public async Task AddPicks_WhenNoCurrentSlateResolves_ReturnsBadRequest()
+    {
+        // Unlike NFL's INflCurrentWeekService (which always throws instead), CFB's
+        // ICfbCurrentSlateService can legitimately return null (e.g. nothing seeded yet) —
+        // no resolvable current slate means there is no slate open for picking.
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([]);
+        _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
+        var request = new AddCfbPicksRequest
+        {
+            LeagueId = 1, CfbSlateId = 1, Season = 2025,
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
+        };
+
+        var noCurrentSlate = Substitute.For<ICfbCurrentSlateService>();
+        noCurrentSlate.GetCurrentSlateAsync().Returns((CfbSlateInfo?)null);
+
+        var result = await BuildController().AddPicks(request, noCurrentSlate);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Contains("current", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
         await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
     }
 
@@ -559,7 +646,7 @@ public class CfbPicksControllerTests
             Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
 
-        var result = await BuildController().AddPicks(request);
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
         Assert.IsType<BadRequestObjectResult>(result);
         await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());

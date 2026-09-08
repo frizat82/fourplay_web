@@ -124,6 +124,18 @@ public class PicksTests
         Season  = Season,
     };
 
+    /// <summary>
+    /// Stubs the control-table "current week" resolver AddPicks now checks against.
+    /// Defaults to matching this file's Week/Season constants so every pre-existing test
+    /// (all of which submit picks "for the current week") keeps passing unchanged.
+    /// </summary>
+    private static INflCurrentWeekService BuildCurrentWeekService(int week = Week, int season = Season)
+    {
+        var svc = Substitute.For<INflCurrentWeekService>();
+        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(week, week, season, false, "Week", "PickAgainstSpread", DateTime.UtcNow.AddDays(-1)));
+        return svc;
+    }
+
     // ── Tests ─────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -144,7 +156,7 @@ public class PicksTests
         var picks = new[] { MakePick("BUF") };
 
         // Act
-        var result = await controller.AddPicks(picks);
+        var result = await controller.AddPicks(picks, BuildCurrentWeekService());
 
         // Assert — server must reject the pick because kickoff has already passed
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
@@ -170,7 +182,7 @@ public class PicksTests
         var picks = new[] { MakePick("BUF") };
 
         // Act
-        var result = await controller.AddPicks(picks);
+        var result = await controller.AddPicks(picks, BuildCurrentWeekService());
 
         // Assert — pick accepted, returns 1
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -205,8 +217,9 @@ public class PicksTests
             NflWeek = historicalWeek, Season = historicalSeason,
         } };
 
-        // Act
-        var result = await controller.AddPicks(picks);
+        // Act — this pick's own week (2023/Wk5) is what must match "current," not the
+        // unrelated cached ESPN event's week (2024/Wk2, the source of the collision bug).
+        var result = await controller.AddPicks(picks, BuildCurrentWeekService(historicalWeek, historicalSeason));
 
         // Assert — BUF's Week 2/2024 kickoff is irrelevant to this Week 5/2023 pick
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -230,7 +243,7 @@ public class PicksTests
         var picks = new[] { MakePick("BUF") };
 
         // Act
-        var result = await controller.AddPicks(picks);
+        var result = await controller.AddPicks(picks, BuildCurrentWeekService());
 
         // Assert — no ESPN data → fail open, let picks through
         Assert.IsType<OkObjectResult>(result.Result);
@@ -273,7 +286,7 @@ public class PicksTests
         };
 
         // Act
-        var result = await controller.AddPicks([pick]);
+        var result = await controller.AddPicks([pick], BuildCurrentWeekService());
 
         // Assert — picks saved must use the JWT claim userId, not the DTO value
         await repo.Received(1).AddNflPicksAsync(
@@ -308,7 +321,7 @@ public class PicksTests
 
         var controller = BuildController(repo, espn, BuildPrincipal(UserId), cache);
 
-        await controller.AddPicks([MakePick("BUF")]);
+        await controller.AddPicks([MakePick("BUF")], BuildCurrentWeekService());
 
         // Cache entry must be removed so subsequent reads reload from DB
         Assert.False(cache.TryGetValue(cacheKey, out _), "Cache must be cleared after AddPicks");
@@ -327,7 +340,9 @@ public class PicksTests
         var espn = Substitute.For<IEspnCacheService>();
         var controller = BuildController(repo, espn, BuildPrincipal(UserId));
 
-        var result = await controller.AddPicks([MakePick("BUF")]);
+        // Membership is checked before the current-week guard, so this never touches
+        // currentWeekService — an unconfigured substitute is enough to satisfy the signature.
+        var result = await controller.AddPicks([MakePick("BUF")], Substitute.For<INflCurrentWeekService>());
 
         Assert.IsType<ForbidResult>(result.Result);
         await repo.DidNotReceive().AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>());
@@ -359,12 +374,74 @@ public class PicksTests
         var controller = BuildController(repo, espn, BuildPrincipal(UserId));
 
         // Submit the same pick that already exists
-        var result = await controller.AddPicks([MakePick("BUF")]);
+        var result = await controller.AddPicks([MakePick("BUF")], BuildCurrentWeekService());
 
         // Must be OK (not a bad request) but no new picks inserted
         Assert.IsType<OkObjectResult>(result.Result);
         await repo.Received(1).AddNflPicksAsync(
             Arg.Is<IEnumerable<NflPicks>>(picks => !picks.Any()));
+    }
+
+    // ── AddPicks — current-week-only guard (frizat-8y4: nothing previously stopped a pick
+    // being submitted for a week whose spread hasn't even released yet — the per-game
+    // kickoff guard above never fires for a future game, since its kickoff hasn't passed) ──
+
+    [Fact]
+    public async Task AddPicks_WhenWeekIsNotTheCurrentWeek_ReturnsBadRequest()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns((EspnScores?)null);
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+        // Pick targets Week 2, but the control table says Week 3 is the current one.
+        var result = await controller.AddPicks([MakePick("BUF")], BuildCurrentWeekService(week: Week + 1));
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("current", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await repo.DidNotReceive().AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>());
+    }
+
+    [Fact]
+    public async Task AddPicks_WhenSeasonIsNotTheCurrentSeason_ReturnsBadRequest()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns((EspnScores?)null);
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+        var result = await controller.AddPicks([MakePick("BUF")], BuildCurrentWeekService(season: Season + 1));
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("current", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await repo.DidNotReceive().AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>());
+    }
+
+    [Fact]
+    public async Task AddPicks_WhenWeekMatchesTheCurrentWeek_ReturnsOk()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
+        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+
+        var espn = Substitute.For<IEspnCacheService>();
+        espn.GetScoresAsync().Returns((EspnScores?)null);
+
+        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+        var result = await controller.AddPicks([MakePick("BUF")], BuildCurrentWeekService());
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(1, ok.Value);
     }
 
     // ── GetLeaguePicks — pick reveal gate ─────────────────────────────────────
