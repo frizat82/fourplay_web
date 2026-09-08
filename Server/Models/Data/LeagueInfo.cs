@@ -1,3 +1,4 @@
+using System.Linq;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Shared.Models.Enum;
 
@@ -15,4 +16,11 @@ public class LeagueInfo {
 
     public ICollection<LeagueUserMapping> LeagueUserMappings { get; set; }
     public ICollection<NflPicks> NflPicks { get; set; }
+
+    // The earliest season this league has ever been configured to play (via LeagueJuiceMapping) —
+    // null if it's never been configured for any season. The single source of truth for "did this
+    // league exist yet" across admin endpoints (GetAllLeagues' MinSeason field, GetAllLeaguesCost's
+    // per-season exclusion filter), so both stay in sync instead of re-deriving it independently.
+    public int? MinConfiguredSeason() =>
+        LeagueJuiceMappings.Count > 0 ? LeagueJuiceMappings.Min(m => m.Season) : (int?)null;
 }

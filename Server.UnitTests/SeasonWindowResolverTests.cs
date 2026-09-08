@@ -109,6 +109,50 @@ public class SeasonWindowResolverTests
         Assert.Equal(windows[1], SeasonWindowResolver.ResolveCurrentWeek(windows, closeNow));
     }
 
+    // frizat-tf2: DemoDataSeeder.DemoFrozenNow must resolve against the real, migration-seeded
+    // NflSeasonWeekConfigs/CfbSeasonWeekConfigs calendars the same way it would for a real user
+    // checking in right after the seeded Super Bowl/Championship — never rolling over into the
+    // real next season the demo seeder never populates, no matter how far past that season's
+    // real spread-lock date the actual wall clock has moved. Checked against both sports' real
+    // migration-seeded values (20260727164222_AddNflSeasonWeekConfig.cs and its CFB equivalent)
+    // since each sport's own real calendar could independently break this invariant.
+    [Fact]
+    public void ResolveCurrentWeek_DemoFrozenNow_StaysOnSeededWeek_NotRealSeasonRollover()
+    {
+        var nflWindows = new[]
+        {
+            WeekWindow(2025, new DateTime(2026, 2, 3), new DateTime(2026, 2, 10), new DateTime(2026, 2, 8, 13, 30, 0, DateTimeKind.Utc)), // seeded Super Bowl
+            WeekWindow(2026, new DateTime(2026, 9, 8), new DateTime(2026, 9, 15), new DateTime(2026, 9, 9, 14, 20, 0, DateTimeKind.Utc)), // real 2026 Week 1 — unseeded in demo
+        };
+        Assert.Equal(2025, SeasonWindowResolver.ResolveCurrentWeek(nflWindows, DemoDataSeeder.DemoFrozenNow.UtcDateTime)!.Value.Season);
+
+        var cfbWindows = new[]
+        {
+            WeekWindow(2025, new DateTime(2026, 1, 13), new DateTime(2026, 1, 20), new DateTime(2026, 1, 19, 14, 30, 0, DateTimeKind.Utc)), // seeded CFP Championship
+            WeekWindow(2026, new DateTime(2026, 8, 27), new DateTime(2026, 9, 3), new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc)), // real 2026 Week 1 — unseeded in demo
+        };
+        Assert.Equal(2025, SeasonWindowResolver.ResolveCurrentWeek(cfbWindows, DemoDataSeeder.DemoFrozenNow.UtcDateTime)!.Value.Season);
+    }
+
+    // frizat-tf2: the replay row's window fields (DemoDataSeeder.SeedReplayGameSpreadAsync) are
+    // anchored to DemoFrozenNow, not real time — this proves that anchoring actually makes the
+    // replay window win over BOTH the regular demo Super Bowl window and the real, unseeded 2026
+    // season window, the same way it must for the plain demo-mode case.
+    [Fact]
+    public void ResolveCurrentWeek_NflDemoFrozenNow_PrefersReplayWindow_OverBothDemoSuperBowlAndRealNextSeason()
+    {
+        var windows = new[]
+        {
+            WeekWindow(2025, new DateTime(2026, 2, 3), new DateTime(2026, 2, 10), new DateTime(2026, 2, 8, 13, 30, 0, DateTimeKind.Utc)), // seeded Super Bowl
+            WeekWindow(2026, DemoDataSeeder.DemoFrozenNow.AddHours(-2).UtcDateTime, DemoDataSeeder.DemoFrozenNow.AddDays(1).UtcDateTime, DemoDataSeeder.DemoFrozenNow.AddHours(-1).UtcDateTime), // replay row
+            WeekWindow(2026, new DateTime(2026, 9, 8), new DateTime(2026, 9, 15), new DateTime(2026, 9, 9, 14, 20, 0, DateTimeKind.Utc)), // real 2026 Week 1 — unseeded in demo/replay
+        };
+
+        var result = SeasonWindowResolver.ResolveCurrentWeek(windows, DemoDataSeeder.DemoFrozenNow.UtcDateTime);
+
+        Assert.Equal(windows[1], result);
+    }
+
     [Fact]
     public void ResolveCurrentWeek_ReturnsSoonestUpcoming_WhenNothingHasEverStarted()
     {

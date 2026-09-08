@@ -14,7 +14,8 @@ namespace FourPlayWebApp.Server.Services;
 public class LeaderboardService(
     ILogger<LeaderboardService> logger,
     IServiceScopeFactory scopeFactory,
-    ILeagueRepository leagueRepository)
+    ILeagueRepository leagueRepository,
+    TimeProvider timeProvider)
     : ILeaderboardService {
 
 
@@ -24,6 +25,7 @@ public class LeaderboardService(
         try {
             var leagueUsers = await leagueRepository.GetLeagueUserMappingsAsync(leagueId);
             var leagueScores = await leagueRepository.GetAllNflScoresForSeasonAsync((int)seasonYear);
+            var leagueSpreads = await leagueRepository.GetAllNflSpreadsForSeasonAsync((int)seasonYear);
             var leagueInfo = await leagueRepository.GetLeagueJuiceMappingAsync(leagueId);
 
             if (leagueInfo.Count == 0 || leagueInfo.All(x => x.Season != seasonYear)) {
@@ -34,13 +36,20 @@ public class LeaderboardService(
                 return leaderboard;
 
             var maxWeek = leagueScores.Max(x => x.NflWeek);
+            // Captured/grouped once for the whole run rather than re-derived per user/week: "now"
+            // stays consistent across every user (a wall-clock tick past a kickoff boundary mid-run
+            // must not give different users a different verdict for the same week), and grouping
+            // avoids re-filtering the full-season spread list on every one of the users × weeks
+            // calls to CalculatePicks below.
+            var now = timeProvider.GetUtcNow();
+            var spreadsByWeek = leagueSpreads.ToLookup(s => s.NflWeek);
             foreach (var user in leagueUsers) {
                 var userPoints = new LeaderboardModel {
                     WeekResults = new LeaderboardWeekResults[maxWeek],
                     User = user.User
                 };
                 for (int week = 1; week <= maxWeek; week++) {
-                    var weekResult = await CalculatePicks(leagueId, seasonYear, leagueScores, user, week);
+                    var weekResult = await CalculatePicks(leagueId, seasonYear, leagueScores, spreadsByWeek[week], user, week, now);
                     userPoints.WeekResults[week - 1] = weekResult;
                 }
                 leaderboard.Add(userPoints);
@@ -56,7 +65,7 @@ public class LeaderboardService(
 
 
     private async Task<LeaderboardWeekResults> CalculatePicks(int leagueId, long seasonYear,
-        List<NflScores> userScores, LeagueUserMapping user, int week) {
+        List<NflScores> userScores, IEnumerable<NflSpreads> weekSpreads, LeagueUserMapping user, int week, DateTimeOffset now) {
         var weekResult = new LeaderboardWeekResults {
             Week = week
         };
@@ -74,13 +83,21 @@ public class LeaderboardService(
                 return false;
             }
         });
+        // A user can submit or change a pick for any individual game right up until that game's own
+        // kickoff — so an incomplete pick set is only a genuine, terminal loss once every game for
+        // this week has already started (e.g. Thursday Night Football already final doesn't mean
+        // Sunday's picking window has closed too). Until then it's no different from "not decided
+        // yet", so it reuses MissingGameResults (frizat-tf1: a real user was shown as losing a week
+        // before any of that week's games had even kicked off — same root cause, CFB side).
+        var allGamesStarted = GameHelpers.AllGamesStarted(weekSpreads.Select(s => s.GameTime), now);
+        var incompletePicksResult = allGamesStarted ? WeekResult.MissingPicks : WeekResult.MissingGameResults;
         if (!allPicksBeatSpread) {
             weekResult.WeekResult = WeekResult.Lost; // Any loss is an immediate full week loss
         }
         else if (userPicks.Count < GameHelpers.GetRequiredPicks(week)) {
             logger.LogDebug("{User} {League} Missing Picks {Week} {Count} {Required}", user.User, user.League.LeagueName, week, userPicks.Count,
                 GameHelpers.GetRequiredPicks(week));
-            weekResult.WeekResult = WeekResult.MissingPicks;
+            weekResult.WeekResult = incompletePicksResult;
         }
         else if (userPicks.Any(pick => {
                      var score = userScores.FirstOrDefault(s =>
@@ -130,21 +147,30 @@ public class LeaderboardService(
         var currentWeeklyCost = baseWeeklyCost;
 
         for (int week = 1; week <= maxWeek; week++) {
+            // A user still waiting on a final score isn't a loser yet — settling their week now
+            // (and paying out based on an incomplete picture) would have to be silently re-computed
+            // once the score lands. Keeping both buckets empty routes this into the exact same
+            // "nobody's decided" branch below (Score=0, roll the pot) as an all-push week already
+            // does, rather than duplicating that branch as a separate special case.
+            var anyPending = LeaderboardSettlementHelper.IsWeekPending(leaderboard, week - 1);
+
             var winners = new List<string>();
             var losers = new List<string>();
 
-            foreach (var result in leaderboard) {
-                var resultWeek = result.WeekResults.FirstOrDefault(w => w.Week == week);
-                if (resultWeek is null) {
-                    logger.LogError("Week result not found for week {Week} in leaderboard for user {User}", week, result.User.NormalizedUserName);
-                    continue;
-                }
-                var userId = result.User.Id;
-                if (resultWeek.WeekResult == WeekResult.Won) {
-                    winners.Add(userId);
-                }
-                else {
-                    losers.Add(userId);
+            if (!anyPending) {
+                foreach (var result in leaderboard) {
+                    var resultWeek = result.WeekResults.FirstOrDefault(w => w.Week == week);
+                    if (resultWeek is null) {
+                        logger.LogError("Week result not found for week {Week} in leaderboard for user {User}", week, result.User.NormalizedUserName);
+                        continue;
+                    }
+                    var userId = result.User.Id;
+                    if (resultWeek.WeekResult == WeekResult.Won) {
+                        winners.Add(userId);
+                    }
+                    else {
+                        losers.Add(userId);
+                    }
                 }
             }
             // If we have losers it means not everyone won this week

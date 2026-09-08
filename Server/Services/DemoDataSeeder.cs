@@ -23,6 +23,16 @@ public class DemoDataSeeder(
     private const int DemoSeason = 2025;
     private const int DemoWeek = 18;
 
+    // frizat-tf2: NflCurrentWeekService/CfbCurrentSlateService resolve "current" off the real
+    // wall clock against real-calendar SeasonWeekConfig rows shared with prod — once the real
+    // clock crosses a real season's early-activation window (see SeasonWindowResolver), "current"
+    // silently flips to a season this seeder never populates, stranding every demo/CI page that
+    // relies on implicit "current" resolution. In DEMO_MODE the app's TimeProvider is frozen at
+    // this value (Program.cs) instead of the real clock, so it always stays derived from data
+    // this seeder actually owns (the Super Bowl kickoff below) rather than a fresh literal that
+    // would just move the same failure to the next rollover.
+    public static DateTimeOffset DemoFrozenNow => SuperBowlGames[0].GameTime.AddDays(1);
+
     // frizat-703.6: the replayed game's own embedded season/week (see sample_espn_nfl_*.json).
     // The frontend derives "which week to show" entirely from the replay data's own season/week
     // fields, not from any separately-resolved "current week" — so the seeded spread must live
@@ -236,7 +246,8 @@ public class DemoDataSeeder(
     // (IND @ ATL, event 401772636 — see sample_espn_nfl_*.json), into the SAME week the replay
     // fixtures embed (ReplaySeason/ReplayWeek). Only runs when DEMO_REPLAY_MODE=true so normal
     // demo e2e's game-count/team assertions for the frozen Super Bowl week are unaffected.
-    private async Task SeedReplayGameSpreadAsync()
+    // public (not private) so DemoDataSeederReplayClockTests can exercise it directly.
+    public async Task SeedReplayGameSpreadAsync()
     {
         // AddPicks (LeagueController) rejects any pick whose (Season, NflWeek) has no NflWeeks row.
         if (!await db.NflWeeks.AnyAsync(w => w.Season == ReplaySeason && w.NflWeek == ReplayWeek))
@@ -250,23 +261,28 @@ public class DemoDataSeeder(
             await db.SaveChangesAsync();
         }
 
-        // frizat: nflAdapter.ts's current-week path now resolves "current" via the control table
-        // (SeasonWindowResolver) FIRST, then fetches that exact week — it no longer just trusts
-        // whatever season/week the raw ESPN "current" response happens to carry (see this class's
-        // top-of-file comment on ReplaySeason, written when that was still true). The migration-
-        // seeded NflSeasonWeekConfigs row for (ReplaySeason, ReplayWeek) has a real fixed calendar
-        // date (Super Bowl LXI, Feb 2027) — SeasonWindowResolver would only ever pick it as
-        // "current" during a ~2-day window around that real date, not whenever this backend
-        // happens to actually run. Self-healing this row's dates to "just resolved" on every
-        // startup (same pattern as the NflSpreads GameTime refresh below) keeps replay mode's
-        // control-table entry always current, regardless of real wall-clock time.
+        // frizat-tf2: this row's dates used to self-heal relative to real DateTimeOffset.UtcNow so
+        // SeasonWindowResolver would always pick it as "current" regardless of wall-clock time —
+        // but that assumption broke the moment real wall-clock came within 2 days of the REAL
+        // (migration-seeded, unseeded-by-demo) next season's own SpreadLockDatetime: the resolver's
+        // early-activation rule (SeasonWindowResolver) jumps to that real future window the instant
+        // it's within range, regardless of how recently this row's own lock passed. That's the same
+        // class of bug DemoFrozenNow was created to fix for regular demo mode (see
+        // NflCurrentWeekService/CfbCurrentSlateService's keyed, demo-frozen TimeProvider) — replay
+        // mode needs the identical fix, not a separate one: anchor this row's window fields to
+        // DemoFrozenNow (the same clock CurrentWeekClock now freezes at in DEMO_REPLAY_MODE too),
+        // not the real clock, so it can never be out-raced by a real season boundary.
+        //
+        // NflSpreads.GameTime below is deliberately NOT changed — the frontend's pick-eligibility
+        // check (PicksPage.tsx) compares GameTime against the browser's real wall clock, so that
+        // still has to self-heal relative to real DateTimeOffset.UtcNow to stay in the future.
         var replayConfig = await db.NflSeasonWeekConfigs.FirstOrDefaultAsync(c =>
             c.Season == ReplaySeason && c.WeekId == ReplayWeek);
         if (replayConfig is not null)
         {
-            replayConfig.WeekStartDatetime = DateTimeOffset.UtcNow.AddHours(-2).UtcDateTime;
-            replayConfig.WeekEndDatetime = DateTimeOffset.UtcNow.AddDays(1).UtcDateTime;
-            replayConfig.SpreadLockDatetime = DateTimeOffset.UtcNow.AddHours(-1).UtcDateTime;
+            replayConfig.WeekStartDatetime = DemoFrozenNow.AddHours(-2).UtcDateTime;
+            replayConfig.WeekEndDatetime = DemoFrozenNow.AddDays(1).UtcDateTime;
+            replayConfig.SpreadLockDatetime = DemoFrozenNow.AddHours(-1).UtcDateTime;
             await db.SaveChangesAsync();
         }
 

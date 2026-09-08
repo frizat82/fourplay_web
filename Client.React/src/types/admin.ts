@@ -6,6 +6,8 @@ export interface LeagueInfoDto {
   dateCreated: string;
   ownerUserId: string;
   leagueType: string;
+  /** Earliest season this league has a juice mapping for, or null/undefined if never configured. */
+  minSeason?: number | null;
 }
 
 export interface LeagueJuiceMappingDto {

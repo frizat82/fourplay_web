@@ -47,4 +47,27 @@ describe('AdminChangelogPage', () => {
 
     expect(screen.getByText(/no entries yet/i)).toBeInTheDocument();
   });
+
+  it('renders each entry as a real <li> element, one per bullet across all releases', async () => {
+    // Locks in native list semantics (a plain <ul>/<li>, not a MUI ListItem CSS override) — the
+    // override previously used (ListItem { display: 'list-item' }) pulled ListItemText out of
+    // the flex layout MUI's own styles assume, which was the fragile point behind long bullets
+    // visually overflowing their Paper card.
+    await renderWithChangelog(nonEmptyChangelog);
+
+    expect(document.querySelectorAll('li').length).toBe(3); // 2 entries + 1 entry across the 2 releases
+  });
+
+  it('wraps a long bullet within its own list item rather than letting it overflow', async () => {
+    const longEntry = 'Fixed: ' + 'a very long changelog entry that must wrap onto multiple lines'.repeat(6);
+    await renderWithChangelog(`# Changelog\n\n## 2026-09-06\n\n- ${longEntry}\n`);
+
+    const item = screen.getByText(/Fixed: a very long changelog entry/).closest('li');
+    expect(item).not.toBeNull();
+    // A real <li> has no fixed width/height/overflow constraints of its own — this assertion
+    // documents the intent (no clipping container) rather than measuring pixel layout, which
+    // jsdom cannot do reliably; the actual visual fix is confirmed by a browser screenshot.
+    expect(item).not.toHaveStyle({ overflow: 'hidden' });
+    expect(item).not.toHaveStyle({ whiteSpace: 'nowrap' });
+  });
 });

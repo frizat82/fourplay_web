@@ -17,9 +17,9 @@ export function useShareLink() {
     }
   };
 
-  const share = (title: string, url: string) => {
+  const share = (title: string, url: string, text?: string) => {
     if (typeof navigator.share === 'function') {
-      shareViaNavigator({ title, url });
+      shareViaNavigator(text ? { title, text, url } : { title, url });
     } else {
       void copy(url);
     }
