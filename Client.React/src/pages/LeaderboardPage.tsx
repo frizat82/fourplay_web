@@ -181,6 +181,13 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
     }
   };
 
+  // A week is "not final" iff any league member's own pick for it is still MissingGameResults —
+  // the same signal the backend's settlement math keys off. True (and thus unlabeled) the instant
+  // that week is fully decided, so this only ever reads false for the current, still-in-progress
+  // week, never a past one.
+  const isWeekFinal = (weekIndex: number) =>
+    !leaderboard.some((row) => row.weekResults[weekIndex]?.weekResult === 'MissingGameResults');
+
   const rowClass = (row: LeaderboardDto) => {
     if (!user?.userId) return {};
     return row.userId === user.userId
@@ -299,9 +306,19 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
                     <TableCell>Rank</TableCell>
                     <TableCell sx={stickyColumnSx}>User</TableCell>
                     <TableCell>Total</TableCell>
-                    {Array.from({ length: maxWeek }).map((_, idx) => (
-                      <TableCell key={idx}>{`W${maxWeek - idx}`}</TableCell>
-                    ))}
+                    {Array.from({ length: maxWeek }).map((_, idx) => {
+                      const weekIndex = maxWeek - idx - 1;
+                      return (
+                        <TableCell key={idx}>
+                          {`W${maxWeek - idx}`}
+                          {!isWeekFinal(weekIndex) && (
+                            <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                              Not Final
+                            </Typography>
+                          )}
+                        </TableCell>
+                      );
+                    })}
                   </TableRow>
                 </TableHead>
                 <TableBody>

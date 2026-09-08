@@ -4,12 +4,14 @@
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import PicksPage from '../pages/PicksPage';
 
 const renderWithClient = (ui: React.ReactElement) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  // MemoryRouter — useCurrentWeekNav (shared by PicksPage/ScoresPage) reads useLocation().
+  return render(<QueryClientProvider client={client}><MemoryRouter>{ui}</MemoryRouter></QueryClientProvider>);
 };
 import { createCfbAdapter } from '../services/cfbAdapter';
 import { createNflAdapter } from '../services/nflAdapter';

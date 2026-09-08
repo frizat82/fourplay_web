@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import PicksPage from '../pages/PicksPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCompetition, createCurrentWeek, createPick, createScores, createSpreadResponse, mockLeagueJuiceEmpty } from '../test/fixtures';
@@ -116,7 +117,9 @@ const renderWithClient = (ui: React.ReactElement) => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
-  return { ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>), queryClient: client };
+  // MemoryRouter — useCurrentWeekNav (shared by PicksPage/ScoresPage) reads useLocation() to
+  // reset back to the current week when AppLayout's nav-link click passes resetToCurrent state.
+  return { ...render(<QueryClientProvider client={client}><MemoryRouter>{ui}</MemoryRouter></QueryClientProvider>), queryClient: client };
 };
 
 const renderPage = async () => {
@@ -364,6 +367,32 @@ describe('PicksPage', () => {
     expect(screen.getByRole('option', { name: '2024 Season' })).toBeInTheDocument();
   });
 
+  // frizat-8y4: nflAdapter.ts used to hardcode maxWeek: 18 regardless of the real current
+  // week — Next could walk all the way to week 18 from week 1, into weeks with no released
+  // spread yet, which still rendered fully clickable pick buttons.
+  it('disables the Next button once already viewing the real current week', async () => {
+    await setupDefaults({ week: 1 });
+    await renderPage();
+
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+  });
+
+  it('does not render any pick buttons for a week with no released odds, even after navigating away and back', async () => {
+    await setupDefaults({ week: 1, oddsExist: false });
+    await renderPage();
+
+    expect(screen.getByText(/Odds Not Posted/i)).toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: /^(BUF|MIA|DAL|NYG)$/i })).toHaveLength(0);
+
+    // Navigating to the season dropdown and back (without changing the actual week) must not
+    // flip oddsNotReady false and reveal pick buttons — the old `isCurrentWeek` gate broke this.
+    await userEvent.click(screen.getAllByRole('combobox')[2]);
+    await userEvent.click(screen.getByRole('option', { name: /regular season/i }));
+
+    expect(screen.getByText(/Odds Not Posted/i)).toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: /^(BUF|MIA|DAL|NYG)$/i })).toHaveLength(0);
+  });
+
   it('locks picks when existing picks equal max allowed', async () => {
     const existing = [
       createPick({ team: 'BUF' }),
@@ -460,7 +489,7 @@ describe('PicksPage', () => {
     sessionState.currentLeague = null;
     rerender(
       <QueryClientProvider client={queryClient}>
-        <PicksPage adapter={createNflAdapter()} />
+        <MemoryRouter><PicksPage adapter={createNflAdapter()} /></MemoryRouter>
       </QueryClientProvider>,
     );
 
