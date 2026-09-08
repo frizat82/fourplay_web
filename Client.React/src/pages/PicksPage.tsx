@@ -21,6 +21,7 @@ import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useToast } from '../services/toast';
 import { isGameDecided } from '../utils/gameHelpers';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
+import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
 
 // Pick key: "gameId|team|pickType" — stable across NFL and CFB
 function pickKey(gameId: string, team: string, pickType: string) {
@@ -47,8 +48,6 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   // Pending (unsubmitted) selections — local state only, never touched by refetches
   const [userPicks, setUserPicks] = useState<Set<string>>(new Set());
   const [storingPicks, setStoringPicks] = useState(false);
-  // The real navigable ceiling, captured only from a current-week load — see the effect below.
-  const [currentBounds, setCurrentBounds] = useState<{ maxWeek: number; maxSeason: number } | null>(null);
 
   const isCurrentWeek = weekState === null;
   const enabled = leaguesLoaded && !!currentLeague && !!user?.userId;
@@ -63,16 +62,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     placeholderData: keepPreviousData,
   });
 
-  // Remember the real max week/season only from a current-week load. loadHistoricalGames
-  // returns maxWeek/maxSeason set to whatever week/season is being VIEWED (it has no other
-  // concept of "today"), so re-deriving the selector's ceiling from `data` on every render — as
-  // this used to do — collapsed the navigable range down to wherever the user last looked,
-  // making it impossible to get back to the current week/season.
-  useEffect(() => {
-    if (isCurrentWeek && data) {
-      setCurrentBounds({ maxWeek: data.maxWeek, maxSeason: data.maxSeason });
-    }
-  }, [isCurrentWeek, data]);
+  const { maxWeek: currentMaxWeek, maxSeason: currentMaxSeason, routeToCurrentIfMatches } =
+    useCurrentWeekNav(isCurrentWeek, data, setWeekState);
 
   const games = useMemo(() => sortGamesByTimeThenRank(data?.games ?? []), [data]);
   const hasOdds = data?.hasOdds ?? false;
@@ -80,8 +71,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const season = weekState?.season ?? data?.season ?? new Date().getFullYear();
   const week = weekState?.week ?? data?.week ?? 0;
   const isPostSeason = weekState?.isPostSeason ?? data?.isPostSeason ?? false;
-  const maxWeek = currentBounds?.maxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
-  const maxSeason = currentBounds?.maxSeason ?? new Date().getFullYear();
+  const maxWeek = currentMaxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
+  const maxSeason = currentMaxSeason ?? new Date().getFullYear();
   const minSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
 
   const existingPicks = useMemo(
@@ -105,12 +96,12 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   // copyright review of the jersey images). adapter.loadJerseys and the underlying
   // /api/jersey endpoint are left intact for a future re-enable.
   const handleWeekChange = useCallback((newWeek: number, meta?: { isPostSeason?: boolean }) => {
-    setWeekState({ season, week: newWeek, isPostSeason: meta?.isPostSeason ?? isPostSeason });
-  }, [season, isPostSeason]);
+    setWeekState(routeToCurrentIfMatches({ season, week: newWeek, isPostSeason: meta?.isPostSeason ?? isPostSeason }));
+  }, [season, isPostSeason, routeToCurrentIfMatches]);
 
   const handleSeasonChange = useCallback((newSeason: number) => {
-    setWeekState({ season: newSeason, week, isPostSeason });
-  }, [week, isPostSeason]);
+    setWeekState(routeToCurrentIfMatches({ season: newSeason, week, isPostSeason }));
+  }, [week, isPostSeason, routeToCurrentIfMatches]);
 
   const handleSeasonTypeChange = useCallback((_ps: boolean) => {
     // WeekYearSelector.handleSeasonTypeSelect also calls onWeekChange with the last
@@ -181,11 +172,12 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   if (isError && !data) return (
     <QueryErrorAlert title="Picks" onRetry={() => void refetch()} />
   );
-  // Current week with no odds yet still needs the WeekYearSelector below rendered — otherwise a
-  // visitor checking in before this week's spreads release has no way to browse to a different
-  // week/season at all (frizat: previously this was a full-page early return that skipped the
-  // selector entirely).
-  const oddsNotReady = !hasOdds && isCurrentWeek;
+  // No longer gated on isCurrentWeek — with navigation capped at the real current week
+  // (adapter.maxWeek), an odds-less week is simply unreachable once you've moved past it, so
+  // "no odds for the week I'm looking at" is the correct condition on its own. Previously this
+  // also had to be true for the *current* week specifically, or a stale isCurrentWeek flag
+  // left a spread-less future week's pick buttons fully clickable (frizat-8y4).
+  const oddsNotReady = !hasOdds;
 
   const hasUnlockedGames = games.some(g => !gameIsLocked(g));
   const isPostSeasonSlate = isPostSeason;
@@ -244,13 +236,6 @@ export default function PicksPage({ adapter }: PicksPageProps) {
             </Grid>
           )}
 
-          {!hasOdds && (
-            <Grid size={12} sx={{ textAlign: 'center', py: 6 }}>
-              <Typography variant="h5" fontWeight={600}>No Odds Available</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>No spreads were posted for this week.</Typography>
-            </Grid>
-          )}
-
           {games.map(game => {
             const homePickState = pickStateFor(game.id, game.homeTeam);
             const awayPickState = pickStateFor(game.id, game.awayTeam);
@@ -264,8 +249,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
                   mode="pick"
                   homeTeam={game.homeTeam}
                   awayTeam={game.awayTeam}
-                  homeSpread={game.homeSpread ?? 0}
-                  awaySpread={game.awaySpread ?? 0}
+                  homeSpread={game.homeSpread}
+                  awaySpread={game.awaySpread}
                   gameTime={game.gameTime}
                   gameStatus={game.gameStatus ?? undefined}
                   spreadPostedAt={game.spreadPostedAt}

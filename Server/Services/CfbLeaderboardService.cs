@@ -155,58 +155,6 @@ public class CfbLeaderboardService(
     }
 
     private static List<LeaderboardModel> CalculateTotals(List<LeaderboardModel> leaderboard,
-        LeagueJuiceMapping juiceMapping, int slateCount) {
-        var baseWeeklyCost = juiceMapping.WeeklyCost;
-        var currentWeeklyCost = baseWeeklyCost;
-
-        for (int i = 0; i < slateCount; i++) {
-            // A user still waiting on a final score isn't a loser yet — settling their week now
-            // (and paying out based on an incomplete picture) would have to be silently re-computed
-            // once the score lands. Keeping both buckets empty routes this into the exact same
-            // "nobody's decided" branch below (Score=0, roll the pot) as an all-push week already
-            // does, rather than duplicating that branch as a separate special case.
-            var anyPending = LeaderboardSettlementHelper.IsWeekPending(leaderboard, i);
-            var winners = anyPending ? [] : leaderboard.Where(u => u.WeekResults[i].WeekResult == WeekResult.Won).Select(u => u.User.Id).ToList();
-            var losers = anyPending ? [] : leaderboard.Where(u => u.WeekResults[i].WeekResult != WeekResult.Won).Select(u => u.User.Id).ToList();
-
-            if (winners.Count > 0 && losers.Count > 0) {
-                foreach (var user in leaderboard) {
-                    user.WeekResults[i].Score = user.WeekResults[i].WeekResult == WeekResult.Won
-                        ? losers.Count * currentWeeklyCost
-                        : -(winners.Count * currentWeeklyCost);
-                }
-                currentWeeklyCost = baseWeeklyCost;
-            } else {
-                currentWeeklyCost += baseWeeklyCost;
-                foreach (var user in leaderboard)
-                    user.WeekResults[i].Score = 0;
-            }
-        }
-
-        foreach (var user in leaderboard)
-            user.Total = user.WeekResults.Sum(w => w.Score);
-
-        return ComputeRanks(leaderboard);
-    }
-
-    private static List<LeaderboardModel> ComputeRanks(List<LeaderboardModel> leaderboard) {
-        var ordered = leaderboard.OrderByDescending(x => x.Total).ToList();
-        int currentRank = 1;
-        int skipped = 0;
-        long? lastScore = null;
-
-        for (int i = 0; i < ordered.Count; i++) {
-            var player = ordered[i];
-            if (lastScore == null || player.Total != lastScore) {
-                currentRank = i + 1;
-                skipped = 0;
-            } else {
-                skipped++;
-            }
-            player.Rank = skipped > 0 ? $"T{currentRank}" : currentRank.ToString();
-            lastScore = player.Total;
-        }
-
-        return ordered;
-    }
+        LeagueJuiceMapping juiceMapping, int slateCount) =>
+        LeaderboardSettlementHelper.SettleWeeks(leaderboard, juiceMapping.WeeklyCost, slateCount);
 }

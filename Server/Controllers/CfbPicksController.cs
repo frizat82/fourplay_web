@@ -193,20 +193,33 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     }
 
     [HttpPost("picks")]
-    public async Task<IActionResult> AddPicks([FromBody] AddCfbPicksRequest request) {
+    public async Task<IActionResult> AddPicks([FromBody] AddCfbPicksRequest request,
+        [FromServices] ICfbCurrentSlateService currentSlateService) {
         var userId = CurrentUserId;
 
         if (!await leagueRepo.UserExistsInLeagueAsync(userId, request.LeagueId))
             return Forbid();
 
+        // None of these four depend on each other's results, so fetch them concurrently.
         var spreadsTask = cfbRepo.GetSpreadsForSlateAsync(request.CfbSlateId);
         var existingPicksTask = repo.GetUserPicksAsync(request.LeagueId, request.CfbSlateId, userId);
         var slateTask = cfbRepo.GetSlateByIdAsync(request.CfbSlateId);
-        await Task.WhenAll(spreadsTask, existingPicksTask, slateTask);
+        var currentSlateTask = currentSlateService.GetCurrentSlateAsync();
+        await Task.WhenAll(spreadsTask, existingPicksTask, slateTask, currentSlateTask);
 
         var slate = slateTask.Result;
         if (slate is null)
             return BadRequest("Cfb Slate Does Not Exist");
+
+        // Guard: picks are only accepted for the currently open slate per the control table —
+        // worse than NFL's equivalent gap, a spread-less future slate has empty
+        // startedTeams/ineligibleTeams below, so NO per-pick validation fired at all
+        // (frizat-8y4). Unlike NflCurrentWeekService, GetCurrentSlateAsync() can legitimately
+        // return null (e.g. nothing seeded yet) — no resolvable current slate means there is
+        // no slate open for picking, so fail closed here too.
+        var currentSlate = currentSlateTask.Result;
+        if (currentSlate is null || request.Season != currentSlate.Season || request.CfbSlateId != currentSlate.Id)
+            return BadRequest("Picks are only accepted for the current slate.");
 
         // Guard: reject picks for any game that has already kicked off. Matched by team name
         // (either side) rather than an ESPN id — a team plays at most one game per slate, so

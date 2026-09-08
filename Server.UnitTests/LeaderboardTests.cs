@@ -360,6 +360,38 @@ public class LeaderboardServiceTests {
         Assert.Equal(0, result.Sum(u => u.Total));
     }
 
+    // Once at least one decided winner AND one decided loser exist, they settle against each
+    // other provisionally even while a third user's pick is still pending — only the pending
+    // user's own outcome stays unresolved.
+    [Fact]
+    public async Task CalculateUserTotals_SettlesDecidedUsersProvisionally_WhenOneUserIsStillPending() {
+        var dbFactory = new DbContextFactoryStub();
+        await dbFactory.PopulateUserTestData(3);
+        await dbFactory.PopulateScoresTestDataAsync(1);
+        var repository = new LeagueRepository(dbFactory);
+        var spreadCalculatorBuilder = new SpreadCalculatorBuilder(repository, new MemoryCache(new MemoryCacheOptions()));
+        var dbContext = await dbFactory.CreateDbContextAsync();
+
+        var league = dbContext.LeagueJuiceMapping.First();
+        league.WeeklyCost = 10;
+        await dbContext.SaveChangesAsync();
+
+        var users = dbContext.Users.Take(3).ToList();
+        var leaderboard = new List<LeaderboardModel> {
+            new() { User = users[0], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Won }] },
+            new() { User = users[1], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Lost }] },
+            new() { User = users[2], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.MissingGameResults }] },
+        };
+
+        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
+        var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 1);
+
+        Assert.Equal(10, result.Single(u => u.User.Id == users[0].Id).WeekResults[0].Score);
+        Assert.Equal(-10, result.Single(u => u.User.Id == users[1].Id).WeekResults[0].Score);
+        Assert.Equal(0, result.Single(u => u.User.Id == users[2].Id).WeekResults[0].Score);
+    }
+
     // frizat-tf1: picks can be submitted for any individual game right up until that game's own
     // kickoff — an incomplete pick set must not be treated as a terminal loss while any of that
     // week's games hasn't started yet (e.g. Thursday Night Football already final, Sunday's games
@@ -607,6 +639,66 @@ public class LeaderboardServiceTests {
         Assert.Equal(WeekResult.MissingGameResults, pending.WeekResults[0].WeekResult);
         // Neither user gets paid or charged for a week that isn't decided yet.
         Assert.Equal(0, decided.WeekResults[0].Score);
+        Assert.Equal(0, pending.WeekResults[0].Score);
+    }
+
+    // Extends the scenario above: once a decided winner AND a decided loser both exist, they
+    // settle against each other provisionally even while a third user's pick is still pending.
+    [Fact]
+    public async Task CfbCalculateTotals_SettlesDecidedUsersProvisionally_WhenOneUserIsStillPending() {
+        const int leagueId = 1;
+        const int slateId = 1;
+        var winnerId = Guid.NewGuid().ToString();
+        var loserId = Guid.NewGuid().ToString();
+        var pendingId = Guid.NewGuid().ToString();
+        var leagueInfo = new LeagueInfo { Id = leagueId, LeagueName = "CFB Test", OwnerUserId = winnerId };
+        var userMappings = new List<LeagueUserMapping> {
+            new() { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = winnerId, UserName = "Winner" }, UserId = winnerId },
+            new() { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = loserId, UserName = "Loser" }, UserId = loserId },
+            new() { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = pendingId, UserName = "Pending" }, UserId = pendingId },
+        };
+        var juiceMapping = new LeagueJuiceMapping { Id = 1, LeagueId = leagueId, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
+        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 19, SlateType = "Championship", Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+
+        var leagueRepo = Substitute.For<ILeagueRepository>();
+        leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns(userMappings);
+        leagueRepo.GetLeagueJuiceMappingAsync(leagueId, 2025).Returns(juiceMapping);
+
+        var cfbRepo = Substitute.For<ICfbRepository>();
+        cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
+        // Winner picks IU (spread + final score both exist, covers). Loser picks OSU (loses).
+        // Pending picks MIC (spread exists, no score row at all yet).
+        cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[
+            new CfbSpreads { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true },
+            new CfbSpreads { Id = 2, CfbSlateId = slateId, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true },
+        ]);
+        cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
+            new CfbScores { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal }
+        ]);
+
+        var picksRepo = Substitute.For<ICfbPicksRepository>();
+        picksRepo.GetUserPicksAsync(leagueId, slateId, winnerId).Returns((IEnumerable<CfbPicks>)[
+            new CfbPicks { UserId = winnerId, LeagueId = leagueId, CfbSlateId = slateId, Team = "IU", PickType = PickType.Spread, Season = 2025 }
+        ]);
+        picksRepo.GetUserPicksAsync(leagueId, slateId, loserId).Returns((IEnumerable<CfbPicks>)[
+            new CfbPicks { UserId = loserId, LeagueId = leagueId, CfbSlateId = slateId, Team = "OSU", PickType = PickType.Spread, Season = 2025 }
+        ]);
+        picksRepo.GetUserPicksAsync(leagueId, slateId, pendingId).Returns((IEnumerable<CfbPicks>)[
+            new CfbPicks { UserId = pendingId, LeagueId = leagueId, CfbSlateId = slateId, Team = "MIC", PickType = PickType.Spread, Season = 2025 }
+        ]);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(),
+            leagueRepo, cfbRepo, picksRepo, BuildCurrentSlateService(slateNumber: 19), TimeProvider.System);
+        var result = await service.BuildLeaderboard(leagueId, 2025);
+
+        var winner = result.Single(u => u.User.Id == winnerId);
+        var loser = result.Single(u => u.User.Id == loserId);
+        var pending = result.Single(u => u.User.Id == pendingId);
+        Assert.Equal(WeekResult.Won, winner.WeekResults[0].WeekResult);
+        Assert.Equal(WeekResult.Lost, loser.WeekResults[0].WeekResult);
+        Assert.Equal(WeekResult.MissingGameResults, pending.WeekResults[0].WeekResult);
+        Assert.Equal(5, winner.WeekResults[0].Score);
+        Assert.Equal(-5, loser.WeekResults[0].Score);
         Assert.Equal(0, pending.WeekResults[0].Score);
     }
 

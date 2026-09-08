@@ -381,7 +381,8 @@ public class LeagueController(
 
     [HttpPost("picks")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<ActionResult<int>> AddPicks([FromBody] IEnumerable<NflPickDto> picksDto) {
+    public async Task<ActionResult<int>> AddPicks([FromBody] IEnumerable<NflPickDto> picksDto,
+        [FromServices] INflCurrentWeekService currentWeekService) {
         var picksDtoList = picksDto.ToList();
         if (picksDtoList.Count == 0)
             return BadRequest("No picks provided");
@@ -404,15 +405,27 @@ public class LeagueController(
         if (!isMember)
             return Forbid();
 
-        // Fetch weeks, ESPN scores, and existing picks concurrently
+        // Fetch weeks, ESPN scores, existing picks, and the current-week guard concurrently —
+        // none of these depend on each other's results.
         var weekTask          = repo.GetNflWeeksAsync(first.Season);
         var espnTask          = espnCacheService.GetScoresAsync();
         var existingPicksTask = repo.GetUserNflPicksAsync(authenticatedUserId, first.LeagueId, first.Season, first.NflWeek);
-        await Task.WhenAll(weekTask, espnTask, existingPicksTask);
+        var currentWeekTask   = currentWeekService.GetCurrentWeekAsync();
+        await Task.WhenAll(weekTask, espnTask, existingPicksTask, currentWeekTask);
 
         var weekId        = weekTask.Result;
         var espnScores    = espnTask.Result;
         var existingPicks = existingPicksTask.Result;
+
+        // Guard: picks are only accepted for the currently open week per the control table —
+        // the per-game kickoff guard below never fires for a future week (its games haven't
+        // kicked off yet), so without this a future week's picks went through unchecked
+        // (frizat-8y4). GetCurrentWeekAsync() never legitimately returns "nothing" — it throws
+        // on a genuine data-integrity problem, which is correct to let bubble up here rather
+        // than silently allow.
+        var currentWeek = currentWeekTask.Result;
+        if (first.Season != currentWeek.Season || first.NflWeek != currentWeek.WeekId)
+            return BadRequest("Picks are only accepted for the current week.");
 
         var picksList = new List<NflPicks>();
         foreach (var pick in picksDtoList) {

@@ -105,7 +105,12 @@ export default function AppLayout() {
 
   const handleNavClick = (to: string) => {
     if (isMobile) setOpen(false);
-    navigate(to);
+    // resetToCurrent: read by useCurrentWeekNav (PicksPage/ScoresPage) so clicking "My Picks"/
+    // "Scores" always lands on the live current week, even when already on that route with a
+    // stale historical weekState — React Router still bumps location.key on a same-path
+    // navigate(), so pages relying on it see this even without the URL itself changing. Passed
+    // unconditionally; pages that don't read location.state simply ignore it.
+    navigate(to, { state: { resetToCurrent: true } });
   };
 
   const leagueLabel = useMemo(() => {
