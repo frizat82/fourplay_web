@@ -165,6 +165,26 @@ describe('cfbAdapter', () => {
       expect(result.season).toBe(2026);
     });
 
+    // frizat-8y4: maxWeek used to be computed by scanning ALL pre-seeded RegularSeason slates
+    // for the season (CfbSlateSeederJob seeds the whole season up front, unlike NFL's NflScores
+    // rows which only exist once a game is final) — so it reflected the season's total length,
+    // not the real current week, letting Next walk all the way to the last regular-season slate
+    // regardless of which week is actually live. loadCurrentScores already got this right via
+    // maxWeek: weekState.week; loadCurrentGames must match it.
+    it('caps maxWeek at the real current week, not the season-wide last pre-seeded slate', async () => {
+      const futureSlates: CfbSlateDto[] = [9, 10, 11, 12, 13].map(slateNumber => ({
+        id: slateNumber, season: 2026, slateNumber, label: `Week ${slateNumber}`,
+        slateType: 'RegularSeason', startDate: '2026-11-01', endDate: '2026-11-07',
+      }));
+      vi.mocked(getCfbSlates).mockResolvedValue([slate, ...futureSlates]); // current slateNumber=8
+      vi.mocked(getCfbSpreads).mockResolvedValue([]);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(null);
+      vi.mocked(getCfbUserPicks).mockResolvedValue([]);
+
+      const result = await adapter.loadCurrentGames(1, 'user1');
+      expect(result.maxWeek).toBe(8);
+    });
+
     it('game shows scheduled when ESPN has no matching event', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
@@ -209,6 +229,17 @@ describe('cfbAdapter', () => {
       const fn = adapter.weekSelectorConfig.weekLabelFn!;
       expect(fn(5, true)).toBe('CFP Championship');
       expect(() => fn(5, true)).not.toThrow();
+    });
+
+    // frizat-8y4: WeekYearSelector prioritizes a non-empty regularWeekOptions unconditionally
+    // over the dynamic maxRegularSeasonWeek prop PicksPage/ScoresPage pass in per-load — a
+    // static full-season regularWeekOptions here silently made maxWeek/maxRegularSeasonWeek
+    // inert for capping regular-season navigation, so Next stayed clickable through the whole
+    // season regardless of which week was actually current. Must stay unset so
+    // WeekYearSelector's dynamic fallback (built from maxRegularSeasonWeek) governs instead —
+    // the same mechanism nflAdapter.ts (which never sets this either) already relies on.
+    it('does not set a static regularWeekOptions, so the dynamic maxWeek/maxRegularSeasonWeek prop actually caps navigation', () => {
+      expect(adapter.weekSelectorConfig.regularWeekOptions).toBeUndefined();
     });
   });
 });
