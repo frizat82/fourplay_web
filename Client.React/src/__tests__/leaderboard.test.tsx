@@ -407,3 +407,53 @@ describe('LeaderboardPage — week-cell colors', () => {
     expect(cell).toHaveStyle({ backgroundColor: expected });
   });
 });
+
+describe('LeaderboardPage — week-not-final header label', () => {
+  beforeEach(() => {
+    sessionState.currentLeague = 1;
+    mockedGetLeaderboard.mockReset();
+    vi.mocked(mockAdapter.currentSeasonYear).mockResolvedValue(2023);
+  });
+
+  it('shows "Not Final" on a week column where a user is still MissingGameResults', async () => {
+    mockedGetLeaderboard.mockResolvedValue([
+      createLeaderboardEntry({
+        userId: '123', userName: 'TestUser', rank: '1', total: 0,
+        weekResults: [createLeaderboardWeekResult({ week: 1, score: 0, weekResult: 'MissingGameResults' })],
+      }),
+    ]);
+
+    renderPage();
+    await screen.findByRole('table');
+    expect(screen.getByText('Not Final')).toBeInTheDocument();
+  });
+
+  it('does not show "Not Final" once every week is decided', async () => {
+    mockedGetLeaderboard.mockResolvedValue([
+      createLeaderboardEntry({
+        userId: '123', userName: 'TestUser', rank: '1', total: 5,
+        weekResults: [createLeaderboardWeekResult({ week: 1, score: 10, weekResult: 'Won' })],
+      }),
+    ]);
+
+    renderPage();
+    await screen.findByRole('table');
+    expect(screen.queryByText('Not Final')).not.toBeInTheDocument();
+  });
+
+  it('only labels the still-pending week, leaving an already-decided earlier week unlabeled', async () => {
+    mockedGetLeaderboard.mockResolvedValue([
+      createLeaderboardEntry({
+        userId: '123', userName: 'TestUser', rank: '1', total: 10,
+        weekResults: [
+          createLeaderboardWeekResult({ week: 1, score: 10, weekResult: 'Won' }),
+          createLeaderboardWeekResult({ week: 2, score: 0, weekResult: 'MissingGameResults' }),
+        ],
+      }),
+    ]);
+
+    renderPage();
+    await screen.findByRole('table');
+    expect(screen.getAllByText('Not Final')).toHaveLength(1);
+  });
+});
