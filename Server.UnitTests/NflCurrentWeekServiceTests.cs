@@ -25,10 +25,10 @@ public class NflCurrentWeekServiceTests
         SpreadLockDatetime = start,
     };
 
-    private static NflCurrentWeekService BuildService(List<NflSeasonWeekConfig> configs) {
+    private static NflCurrentWeekService BuildService(List<NflSeasonWeekConfig> configs, TimeProvider? timeProvider = null) {
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetNflSeasonWeekConfigsAsync().Returns(configs);
-        return new NflCurrentWeekService(repo);
+        return new NflCurrentWeekService(repo, timeProvider ?? TimeProvider.System);
     }
 
     [Fact]
@@ -116,6 +116,24 @@ public class NflCurrentWeekServiceTests
         Assert.Equal(22, result.WeekId);
         Assert.Equal(5, result.EspnWeek);
         Assert.True(result.IsPostSeason);
+    }
+
+    // frizat-tf2: GetCurrentWeekAsync must resolve "current" against an injected TimeProvider
+    // (used to freeze the clock in DEMO_MODE — see DemoDataSeeder.DemoFrozenNow), not the real
+    // wall clock. Two windows are constructed so a real-clock read (long past both locks by now)
+    // would resolve to week 22, while the frozen clock correctly stays on week 21 — a bug that
+    // silently reverted to DateTime.UtcNow would still pass every other test in this file (they
+    // all default to TimeProvider.System, which behaves identically to DateTime.UtcNow).
+    [Fact]
+    public async Task GetCurrentWeekAsync_UsesInjectedClock_NotRealWallClock() {
+        var frozen = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var week21 = Config(2025, 21, frozen.UtcDateTime.AddDays(-10), frozen.UtcDateTime.AddDays(-3));
+        var week22 = Config(2025, 22, frozen.UtcDateTime.AddDays(10), frozen.UtcDateTime.AddDays(17));
+        var svc = BuildService([week21, week22], new FakeTimeProvider(frozen));
+
+        var result = await svc.GetCurrentWeekAsync();
+
+        Assert.Equal(21, result.WeekId);
     }
 
     [Fact]
