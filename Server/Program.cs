@@ -284,17 +284,20 @@ builder.Services.AddSingleton<INflCurrentWeekService, NflCurrentWeekService>();
 // clock, so freezing it here would silently reach all of them too.
 builder.Services.AddSingleton(TimeProvider.System);
 // frizat-tf2: NflCurrentWeekService/CfbCurrentSlateService's "what's current" resolution gets its
-// own, separately-keyed clock instead of sharing the singleton above, so DEMO_MODE's frozen clock
-// stays scoped to exactly the two services it's for. In DEMO_MODE (but NOT DEMO_REPLAY_MODE — see
-// below) this is frozen at DemoDataSeeder.DemoFrozenNow, so "current week/slate" always resolves
-// against whatever season the seeder actually populated — otherwise the real wall clock crossing
-// a real NFL/CFB season rollover mid-CI-run silently strands the demo dataset on a season with no
-// data. Replay mode deliberately keeps the real clock: SeedReplayGameSpreadAsync already
-// self-heals its own NflSeasonWeekConfigs/NflSpreads rows relative to real DateTimeOffset.UtcNow
-// on every startup specifically so they always resolve as "current" regardless of wall-clock time
-// — freezing the clock there would make that self-healing row look permanently in the future/past
-// instead.
-builder.Services.AddKeyedSingleton<TimeProvider>(CurrentWeekClock.Key, isDemoMode
+// own, separately-keyed clock instead of sharing the singleton above, so the frozen clock stays
+// scoped to exactly the two services it's for. Frozen at DemoDataSeeder.DemoFrozenNow in BOTH
+// DEMO_MODE and DEMO_REPLAY_MODE (seedsDemoData covers both), so "current week/slate" always
+// resolves against whatever season the seeder actually populated — otherwise the real wall clock
+// crossing a real NFL/CFB season rollover mid-CI-run silently strands the demo/replay dataset on a
+// season with no data. Replay mode is NOT exempt from this: its own NflSeasonWeekConfigs row
+// (SeedReplayGameSpreadAsync) used to self-heal relative to the real clock specifically so it would
+// always resolve as current, but SeasonWindowResolver's early-activation rule can still jump ahead
+// to a real, unseeded future season's window the moment real wall-clock comes within 2 days of
+// it — regardless of how recently the replay row's own lock passed (the same bug this fix already
+// closed for regular demo mode, one call site later). SeedReplayGameSpreadAsync now anchors that
+// row to this same frozen clock instead, so both sides of the "what's current" check agree
+// unconditionally.
+builder.Services.AddKeyedSingleton<TimeProvider>(CurrentWeekClock.Key, seedsDemoData
     ? new FrozenTimeProvider(DemoDataSeeder.DemoFrozenNow)
     : TimeProvider.System);
 builder.Services.AddScoped<ICfbCurrentSlateService, CfbCurrentSlateService>();
