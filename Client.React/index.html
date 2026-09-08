@@ -47,6 +47,25 @@
 
 
     <title>IV League</title>
+    <!-- Static site-level preview for any shared link (invite links included). Some share targets
+         (Slack, WhatsApp link cards, etc.) fetch the page and build their own rich preview from
+         these tags independently of whatever text navigator.share() carried; with none defined
+         that preview came back with no title/description/image at all. This can't carry a
+         per-league name into the preview (that needs server-rendering the /join/:token route,
+         which this doesn't attempt) but ensures every shared link previews as IV League instead
+         of blank. See useShareLink.ts for the actual root cause of "share produced no message at
+         all" — the clipboard fallback used when navigator.share isn't available was dropping the
+         text message entirely, independent of these tags. -->
+    <meta name="description" content="IV League is what fantasy football should have been — no draft, no waiver wire, no dead lineups. Pick NFL or college football games against the spread each week and watch the leaderboard." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="IV League" />
+    <meta property="og:title" content="IV League — Skip the Draft. Make Picks. Beat Your Friends." />
+    <meta property="og:description" content="Pick games against the spread every week. All picks must hit to win — winners collect the pot from losers." />
+    <meta property="og:image" content="/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="IV League — Skip the Draft. Make Picks. Beat Your Friends." />
+    <meta name="twitter:description" content="Pick games against the spread every week. All picks must hit to win — winners collect the pot from losers." />
+    <meta name="twitter:image" content="/icon-512.png" />
     <link rel="stylesheet" href="/Icons/Weather/css/weather-icons.min.css" />
     <link rel="stylesheet" href="https://unpkg.com/flipdown/dist/flipdown.css" />
   </head>
