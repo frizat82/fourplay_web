@@ -47,6 +47,23 @@
 
 
     <title>IV League</title>
+    <!-- Static site-level preview for any shared link (invite links included). Several native
+         share targets — iOS Messages chief among them — ignore navigator.share()'s `text` field
+         whenever a `url` is also present, and instead fetch the page and build their own preview
+         from these tags; with none defined that preview came back with no title/description/image
+         at all. This can't carry a per-league name into the preview (that needs server-rendering
+         the /join/:token route, which this doesn't attempt) but ensures every shared link previews
+         as IV League instead of blank. -->
+    <meta name="description" content="IV League is what fantasy football should have been — no draft, no waiver wire, no dead lineups. Pick NFL or college football games against the spread each week and watch the leaderboard." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="IV League" />
+    <meta property="og:title" content="IV League — Skip the Draft. Make Picks. Beat Your Friends." />
+    <meta property="og:description" content="Pick games against the spread every week. All picks must hit to win — winners collect the pot from losers." />
+    <meta property="og:image" content="/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="IV League — Skip the Draft. Make Picks. Beat Your Friends." />
+    <meta name="twitter:description" content="Pick games against the spread every week. All picks must hit to win — winners collect the pot from losers." />
+    <meta name="twitter:image" content="/icon-512.png" />
     <link rel="stylesheet" href="/Icons/Weather/css/weather-icons.min.css" />
     <link rel="stylesheet" href="https://unpkg.com/flipdown/dist/flipdown.css" />
   </head>
