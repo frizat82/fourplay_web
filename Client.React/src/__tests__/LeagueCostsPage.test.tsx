@@ -5,10 +5,24 @@ import { vi } from 'vitest';
 import AdminLeagueCostsPage from '../pages/admin/LeagueCostsPage';
 import type { AdminLeagueCostDto } from '../types/admin';
 
-vi.mock('../api/league', () => ({ getAllLeaguesCost: vi.fn() }));
-import { getAllLeaguesCost } from '../api/league';
+vi.mock('../api/league', () => ({ getAllLeaguesCost: vi.fn(), getAllLeagues: vi.fn() }));
+import { getAllLeaguesCost, getAllLeagues } from '../api/league';
+import type { LeagueInfoDto } from '../types/admin';
 
 const mockedGetAllLeaguesCost = vi.mocked(getAllLeaguesCost);
+const mockedGetAllLeagues = vi.mocked(getAllLeagues);
+
+function makeLeagueInfo(overrides: Partial<LeagueInfoDto> = {}): LeagueInfoDto {
+  return {
+    id: 1,
+    leagueName: 'Demo League',
+    dateCreated: '2024-01-01T00:00:00Z',
+    ownerUserId: 'owner-1',
+    leagueType: 'Nfl',
+    minSeason: 2024,
+    ...overrides,
+  };
+}
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
@@ -34,6 +48,8 @@ function makeCost(overrides: Partial<AdminLeagueCostDto> = {}): AdminLeagueCostD
 describe('AdminLeagueCostsPage', () => {
   beforeEach(() => {
     mockedGetAllLeaguesCost.mockReset();
+    mockedGetAllLeagues.mockReset();
+    mockedGetAllLeagues.mockResolvedValue([makeLeagueInfo()]);
   });
 
   it('shows each league with its owner, sport, member count, and cost, plus a total row', async () => {
@@ -83,5 +99,44 @@ describe('AdminLeagueCostsPage', () => {
     await userEvent.click(await screen.findByRole('option', { name: String(currentYear - 1) }));
 
     await waitFor(() => expect(mockedGetAllLeaguesCost).toHaveBeenCalledWith(currentYear - 1));
+  });
+
+  it('does not offer a season before the earliest season any league has been configured for', async () => {
+    mockedGetAllLeagues.mockResolvedValue([makeLeagueInfo({ minSeason: 2025 })]);
+    mockedGetAllLeaguesCost.mockResolvedValue([makeCost()]);
+    renderPage();
+    await screen.findByText('Demo League');
+
+    await userEvent.click(screen.getByRole('combobox'));
+    expect(await screen.findByRole('option', { name: '2025' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '2024' })).toBeNull();
+  });
+
+  it('renders a sane fallback season range while the leagues list is still loading', async () => {
+    // getAllLeagues never resolves during this test — the page must still render usable season
+    // options (the fallback floor) rather than crashing or showing an empty select.
+    mockedGetAllLeagues.mockReturnValue(new Promise(() => {}));
+    mockedGetAllLeaguesCost.mockResolvedValue([makeCost()]);
+    renderPage();
+    await screen.findByText('Demo League');
+
+    await userEvent.click(screen.getByRole('combobox'));
+    const currentYear = new Date().getFullYear();
+    expect(await screen.findByRole('option', { name: String(currentYear) })).toBeInTheDocument();
+  });
+
+  it('clamps the selected season up to the earliest available one when every league is newer than the current year', async () => {
+    // Every league's minSeason is in the future relative to CURRENT_YEAR (e.g. only next
+    // season's leagues have been configured so far) — the initial `useState(CURRENT_YEAR)`
+    // value falls outside the computed season range, so the page must derive an in-range season
+    // rather than leaving the Select controlled to a value with no matching option.
+    const currentYear = new Date().getFullYear();
+    const futureSeason = currentYear + 5;
+    mockedGetAllLeagues.mockResolvedValue([makeLeagueInfo({ minSeason: futureSeason })]);
+    mockedGetAllLeaguesCost.mockResolvedValue([makeCost()]);
+    renderPage();
+
+    await waitFor(() => expect(mockedGetAllLeaguesCost).toHaveBeenCalledWith(futureSeason));
+    expect(await screen.findByText(String(futureSeason))).toBeInTheDocument();
   });
 });

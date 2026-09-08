@@ -3,9 +3,9 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class NflCurrentWeekService(ILeagueRepository repo) : INflCurrentWeekService {
+public class NflCurrentWeekService(ILeagueRepository repo, [FromKeyedServices(CurrentWeekClock.Key)] TimeProvider timeProvider) : INflCurrentWeekService {
     public async Task<NflWeekInfo> GetCurrentWeekAsync() {
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var configs = await repo.GetNflSeasonWeekConfigsAsync();
 
         // frizat-9xg: most recent week whose own spread grab has passed, unless we're within
@@ -23,7 +23,7 @@ public class NflCurrentWeekService(ILeagueRepository repo) : INflCurrentWeekServ
     public async Task<bool> IsSeasonActiveAsync() {
         var configs = await repo.GetNflSeasonWeekConfigsAsync();
         var windows = configs.Select(c => new SeasonWindowResolver.Window(c.Season, c.WeekStartDatetime, c.WeekEndDatetime));
-        return SeasonWindowResolver.IsSeasonActive(windows, DateTime.UtcNow);
+        return SeasonWindowResolver.IsSeasonActive(windows, timeProvider.GetUtcNow().UtcDateTime);
     }
 
     private static NflWeekInfo ToWeekInfo(Models.Data.NflSeasonWeekConfig cfg) {

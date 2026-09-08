@@ -50,6 +50,20 @@ describe('useShareLink', () => {
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
   });
 
+  it('share() forwards an optional text message alongside title and url', async () => {
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
+
+    const { result } = renderHook(() => useShareLink());
+    result.current.share('Join my league', 'https://ivleague.com/join/abc', "You're invited to join OG FourPlayaz.");
+
+    await waitFor(() => expect(shareMock).toHaveBeenCalledWith({
+      title: 'Join my league',
+      text: "You're invited to join OG FourPlayaz.",
+      url: 'https://ivleague.com/join/abc',
+    }));
+  });
+
   it('share() does not throw an unhandled rejection when the user cancels the native share sheet', async () => {
     const shareMock = vi.fn().mockRejectedValue(new DOMException('Abort', 'AbortError'));
     Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });

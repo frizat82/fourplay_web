@@ -11,4 +11,6 @@ public class LeagueInfoDto
     public string OwnerUserId { get; set; } = string.Empty;
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public LeagueType LeagueType { get; set; } = LeagueType.Nfl;
+    /// <summary>The earliest season this league has a juice mapping for, or null if never configured.</summary>
+    public int? MinSeason { get; set; }
 }
