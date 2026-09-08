@@ -16,10 +16,13 @@ public class DemoEspnCacheService : IEspnCacheService
 {
     private readonly EspnScores? _scores;
     private readonly IDbContextFactory<ApplicationDbContext> _dbContextFactory;
+    private readonly TimeProvider _timeProvider;
 
-    public DemoEspnCacheService(IDbContextFactory<ApplicationDbContext> dbContextFactory)
+    public DemoEspnCacheService(IDbContextFactory<ApplicationDbContext> dbContextFactory,
+        [FromKeyedServices(CurrentWeekClock.Key)] TimeProvider timeProvider)
     {
         _dbContextFactory = dbContextFactory;
+        _timeProvider = timeProvider;
         _scores = DemoFixtureLoader.Load("sample_espn_nfl.json", json =>
         {
             foreach (var map in NflTeamMappingHelpers.NflTeamAbbrMapping)
@@ -45,7 +48,9 @@ public class DemoEspnCacheService : IEspnCacheService
     // does, not just DB-persisted final scores (which would silently drop live situation/clock
     // data for the week the demo is specifically built to show as "in progress"). Resolved
     // inline via SeasonWindowResolver (same logic as NflCurrentWeekService) rather than
-    // constructor-injecting the Scoped INflCurrentWeekService into this Singleton.
+    // constructor-injecting the Scoped INflCurrentWeekService into this Singleton — but must use
+    // the SAME keyed clock NflCurrentWeekService resolves "current" against (frizat-tf2), or this
+    // and NflCurrentWeekService can silently disagree on what "current" is in DEMO_MODE.
     public async Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false)
     {
         var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, year, postSeason);
@@ -54,7 +59,7 @@ public class DemoEspnCacheService : IEspnCacheService
 
         var configs = await db.NflSeasonWeekConfigs.ToListAsync();
         var windows = configs.Select(c => new SeasonWindowResolver.WeekWindow(c.Season, c.WeekStartDatetime, c.WeekEndDatetime, c.SpreadLockDatetime));
-        var resolvedCurrent = SeasonWindowResolver.ResolveCurrentWeek(windows, DateTime.UtcNow);
+        var resolvedCurrent = SeasonWindowResolver.ResolveCurrentWeek(windows, _timeProvider.GetUtcNow().UtcDateTime);
         var matchingConfig = configs.FirstOrDefault(c => c.Season == year && c.WeekId == nflWeek);
         var isResolvedCurrentWeek = matchingConfig is not null && resolvedCurrent is not null
             && resolvedCurrent.Value.Season == matchingConfig.Season
