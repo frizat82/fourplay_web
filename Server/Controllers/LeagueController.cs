@@ -732,6 +732,7 @@ public class LeagueController(
         return Ok(leagues.Select(l => new LeagueInfoDto {
             Id = l.Id, LeagueName = l.LeagueName, LeagueType = l.LeagueType,
             OwnerUserId = l.OwnerUserId, DateCreated = l.DateCreated,
+            MinSeason = l.MinConfiguredSeason(),
         }));
     }
 
@@ -754,7 +755,11 @@ public class LeagueController(
         var countsTask = repo.GetLeagueMemberCountsAsync(season);
         var usersTask = repo.GetUsersAsync();
         await Task.WhenAll(leaguesTask, countsTask, usersTask);
-        var leagues = leaguesTask.Result;
+        // A league with no juice mapping at or before this season didn't exist yet — exclude it
+        // rather than billing it the flat base cost. A league that DID exist but has zero counted
+        // members this season (e.g. a future season not seeded yet) still bills the base tier —
+        // see GetAllLeaguesCost_DefaultsMemberCountToZero_ForLeagueMissingFromCountsMap.
+        var leagues = leaguesTask.Result.Where(l => l.MinConfiguredSeason() is int min && min <= season);
         var counts = countsTask.Result;
         var owners = usersTask.Result.ToDictionary(u => u.Id, u => u.UserName ?? u.Id);
         return Ok(leagues.Select(l => {

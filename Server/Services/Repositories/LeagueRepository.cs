@@ -138,12 +138,19 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
                 await db.NflSpreads.AddAsync(spread);
             }
             else {
-                // Exists -> Update only if odds are currently 0/0 and new ones are valid
+                // The odds themselves freeze once real (non-zero) values are captured — a locked
+                // line shouldn't move after users have already picked against it.
                 if (existing.HomeTeamSpread == 0 && existing.AwayTeamSpread == 0 &&
                     (spread.HomeTeamSpread != 0 || spread.AwayTeamSpread != 0)) {
-                    // Update fields
                     spread.Id = existing.Id;
                     db.Entry(existing).CurrentValues.SetValues(spread);
+                } else {
+                    // GameTime keeps refreshing regardless (frizat-tf1) — an NFL flex schedule or
+                    // weather delay can push a game's real kickoff later than whatever was true when
+                    // the spread first posted, and LeaderboardService's "has every game for this
+                    // week started" check depends on this staying accurate. Matches
+                    // CfbRepository.UpsertAsync, which already refreshes GameTime unconditionally.
+                    existing.GameTime = spread.GameTime;
                 }
             }
         }

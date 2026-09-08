@@ -42,7 +42,7 @@ public class DemoEspnCacheServiceTests
     [Fact]
     public async Task GetScoresAsync_LoadsFixture_RegardlessOfWorkingDirectoryOrContentRoot()
     {
-        var sut = new DemoEspnCacheService(BuildFactory(BuildDb(nameof(GetScoresAsync_LoadsFixture_RegardlessOfWorkingDirectoryOrContentRoot))));
+        var sut = new DemoEspnCacheService(BuildFactory(BuildDb(nameof(GetScoresAsync_LoadsFixture_RegardlessOfWorkingDirectoryOrContentRoot))), TimeProvider.System);
 
         var scores = await sut.GetScoresAsync();
 
@@ -88,7 +88,7 @@ public class DemoEspnCacheServiceTests
         });
         await db.SaveChangesAsync();
 
-        var sut = new DemoEspnCacheService(BuildFactory(db));
+        var sut = new DemoEspnCacheService(BuildFactory(db), TimeProvider.System);
 
         var result = await sut.GetWeekScoresAsync(1, 2025, postSeason: true);
 
@@ -129,7 +129,7 @@ public class DemoEspnCacheServiceTests
         });
         await db.SaveChangesAsync();
 
-        var sut = new DemoEspnCacheService(BuildFactory(db));
+        var sut = new DemoEspnCacheService(BuildFactory(db), TimeProvider.System);
 
         // Week 5, regular season — nothing seeded for that combo.
         var result = await sut.GetWeekScoresAsync(5, 2025, postSeason: false);
@@ -169,10 +169,62 @@ public class DemoEspnCacheServiceTests
         });
         await db.SaveChangesAsync();
 
-        var sut = new DemoEspnCacheService(BuildFactory(db));
+        var sut = new DemoEspnCacheService(BuildFactory(db), TimeProvider.System);
 
         // Raw ESPN week 5 = Super Bowl = internal WeekId 22 (GameHelpers.GetWeekFromEspnWeek).
         var result = await sut.GetWeekScoresAsync(5, 2025, postSeason: true);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result!.Events);
+        Assert.NotEmpty(result.Events!);
+        // The frozen fixture's teams, not the DB-persisted SF/SEA final score.
+        Assert.DoesNotContain(result.Events!, e => e.Competitions[0].Competitors.Any(c => c.Team.Abbreviation == "SF"));
+    }
+
+    // frizat-tf2: this "is this the resolved current week" check must use the SAME injected clock
+    // NflCurrentWeekService uses (CurrentWeekClock.Key), not DateTime.UtcNow — otherwise, once the
+    // real wall clock crosses a real season's early-activation window, this endpoint silently
+    // disagrees with NflCurrentWeekService about what "current" is: the frontend asks for the week
+    // NflCurrentWeekService (correctly, via the frozen clock) calls current, but this endpoint
+    // (still reading the real clock) no longer thinks that week is current, falls back to the
+    // DB-only path, and the Super Bowl loses its live clock/field-position/down-distance data (the
+    // exact regression the tests above already guard against — only for the wrong reason).
+    [Fact]
+    public async Task GetWeekScoresAsync_UsesInjectedClock_NotRealWallClock_ToResolveCurrentWeek()
+    {
+        var frozen = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        await using var db = BuildDb(nameof(GetWeekScoresAsync_UsesInjectedClock_NotRealWallClock_ToResolveCurrentWeek));
+        // A seeded final score that would otherwise be served by the DB-only path — proves the
+        // frozen fixture wins because THIS week resolves as current under the frozen clock, even
+        // though the real wall clock (long past both configs' locks by now) would instead resolve
+        // week 22 as current.
+        db.NflScores.Add(new NflScores {
+            Season = 2025,
+            NflWeek = 21,
+            HomeTeam = "SF",
+            AwayTeam = "SEA",
+            HomeTeamScore = 10,
+            AwayTeamScore = 9,
+            GameTime = frozen.UtcDateTime.AddDays(-10),
+        });
+        db.NflSeasonWeekConfigs.Add(new Models.Data.NflSeasonWeekConfig {
+            Season = 2025, WeekId = 21, WeekLabel = "Conference Championship", WeekType = "PostSeason",
+            ScoringFormat = "Standard",
+            WeekStartDatetime = frozen.UtcDateTime.AddDays(-10), WeekEndDatetime = frozen.UtcDateTime.AddDays(-3),
+            SpreadLockDatetime = frozen.UtcDateTime.AddDays(-10),
+        });
+        db.NflSeasonWeekConfigs.Add(new Models.Data.NflSeasonWeekConfig {
+            Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "PostSeason",
+            ScoringFormat = "Standard",
+            WeekStartDatetime = frozen.UtcDateTime.AddDays(10), WeekEndDatetime = frozen.UtcDateTime.AddDays(17),
+            SpreadLockDatetime = frozen.UtcDateTime.AddDays(10),
+        });
+        await db.SaveChangesAsync();
+
+        var sut = new DemoEspnCacheService(BuildFactory(db), new FakeTimeProvider(frozen));
+
+        // Raw ESPN week 3 = Conference Championship = internal WeekId 21 (week + 18).
+        var result = await sut.GetWeekScoresAsync(3, 2025, postSeason: true);
 
         Assert.NotNull(result);
         Assert.NotNull(result!.Events);
