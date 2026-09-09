@@ -40,15 +40,17 @@ public class LeagueJuiceScheduleSourceTests
         LeagueJuiceMappings = mappings,
     };
 
-    private static NflSeasonWeekConfig MakeNflWeek1(int season, DateTime firstGameUtc) => new() {
-        Season = season, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+    private static NflSeasonWeekConfig MakeNflWeek(int season, int weekId, DateTime firstGameUtc) => new() {
+        Season = season, WeekId = weekId, WeekLabel = $"Week {weekId}", WeekType = "Regular Season", ScoringFormat = "Standard",
         FirstGameOfWeekStartDatetime = firstGameUtc,
     };
+    private static NflSeasonWeekConfig MakeNflWeek1(int season, DateTime firstGameUtc) => MakeNflWeek(season, 1, firstGameUtc);
 
-    private static CfbSeasonWeekConfig MakeCfbSlate1(int season, DateOnly startDate) => new() {
-        Season = season, EspnWeekNumber = 1, IvLeagueWeekNumber = 1, WeekStartDate = startDate,
+    private static CfbSeasonWeekConfig MakeCfbSlate(int season, int slateNumber, DateOnly startDate) => new() {
+        Season = season, EspnWeekNumber = slateNumber, IvLeagueWeekNumber = slateNumber, WeekStartDate = startDate,
         WeekEndDate = startDate.AddDays(6), InScopeIvLeague = true,
     };
+    private static CfbSeasonWeekConfig MakeCfbSlate1(int season, DateOnly startDate) => MakeCfbSlate(season, 1, startDate);
 
     // ── No hardcoded year ──────────────────────────────────────────────────────
 
@@ -271,6 +273,78 @@ public class LeagueJuiceScheduleSourceTests
 
         Assert.Empty(reminders);
         Assert.Empty(locks);
+    }
+
+    // ── GetWeekLockTimeUtc / GetSeasonStartLockTimeUtc / GetSeasonEndLockTimeUtc ─────
+    // frizat: extracted for LeagueController.UpdateLeagueJuice to reuse the identical
+    // "when does this week/slate start" boundary the scheduler above already computes — tease
+    // points lock at season start (week/slate 1), WeeklyCost locks at season end (NFL WeekId 22
+    // Super Bowl / CFB slate 18 Championship). Pure, no I/O.
+
+    [Fact]
+    public void GetSeasonStartLockTimeUtc_Nfl_ResolvesWeek1LockTime() {
+        var nflConfigs = new[] { MakeNflWeek(2025, 1, new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc)) };
+
+        var lockTime = LeagueJuiceScheduleSource.GetSeasonStartLockTimeUtc(LeagueType.Nfl, 2025, nflConfigs, []);
+
+        Assert.Equal(new DateTime(2025, 9, 4, 19, 0, 0, DateTimeKind.Utc), lockTime); // 2pm CDT = 19:00 UTC
+    }
+
+    [Fact]
+    public void GetSeasonEndLockTimeUtc_Nfl_ResolvesWeek22_NotWeek1() {
+        var nflConfigs = new[] {
+            MakeNflWeek(2025, 1, new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc)),
+            MakeNflWeek(2025, 22, new DateTime(2026, 2, 8, 23, 30, 0, DateTimeKind.Utc)),
+        };
+
+        var lockTime = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(LeagueType.Nfl, 2025, nflConfigs, []);
+
+        Assert.Equal(new DateTime(2026, 2, 8, 20, 0, 0, DateTimeKind.Utc), lockTime); // 2pm CST = 20:00 UTC
+    }
+
+    [Fact]
+    public void GetSeasonStartLockTimeUtc_Cfb_ResolvesSlate1LockTime() {
+        var cfbConfigs = new[] { MakeCfbSlate(2025, 1, new DateOnly(2025, 8, 23)) };
+
+        var lockTime = LeagueJuiceScheduleSource.GetSeasonStartLockTimeUtc(LeagueType.Cfb, 2025, [], cfbConfigs);
+
+        Assert.Equal(new DateTime(2025, 8, 23, 19, 0, 0, DateTimeKind.Utc), lockTime); // 2pm CDT = 19:00 UTC
+    }
+
+    [Fact]
+    public void GetSeasonEndLockTimeUtc_Cfb_ResolvesSlate18_NotSlate1() {
+        var cfbConfigs = new[] {
+            MakeCfbSlate(2025, 1, new DateOnly(2025, 8, 23)),
+            MakeCfbSlate(2025, 18, new DateOnly(2026, 1, 12)),
+        };
+
+        var lockTime = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(LeagueType.Cfb, 2025, [], cfbConfigs);
+
+        Assert.Equal(new DateTime(2026, 1, 12, 20, 0, 0, DateTimeKind.Utc), lockTime); // 2pm CST = 20:00 UTC
+    }
+
+    [Fact]
+    public void GetWeekLockTimeUtc_ReturnsNull_WhenNoMatchingConfigRowExists() {
+        var startLock = LeagueJuiceScheduleSource.GetSeasonStartLockTimeUtc(LeagueType.Nfl, 2031, [], []);
+        var endLock = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(LeagueType.Cfb, 2031, [], []);
+
+        Assert.Null(startLock);
+        Assert.Null(endLock);
+    }
+
+    [Fact]
+    public void GetWeekLockTimeUtc_Cfb_IgnoresRowNotInScopeIvLeague() {
+        var cfbConfigs = new[] {
+            new CfbSeasonWeekConfig {
+                Season = 2025, EspnWeekNumber = 18, IvLeagueWeekNumber = 18,
+                WeekStartDate = new DateOnly(2026, 1, 12), WeekEndDate = new DateOnly(2026, 1, 18),
+                InScopeIvLeague = false,
+            },
+        };
+
+        var lockTime = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(LeagueType.Cfb, 2025, [], cfbConfigs);
+
+        Assert.Null(lockTime);
     }
 
     // ── JobData ────────────────────────────────────────────────────────────────────

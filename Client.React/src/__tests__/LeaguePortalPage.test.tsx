@@ -60,6 +60,7 @@ import {
   getLeagueUserMappings,
   getLeagueJuice,
   getLeagueCost,
+  updateLeagueJuice,
   getAllLeagues,
   getUsers,
   createLeague,
@@ -79,6 +80,7 @@ import {
 const mockedGetMappings = vi.mocked(getLeagueUserMappings);
 const mockedGetJuice = vi.mocked(getLeagueJuice);
 const mockedGetCost = vi.mocked(getLeagueCost);
+const mockedUpdateJuice = vi.mocked(updateLeagueJuice);
 const mockedGetAllLeagues = vi.mocked(getAllLeagues);
 const mockedGetCurrentInviteLink = vi.mocked(getCurrentInviteLink);
 const mockedGetLeagueInvitations = vi.mocked(getLeagueInvitations);
@@ -116,7 +118,7 @@ function makeMember(): LeagueUserMappingDto {
   };
 }
 
-function makeJuice(season: number): LeagueJuiceMappingDto {
+function makeJuice(season: number, overrides?: Partial<Pick<LeagueJuiceMappingDto, 'teaseLocked' | 'weeklyCostLocked'>>): LeagueJuiceMappingDto {
   return {
     id: 1,
     leagueId: 1,
@@ -127,6 +129,9 @@ function makeJuice(season: number): LeagueJuiceMappingDto {
     juiceConference: 6,
     weeklyCost: 5,
     dateCreated: '2026-06-29T00:00:00Z',
+    teaseLocked: false,
+    weeklyCostLocked: false,
+    ...overrides,
   };
 }
 
@@ -145,6 +150,7 @@ beforeEach(() => {
   mockedGetMappings.mockResolvedValue([makeMember()]);
   mockedGetCost.mockResolvedValue(cost);
   mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON - 1)]);
+  mockedUpdateJuice.mockResolvedValue(undefined);
   mockedGetAllLeagues.mockResolvedValue([]);
   mockedGetUsers.mockResolvedValue([makeUser()]);
   mockedCreateLeague.mockResolvedValue(makeLeague({ id: 99, leagueName: 'New League' }));
@@ -178,6 +184,52 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
 
     await waitFor(() => expect(screen.getByLabelText(/Tease Pts \(Regular Season\)/i)).not.toBeDisabled());
     expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
+  });
+
+  it('locks only the tease fields, not Weekly Cost, once the season has started', async () => {
+    mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON, { teaseLocked: true, weeklyCostLocked: false })]);
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    await waitFor(() => expect(screen.getByLabelText(/Tease Pts \(Regular Season\)/i)).toHaveValue(13));
+    expect(screen.getByLabelText(/Tease Pts \(Regular Season\)/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Tease Pts \(Divisional\)/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Tease Pts \(Conference\)/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Cost Per Week/i)).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
+    expect(screen.getByText(/Tease points are locked once the season has started/i)).toBeInTheDocument();
+  });
+
+  it('locks only Weekly Cost, not the tease fields, once the season\'s final week has started', async () => {
+    mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON, { teaseLocked: false, weeklyCostLocked: true })]);
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    await waitFor(() => expect(screen.getByLabelText(/Cost Per Week/i)).toHaveValue(5));
+    expect(screen.getByLabelText(/Cost Per Week/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Tease Pts \(Regular Season\)/i)).not.toBeDisabled();
+    expect(screen.getByLabelText(/Tease Pts \(Divisional\)/i)).not.toBeDisabled();
+    expect(screen.getByLabelText(/Tease Pts \(Conference\)/i)).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
+    expect(screen.getByText(/Weekly Cost is locked once the season's final week has started/i)).toBeInTheDocument();
+  });
+
+  it('shows the server\'s specific rejection message when a save is rejected by a lock, instead of a generic failure toast', async () => {
+    mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON)]);
+    mockedUpdateJuice.mockRejectedValue(
+      Object.assign(new Error('Bad Request'), {
+        isAxiosError: true,
+        response: { status: 400, data: "Tease points can't be changed once the season has started." },
+      }),
+    );
+
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    await waitFor(() => expect(screen.getByLabelText(/Tease Pts \(Regular Season\)/i)).not.toBeDisabled());
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() =>
+      expect(toastPush).toHaveBeenCalledWith("Tease points can't be changed once the season has started.", 'error'));
   });
 
   it('lets the owner clear and retype a Tease Pts value without it snapping back mid-edit', async () => {
