@@ -546,6 +546,41 @@ public class LeaderboardServiceTests {
         Assert.Equal(WeekResult.MissingPicks, result[0].WeekResults[0].WeekResult);
     }
 
+    // frizat-8y6: reported live on prod — a slate with ZERO spreads released yet (the picking
+    // window hasn't even opened) showed on the leaderboard as MissingPicks — a terminal loss —
+    // for every user, because AllGamesStarted's underlying .All() is vacuously true on an empty
+    // sequence. A week that hasn't started must never read as "everyone missed their picks".
+    [Fact]
+    public async Task CfbBuildLeaderboard_ReturnsMissingGameResults_NotMissingPicks_WhenNoSpreadsExistYet() {
+        var userId = Guid.NewGuid().ToString();
+        const int leagueId = 1;
+        const int slateId = 1;
+        var leagueInfo = new LeagueInfo { Id = leagueId, LeagueName = "CFB Test", OwnerUserId = userId };
+        var userMapping = new LeagueUserMapping { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = userId, UserName = "Alice" }, UserId = userId };
+        var juiceMapping = new LeagueJuiceMapping { Id = 1, LeagueId = leagueId, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
+        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 2, SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+
+        var leagueRepo = Substitute.For<ILeagueRepository>();
+        leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns([userMapping]);
+        leagueRepo.GetLeagueJuiceMappingAsync(leagueId, 2025).Returns(juiceMapping);
+
+        var cfbRepo = Substitute.For<ICfbRepository>();
+        cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
+        cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[]); // nothing released yet
+        cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[]);
+
+        var picksRepo = Substitute.For<ICfbPicksRepository>();
+        picksRepo.GetUserPicksAsync(leagueId, slateId, userId).Returns((IEnumerable<CfbPicks>)[]);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(),
+            leagueRepo, cfbRepo, picksRepo, BuildCurrentSlateService(slateNumber: 2), TimeProvider.System);
+        var result = await service.BuildLeaderboard(leagueId, 2025);
+
+        Assert.Equal(WeekResult.MissingGameResults, result[0].WeekResults[0].WeekResult);
+        // Not a terminal loss, so no payout is computed for a week that hasn't started.
+        Assert.Equal(0, result[0].WeekResults[0].Score);
+    }
+
     // frizat-tf1: a user can submit picks for any individual game right up until that game's own
     // kickoff (CfbPicksController.StartedTeams uses the identical GameTime <= now check) — so an
     // incomplete pick set must not be treated as a terminal loss while any of that slate's games
