@@ -11,4 +11,10 @@ public class LeagueJuiceMappingDto
     public int JuiceConference { get; set; }
     public int WeeklyCost { get; set; }
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
+    // Tease points (Juice/JuiceDivisional/JuiceConference) lock once the season's first week/slate
+    // has started; WeeklyCost locks separately, once the season's LAST week/slate (Super Bowl /
+    // Championship) has started — see LeagueController.UpdateLeagueJuice and
+    // LeagueJuiceScheduleSource.GetSeasonStartLockTimeUtc/GetSeasonEndLockTimeUtc.
+    public bool TeaseLocked { get; set; }
+    public bool WeeklyCostLocked { get; set; }
 }
