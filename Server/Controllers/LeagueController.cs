@@ -1,4 +1,5 @@
 ﻿using FourPlayWebApp.Server.Auth;
+using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
@@ -111,34 +112,65 @@ public class LeagueController(
     */
 
     // ---------- League Juice ----------
+
+    // Used only by GetLeagueJuice below, which needs every season's lock state at once from one
+    // already-fetched full config table (not the season-scoped LeagueJuiceScheduleSource.
+    // GetJuiceLockStateAsync instance method GetLeagueJuiceForSeason/UpdateLeagueJuice use —
+    // those look up exactly one season, so a per-season DB round trip there is the cheaper
+    // fetch; here, fetching per-row instead of once would be N round trips for N seasons).
+    private static (bool TeaseLocked, bool WeeklyCostLocked) GetJuiceLockState(LeagueType leagueType, int season,
+        IEnumerable<NflSeasonWeekConfig> nflConfigs, IEnumerable<CfbSeasonWeekConfig> cfbConfigs) {
+        var now = DateTimeOffset.UtcNow.UtcDateTime;
+        var teaseLockTime = LeagueJuiceScheduleSource.GetSeasonStartLockTimeUtc(leagueType, season, nflConfigs, cfbConfigs);
+        var weeklyCostLockTime = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(leagueType, season, nflConfigs, cfbConfigs);
+        return (teaseLockTime is not null && now >= teaseLockTime, weeklyCostLockTime is not null && now >= weeklyCostLockTime);
+    }
+
     [HttpGet("{leagueId:int}/juice")]
     [ProducesResponseType(typeof(List<LeagueJuiceMappingDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<LeagueJuiceMappingDto>>> GetLeagueJuice(int leagueId) {
+    public async Task<ActionResult<List<LeagueJuiceMappingDto>>> GetLeagueJuice(int leagueId,
+            [FromServices] ICfbRepository cfbRepo) {
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
             return Forbid();
         var mappings = await repo.GetLeagueJuiceMappingAsync(leagueId);
-        var dtoMappings = mappings.Select(m => new LeagueJuiceMappingDto {
-            LeagueId = m.LeagueId,
-            LeagueName = m.League.LeagueName,
-            Season = m.Season,
-            Juice = m.Juice,
-            JuiceDivisional = m.JuiceDivisional,
-            JuiceConference = m.JuiceConference,
-            WeeklyCost = m.WeeklyCost,
-            DateCreated = m.DateCreated
+        if (mappings.Count == 0) return Ok(new List<LeagueJuiceMappingDto>());
+
+        // All mappings belong to the same league, so the same sport's config table serves every
+        // one of them — fetched once, not once per season row.
+        var leagueType = mappings[0].League.LeagueType;
+        var nflConfigs = leagueType == LeagueType.Cfb ? [] : await repo.GetNflSeasonWeekConfigsAsync();
+        var cfbConfigs = leagueType == LeagueType.Cfb ? await cfbRepo.GetAllWeekConfigsAsync() : [];
+
+        var dtoMappings = mappings.Select(m => {
+            var (teaseLocked, weeklyCostLocked) = GetJuiceLockState(leagueType, m.Season, nflConfigs, cfbConfigs);
+            return new LeagueJuiceMappingDto {
+                LeagueId = m.LeagueId,
+                LeagueName = m.League.LeagueName,
+                Season = m.Season,
+                Juice = m.Juice,
+                JuiceDivisional = m.JuiceDivisional,
+                JuiceConference = m.JuiceConference,
+                WeeklyCost = m.WeeklyCost,
+                DateCreated = m.DateCreated,
+                TeaseLocked = teaseLocked,
+                WeeklyCostLocked = weeklyCostLocked,
+            };
         }).ToList();
         return Ok(dtoMappings);
     }
 
     [HttpGet("{leagueId:int}/juice/{season:int}")]
     [ProducesResponseType(typeof(LeagueJuiceMappingDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<LeagueJuiceMappingDto?>> GetLeagueJuiceForSeason(int leagueId, int season) {
+    public async Task<ActionResult<LeagueJuiceMappingDto?>> GetLeagueJuiceForSeason(int leagueId, int season,
+            [FromServices] LeagueJuiceScheduleSource scheduleSource) {
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId!, leagueId))
             return Forbid();
         var mapping = await repo.GetLeagueJuiceMappingAsync(leagueId, season);
         if (mapping == null) return Ok(null);
+
+        var (teaseLocked, weeklyCostLocked) = await scheduleSource.GetJuiceLockStateAsync(mapping.League.LeagueType, season);
 
         var dtoMapping = new LeagueJuiceMappingDto {
             LeagueId = mapping.LeagueId,
@@ -148,7 +180,9 @@ public class LeagueController(
             JuiceDivisional = mapping.JuiceDivisional,
             JuiceConference = mapping.JuiceConference,
             WeeklyCost = mapping.WeeklyCost,
-            DateCreated = mapping.DateCreated
+            DateCreated = mapping.DateCreated,
+            TeaseLocked = teaseLocked,
+            WeeklyCostLocked = weeklyCostLocked,
         };
         return Ok(dtoMapping);
     }
@@ -784,13 +818,30 @@ public class LeagueController(
 
     [HttpPut("{leagueId:int}/juice/{season:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> UpdateLeagueJuice(int leagueId, int season, [FromBody] LeagueJuiceUpdateDto dto) {
-        var (_, error) = await LoadOwnedLeagueAsync(leagueId);
+    public async Task<IActionResult> UpdateLeagueJuice(int leagueId, int season, [FromBody] LeagueJuiceUpdateDto dto,
+            [FromServices] LeagueJuiceScheduleSource scheduleSource) {
+        var (league, error) = await LoadOwnedLeagueAsync(leagueId);
         if (error is not null) return error;
-        var existing = await repo.GetLeagueJuiceMappingAsync(leagueId, season);
+
+        // Independent of each other — kick both off before awaiting instead of paying for two
+        // sequential round trips.
+        var existingTask = repo.GetLeagueJuiceMappingAsync(leagueId, season);
+        var lockStateTask = scheduleSource.GetJuiceLockStateAsync(league!.LeagueType, season);
+        await Task.WhenAll(existingTask, lockStateTask);
+        var existing = existingTask.Result;
         if (existing is null) return NotFound($"No juice mapping for league {leagueId} season {season}.");
+        var (teaseLocked, weeklyCostLocked) = lockStateTask.Result;
+
+        var teaseChanged = dto.Juice != existing.Juice || dto.JuiceDivisional != existing.JuiceDivisional
+            || dto.JuiceConference != existing.JuiceConference;
+        if (teaseLocked && teaseChanged)
+            return BadRequest("Tease points can't be changed once the season has started.");
+        if (weeklyCostLocked && dto.WeeklyCost != existing.WeeklyCost)
+            return BadRequest("Weekly Cost can't be changed once the season's final week has started.");
+
         existing.Juice = dto.Juice;
         existing.JuiceDivisional = dto.JuiceDivisional;
         existing.JuiceConference = dto.JuiceConference;

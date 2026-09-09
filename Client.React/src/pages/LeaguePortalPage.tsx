@@ -297,8 +297,8 @@ export default function LeaguePortalPage() {
       await updateLeagueJuice(selectedLeague.id, selectedSeason, juiceForm);
       toast.push('Juice settings saved', 'success');
       await loadJuice(selectedLeague.id);
-    } catch {
-      toast.push('Failed to save juice settings', 'error');
+    } catch (error) {
+      toast.push(extractApiErrorMessage(error, 'Failed to save juice settings'), 'error');
     } finally {
       setSavingJuice(false);
     }
@@ -532,6 +532,8 @@ export default function LeaguePortalPage() {
               onJuiceFormChange={(field, value) => setJuiceForm((f) => ({ ...f, [field]: value }))}
               hasMappingForSeason={!!currentJuiceMapping}
               locked={selectedSeason < CURRENT_SEASON}
+              teaseLocked={!!currentJuiceMapping?.teaseLocked}
+              weeklyCostLocked={!!currentJuiceMapping?.weeklyCostLocked}
               onSave={handleSaveJuice}
               onRollForward={handleRollForward}
               saving={savingJuice}
@@ -975,6 +977,10 @@ interface JuiceTabProps {
   onJuiceFormChange: (field: string, value: number) => void;
   hasMappingForSeason: boolean;
   locked: boolean;
+  /** Tease points (Juice/JuiceDivisional/JuiceConference) — locked once the season's first week/slate has started. */
+  teaseLocked: boolean;
+  /** Weekly Cost — locked separately, once the season's final week/slate (Super Bowl / Championship) has started. */
+  weeklyCostLocked: boolean;
   onSave: () => void;
   onRollForward: () => void;
   saving: boolean;
@@ -983,7 +989,7 @@ interface JuiceTabProps {
 
 function JuiceTab({
   availableSeasons, selectedSeason, onSeasonChange, juiceForm, onJuiceFormChange,
-  hasMappingForSeason, locked, onSave, onRollForward, saving, rollingForward,
+  hasMappingForSeason, locked, teaseLocked, weeklyCostLocked, onSave, onRollForward, saving, rollingForward,
 }: JuiceTabProps) {
   // All 4 fields are backend `int` DTOs (Shared/Models/Data/Dtos/LeagueCreateDto.cs) — teaser
   // points and weekly cost are always whole numbers in this domain, so integerOnly strips a
@@ -992,6 +998,8 @@ function JuiceTab({
   const juiceDivisionalField = useNumericField(juiceForm.juiceDivisional, (n) => onJuiceFormChange('juiceDivisional', n), { integerOnly: true });
   const juiceConferenceField = useNumericField(juiceForm.juiceConference, (n) => onJuiceFormChange('juiceConference', n), { integerOnly: true });
   const weeklyCostField = useNumericField(juiceForm.weeklyCost, (n) => onJuiceFormChange('weeklyCost', n), { integerOnly: true });
+  const teaseDisabled = locked || teaseLocked;
+  const weeklyCostDisabled = locked || weeklyCostLocked;
 
   return (
     <Box>
@@ -1020,13 +1028,23 @@ function JuiceTab({
           {selectedSeason} has already been played — juice settings are locked to protect past results.
         </Typography>
       )}
+      {!locked && teaseLocked && (
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 1 }}>
+          Tease points are locked once the season has started.
+        </Typography>
+      )}
+      {!locked && weeklyCostLocked && (
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+          Weekly Cost is locked once the season's final week has started.
+        </Typography>
+      )}
 
       <Stack spacing={2} sx={{ maxWidth: 400 }}>
         <TextField
           label="Tease Pts (Regular Season)"
           type="number"
           size="small"
-          disabled={locked}
+          disabled={teaseDisabled}
           slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           {...juiceField}
         />
@@ -1034,7 +1052,7 @@ function JuiceTab({
           label="Tease Pts (Divisional)"
           type="number"
           size="small"
-          disabled={locked}
+          disabled={teaseDisabled}
           slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           {...juiceDivisionalField}
         />
@@ -1042,7 +1060,7 @@ function JuiceTab({
           label="Tease Pts (Conference)"
           type="number"
           size="small"
-          disabled={locked}
+          disabled={teaseDisabled}
           slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           {...juiceConferenceField}
         />
@@ -1050,7 +1068,7 @@ function JuiceTab({
           label="Cost Per Week ($)"
           type="number"
           size="small"
-          disabled={locked}
+          disabled={weeklyCostDisabled}
           slotProps={{ htmlInput: { inputMode: 'numeric' } }}
           {...weeklyCostField}
         />

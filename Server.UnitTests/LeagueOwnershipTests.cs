@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Controllers;
+using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
@@ -182,13 +183,30 @@ public class LeagueOwnershipTests
         return (ctrl, repo);
     }
 
+    // No NflSeasonWeekConfigs/CfbSeasonWeekConfigs rows configured for the season under test —
+    // GetSeasonStartLockTimeUtc/GetSeasonEndLockTimeUtc resolve to null, so neither lock ever
+    // fires. Used by tests that don't care about the season-boundary locks themselves.
+    private static ICfbRepository EmptyCfbRepo() {
+        var cfbRepo = Substitute.For<ICfbRepository>();
+        cfbRepo.GetAllWeekConfigsAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig>());
+        cfbRepo.GetWeekConfigsForSeasonAsync(Arg.Any<int>()).Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig>());
+        return cfbRepo;
+    }
+
+    // UpdateLeagueJuice/GetLeagueJuiceForSeason take a real (non-substituted) LeagueJuiceScheduleSource
+    // — its lock-time methods aren't virtual, so NSubstitute can't override them; constructing the
+    // real thing over the test's own repo mocks (already set up with whatever config rows the test
+    // needs) exercises the actual lock logic instead of re-mocking it a second, parallel way.
+    private static LeagueJuiceScheduleSource BuildScheduleSource(ILeagueRepository repo, ICfbRepository? cfbRepo = null) =>
+        new(repo, cfbRepo ?? EmptyCfbRepo(), TimeProvider.System);
+
     [Fact]
     public async Task UpdateJuice_ReturnsForbid_WhenCallerIsNotOwnerOrAdmin()
     {
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
 
-        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 5));
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 5), BuildScheduleSource(repo));
 
         Assert.IsType<ForbidResult>(result);
     }
@@ -199,8 +217,9 @@ public class LeagueOwnershipTests
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig>());
 
-        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(14, 11, 7, 10));
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(14, 11, 7, 10), BuildScheduleSource(repo));
 
         Assert.IsType<NoContentResult>(result);
         await repo.Received(1).UpdateLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.Juice == 14 && m.JuiceDivisional == 11));
@@ -212,8 +231,95 @@ public class LeagueOwnershipTests
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025 });
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig>());
 
-        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 5));
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 5), BuildScheduleSource(repo));
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    // ── Season-boundary locks: tease points at season start, WeeklyCost at season end ──────────
+
+    [Fact]
+    public async Task UpdateJuice_RejectsTeaseChange_OnceSeasonHasStarted()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
+            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+                FirstGameOfWeekStartDatetime = new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc) },
+        });
+
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(14, 10, 6, 5), BuildScheduleSource(repo));
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceive().UpdateLeagueJuiceMappingAsync(Arg.Any<LeagueJuiceMapping>());
+    }
+
+    [Fact]
+    public async Task UpdateJuice_AllowsWeeklyCostChange_EvenAfterSeasonHasStarted()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
+            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+                FirstGameOfWeekStartDatetime = new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc) },
+        });
+
+        // Tease values resubmitted unchanged; only WeeklyCost differs — the season has started
+        // (fixed 2025 dates, always in the past), but WeeklyCost isn't locked until the season's
+        // LAST week, which has no config row here, so it's still open.
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 10), BuildScheduleSource(repo));
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).UpdateLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.WeeklyCost == 10));
+    }
+
+    [Fact]
+    public async Task UpdateJuice_RejectsWeeklyCostChange_OnceFinalWeekHasStarted()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
+            new() { Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "PostSeason", ScoringFormat = "Standard",
+                FirstGameOfWeekStartDatetime = new DateTime(2026, 2, 8, 23, 30, 0, DateTimeKind.Utc) },
+        });
+
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 10), BuildScheduleSource(repo));
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceive().UpdateLeagueJuiceMappingAsync(Arg.Any<LeagueJuiceMapping>());
+    }
+
+    [Fact]
+    public async Task UpdateJuice_AllowsTeaseChange_BeforeFinalWeekHasStarted_EvenWithConfigRowSeeded()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
+        // Super Bowl config row exists but is set far in the future — WeeklyCost lock hasn't hit
+        // yet either way, and Season 2025's WEEK 1 has no config row at all here, so tease is open.
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
+            new() { Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "PostSeason", ScoringFormat = "Standard",
+                FirstGameOfWeekStartDatetime = new DateTime(2099, 2, 8, 23, 30, 0, DateTimeKind.Utc) },
+        });
+
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(14, 10, 6, 5), BuildScheduleSource(repo));
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task UpdateJuice_AllowsAnyChange_WhenSeasonHasNoConfigRowsAtAll()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Cfb });
+        repo.GetLeagueJuiceMappingAsync(1, 2031).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2031, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
+
+        var result = await ctrl.UpdateLeagueJuice(1, 2031, new LeagueJuiceUpdateDto(20, 15, 9, 15), BuildScheduleSource(repo));
 
         Assert.IsType<NoContentResult>(result);
     }
@@ -388,7 +494,7 @@ public class LeagueOwnershipTests
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
         repo.GetLeagueInfoAsync(999).Returns(Task.FromException<LeagueInfo>(new InvalidOperationException("Sequence contains no elements")));
 
-        var result = await ctrl.UpdateLeagueJuice(999, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 5));
+        var result = await ctrl.UpdateLeagueJuice(999, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 5), BuildScheduleSource(repo));
 
         Assert.IsType<NotFoundResult>(result);
     }
@@ -1144,7 +1250,7 @@ public class LeagueOwnershipTests
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
         repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
 
-        var result = await ctrl.GetLeagueJuice(1);
+        var result = await ctrl.GetLeagueJuice(1, EmptyCfbRepo());
 
         Assert.IsType<ForbidResult>(result.Result);
     }
@@ -1157,7 +1263,7 @@ public class LeagueOwnershipTests
         repo.UserExistsInLeagueAsync(memberId, 1).Returns(true);
         repo.GetLeagueJuiceMappingAsync(1).Returns([]);
 
-        var result = await ctrl.GetLeagueJuice(1);
+        var result = await ctrl.GetLeagueJuice(1, EmptyCfbRepo());
 
         Assert.IsType<OkObjectResult>(result.Result);
     }
@@ -1168,7 +1274,7 @@ public class LeagueOwnershipTests
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
         repo.GetLeagueJuiceMappingAsync(1).Returns([]);
 
-        var result = await ctrl.GetLeagueJuice(1);
+        var result = await ctrl.GetLeagueJuice(1, EmptyCfbRepo());
 
         Assert.IsType<OkObjectResult>(result.Result);
     }
@@ -1181,7 +1287,7 @@ public class LeagueOwnershipTests
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId));
         repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
 
-        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025);
+        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025, BuildScheduleSource(repo));
 
         Assert.IsType<ForbidResult>(result.Result);
     }
@@ -1194,7 +1300,7 @@ public class LeagueOwnershipTests
         repo.UserExistsInLeagueAsync(memberId, 1).Returns(true);
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns((LeagueJuiceMapping?)null);
 
-        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025);
+        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025, BuildScheduleSource(repo));
 
         Assert.IsType<OkObjectResult>(result.Result);
     }
@@ -1205,7 +1311,7 @@ public class LeagueOwnershipTests
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns((LeagueJuiceMapping?)null);
 
-        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025);
+        var result = await ctrl.GetLeagueJuiceForSeason(1, 2025, BuildScheduleSource(repo));
 
         Assert.IsType<OkObjectResult>(result.Result);
     }
