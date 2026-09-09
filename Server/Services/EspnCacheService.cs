@@ -12,7 +12,7 @@ namespace FourPlayWebApp.Server.Services;
 // engine for CFB, differing only in what/how it fetches.
 public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 {
-    private readonly IEspnApiService _espnApiService;
+    private readonly INflLiveScoreFetcher _fetcher;
     private readonly ILeagueRepository _leagueRepository;
     private readonly IMemoryCache _historicalCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
@@ -23,9 +23,9 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         remove => _cache.Changed -= value;
     }
 
-    public EspnCacheService(IEspnApiService espnApiService, INflCurrentWeekService nflCurrentWeekService, ILeagueRepository leagueRepository, IMemoryCache historicalCache, TimeSpan? initialDelay = null)
+    public EspnCacheService(INflLiveScoreFetcher fetcher, INflCurrentWeekService nflCurrentWeekService, ILeagueRepository leagueRepository, IMemoryCache historicalCache, TimeSpan? initialDelay = null)
     {
-        _espnApiService = espnApiService;
+        _fetcher = fetcher;
         _leagueRepository = leagueRepository;
         _historicalCache = historicalCache;
         _cache = new PeriodicRefreshCache<EspnScores>(
@@ -37,7 +37,9 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
                 if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return null;
 
                 var week = await nflCurrentWeekService.GetCurrentWeekAsync();
-                return await espnApiService.GetWeekScores(week.EspnWeek, week.Season, week.IsPostSeason);
+                var configs = await leagueRepository.GetNflSeasonWeekConfigsAsync();
+                var matchingConfig = configs.FirstOrDefault(c => c.Season == week.Season && c.WeekId == week.WeekId);
+                return matchingConfig is null ? null : await _fetcher.FetchForWeekAsync(matchingConfig);
             },
             fingerprint: EspnScoresFingerprint.Compute,
             interval: TimeSpan.FromMinutes(5),
@@ -61,12 +63,19 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     // persisted later, is permanently dropped from every future response.
     public async Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false)
     {
-        var cacheKey = $"nfl-week-scores_{year}_{week}_{postSeason}";
+        var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, year, postSeason);
+
+        // Cache key is the resolved internal (season, WeekId), not the raw incoming ESPN-style
+        // params — matches CfbLiveScoreFetcher's cfb-slate-scores_{slateId} shape and is what
+        // InvalidateWeekCache(season, week) can actually address after an upsert.
+        var cacheKey = $"nfl-week-scores_{year}_{nflWeek}";
         if (_historicalCache.TryGetValue<EspnScores>(cacheKey, out var cached)) return cached;
 
-        var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, year, postSeason);
-        var configs = await _leagueRepository.GetNflSeasonWeekConfigsAsync();
-        var matchingConfig = configs.FirstOrDefault(c => c.Season == year && c.WeekId == nflWeek);
+        // One unscoped fetch serves both purposes below — finding this week's own row and
+        // resolving which week SeasonWindowResolver currently treats as "current" needs the
+        // full set of configs either way.
+        var allConfigs = await _leagueRepository.GetNflSeasonWeekConfigsAsync();
+        var matchingConfig = allConfigs.FirstOrDefault(c => c.Season == year && c.WeekId == nflWeek);
 
         // The control-table-resolved CURRENT week is always live-fetched, even if its own
         // calendar window already looks "ended" by the 6-hour buffer below —
@@ -77,7 +86,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         // week. Skipping this check would silently serve the "genuinely historical" DB-final-
         // score reconstruction below (no live situation/clock data) for the week the UI is
         // actively treating as current, instead of its real live/final ESPN state.
-        var windows = configs.Select(c => new SeasonWindowResolver.WeekWindow(c.Season, c.WeekStartDatetime, c.WeekEndDatetime, c.SpreadLockDatetime));
+        var windows = allConfigs.Select(c => new SeasonWindowResolver.WeekWindow(c.Season, c.WeekStartDatetime, c.WeekEndDatetime, c.SpreadLockDatetime));
         var resolvedCurrent = SeasonWindowResolver.ResolveCurrentWeek(windows, DateTime.UtcNow);
         var isResolvedCurrentWeek = matchingConfig is not null && resolvedCurrent is not null
             && resolvedCurrent.Value.Season == matchingConfig.Season
@@ -100,8 +109,15 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
                 return built;
             }
         }
-        return await _espnApiService.GetWeekScores(week, year, postSeason);
+
+        // Never trust ESPN's own week=N bucketing (frizat-11t's NFL mirror) — only fetch when we
+        // have a real control-table row to scope the date-range query to. No matching config
+        // means there's nothing to ask ESPN for.
+        return matchingConfig is null ? null : await _fetcher.FetchForWeekAsync(matchingConfig);
     }
+
+    public void InvalidateWeekCache(int season, int week) =>
+        _historicalCache.Remove($"nfl-week-scores_{season}_{week}");
 
     public ValueTask DisposeAsync() => _cache.DisposeAsync();
 }

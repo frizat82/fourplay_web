@@ -1,6 +1,4 @@
-using FourPlayWebApp.Server.Models.Data;
 using System.Text.Json;
-using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
@@ -13,11 +11,16 @@ namespace FourPlayWebApp.Server.Services;
 public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logger)
     : IEspnApiService {
     private const string _scoreboardEndpoint = "/apis/site/v2/sports/football/nfl/scoreboard";
-    public async Task<EspnScores?> GetWeekScores(int week, int year, bool postSeason = false) {
+
+    // frizat-11t (NFL mirror): dates=yyyyMMdd-yyyyMMdd scoped to the caller's own control-table
+    // window, not week=N — see IEspnApiService's doc comment for why. seasontype still needs to
+    // be passed explicitly (2=regular, 3=postseason) since ESPN's date filter alone doesn't
+    // disambiguate a rescheduled/rare doubleheader week that straddles both season types.
+    public async Task<EspnScores?> GetScoresByDateRangeAsync(DateOnly startDate, DateOnly endDate, bool postSeason = false) {
         try {
-            // Replace the endpoint with the actual ESPN API endpoint for NFL spreads
+            var dates = $"{startDate:yyyyMMdd}-{endDate:yyyyMMdd}";
             var response = await httpClient.GetAsync(
-            $"{_scoreboardEndpoint}?dates={year}&seasontype={(postSeason ? 3 : 2)}&week={week}");
+                $"{_scoreboardEndpoint}?dates={dates}&seasontype={(postSeason ? 3 : 2)}&limit=100");
             response.EnsureSuccessStatusCode();
             if (response.IsSuccessStatusCode) {
                 var responseString = await response.Content.ReadAsStringAsync();
@@ -28,36 +31,6 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
                 }
 
                 var deserializedObject = JsonSerializer.Deserialize<EspnScores>(responseString, EspnApiServiceJsonConverter.Settings);
-
-                // Use the deserialized object as needed
-                return FixEspnProbBowlWeek(deserializedObject);
-            }
-
-            logger.LogError("Error: {ResponseReasonPhrase}", response.ReasonPhrase);
-            return null;
-        }
-        catch (HttpRequestException e) {
-            logger.LogError("HTTP Request error: {EMessage}", e.Message);
-            return null;
-        }
-    }
-    public async Task<EspnScores?> GetSeasonScores(int year) {
-        try {
-            // Replace the endpoint with the actual ESPN API endpoint for NFL spreads
-            var response = await httpClient.GetAsync(
-            $"{_scoreboardEndpoint}?dates={year}&limit=1000");
-            response.EnsureSuccessStatusCode();
-            if (response.IsSuccessStatusCode) {
-                var responseString = await response.Content.ReadAsStringAsync();
-                // Fix some strange team abbreviations from ESPN that don't match standard ones
-                foreach (var map in NflTeamMappingHelpers.NflTeamAbbrMapping.Where(map =>
-                             responseString.Contains($"\"{map.Key}\""))) {
-                    responseString = responseString.Replace($"\"{map.Key}\"", $"\"{map.Value}\"");
-                }
-
-                var deserializedObject = JsonSerializer.Deserialize<EspnScores>(responseString, EspnApiServiceJsonConverter.Settings);
-
-                // Use the deserialized object as needed
                 return FixEspnProbBowlWeek(deserializedObject);
             }
 

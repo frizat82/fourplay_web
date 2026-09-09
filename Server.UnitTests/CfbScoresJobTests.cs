@@ -83,7 +83,7 @@ public class CfbScoresJobTests
 
         await BuildJob().Execute(_context);
 
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
     }
 
     // Beyond "slates exist" — the job must also check whether the season is actually happening
@@ -101,15 +101,30 @@ public class CfbScoresJobTests
 
         await BuildJob().Execute(_context);
 
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
         await _repo.DidNotReceive().UpsertCfbScoresAsync(Arg.Any<IEnumerable<CfbScores>>());
+    }
+
+    // /code-review: the fix for today's real production incident (a missed Monday-night game
+    // that a re-run of this job couldn't recover, because the viewer-facing cache/DB-shortcut
+    // permanently stopped calling ESPN for an "ended" slate) is this one bypassCache:true argument
+    // — pin it explicitly so a future refactor can't silently drop it back to the default.
+    [Fact]
+    public async Task Execute_AlwaysFetchesWithBypassCacheTrue_SoAnEndedSlateCanStillRecoverAMissedGame()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns((EspnScores?)null);
+
+        await BuildJob().Execute(_context);
+
+        await _fetcher.Received(1).FetchForSlateAsync(Arg.Any<CfbSlates>(), bypassCache: true);
     }
 
     [Fact]
     public async Task Execute_WhenFetcherReturnsNull_SavesNoScores()
     {
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns((EspnScores?)null);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns((EspnScores?)null);
 
         await BuildJob().Execute(_context);
 
@@ -120,7 +135,7 @@ public class CfbScoresJobTests
     public async Task Execute_WhenGameFinal_SavesScore()
     {
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
 
         await BuildJob().Execute(_context);
 
@@ -133,7 +148,7 @@ public class CfbScoresJobTests
     {
         var slate = BuildSlate();
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([slate]);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>())
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>())
             .Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU", homeScore: 41, awayScore: 21, status: TypeName.StatusFinal));
 
         IEnumerable<CfbScores>? saved = null;
@@ -156,7 +171,7 @@ public class CfbScoresJobTests
     public async Task Execute_InProgressGame_IsNotSaved()
     {
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(status: TypeName.StatusInProgress));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusInProgress));
 
         await BuildJob().Execute(_context);
 
@@ -167,7 +182,7 @@ public class CfbScoresJobTests
     public async Task Execute_HalftimeGame_IsNotSaved()
     {
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(status: TypeName.StatusHalftime));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusHalftime));
 
         await BuildJob().Execute(_context);
 
@@ -178,7 +193,7 @@ public class CfbScoresJobTests
     public async Task Execute_ScheduledGame_IsNotSaved()
     {
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(status: TypeName.StatusScheduled));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusScheduled));
 
         await BuildJob().Execute(_context);
 
@@ -193,7 +208,7 @@ public class CfbScoresJobTests
             DisplayValue = "Partly Cloudy", ConditionId = "3", Temperature = 55
         };
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(scoreboard);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(scoreboard);
 
         IEnumerable<CfbScores>? saved = null;
         await _repo.UpsertCfbScoresAsync(Arg.Do<IEnumerable<CfbScores>>(s => saved = s));
@@ -209,7 +224,7 @@ public class CfbScoresJobTests
     public async Task Execute_WeatherIsNullWhenEventHasNoWeather()
     {
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
 
         IEnumerable<CfbScores>? saved = null;
         await _repo.UpsertCfbScoresAsync(Arg.Do<IEnumerable<CfbScores>>(s => saved = s));
