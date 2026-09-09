@@ -34,7 +34,7 @@ function makeScores(homeTeam: string, awayTeam: string, homeScore = 24, awayScor
 // considers current (e.g. the most recently completed game during any gap in play) regardless of
 // the league's actual spread-release schedule.
 const DEFAULT_CURRENT_WEEK = {
-  weekId: 8, espnWeek: 8, season: 2023, isPostSeason: false,
+  weekId: 8, season: 2023, isPostSeason: false,
   weekLabel: 'Week 8', scoringFormat: 'Standard', spreadLockDatetime: '2023-10-26T17:00:00Z',
 };
 
@@ -137,7 +137,7 @@ describe('nflAdapter', () => {
 
       const result = await adapter.loadCurrentGames(1, 'user1');
 
-      expect(getWeekScores).toHaveBeenCalledWith(8, 2023, false);
+      expect(getWeekScores).toHaveBeenCalledWith(2023, 8);
       expect(loadScoresWithRetry).not.toHaveBeenCalled();
       expect(result.season).toBe(2023);
       expect(result.week).toBe(8);
@@ -178,7 +178,7 @@ describe('nflAdapter', () => {
 
       const result = await adapter.loadCurrentScores(1, 'user1');
 
-      expect(getWeekScores).toHaveBeenCalledWith(8, 2023, false);
+      expect(getWeekScores).toHaveBeenCalledWith(2023, 8);
       expect(loadScoresWithRetry).not.toHaveBeenCalled();
       expect(result.season).toBe(2023);
       expect(result.week).toBe(8);
@@ -213,7 +213,7 @@ describe('nflAdapter', () => {
     // season's Super Bowl as "current" throughout the summer offseason gap).
     it('currentSeasonYear uses the control table, never ESPN\'s own scoreboard', async () => {
       vi.mocked(getNflCurrentWeek).mockResolvedValue({
-        weekId: 1, espnWeek: 1, season: 2026, isPostSeason: false,
+        weekId: 1, season: 2026, isPostSeason: false,
         weekLabel: 'Week 1', scoringFormat: 'Standard', spreadLockDatetime: '2026-09-09T13:20:00Z',
       });
 

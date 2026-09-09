@@ -18,7 +18,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import PeopleIcon from '@mui/icons-material/People';
 import ScoreboardIcon from '@mui/icons-material/Scoreboard';
 import PageHeader from '../../components/PageHeader';
-import { getAllJobsStatus, runScores, runSpreads, runUserManager } from '../../api/jobManager';
+import { getAllJobsStatus, runCfbScores, runCfbSpreads, runScores, runSpreads, runUserManager } from '../../api/jobManager';
 import type { JobStatusResponse } from '../../types/admin';
 import { useToast } from '../../services/toast';
 import { stickyColumnSx } from '../../utils/tableStyles';
@@ -82,6 +82,11 @@ export default function AdminJobManagerPage() {
         <Typography variant="h5" align="center" sx={{ mb: 2 }}>
           Admin Tasks
         </Typography>
+        {/* One dedicated button per job TYPE (NFL/CFB Scores, NFL/CFB Spreads are always
+            separate jobs, never combined — see LeagueController/CfbPicksController siblings) —
+            a single generically-labeled "Run Scores Job" button here previously ran NFL only,
+            with no way to trigger CFB's scores/spreads jobs from this page at all. That silently
+            reads as "did nothing" for CFB and has caused a real admin mix-up in prod. */}
         <Grid container spacing={2} justifyContent="center">
           <Grid size={{ xs: 12, sm: 6 }}>
             <Button
@@ -89,9 +94,42 @@ export default function AdminJobManagerPage() {
               fullWidth
               startIcon={<TrendingUpIcon />}
               disabled={jobRunning || loading}
-              onClick={() => runJob(runSpreads, 'Spread Job')}
+              onClick={() => runJob(runSpreads, 'NFL Spreads Job')}
             >
-              {jobRunning ? 'Running...' : 'Run Spreads Job'}
+              {jobRunning ? 'Running...' : 'Run NFL Spreads Job'}
+            </Button>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Button
+              variant="contained"
+              fullWidth
+              startIcon={<TrendingUpIcon />}
+              disabled={jobRunning || loading}
+              onClick={() => runJob(runCfbSpreads, 'CFB Spreads Job')}
+            >
+              {jobRunning ? 'Running...' : 'Run CFB Spreads Job'}
+            </Button>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Button
+              variant="contained"
+              fullWidth
+              startIcon={<ScoreboardIcon />}
+              disabled={jobRunning || loading}
+              onClick={() => runJob(runScores, 'NFL Scores Job')}
+            >
+              {jobRunning ? 'Running...' : 'Run NFL Scores Job'}
+            </Button>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Button
+              variant="contained"
+              fullWidth
+              startIcon={<ScoreboardIcon />}
+              disabled={jobRunning || loading}
+              onClick={() => runJob(runCfbScores, 'CFB Scores Job')}
+            >
+              {jobRunning ? 'Running...' : 'Run CFB Scores Job'}
             </Button>
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
@@ -103,17 +141,6 @@ export default function AdminJobManagerPage() {
               onClick={() => runJob(runUserManager, 'User Manager Job')}
             >
               {jobRunning ? 'Running...' : 'Run User Manager Job'}
-            </Button>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <Button
-              variant="contained"
-              fullWidth
-              startIcon={<ScoreboardIcon />}
-              disabled={jobRunning || loading}
-              onClick={() => runJob(runScores, 'Scores Job')}
-            >
-              {jobRunning ? 'Running...' : 'Run Scores Job'}
             </Button>
           </Grid>
         </Grid>

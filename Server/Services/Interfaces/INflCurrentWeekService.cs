@@ -1,6 +1,8 @@
 namespace FourPlayWebApp.Server.Services.Interfaces;
 
-public record NflWeekInfo(int WeekId, int EspnWeek, int Season, bool IsPostSeason, string WeekLabel, string ScoringFormat, DateTime SpreadLockDatetime);
+// No EspnWeek field — every consumer (backend and frontend) now routes purely by WeekId (our
+// own control table), never ESPN's own numbering. See frizat-3nv.
+public record NflWeekInfo(int WeekId, int Season, bool IsPostSeason, string WeekLabel, string ScoringFormat, DateTime SpreadLockDatetime);
 
 public interface INflCurrentWeekService {
     Task<NflWeekInfo> GetCurrentWeekAsync();

@@ -10,7 +10,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { getEspnRequiredPicks, getCfbRequiredPicks } from '../utils/gameHelpers';
+import { getNflRequiredPicks, getCfbRequiredPicks } from '../utils/gameHelpers';
 import { useSportContext } from '../services/sport';
 import { getNflSpreadLockSchedule } from '../api/league';
 import { getCfbSpreadLockSchedule } from '../api/cfb';
@@ -179,7 +179,7 @@ function MatchupExample() {
 function OverUnderExample() {
   const { isCfb } = useSportContext();
   const roundLabel = isCfb ? 'CFP First Round' : 'Wild Card';
-  const requiredPicks = isCfb ? getCfbRequiredPicks(15) : getEspnRequiredPicks(1, true);
+  const requiredPicks = isCfb ? getCfbRequiredPicks(15) : getNflRequiredPicks(19);
   const picks = isCfb
     ? [
         { type: 'spread' as const, label: 'Ohio State Buckeyes', detail: 'Teased line +8.5' },
@@ -343,10 +343,10 @@ function PlayoffGrid() {
         { round: 'Championship', picks: getCfbRequiredPicks(18) },
       ]
     : [
-        { round: 'Wild Card', picks: getEspnRequiredPicks(1, true) },
-        { round: 'Divisional', picks: getEspnRequiredPicks(2, true) },
-        { round: 'Championship', picks: getEspnRequiredPicks(3, true) },
-        { round: 'Super Bowl', picks: getEspnRequiredPicks(5, true) },
+        { round: 'Wild Card', picks: getNflRequiredPicks(19) },
+        { round: 'Divisional', picks: getNflRequiredPicks(20) },
+        { round: 'Championship', picks: getNflRequiredPicks(21) },
+        { round: 'Super Bowl', picks: getNflRequiredPicks(22) },
       ];
 
   return (
@@ -495,7 +495,7 @@ function SpreadLockInfo({ isCfb }: { isCfb: boolean }) {
 
 export function RulesContent() {
   const { isCfb } = useSportContext();
-  const regularPicks = getEspnRequiredPicks(1, false);
+  const regularPicks = getNflRequiredPicks(1);
 
   return (
     <Stack spacing={3}>

@@ -102,10 +102,12 @@ public class NflCurrentWeekServiceTests
         Assert.Equal(5, result.WeekId);
     }
 
+    // frizat-3nv: NflWeekInfo no longer carries an EspnWeek field at all — nothing on the
+    // backend or frontend needs ESPN's own week numbering anymore, only WeekId. ToWeekInfo's
+    // former WeekId->EspnWeek mapping (and its unconditional, non-season-gated Pro-Bowl-skip
+    // special case, flagged separately under frizat-4k9) is gone, not relocated.
     [Fact]
-    public async Task GetCurrentWeekAsync_MapsEspnWeek_ForPostseasonRounds() {
-        // ToWeekInfo's WeekId -> ESPN week mapping is unchanged by this refactor — Super
-        // Bowl (WeekId 22) maps to ESPN week 5 (ESPN skips week 4 = Pro Bowl).
+    public async Task GetCurrentWeekAsync_ResolvesPostseasonRounds_ByWeekIdOnly() {
         var now = DateTime.UtcNow;
         var svc = BuildService([
             Config(2025, 22, now.AddDays(-1), now.AddDays(1)),
@@ -114,7 +116,6 @@ public class NflCurrentWeekServiceTests
         var result = await svc.GetCurrentWeekAsync();
 
         Assert.Equal(22, result.WeekId);
-        Assert.Equal(5, result.EspnWeek);
         Assert.True(result.IsPostSeason);
     }
 
