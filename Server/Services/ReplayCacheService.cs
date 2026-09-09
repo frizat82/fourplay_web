@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Helpers.Extensions;
 using FourPlayWebApp.Shared.Models;
 using Serilog;
@@ -75,10 +76,14 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
     // Replay mode drives one fixed game through scheduled->final — it has no concept of "other
     // weeks". Only serve a result when the request matches the current snapshot's own week;
     // never fall through to a real ESPN call (that would defeat the point of replay/demo mode).
-    public Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false) {
+    // The snapshot's own Week.Number is real captured ESPN wire data (frizat-703.5 fixtures), so
+    // it's converted to our internal WeekId to compare against the caller's now-internal request.
+    public Task<EspnScores?> GetWeekScoresAsync(int season, int nflWeek) {
         var current = _snapshots[_index];
-        var matches = current.Season?.Year == year && current.Week?.Number == week &&
-                      current.IsPostSeason() == postSeason;
+        var currentNflWeek = current.Week?.Number is { } w
+            ? GameHelpers.GetWeekFromEspnWeek(w, (int)(current.Season?.Year ?? 0), current.IsPostSeason())
+            : (int?)null;
+        var matches = current.Season?.Year == season && currentNflWeek == nflWeek;
         return Task.FromResult(matches ? current : null);
     }
 

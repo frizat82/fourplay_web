@@ -17,11 +17,13 @@ public class EspnController(
     ICfbLiveScoreFetcher cfbFetcher,
     ICfbRepository cfbRepo)
     : ControllerBase {
-    [HttpGet("scores/week/{week:int}/{year:int}")]
+    // Route is our own (season, nflWeek) — NflSeasonWeekConfig.WeekId — never ESPN's own week
+    // numbering, matching GetCfbScoresForSlate's shape below (frizat-3nv).
+    [HttpGet("scores/nfl-week/{season:int}/{nflWeek:int}")]
     [ProducesResponseType(typeof(EspnScores), StatusCodes.Status200OK)]
-    public async Task<ActionResult<EspnScores?>> GetWeekScores(int week, int year, [FromQuery] bool postSeason = false)
+    public async Task<ActionResult<EspnScores?>> GetWeekScores(int season, int nflWeek)
     {
-        var scores = await espnCacheService.GetWeekScoresAsync(week, year, postSeason);
+        var scores = await espnCacheService.GetWeekScoresAsync(season, nflWeek);
         return Ok(scores ?? new EspnScores());
     }
 

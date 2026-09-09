@@ -18,12 +18,35 @@ export function isGameDecided(status: GameStatusValue): boolean {
   return isGameFinal(status) || isGameLive(status);
 }
 
+// Converts ESPN's own raw week numbering into our internal WeekId — legitimately still needed
+// wherever raw ESPN data is genuinely being ingested/interpreted (e.g. the frozen demo/replay
+// fixture, which IS a real captured ESPN wire snapshot) — but never for routing/fetching, which
+// is WeekId-primary everywhere now (frizat-3nv).
 export function getWeekFromEspnWeek(week: number, isPostSeason = false) {
   if (!isPostSeason) return week;
   // ESPN skips Pro Bowl (week 4); Super Bowl is ESPN week 5.
-  // NflScoresJob normalizes week 5 → 4 before storing (j == 5 ? 4 : j).
   // DB postseason weeks: WC=19, Div=20, CC=21, SB=22.
   return (week === 5 ? 4 : week) + 18;
+}
+
+// NFL week name/required-picks, keyed by our own internal WeekId (1-18 regular, 19-22
+// postseason) — never ESPN's own week numbering (frizat-3nv). getNflRequiredPicks mirrors
+// GameHelpers.GetRequiredPicks on the backend exactly; getNflWeekName reuses getWeekName's own
+// round-name table below (1-4) rather than re-declaring it, offset by the constant 18 gap
+// between WeekId's postseason range and that table's index.
+export function getNflWeekName(nflWeek: number, isPostSeason = false): string {
+  return getWeekName(isPostSeason ? nflWeek - 18 : nflWeek, isPostSeason);
+}
+
+export function getNflRequiredPicks(nflWeek: number): number {
+  if (nflWeek < 19) return 4;
+  switch (nflWeek) {
+    case 19: return 3;
+    case 20: return 3;
+    case 21: return 2;
+    case 22: return 1;
+    default: throw new Error('Invalid week number');
+  }
 }
 
 export function spreadLabel(spread: number): string {
@@ -66,19 +89,6 @@ export function getWeekName(week: number, isPostSeason = false) {
       return 'Conference Championship';
     case 4:
       return 'Super Bowl';
-    default:
-      throw new Error('Invalid week number');
-  }
-}
-
-export function getEspnRequiredPicks(week: number, isPostSeason = false) {
-  if (!isPostSeason) return 4;
-  switch (week) {
-    case 1: return 3; // Wild Card
-    case 2: return 3; // Divisional
-    case 3: return 2; // Conference Championship
-    case 4:
-    case 5: return 1; // Super Bowl (week 5 in ESPN; week 4 = Pro Bowl)
     default:
       throw new Error('Invalid week number');
   }

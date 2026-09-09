@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-09
+
+- Fixed: the admin Job Manager page had one generically-labeled "Run Scores Job" / "Run Spreads Job" button that only ever ran NFL's job, with no way to trigger CFB's scores or spreads jobs at all — each sport now has its own clearly-labeled button
+
 ## 2026-09-07
 
 - Fixed: the admin League Costs page's season dropdown was a hardcoded 4-year window unrelated to any real league's history, and could bill a league its flat base cost for seasons before it ever existed — the dropdown now only offers seasons from the earliest any league has actually been configured for, and leagues that didn't exist yet in the selected season are excluded from the cost table entirely

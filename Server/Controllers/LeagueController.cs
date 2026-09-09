@@ -338,6 +338,9 @@ public class LeagueController(
         // Hide other users' picks for games that haven't kicked off yet.
         // Mirrors revealPicksForStartedGames on the frontend — same "not STATUS_SCHEDULED" rule.
         // Admins always see all picks. Fails open if ESPN cache is unavailable.
+        // Deliberately still ESPN-live, unlike AddPicks's kickoff guard below (frizat-3nv, now DB-
+        // only) — this needs the game's real live status (a delayed/moved kickoff can outlive its
+        // own scheduled NflSpreads.GameTime), not just a scheduled timestamp comparison.
         if (!User.IsInRole(AppRoles.Administrator)) {
             var espnScores = await espnCacheService.GetScoresAsync();
             if (espnScores?.Events is not null) {
@@ -405,16 +408,16 @@ public class LeagueController(
         if (!isMember)
             return Forbid();
 
-        // Fetch weeks, ESPN scores, existing picks, and the current-week guard concurrently —
-        // none of these depend on each other's results.
+        // Fetch weeks, this week's spreads, existing picks, and the current-week guard
+        // concurrently — none of these depend on each other's results.
         var weekTask          = repo.GetNflWeeksAsync(first.Season);
-        var espnTask          = espnCacheService.GetScoresAsync();
+        var spreadsTask       = repo.GetNflSpreadsAsync(first.Season, first.NflWeek);
         var existingPicksTask = repo.GetUserNflPicksAsync(authenticatedUserId, first.LeagueId, first.Season, first.NflWeek);
         var currentWeekTask   = currentWeekService.GetCurrentWeekAsync();
-        await Task.WhenAll(weekTask, espnTask, existingPicksTask, currentWeekTask);
+        await Task.WhenAll(weekTask, spreadsTask, existingPicksTask, currentWeekTask);
 
         var weekId        = weekTask.Result;
-        var espnScores    = espnTask.Result;
+        var spreads       = spreadsTask.Result ?? [];
         var existingPicks = existingPicksTask.Result;
 
         // Guard: picks are only accepted for the currently open week per the control table —
@@ -443,28 +446,15 @@ public class LeagueController(
             });
         }
 
-        // Guard: reject picks for any game that has already kicked off
-        if (espnScores?.Events is null)
+        // Guard: reject picks for any game that has already kicked off. Pure control-table
+        // timestamp check — shares GameHelpers.StartedTeams with CfbPicksController's identical
+        // guard (frizat-3nv). Never trusts live ESPN data as a decision input, and can't fail
+        // open the way the previous ESPN-cache-based version did (a DB read can't be "unavailable").
+        var startedTeams = GameHelpers.StartedTeams(spreads, DateTimeOffset.UtcNow, s => s.GameTime, s => s.HomeTeam, s => s.AwayTeam);
+        foreach (var pick in picksList)
         {
-            logger.LogWarning("AddPicks: ESPN cache is unavailable — kickoff guard skipped for user {UserId} league {LeagueId}", authenticatedUserId, first.LeagueId);
-        }
-        else
-        {
-            var now = DateTimeOffset.UtcNow;
-            foreach (var pick in picksList)
-            {
-                // Scope the match to the SAME season/week as the pick — matching by team
-                // abbreviation alone let a historical pick get falsely rejected whenever that
-                // team also happened to appear in the currently-cached (unrelated) event.
-                var competition = espnScores.Events
-                    .Where(e => e.Season.Year == pick.Season &&
-                                GameHelpers.GetWeekFromEspnWeek(e.Week.Number, (int)e.Season.Year, e.IsPostSeason()) == pick.NflWeek)
-                    .SelectMany(e => e.Competitions)
-                    .FirstOrDefault(c =>
-                        c.Competitors.Any(comp => string.Equals(comp.Team?.Abbreviation, pick.Team, StringComparison.OrdinalIgnoreCase)));
-                if (competition is not null && competition.Date <= now)
-                    return BadRequest($"Pick rejected: {pick.Team}'s game has already kicked off.");
-            }
+            if (startedTeams.Contains(pick.Team))
+                return BadRequest($"Pick rejected: {pick.Team}'s game has already kicked off.");
         }
 
         var existingKeys = existingPicks

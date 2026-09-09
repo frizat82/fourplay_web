@@ -193,6 +193,14 @@ public static class GameHelpers {
         var times = gameTimes as ICollection<DateTimeOffset> ?? gameTimes.ToList();
         return times.Count > 0 && times.All(t => t <= now);
     }
+
+    // Shared by LeagueController.AddPicks (NflSpreads) and CfbPicksController.AddPicks
+    // (CfbSpreads) — was two byte-identical private methods, one per controller, differing only
+    // in the spread row's concrete type. Pure control-table timestamp check, no ESPN dependency.
+    public static HashSet<string> StartedTeams<T>(
+        IEnumerable<T> spreads, DateTimeOffset now,
+        Func<T, DateTimeOffset> gameTime, Func<T, string> homeTeam, Func<T, string> awayTeam) =>
+        spreads.Where(s => gameTime(s) <= now).SelectMany(s => new[] { homeTeam(s), awayTeam(s) }).ToHashSet();
     public static bool IsGameOver(Competition competition) => competition.Status.Type.Name == TypeName.StatusFinal;
     public static long GetTeamScore(Competitor competitor) => competitor.Score;
     public static string GetTeamAbbr(Competitor competitor) => competitor.Team.Abbreviation;
