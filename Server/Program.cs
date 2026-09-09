@@ -302,6 +302,7 @@ builder.Services.AddKeyedSingleton<TimeProvider>(CurrentWeekClock.Key, seedsDemo
     : TimeProvider.System);
 builder.Services.AddScoped<ICfbCurrentSlateService, CfbCurrentSlateService>();
 builder.Services.AddSingleton<ICfbLiveScoreFetcher, CfbLiveScoreFetcher>();
+builder.Services.AddSingleton<INflLiveScoreFetcher, NflLiveScoreFetcher>();
 builder.Services.AddScoped<NflSpreadScheduleSource>();
 builder.Services.AddScoped<CfbSpreadScheduleSource>();
 builder.Services.AddScoped<LeagueJuiceScheduleSource>();
@@ -347,8 +348,9 @@ builder.Services.AddQuartz(q => {
     );
 
     // frizat: every job below this line pulls LIVE data from ESPN and writes it into the same
-    // tables DemoDataSeeder owns — NflScoresJob in particular loops currentYear-2..+1, which
-    // always includes whatever season the demo seeder fictionally populates. NflScores' unique
+    // tables DemoDataSeeder owns — NflScoresJob in particular is scoped to the real current
+    // season (control-table-driven, see NflScoresJob's own comment), which is exactly whatever
+    // season the demo seeder fictionally populates. NflScores' unique
     // index is (Season, NflWeek, HomeTeam), not a real per-game key, so a live upsert doesn't even
     // reliably collide with the demo's row for the "same" game if the two sources disagree on
     // which team was home — it just adds a second, conflicting row instead. Confirmed in practice:

@@ -9,7 +9,7 @@ using Quartz;
 using Serilog;
 namespace FourPlayWebApp.Server.Jobs;
 [DisallowConcurrentExecution]
-public class NflSpreadJob(IEspnCoreOddsService sportsOdds, IEspnApiService espn, ILeagueRepository leagueRepository, INflCurrentWeekService nflCurrentWeekService, TimeProvider timeProvider)
+public class NflSpreadJob(IEspnCoreOddsService sportsOdds, INflLiveScoreFetcher fetcher, ILeagueRepository leagueRepository, INflCurrentWeekService nflCurrentWeekService, TimeProvider timeProvider)
     : IJob {
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("Grabbing NFL Spreads at {Time}",DateTime.UtcNow);
@@ -20,10 +20,19 @@ public class NflSpreadJob(IEspnCoreOddsService sportsOdds, IEspnApiService espn,
             return;
         }
 
-        var scoreboard = await espn.GetWeekScores(currentWeek.EspnWeek, currentWeek.Season, currentWeek.IsPostSeason);
+        // Mirrors CfbSpreadJob exactly: resolve the full control-table row for the current week
+        // (NflWeekInfo alone carries no date window) and fetch by date range — never trust
+        // ESPN's own week=N bucketing (frizat-11t's NFL mirror).
+        var configs = await leagueRepository.GetNflSeasonWeekConfigsAsync(currentWeek.Season);
+        var config = configs.FirstOrDefault(c => c.WeekId == currentWeek.WeekId);
+        if (config is null) {
+            Log.Warning("NflSpreadJob: no NflSeasonWeekConfig row for {Season} week {WeekId}", currentWeek.Season, currentWeek.WeekId);
+            return;
+        }
+
+        var scoreboard = await fetcher.FetchForWeekAsync(config);
         if (scoreboard is null)
             return;
-        var isPostSeason = currentWeek.IsPostSeason;
         var newGames = scoreboard?.Events.SelectMany(x => x.Competitions, (x, y) => new CompetitionBySeason { Id = int.Parse(x.Id), Season = x.Season, Competition = y }).Where(y => y.Competition.Status.Type.Name == TypeName.StatusScheduled).ToList();
         if (newGames is null)
             return;

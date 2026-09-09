@@ -2,6 +2,7 @@ using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
+using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,7 +14,7 @@ namespace FourPlayWebApp.Server.Services;
 // the constructor would be a captive-dependency DI violation (same pattern CfbCacheService already
 // uses for the identical problem; see its own comment).
 public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory scopeFactory, IMemoryCache settledCache) : ICfbLiveScoreFetcher {
-    public async Task<EspnScores?> FetchForSlateAsync(CfbSlates slate) {
+    public async Task<EspnScores?> FetchForSlateAsync(CfbSlates slate, bool bypassCache = false) {
         // CfbSeasonWeekConfig.EspnWeekNumber is non-nullable, and both known producers of CfbSlates
         // rows (CfbSlateSeederJob, DemoDataSeeder) always copy a real week number through — so every
         // slate in practice carries one. frizat-11t: the regular-season ESPN fetch itself no longer
@@ -62,7 +63,7 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
         var currentSlate = await currentSlateService.GetCurrentSlateAsync();
         var isCurrentSlate = currentSlate?.Id == slate.Id;
 
-        var slateHasEnded = !isCurrentSlate && slate.EndDate.ToDateTime(TimeOnly.MaxValue).AddHours(6) < DateTime.UtcNow;
+        var slateHasEnded = !bypassCache && !isCurrentSlate && slate.EndDate.ToDateTime(TimeOnly.MaxValue).AddHours(6) < DateTime.UtcNow;
         if (slateHasEnded) {
             var cacheKey = $"cfb-slate-scores_{slate.Id}";
             if (settledCache.TryGetValue<EspnScores>(cacheKey, out var cached)) return cached;
@@ -115,14 +116,10 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
         var scoreboard = await cfbApi.GetCfpGamesAsync();
         if (scoreboard?.Events is null) return null;
 
-        var events = scoreboard.Events.Where(e => {
-            var comp = e.Competitions.FirstOrDefault();
-            return comp is not null
-                && comp.Date.Date >= slate.StartDate.ToDateTime(TimeOnly.MinValue).Date
-                && comp.Date.Date <= slate.EndDate.ToDateTime(TimeOnly.MaxValue).Date;
-        }).ToArray();
+        var events = GameHelpers.FilterEventsToDateWindow(scoreboard.Events,
+            slate.StartDate.ToDateTime(TimeOnly.MinValue), slate.EndDate.ToDateTime(TimeOnly.MaxValue));
 
-        return events.Length == 0 ? null : WithEvents(scoreboard, events);
+        return events.Length == 0 ? null : GameHelpers.WithEvents(scoreboard, events);
     }
 
     private async Task<EspnScores?> FetchRegularSeasonAsync(CfbSlates slate) {
@@ -143,20 +140,11 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceScopeFactory sco
         var scoreboard = await cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate);
         if (scoreboard?.Events is null) return null;
 
-        var events = scoreboard.Events.Where(e => {
-            var comp = e.Competitions.FirstOrDefault();
-            return comp is not null
-                && comp.Date.Date >= slate.StartDate.ToDateTime(TimeOnly.MinValue).Date
-                && comp.Date.Date <= slate.EndDate.ToDateTime(TimeOnly.MaxValue).Date;
-        }).ToArray();
+        var events = GameHelpers.FilterEventsToDateWindow(scoreboard.Events,
+            slate.StartDate.ToDateTime(TimeOnly.MinValue), slate.EndDate.ToDateTime(TimeOnly.MaxValue));
 
-        return events.Length == 0 ? null : WithEvents(scoreboard, events);
+        return events.Length == 0 ? null : GameHelpers.WithEvents(scoreboard, events);
     }
 
-    private static EspnScores WithEvents(EspnScores source, Event[] events) => new() {
-        Leagues = source.Leagues,
-        Season  = source.Season,
-        Week    = source.Week,
-        Events  = events,
-    };
+    public void InvalidateSlateCache(int slateId) => settledCache.Remove($"cfb-slate-scores_{slateId}");
 }

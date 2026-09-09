@@ -100,4 +100,7 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
         _index = 0;
         ScoresChanged?.Invoke();
     }
+
+    // No-op: replay mode drives fixed captured snapshots, never a live NflScoresJob upsert.
+    public void InvalidateWeekCache(int season, int week) { }
 }
