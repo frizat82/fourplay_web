@@ -123,7 +123,7 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
 function isFrozenWeekMatch(frozenData: Awaited<ReturnType<typeof loadScoresWithRetry>>, season: number, nflWeek: number, isPostSeason: boolean): boolean {
   if (!frozenData?.week || !frozenData.season) return false;
   const frozenIsPostSeason = isPostSeasonHelper(frozenData);
-  const frozenNflWeek = getWeekFromEspnWeek(frozenData.week.number, frozenIsPostSeason);
+  const frozenNflWeek = getWeekFromEspnWeek(frozenData.week.number, frozenData.season.year, frozenIsPostSeason);
   return frozenData.season.year === season && frozenNflWeek === nflWeek && frozenIsPostSeason === isPostSeason;
 }
 

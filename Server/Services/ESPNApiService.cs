@@ -47,20 +47,26 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
         if (scores == null || !scores.Events.Any())
             return scores;
 
-        // Remove teams with Abbr "NFC" or "AFC" and fix Pro Bowl
+        // Remove teams with Abbr "NFC" or "AFC" — the old Pro Bowl exhibition's placeholder
+        // competitors. Unconditional, not season-gated: this is data hygiene (an event that
+        // shouldn't be treated as a real game), not the week-number quirk-correction below.
         foreach (var scoreEvent in scores.Events) {
             scoreEvent.Competitions = scoreEvent.Competitions
                 .Where(c => !c.Competitors.Any(team => team.Team.Abbreviation == "NFC" || team.Team.Abbreviation == "AFC"))
                 .ToArray();
         }
 
-        // Move back Super Bowl to a proper week
-        if (scores.IsPostSeason() && scores.Week.Number == 5) {
+        // Move back Super Bowl to a proper week — gated by SEASON, matching
+        // GameHelpers.GetWeekFromEspnWeek's identical condition exactly via the shared
+        // NeedsProBowlWeekFix predicate (frizat-4k9: this used to be an independent,
+        // unconditional copy of the same quirk-correction, which would have silently
+        // mis-relabeled a real 2026+ week 5 game as week 4 instead of failing loudly).
+        if (scores.NeedsProBowlWeekFix()) {
             scores.Week.Number = 4;
         }
         // Update SeasonType and Week number
         foreach (var scoreEvent in scores.Events) {
-            if (scoreEvent.IsPostSeason() && scoreEvent.Week.Number == 5) {
+            if (scoreEvent.NeedsProBowlWeekFix()) {
                 scoreEvent.Week.Number = 4;
             }
         }

@@ -1,5 +1,6 @@
 using System.Net;
 using FourPlayWebApp.Server.Services;
+using FourPlayWebApp.Server.UnitTests.TestHelpers;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
@@ -9,19 +10,6 @@ namespace FourPlayWebApp.Server.UnitTests;
 // own WeekStartDate/WeekEndDate. This is a NEW query shape, not a revert to the old broken
 // groups=80 date approach CfbApiService.GetScoresByWeekAsync's own comment references.
 public class CfbApiServiceTests {
-    private sealed class CapturingHandler : HttpMessageHandler {
-        public Uri? LastRequestUri { get; private set; }
-        public string ResponseBody { get; set; } = "{}";
-        public HttpStatusCode StatusCode { get; set; } = HttpStatusCode.OK;
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
-            LastRequestUri = request.RequestUri;
-            return Task.FromResult(new HttpResponseMessage(StatusCode) {
-                Content = new StringContent(ResponseBody),
-            });
-        }
-    }
-
     private static (CfbApiService sut, CapturingHandler handler) Build() {
         var handler = new CapturingHandler();
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://site.api.espn.com") };
