@@ -168,8 +168,14 @@ public static class GameHelpers {
     // tell a terminal MissingPicks (every game for the week/slate has already kicked off) apart
     // from a still-open picking window (MissingGameResults) — same GameTime <= now boundary
     // CfbPicksController.StartedTeams already enforces for locking individual picks.
-    public static bool AllGamesStarted(IEnumerable<DateTimeOffset> gameTimes, DateTimeOffset now) =>
-        gameTimes.All(t => t <= now);
+    // frizat-8y6: .All() is vacuously true on an empty sequence — a week/slate with literally no
+    // games (spreads not released yet) must never read as "already started" (that flips a
+    // genuinely not-yet-open picking window into a terminal MissingPicks loss). Require at least
+    // one real game before concluding anything has started.
+    public static bool AllGamesStarted(IEnumerable<DateTimeOffset> gameTimes, DateTimeOffset now) {
+        var times = gameTimes as ICollection<DateTimeOffset> ?? gameTimes.ToList();
+        return times.Count > 0 && times.All(t => t <= now);
+    }
     public static bool IsGameOver(Competition competition) => competition.Status.Type.Name == TypeName.StatusFinal;
     public static long GetTeamScore(Competitor competitor) => competitor.Score;
     public static string GetTeamAbbr(Competitor competitor) => competitor.Team.Abbreviation;
