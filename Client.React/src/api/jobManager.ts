@@ -10,12 +10,20 @@ export async function runSpreads() {
   await http.post('/api/jobmanager/run-spreads');
 }
 
+export async function runCfbSpreads() {
+  await http.post('/api/jobmanager/run-cfb-spreads');
+}
+
 export async function runUserManager() {
   await http.post('/api/jobmanager/run-users');
 }
 
 export async function runScores() {
   await http.post('/api/jobmanager/run-scores');
+}
+
+export async function runCfbScores() {
+  await http.post('/api/jobmanager/run-cfb-scores');
 }
 
 export async function deleteJob(jobName: string) {

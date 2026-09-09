@@ -42,7 +42,7 @@ public class NflScoresJobTests
         // unscoped weekList sync override this explicitly below.
         _currentWeekService.IsSeasonActiveAsync().Returns(true);
         _currentWeekService.GetCurrentWeekAsync().Returns(new NflWeekInfo(
-            WeekId: 1, EspnWeek: 1, Season: _year, IsPostSeason: false,
+            WeekId: 1, Season: _year, IsPostSeason: false,
             WeekLabel: "Week 1", ScoringFormat: "Standard", SpreadLockDatetime: DateTime.UtcNow.AddDays(-1)));
         // NflScoresJob filters the current season's rows out of the one unscoped fetch (no
         // second, season-scoped DB call) — see Execute_FetchesOnlyTheCurrentSeasonsConfigs...

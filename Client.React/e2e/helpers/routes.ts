@@ -195,15 +195,15 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
     }
 
     // ── NFL current-week (control table) — nflAdapter.ts resolves this FIRST for the current-
-    // week path, then fetches that exact week via /api/espn/scores/week/ below. Must match
+    // week path, then fetches that exact week via /api/espn/scores/nfl-week/ below. Must match
     // scoresData's week/season/isPostSeason or the two responses disagree.
     if (url.includes('/api/league/current-week') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(createCurrentWeek(week, isPostSeason, season)) });
       return;
     }
 
-    // ── ESPN scores/week — historical ──────────────────────────────────────
-    if (url.includes('/api/espn/scores/week/') && method === 'GET') {
+    // ── ESPN scores/nfl-week — our own (season, nflWeek), historical + current (frizat-3nv) ──
+    if (url.includes('/api/espn/scores/nfl-week/') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(scoresData) });
       return;
     }
