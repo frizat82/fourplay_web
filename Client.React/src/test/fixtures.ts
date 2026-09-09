@@ -175,7 +175,7 @@ export function createSpreadResponse(team: string, spread: number, over?: number
  * createScores'/makeScores' fixture convention (season 2024 unless overridden). */
 export function createCurrentWeek(week: number, postSeason = false, season = 2024) {
   return {
-    weekId: week, espnWeek: week, season, isPostSeason: postSeason,
+    weekId: week, season, isPostSeason: postSeason,
     weekLabel: postSeason ? `Postseason Week ${week}` : `Week ${week}`,
     scoringFormat: 'Standard', spreadLockDatetime: new Date().toISOString(),
   };

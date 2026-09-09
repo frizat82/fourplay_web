@@ -67,16 +67,16 @@ public class EspnControllerTests
         Assert.IsType<EspnScores>(ok.Value);
     }
 
-    // ── GetWeekScores (proxied from IEspnCacheService — demo-aware, frizat fix for ESPN calls
-    //    bypassing the demo cache abstraction on non-current weeks) ──────────
+    // ── GetWeekScores (proxied from IEspnCacheService — takes our own (season, nflWeek), never
+    //    ESPN's own week numbering — frizat-3nv) ──────────
 
     [Fact]
     public async Task GetWeekScores_ReturnsOk_WithScores()
     {
         var scores = new EspnScores { Season = new Season { Year = 2025 } };
-        _espnCacheService.GetWeekScoresAsync(10, 2025, false).Returns(scores);
+        _espnCacheService.GetWeekScoresAsync(2025, 10).Returns(scores);
 
-        var result = await _sut.GetWeekScores(10, 2025);
+        var result = await _sut.GetWeekScores(2025, 10);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(scores, ok.Value);
@@ -85,9 +85,9 @@ public class EspnControllerTests
     [Fact]
     public async Task GetWeekScores_ReturnsOk_WhenServiceReturnsNull()
     {
-        _espnCacheService.GetWeekScoresAsync(1, 2025, false).Returns((EspnScores?)null);
+        _espnCacheService.GetWeekScoresAsync(2025, 1).Returns((EspnScores?)null);
 
-        var result = await _sut.GetWeekScores(1, 2025);
+        var result = await _sut.GetWeekScores(2025, 1);
 
         // Fail-open: returns empty EspnScores
         var ok = Assert.IsType<OkObjectResult>(result.Result);
@@ -95,13 +95,13 @@ public class EspnControllerTests
     }
 
     [Fact]
-    public async Task GetWeekScores_PassesPostSeasonFlag_ToService()
+    public async Task GetWeekScores_PassesPostseasonWeekId_ToService()
     {
-        _espnCacheService.GetWeekScoresAsync(1, 2025, true).Returns(new EspnScores());
+        _espnCacheService.GetWeekScoresAsync(2025, 19).Returns(new EspnScores());
 
-        await _sut.GetWeekScores(1, 2025, postSeason: true);
+        await _sut.GetWeekScores(2025, 19);
 
-        await _espnCacheService.Received(1).GetWeekScoresAsync(1, 2025, true);
+        await _espnCacheService.Received(1).GetWeekScoresAsync(2025, 19);
     }
 
     // ── GetCfbScores (cached, current slate — mirrors GetScores for NFL) ─────

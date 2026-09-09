@@ -77,9 +77,10 @@ export interface NflWeekDto {
 
 // GET /api/league/current-week — mirrors CfbSlateDto's role for NFL: the season/week to treat
 // as "current," resolved server-side with a real off-season/pre-season fallback (NflCurrentWeekService).
+// No espnWeek field — nothing on the frontend routes by ESPN's own week numbering anymore,
+// only weekId (frizat-3nv).
 export interface NflCurrentWeekDto {
   weekId: number;
-  espnWeek: number;
   season: number;
   isPostSeason: boolean;
   weekLabel: string;

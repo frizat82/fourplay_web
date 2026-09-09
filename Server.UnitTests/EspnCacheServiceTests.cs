@@ -22,7 +22,7 @@ public class EspnCacheServiceTests
     private readonly IMemoryCache _memoryCache = new MemoryCache(new MemoryCacheOptions());
 
     // Default week returned by the mock — tests that don't care about the specific week use this
-    private static readonly NflWeekInfo DefaultWeek = new(5, 5, 2025, false, "Week 5", "Standard", new DateTime(2025, 10, 2, 18, 0, 0, DateTimeKind.Utc));
+    private static readonly NflWeekInfo DefaultWeek = new(5, 2025, false, "Week 5", "Standard", new DateTime(2025, 10, 2, 18, 0, 0, DateTimeKind.Utc));
 
     private static NflSeasonWeekConfig BuildConfig(int weekId, int season, DateTime? start = null, DateTime? end = null) => new() {
         Id = weekId,
@@ -266,7 +266,7 @@ public class EspnCacheServiceTests
         });
 
         await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
-        var result = await svc.GetWeekScoresAsync(1, 2025, postSeason: true);
+        var result = await svc.GetWeekScoresAsync(2025, 19);
 
         Assert.NotNull(result);
         var comp = result!.Events!.Single().Competitions[0];
@@ -301,7 +301,7 @@ public class EspnCacheServiceTests
         _fetcher.FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 19 && c.Season == 2025)).Returns(Task.FromResult<EspnScores?>(espnScores));
 
         await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
-        var result = await svc.GetWeekScoresAsync(1, 2025, postSeason: true);
+        var result = await svc.GetWeekScoresAsync(2025, 19);
 
         Assert.Same(espnScores, result);
         await _fetcher.Received(1).FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 19 && c.Season == 2025));
@@ -319,7 +319,7 @@ public class EspnCacheServiceTests
         _fetcher.FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 5 && c.Season == 2025)).Returns(Task.FromResult<EspnScores?>(espnScores));
 
         await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
-        var result = await svc.GetWeekScoresAsync(5, 2025, postSeason: false);
+        var result = await svc.GetWeekScoresAsync(2025, 5);
 
         Assert.Same(espnScores, result);
         await _fetcher.Received(1).FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 5 && c.Season == 2025));
@@ -333,7 +333,7 @@ public class EspnCacheServiceTests
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig>());
 
         await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
-        var result = await svc.GetWeekScoresAsync(5, 2025, postSeason: false);
+        var result = await svc.GetWeekScoresAsync(2025, 5);
 
         Assert.Null(result);
         await _fetcher.DidNotReceiveWithAnyArgs().FetchForWeekAsync(default!);
@@ -367,8 +367,8 @@ public class EspnCacheServiceTests
         });
 
         await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
-        var first = await svc.GetWeekScoresAsync(1, 2025, postSeason: false);
-        var second = await svc.GetWeekScoresAsync(1, 2025, postSeason: false);
+        var first = await svc.GetWeekScoresAsync(2025, 1);
+        var second = await svc.GetWeekScoresAsync(2025, 1);
 
         Assert.NotNull(first);
         Assert.NotNull(second);
@@ -399,7 +399,7 @@ public class EspnCacheServiceTests
         _fetcher.FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 3 && c.Season == 2026)).Returns(Task.FromResult<EspnScores?>(espnScores));
 
         await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
-        var result = await svc.GetWeekScoresAsync(3, 2026, postSeason: false);
+        var result = await svc.GetWeekScoresAsync(2026, 3);
 
         await _fetcher.Received(1).FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 3 && c.Season == 2026));
         Assert.Same(espnScores, result);
@@ -431,9 +431,9 @@ public class EspnCacheServiceTests
         });
 
         await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMinutes(5));
-        await svc.GetWeekScoresAsync(1, 2025, postSeason: false);
+        await svc.GetWeekScoresAsync(2025, 1);
         svc.InvalidateWeekCache(2025, 1);
-        await svc.GetWeekScoresAsync(1, 2025, postSeason: false);
+        await svc.GetWeekScoresAsync(2025, 1);
 
         await _leagueRepo.Received(2).GetNflScoresAsync(2025, 1);
     }

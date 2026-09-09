@@ -208,7 +208,7 @@ describe('PicksPage', () => {
 
   it('shows picks remaining (1) for postseason week 1 with two existing picks', async () => {
     const existing = [createPick({ team: 'BUF' }), createPick({ team: 'DAL' })];
-    await setupDefaults({ week: 1, postSeason: true, existingPicks: existing });
+    await setupDefaults({ week: 19, postSeason: true, existingPicks: existing });
     await renderPage();
     expect(screen.getByText(/Picks Remaining \(1\)/i)).toBeInTheDocument();
   });
@@ -351,7 +351,7 @@ describe('PicksPage', () => {
     // getWeekScores now serves both the current week (season 2024) and the historical navigation
     // below (season 2022) — differentiate by the requested year so the initial current-week load
     // isn't overwritten by the season-2022 fixture before the snapshot is even captured.
-    mockedGetWeekScores.mockImplementation(async (_week: number, year: number) => year === 2022
+    mockedGetWeekScores.mockImplementation(async (season: number) => season === 2022
       ? createScores({ week: 2, seasonYear: 2022, gameStarted: false })
       : createScores({ week: 2, postSeason: false, gameStarted: false }));
 
@@ -433,25 +433,25 @@ describe('PicksPage', () => {
   });
 
   it('postseason week 1 displays wild card title', async () => {
-    await setupDefaults({ week: 1, postSeason: true });
+    await setupDefaults({ week: 19, postSeason: true });
     await renderPage();
     expect(screen.getAllByText(/Wild Card/i).length).toBeGreaterThan(0);
   });
 
   it('postseason week 2 displays divisional round title', async () => {
-    await setupDefaults({ week: 2, postSeason: true });
+    await setupDefaults({ week: 20, postSeason: true });
     await renderPage();
     expect(screen.getAllByText(/Divisional Round/i).length).toBeGreaterThan(0);
   });
 
   it('postseason week 3 displays conference championship title', async () => {
-    await setupDefaults({ week: 3, postSeason: true });
+    await setupDefaults({ week: 21, postSeason: true });
     await renderPage();
     expect(screen.getAllByText(/Conference Championship/i).length).toBeGreaterThan(0);
   });
 
   it('postseason week 4 displays super bowl title', async () => {
-    await setupDefaults({ week: 4, postSeason: true });
+    await setupDefaults({ week: 22, postSeason: true });
     await renderPage();
     await waitFor(() => expect(screen.getAllByText(/Super Bowl/i).length).toBeGreaterThan(0));
   });
@@ -505,7 +505,7 @@ describe('PicksPage', () => {
   });
 
   it('postseason shows over/under buttons and toggles', async () => {
-    await setupDefaults({ week: 1, postSeason: true });
+    await setupDefaults({ week: 19, postSeason: true });
     await renderPage();
 
     const overButton = screen.getAllByRole('button', { name: /^Over$/i })[0];
@@ -518,7 +518,7 @@ describe('PicksPage', () => {
   });
 
   it('postseason allows selecting spread and over picks together', async () => {
-    await setupDefaults({ week: 1, postSeason: true });
+    await setupDefaults({ week: 19, postSeason: true });
     await renderPage();
 
     const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
@@ -531,7 +531,7 @@ describe('PicksPage', () => {
   });
 
   it('renders a dedicated over/under control block per postseason matchup', async () => {
-    await setupDefaults({ week: 1, postSeason: true });
+    await setupDefaults({ week: 19, postSeason: true });
     await renderPage();
 
     const controls = screen.getAllByTestId('over-under-controls');

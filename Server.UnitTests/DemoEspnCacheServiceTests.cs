@@ -90,7 +90,7 @@ public class DemoEspnCacheServiceTests
 
         var sut = new DemoEspnCacheService(BuildFactory(db), TimeProvider.System);
 
-        var result = await sut.GetWeekScoresAsync(1, 2025, postSeason: true);
+        var result = await sut.GetWeekScoresAsync(2025, 19);
 
         Assert.NotNull(result);
         Assert.NotNull(result!.Events);
@@ -132,7 +132,7 @@ public class DemoEspnCacheServiceTests
         var sut = new DemoEspnCacheService(BuildFactory(db), TimeProvider.System);
 
         // Week 5, regular season — nothing seeded for that combo.
-        var result = await sut.GetWeekScoresAsync(5, 2025, postSeason: false);
+        var result = await sut.GetWeekScoresAsync(2025, 5);
 
         Assert.Null(result);
     }
@@ -172,7 +172,7 @@ public class DemoEspnCacheServiceTests
         var sut = new DemoEspnCacheService(BuildFactory(db), TimeProvider.System);
 
         // Raw ESPN week 5 = Super Bowl = internal WeekId 22 (GameHelpers.GetWeekFromEspnWeek).
-        var result = await sut.GetWeekScoresAsync(5, 2025, postSeason: true);
+        var result = await sut.GetWeekScoresAsync(2025, 22);
 
         Assert.NotNull(result);
         Assert.NotNull(result!.Events);
@@ -224,7 +224,7 @@ public class DemoEspnCacheServiceTests
         var sut = new DemoEspnCacheService(BuildFactory(db), new FakeTimeProvider(frozen));
 
         // Raw ESPN week 3 = Conference Championship = internal WeekId 21 (week + 18).
-        var result = await sut.GetWeekScoresAsync(3, 2025, postSeason: true);
+        var result = await sut.GetWeekScoresAsync(2025, 21);
 
         Assert.NotNull(result);
         Assert.NotNull(result!.Events);
