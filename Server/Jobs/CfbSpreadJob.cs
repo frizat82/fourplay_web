@@ -43,7 +43,8 @@ public class CfbSpreadJob(
         var spreads = new List<CfbSpreads>();
         var rankings = new List<CfbRanking>();
 
-        var scoreboard = await fetcher.FetchForSlateAsync(slate);
+        // slate was resolved from slateInfo.Id above, i.e. it IS the current slate.
+        var scoreboard = await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true);
         if (scoreboard?.Events is not null) {
             rankings.AddRange(CfbRankingExtractor.ExtractFrom(scoreboard.Events, slate));
             await ProcessEventsForSpreads(spreads, slate, scoreboard.Events);
