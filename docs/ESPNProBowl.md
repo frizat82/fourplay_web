@@ -14,15 +14,38 @@ to raw ESPN week 5 instead of the 4th real playoff round it actually is:
 | Pro Bowl (exhibition, not tracked) | — | 4 |
 | Super Bowl | 4 | **5** |
 
-This is confirmed by three independent, previously-uncoordinated spots in the codebase
-that all separately hardcoded the same workaround before this fix:
+This was, until frizat-4k9 (2026-09-09), encoded independently in **four** separate spots
+with inconsistent (in three of the four cases, missing entirely) season-gating — despite
+this doc's own earlier claim that the rest of the codebase already read through one shared
+function. That claim was false; frizat-4k9 made it true. The four spots, and their status
+now:
 
-- `GameHelpers.GetWeekFromEspnWeek` — the week→`WeekId` translation
-- `GameHelpers.GetEspnRequiredPicks` — `"ESPN Treats Post Season Week 4 as the Pro Bowl - this sucks"`
+- `GameHelpers.GetWeekFromEspnWeek` (`Shared/Helpers/GameHelpers.cs`) — the canonical,
+  correctly season-gated week→`WeekId` translation. Always was correct; this is the one
+  source of truth the other three now route through (or, for spot 2 below, were deleted
+  in favor of).
+- `NflCurrentWeekService.ToWeekInfo` — **fixed as a side effect of PR #341** (frizat-3nv):
+  this was the most dangerous instance, an unconditional non-season-gated `WeekId 22 →
+  EspnWeek 5` switch. It's not "routed through" the shared function — it's gone entirely,
+  since `NflWeekInfo` dropped its `EspnWeek` field outright once the public API/frontend
+  contract became `WeekId`-primary (see "PR #341" below).
 - `Server/Services/ESPNApiService.cs`'s `FixEspnProbBowlWeek` — rewrites a live response's
-  `Week.Number` from 5 back to 4 after fetching, for display/team-matching purposes
-- `nflAdapter.ts`'s `weekLabelFn`/`postSeasonWeekOptions: [1, 2, 3, 5]` — `"Skip week 4
-  (Pro Bowl) — Super Bowl is week 5 in ESPN's 2025 postseason"`
+  `Week.Number` from 5 back to 4 after fetching, for display/team-matching purposes.
+  **Fixed by frizat-4k9**: now gated on `scores.Season.Year <= GameHelpers.LastSeasonEspnSkippedProBowlWeek`,
+  the same constant `GetWeekFromEspnWeek` uses (not a copy of the value — a reference to
+  the same `public const`). The function's separate NFC/AFC placeholder-competitor
+  filtering stays unconditional — that's data hygiene, not part of the season-numbering
+  quirk.
+- `Client.React/src/utils/gameHelpers.ts`'s `getWeekFromEspnWeek` — the TS mirror. Its old
+  routing-decision usage (feeding NFL's page-routing logic) is gone as of PR #341, since
+  the frontend now routes by `WeekId` throughout (`postSeasonWeekOptions` is the plain
+  `[19, 20, 21, 22]`, not ESPN-shaped `[1, 2, 3, 5]`). Its one remaining caller,
+  `nflAdapter.ts`'s `isFrozenWeekMatch`, interprets the frozen demo/replay fixture's *real*
+  captured ESPN wire data (season+week), so the function itself couldn't be deleted — it's
+  season-gated to match the backend (`LAST_SEASON_ESPN_SKIPPED_PRO_BOWL_WEEK = 2025`, with
+  a comment cross-referencing `GameHelpers.cs` so the two values don't drift independently;
+  TypeScript can't share the C# `const` directly, so this is the one place a literal copy
+  of the value is unavoidable).
 
 ## What changed (2026-08-26)
 
@@ -59,7 +82,7 @@ availability question.)
 **season**, not by a raw-week heuristic:
 
 ```csharp
-private const int LastSeasonEspnSkippedProBowlWeek = 2025;
+public const int LastSeasonEspnSkippedProBowlWeek = 2025;
 
 public static int GetWeekFromEspnWeek(long week, int season, bool isPostSeason = false) {
     if (!isPostSeason) return (int)week;
@@ -77,16 +100,42 @@ renumbers differently), a real week=5 postseason response for 2026+ maps to a
 persisted scores, `doOddsExist` empty) instead of silently coinciding with the right
 answer by accident. That's deliberate: better a visible failure than a quiet wrong guess.
 
+`LastSeasonEspnSkippedProBowlWeek` is `public` (not `private`, as it originally was)
+specifically so `ESPNApiService.FixEspnProbBowlWeek` can reference this exact constant
+rather than carrying its own independent copy of the value — see "The fix (2026-09-09)"
+below.
+
+## PR #341 — NFL's public contract went `WeekId`-primary (2026-09-08)
+
+Separately from this quirk's own fix, `frizat-3nv` made NFL's public API/frontend
+contract route by our own `WeekId` throughout (matching how CFB already routed by its own
+`CfbSlates` id) — the frontend, and every controller route, now deal in `WeekId` only;
+ESPN's own week numbering never crosses that boundary except inside the ESPN-ingestion
+code itself. This directly closed spot 2 above (`NflCurrentWeekService.ToWeekInfo` no
+longer computes an `EspnWeek` value at all — nothing to gate) and narrowed spot 4's
+purpose to only the demo/replay fixture-interpretation case.
+
+## The fix (2026-09-09, frizat-4k9)
+
+The two remaining ungated spots (`ESPNApiService.FixEspnProbBowlWeek` and the frontend
+`gameHelpers.ts` mirror) now both gate on the same season threshold `GetWeekFromEspnWeek`
+uses. The backend side references `GameHelpers.LastSeasonEspnSkippedProBowlWeek` directly
+(one constant, two call sites — `Shared/Helpers/GameHelpers.cs` and
+`Server/Services/ESPNApiService.cs`); the frontend can't share a C# `const`, so it carries
+one literal copy (`LAST_SEASON_ESPN_SKIPPED_PRO_BOWL_WEEK = 2025` in
+`Client.React/src/utils/gameHelpers.ts`), commented to cross-reference the backend value.
+
 ## TODO — verify once real 2026 postseason data exists (~January 2027)
 
 - [ ] Hit ESPN's real scoreboard endpoint for a 2026-season postseason week and check
       the actual `week.number` ESPN returns for the Super Bowl (4 or 5?)
 - [ ] If it's still 5 (gap kept for some other reason): bump
       `LastSeasonEspnSkippedProBowlWeek` in `Shared/Helpers/GameHelpers.cs` — that's the
-      only place this needs to change (the rest of the codebase already reads through
-      this one function; `ESPNApiService.FixEspnProbBowlWeek`'s own `Week.Number == 5`
-      check would also need the same season gate applied, or its own version of this fix)
+      only C# place this needs to change (`ESPNApiService.FixEspnProbBowlWeek` already
+      reads the same constant). Also bump the frontend's literal copy in
+      `Client.React/src/utils/gameHelpers.ts`.
 - [ ] If it's 4 (gap closed, as expected): no code change needed — remove this file's
       TODO and the `//TODO` comment above `LastSeasonEspnSkippedProBowlWeek`
 
-Tracked as GitHub issue — see the bead sync for this repo.
+Tracked as GitHub issue — see the bead sync for this repo (frizat-jw7 tracks this
+verification step; frizat-4k9 tracked the centralization fix itself, closed 2026-09-09).
