@@ -3,6 +3,23 @@ using FourPlayWebApp.Shared.Models;
 namespace FourPlayWebApp.Shared.Helpers;
 
 public static class GameHelpers {
+    // Shared by NflLiveScoreFetcher and CfbLiveScoreFetcher — defense in depth on top of each
+    // fetcher's own dates= query param (frizat-11t): don't fully trust ESPN to honor a date range
+    // perfectly either (e.g. a timezone-boundary edge case on a late West Coast kickoff). One
+    // implementation instead of drifting per-sport copies of the same boundary check.
+    public static Event[] FilterEventsToDateWindow(IEnumerable<Event> events, DateTime start, DateTime end) =>
+        events.Where(e => {
+            var comp = e.Competitions.FirstOrDefault();
+            return comp is not null && comp.Date.Date >= start.Date && comp.Date.Date <= end.Date;
+        }).ToArray();
+
+    public static EspnScores WithEvents(EspnScores source, Event[] events) => new() {
+        Leagues = source.Leagues,
+        Season  = source.Season,
+        Week    = source.Week,
+        Events  = events,
+    };
+
     public static bool IsPastNoonCst
     {
         get
