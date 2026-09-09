@@ -510,17 +510,20 @@ describe('ScoresPage', () => {
   it('keys the scores query by adapter.sport, so NFL and CFB never share a cache entry', async () => {
     await setupDefaults();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-    const { rerender } = renderWithClient(<ScoresPage adapter={createNflAdapter()} />, client);
+    const { unmount } = renderWithClient(<ScoresPage adapter={createNflAdapter()} />, client);
     await screen.findByText(/Scores/i);
     await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
     expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0);
 
-    // CFB gets its own real, resolved dataset with entirely different teams (MICH/PSU — CFB
-    // has no BUF/MIA). placeholderData: keepPreviousData legitimately shows NFL's stale BUF/MIA
-    // as a transient placeholder while CFB's own query is pending (that's the point of
-    // keepPreviousData — no spinner flash on navigation) — the real assertion for "separate
-    // cache entries" is that once CFB's OWN query settles, ITS data (MICH/PSU) is what renders,
-    // not that NFL's cache entry got clobbered or that a spinner necessarily appears.
+    // Switching sports is always a cross-domain navigation in the real app (ivleague.xyz vs.
+    // cfb.ivleague.xyz — confirmed live), which fully remounts the page; an in-place adapter
+    // swap on the same component instance (the old rerender() here) can never happen in
+    // production and masked a real bug (frizat-8y4: it relied on CFB's static regularWeekOptions
+    // never shrinking below whatever week a stale NFL snapshot happened to hold). Simulate the
+    // real remount instead, sharing one QueryClient — that's what the cache-keying assertion
+    // below actually needs.
+    unmount();
+
     const cfbSlate = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
     const cfbSpread = { id: 1, cfbSlateId: 1, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, over: 44.5, under: 44.5, gameTime: '2025-10-11T20:00:00Z', dateCreated: '2025-10-09T14:00:00Z', homeTeamRank: null, awayTeamRank: null };
     mockedGetCfbCurrentSlate.mockResolvedValue(cfbSlate);
@@ -531,11 +534,7 @@ describe('ScoresPage', () => {
     mockedGetCfbScoresForSlate.mockResolvedValue({ leagues: [], season: { year: 2025, type: 2 }, week: { number: 8 }, events: [] });
     mockedGetCfbLiveGames.mockResolvedValue([]);
 
-    rerender(
-      <QueryClientProvider client={client}>
-        <MemoryRouter><ScoresPage adapter={createCfbAdapter()} /></MemoryRouter>
-      </QueryClientProvider>,
-    );
+    renderWithClient(<ScoresPage adapter={createCfbAdapter()} />, client);
 
     await waitFor(() => expect(screen.getAllByText(/MICH/i).length).toBeGreaterThan(0));
     expect(screen.queryByText(/BUF/i)).toBeNull();
