@@ -14,6 +14,15 @@ const CFB_CONFIGURED_SEASON = 2026;
 // Earliest supported CFB season (controls the lower bound of the season dropdown).
 const CFB_FIRST_SEASON = 2025;
 const CFB_POST_WEEKS = [1, 2, 3, 4, 5]; // Conf.Champs + CFP First Round/QF/SF/Championship
+// Regular season = slates 1-13 (cfbSlateNumberToWeek's own cutoff) — the correct maxWeek to
+// report once the season has moved into postseason, when weekState.week is a small postseason
+// week number instead (frizat-8y7: that number was briefly leaking in as the regular-season cap
+// the moment CFB's navigation stopped being capped by a separate static option list).
+const CFB_REGULAR_SEASON_LENGTH = 13;
+
+function maxWeekFor(weekState: WeekState): number {
+  return weekState.isPostSeason ? CFB_REGULAR_SEASON_LENGTH : weekState.week;
+}
 
 function slateToWeekState(slate: CfbSlateDto): WeekState {
   const { week, isPostSeason } = cfbSlateNumberToWeek(slate.slateNumber);
@@ -213,7 +222,7 @@ export function createCfbAdapter(): SportAdapter {
       // (WeekYearSelector prioritizes a non-empty regularWeekOptions unconditionally), so Next
       // stayed clickable through the whole season regardless of maxWeek (frizat-8y4).
       postSeasonWeekOptions: CFB_POST_WEEKS,
-      maxRegularSeasonWeek: 13,
+      maxRegularSeasonWeek: CFB_REGULAR_SEASON_LENGTH,
       minSeason: CFB_FIRST_SEASON,
       weekLabelFn: getCfbWeekName,
     },
@@ -230,12 +239,12 @@ export function createCfbAdapter(): SportAdapter {
       }
       const { games, userPicks } = await loadSlate(leagueId, userId, active.id, active);
       const weekState = slateToWeekState(active);
-      // Cap navigation at the real current week, not the season-wide last pre-seeded slate —
+      // Cap navigation at the real current week (or the full regular-season length once
+      // postseason is active — see maxWeekFor), not the season-wide last pre-seeded slate.
       // CfbSlates is fully seeded ahead of time for the whole season (CfbSlateSeederJob), so
       // scanning all of them for the max RegularSeason slateNumber returns the season's total
-      // length regardless of which week is actually live. Matches loadCurrentScores below,
-      // which already used weekState.week (frizat-8y4).
-      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: weekState.week, maxSeason: active.season };
+      // length regardless of which week is actually live (frizat-8y4/frizat-8y7).
+      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: maxWeekFor(weekState), maxSeason: active.season };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
@@ -283,7 +292,7 @@ export function createCfbAdapter(): SportAdapter {
       const weekState = slateToWeekState(active);
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
       const hasActiveGames = games.some(g => isGameLive(g.gameStatus));
-      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: weekState.week, maxSeason: active.season };
+      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: maxWeekFor(weekState), maxSeason: active.season };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
