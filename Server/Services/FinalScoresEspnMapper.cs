@@ -1,4 +1,5 @@
 using FourPlayWebApp.Shared.Models;
+using FourPlayWebApp.Shared.Models.Data;
 
 namespace FourPlayWebApp.Server.Services;
 
@@ -14,6 +15,15 @@ public static class FinalScoresEspnMapper {
         string Id, string HomeTeam, string AwayTeam,
         int HomeScore, int AwayScore, DateTimeOffset GameTime,
         WeatherInfo? Weather = null);
+
+    // frizat-d0t: CfbScores -> FinishedGame (including the optional weather fields NFL's
+    // NflScores has no equivalent of) — one implementation shared by CfbCacheService and
+    // DemoCfbCacheService, previously copy-pasted identically in both.
+    public static FinishedGame FromCfbScores(CfbScores row) =>
+        new(row.Id.ToString(), row.HomeTeam, row.AwayTeam, row.HomeTeamScore, row.AwayTeamScore, row.GameTime,
+            row.WeatherDisplayValue is null && row.WeatherConditionId is null && row.WeatherTemperatureF is null
+                ? null
+                : new WeatherInfo(row.WeatherDisplayValue, row.WeatherConditionId, row.WeatherTemperatureF));
 
     public static EspnScores Build(IEnumerable<FinishedGame> games, int season, int week, bool postSeason) {
         var events = games.Select(g => BuildEvent(g, season, week, postSeason)).ToArray();

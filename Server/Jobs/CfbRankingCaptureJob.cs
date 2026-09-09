@@ -37,8 +37,10 @@ public class CfbRankingCaptureJob(ICfbLiveScoreFetcher fetcher, ICfbRepository r
 
         // Each remaining slate's scoreboard fetch is an independent ESPN call — no data dependency
         // between them, so fetch all slates concurrently rather than serializing the round-trips.
+        // isCurrentSlate: false for all of them — this job extracts AP rankings from real ESPN
+        // events, never wants the replay-mode snapshot merged in.
         var scoreboards = await Task.WhenAll(slates.Select(async slate =>
-            (slate, scoreboard: await fetcher.FetchForSlateAsync(slate))));
+            (slate, scoreboard: await fetcher.FetchForSlateAsync(slate, isCurrentSlate: false))));
 
         var rankings = new List<CfbRanking>();
         foreach (var (slate, scoreboard) in scoreboards) {

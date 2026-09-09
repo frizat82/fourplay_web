@@ -14,7 +14,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
 {
     private readonly INflLiveScoreFetcher _fetcher;
     private readonly ILeagueRepository _leagueRepository;
-    private readonly IMemoryCache _historicalCache;
+    private readonly SettledScoreCache _settledCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
 
     public event Action? ScoresChanged
@@ -27,7 +27,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     {
         _fetcher = fetcher;
         _leagueRepository = leagueRepository;
-        _historicalCache = historicalCache;
+        _settledCache = new SettledScoreCache(historicalCache);
         _cache = new PeriodicRefreshCache<EspnScores>(
             fetch: async () => {
                 // NflCurrentWeekService always resolves *something* now (most-recently-completed
@@ -64,19 +64,26 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     public async Task<EspnScores?> GetWeekScoresAsync(int season, int nflWeek)
     {
         // Cache key is the resolved internal (season, WeekId) — matches
-        // CfbLiveScoreFetcher's cfb-slate-scores_{slateId} shape and is what
+        // CfbCacheService's cfb-slate-scores_{slateId} shape and is what
         // InvalidateWeekCache(season, week) can actually address after an upsert.
         var cacheKey = $"nfl-week-scores_{season}_{nflWeek}";
-        if (_historicalCache.TryGetValue<EspnScores>(cacheKey, out var cached)) return cached;
+        // Fast path: skip the config/current-week resolution entirely on a cache hit — a
+        // settled week's response never changes, so repeat requests for it shouldn't pay for an
+        // unfiltered NflSeasonWeekConfigs read just to re-derive a cache key we already have.
+        if (_settledCache.TryGet(cacheKey, out var cached)) return cached;
 
         // One unscoped fetch serves both purposes below — finding this week's own row and
         // resolving which week SeasonWindowResolver currently treats as "current" needs the
         // full set of configs either way.
         var allConfigs = await _leagueRepository.GetNflSeasonWeekConfigsAsync();
         var matchingConfig = allConfigs.FirstOrDefault(c => c.Season == season && c.WeekId == nflWeek);
+        // Never trust ESPN's own week=N bucketing (frizat-11t's NFL mirror) — only fetch when we
+        // have a real control-table row to scope the date-range query to. No matching config
+        // means there's nothing to ask ESPN for, and nothing to have ever cached either.
+        if (matchingConfig is null) return null;
 
         // The control-table-resolved CURRENT week is always live-fetched, even if its own
-        // calendar window already looks "ended" by the 6-hour buffer below —
+        // calendar window already looks "ended" by SettledScoreCache's own buffer below —
         // SeasonWindowResolver can legitimately keep an old window as "current" well past its
         // nominal end (e.g. the off-season bootstrap case: showing last season's Super Bowl
         // until 2 days before the next season's first spread grab), and the frontend's
@@ -86,40 +93,29 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         // actively treating as current, instead of its real live/final ESPN state.
         var windows = allConfigs.Select(c => new SeasonWindowResolver.WeekWindow(c.Season, c.WeekStartDatetime, c.WeekEndDatetime, c.SpreadLockDatetime));
         var resolvedCurrent = SeasonWindowResolver.ResolveCurrentWeek(windows, DateTime.UtcNow);
-        var isResolvedCurrentWeek = matchingConfig is not null && resolvedCurrent is not null
+        var isResolvedCurrentWeek = resolvedCurrent is not null
             && resolvedCurrent.Value.Season == matchingConfig.Season
             && resolvedCurrent.Value.Start == matchingConfig.WeekStartDatetime
             && resolvedCurrent.Value.End == matchingConfig.WeekEndDatetime;
 
-        // 6-hour buffer past the configured end, mirroring CfbLiveScoreFetcher's identical
-        // safety margin — this now gets cached forever once true, so a week whose config end
-        // time turns out to be a little too tight against its actual last kickoff shouldn't
-        // permanently freeze a still-in-progress game out of every future response.
-        var weekHasEnded = !isResolvedCurrentWeek && matchingConfig is not null && matchingConfig.WeekEndDatetime.AddHours(6) < DateTime.UtcNow;
-
-        if (weekHasEnded) {
-            var rows = await _leagueRepository.GetNflScoresAsync(season, nflWeek);
-            if (rows.Count > 0) {
+        return await _settledCache.GetOrBuildAsync(
+            cacheKey, isResolvedCurrentWeek, matchingConfig.WeekEndDatetime,
+            buildFromRowsAsync: async () => {
+                var rows = await _leagueRepository.GetNflScoresAsync(season, nflWeek);
+                if (rows.Count == 0) return null;
                 var games = rows.Select(row => new FinalScoresEspnMapper.FinishedGame(
                     row.Id.ToString(), row.HomeTeam, row.AwayTeam, row.HomeTeamScore, row.AwayTeamScore, row.GameTime));
-                // NB: the built EspnScores.Week.Number below holds our internal nflWeek, not
-                // ESPN's real week number the live-fetch path (_fetcher.FetchForWeekAsync) would
-                // have put there — no current consumer reads this field from a live response for
-                // a decision, but it's a real seam the full frizat-3nv GameData DTO would close.
-                var built = FinalScoresEspnMapper.Build(games, season, nflWeek, matchingConfig!.WeekType == "PostSeason");
-                _historicalCache.Set(cacheKey, built);
-                return built;
-            }
-        }
-
-        // Never trust ESPN's own week=N bucketing (frizat-11t's NFL mirror) — only fetch when we
-        // have a real control-table row to scope the date-range query to. No matching config
-        // means there's nothing to ask ESPN for.
-        return matchingConfig is null ? null : await _fetcher.FetchForWeekAsync(matchingConfig);
+                // NB: the built EspnScores.Week.Number holds our internal nflWeek, not ESPN's
+                // real week number the live-fetch path below would have put there — no current
+                // consumer reads this field from a live response for a decision, but it's a real
+                // seam the full frizat-3nv GameData DTO would close.
+                return FinalScoresEspnMapper.Build(games, season, nflWeek, matchingConfig.WeekType == "PostSeason");
+            },
+            liveFetchAsync: () => _fetcher.FetchForWeekAsync(matchingConfig));
     }
 
     public void InvalidateWeekCache(int season, int week) =>
-        _historicalCache.Remove($"nfl-week-scores_{season}_{week}");
+        _settledCache.Invalidate($"nfl-week-scores_{season}_{week}");
 
     public ValueTask DisposeAsync() => _cache.DisposeAsync();
 }

@@ -115,14 +115,14 @@ public class CfbSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
     }
 
     [Fact]
     public async Task Execute_WhenFetcherReturnsNull_SavesNoSpreads()
     {
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns((EspnScores?)null);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns((EspnScores?)null);
 
         await BuildJob().Execute(_context);
 
@@ -134,7 +134,7 @@ public class CfbSpreadJobTests
     {
         var slate = BuildSlate();
         SetCurrentSlate(slate);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard());
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         await BuildJob().Execute(_context);
@@ -148,7 +148,7 @@ public class CfbSpreadJobTests
     {
         var slate = BuildSlate();
         SetCurrentSlate(slate);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU"));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU"));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds("-7.5", "+7.5", 52.5));
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -169,7 +169,7 @@ public class CfbSpreadJobTests
     public async Task Execute_WhenOddsUnavailable_SkipsGame()
     {
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard());
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>(), 100).Returns((EspnCoreOddsItem?)null);
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>()).Returns((EspnCoreOddsApiResponse?)null);
 
@@ -182,7 +182,7 @@ public class CfbSpreadJobTests
     public async Task Execute_SkipsGame_WhenNotScheduled()
     {
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
 
         await BuildJob().Execute(_context);
 
@@ -203,7 +203,7 @@ public class CfbSpreadJobTests
     public async Task Execute_RegularSeason_RankedAndNotMidweek_SavesEligibleTrue()
     {
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99)); // Friday
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99)); // Friday
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -218,7 +218,7 @@ public class CfbSpreadJobTests
     public async Task Execute_RegularSeason_BothUnranked_SavesEligibleFalse()
     {
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -234,7 +234,7 @@ public class CfbSpreadJobTests
     {
         var tuesdayEt = new DateTimeOffset(2025, 9, 30, 23, 0, 0, TimeSpan.Zero); // Tue 7pm ET
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99, date: tuesdayEt));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99, date: tuesdayEt));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -249,7 +249,7 @@ public class CfbSpreadJobTests
     public async Task Execute_CfpSlate_BothUnranked_SavesEligibleTrueRegardless()
     {
         SetCurrentSlate(BuildCfpSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -266,7 +266,7 @@ public class CfbSpreadJobTests
         // "Rankings" now means one row per (season, week, ranked team) — CuratedRank=99 (ESPN's
         // unranked sentinel) is not a rank, so it's never persisted at all, not even as a row.
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU", homeRank: 3, awayRank: 99));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU", homeRank: 3, awayRank: 99));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbRanking>? saved = null;
@@ -285,7 +285,7 @@ public class CfbSpreadJobTests
     public async Task Execute_PersistsRanking_EvenWhenOddsUnavailable()
     {
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard(homeRank: 3, awayRank: 99));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 3, awayRank: 99));
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>(), 100).Returns((EspnCoreOddsItem?)null);
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>()).Returns((EspnCoreOddsApiResponse?)null);
 
@@ -306,7 +306,7 @@ public class CfbSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<IEnumerable<CfbSpreads>>());
     }
 
@@ -329,7 +329,7 @@ public class CfbSpreadJobTests
         var forceMap = new JobDataMap();
         forceMap.Put("force", true);
         _context.MergedJobDataMap.Returns(forceMap);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard());
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         await BuildJob().Execute(_context);
@@ -342,7 +342,7 @@ public class CfbSpreadJobTests
     {
         var slate = BuildSlate();
         SetCurrentSlate(slate); // defaults to PastLockTime
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>()).Returns(BuildScoreboard());
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         await BuildJob().Execute(_context);
