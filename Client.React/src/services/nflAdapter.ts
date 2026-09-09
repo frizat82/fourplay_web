@@ -8,7 +8,7 @@ import {
   getHomeTeam, getAwayTeam,
   getHomeTeamScore, getAwayTeamScore,
   getTeamRecord, getTeamLogo,
-  getWeekFromEspnWeek, getEspnRequiredPicks,
+  getWeekFromEspnWeek, getNflWeekName, getNflRequiredPicks,
   isPostSeason as isPostSeasonHelper,
   isGameOver, isGameStarted, toGameStatus,
   computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins,
@@ -117,6 +117,16 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
   return map;
 }
 
+// The frozen demo/replay fixture is real captured ESPN wire data (its own week.number is ESPN's
+// raw numbering, not our internal WeekId) — this is the one place nflAdapter.ts still legitimately
+// needs to interpret ESPN's own shape, since a frozen fixture genuinely IS an ESPN ingestion point.
+function isFrozenWeekMatch(frozenData: Awaited<ReturnType<typeof loadScoresWithRetry>>, season: number, nflWeek: number, isPostSeason: boolean): boolean {
+  if (!frozenData?.week || !frozenData.season) return false;
+  const frozenIsPostSeason = isPostSeasonHelper(frozenData);
+  const frozenNflWeek = getWeekFromEspnWeek(frozenData.week.number, frozenIsPostSeason);
+  return frozenData.season.year === season && frozenNflWeek === nflWeek && frozenIsPostSeason === isPostSeason;
+}
+
 export function createNflAdapter(): SportAdapter {
   // The control table (NflSeasonWeekConfigs, via SeasonWindowResolver/NflCurrentWeekService) is
   // the SOLE source of truth for which week is "current" — mirrors cfbAdapter.ts's
@@ -124,7 +134,8 @@ export function createNflAdapter(): SportAdapter {
   // with no week param) must never be used to decide season/week: it has its own notion of
   // "current" — e.g. during any gap in play it returns the last-completed event — which can
   // disagree with the league's actual spread-release schedule. Once resolved here, the specific
-  // week is always fetched by week (getWeekScores), same as historical navigation.
+  // week is always fetched by (season, weekId) — our own control table, never ESPN's own week
+  // numbering (frizat-3nv) — same as historical navigation.
   //
   // NflCurrentWeekService NEVER legitimately resolves to "nothing" — it either returns a real
   // week or throws (e.g. no NflSeasonWeekConfig rows seeded at all, a genuine data-integrity
@@ -147,18 +158,11 @@ export function createNflAdapter(): SportAdapter {
     weekSelectorConfig: {
       maxRegularSeasonWeek: 18,
       minSeason: 2020,
-      // Skip week 4 (Pro Bowl) — Super Bowl is week 5 in ESPN's 2025 postseason
-      postSeasonWeekOptions: [1, 2, 3, 5],
-      weekLabelFn: (week, isPostSeason) => {
-        if (!isPostSeason) return `Week ${week}`;
-        switch (week) {
-          case 1: return 'Wild Card';
-          case 2: return 'Divisional Round';
-          case 3: return 'Conference Championship';
-          case 5: return 'Super Bowl';
-          default: return `Postseason Week ${week}`;
-        }
-      },
+      // Our own internal WeekId (19-22) — contiguous, no ESPN Pro-Bowl-skip gap to work around
+      // here at all (frizat-3nv/frizat-4k9: that quirk is normalized once, at the ESPN-ingestion
+      // boundary, and never leaks past it).
+      postSeasonWeekOptions: [19, 20, 21, 22],
+      weekLabelFn: getNflWeekName,
     },
 
     async currentSeasonYear() {
@@ -170,37 +174,33 @@ export function createNflAdapter(): SportAdapter {
 
     async loadCurrentGames(leagueId, userId) {
       const current = await getCurrentWeek();
-      const { season, espnWeek: weekNum, isPostSeason: postSeason } = current;
-      const nflWeek = getWeekFromEspnWeek(weekNum, postSeason);
+      const { season, weekId: nflWeek, isPostSeason: postSeason } = current;
       const [data, picksResult, hasOdds] = await Promise.all([
-        getWeekScores(weekNum, season, postSeason),
+        getWeekScores(season, nflWeek),
         getUserPicks(userId, leagueId, season, nflWeek),
         doOddsExist(leagueId, season, nflWeek),
       ]);
       const sc = await buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, hasOdds);
       const games: GameView[] = (data?.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const userPicks = picksResult.map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
-      return { season, week: weekNum, isPostSeason: postSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: maxWeekFor(postSeason, nflWeek), maxSeason: season };
+      return { season, week: nflWeek, isPostSeason: postSeason, games, userPicks, hasOdds, requiredPicks: getNflRequiredPicks(nflWeek), maxWeek: maxWeekFor(postSeason, nflWeek), maxSeason: season };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
       // Use frozen JSON when requesting the current demo week for consistent in-progress state
       const frozenData = await loadScoresWithRetry();
-      const frozenIsPostSeason = isPostSeasonHelper(frozenData);
-      const isFrozenWeek = frozenData?.season?.year === season && frozenData?.week?.number === week && frozenIsPostSeason === isPostSeason;
-      const data = isFrozenWeek ? frozenData : await getWeekScores(week, season, isPostSeason);
+      const isFrozenWeek = isFrozenWeekMatch(frozenData, season, week, isPostSeason);
+      const data = isFrozenWeek ? frozenData : await getWeekScores(season, week);
       if (!data?.events?.length) return null;
-      const nflWeek = getWeekFromEspnWeek(week, isPostSeason);
-      const [picksResult, hasOdds] = await Promise.all([getUserPicks(userId, leagueId, season, nflWeek), doOddsExist(leagueId, season, nflWeek)]);
-      const sc = await buildSpreadCache(data.events, leagueId, season, nflWeek, hasOdds);
+      const [picksResult, hasOdds] = await Promise.all([getUserPicks(userId, leagueId, season, week), doOddsExist(leagueId, season, week)]);
+      const sc = await buildSpreadCache(data.events, leagueId, season, week, hasOdds);
       const games: GameView[] = data.events.flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const userPicks = picksResult.map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
-      return { season, week, isPostSeason, games, userPicks, hasOdds, requiredPicks: getEspnRequiredPicks(week, isPostSeason), maxWeek: maxWeekFor(isPostSeason, nflWeek), maxSeason: season };
+      return { season, week, isPostSeason, games, userPicks, hasOdds, requiredPicks: getNflRequiredPicks(week), maxWeek: maxWeekFor(isPostSeason, week), maxSeason: season };
     },
 
-    async submitPicks(leagueId, { season, week, isPostSeason }, picks) {
-      const nflWeek = getWeekFromEspnWeek(week, isPostSeason);
-      await addPicks(picks.map(p => ({ id: 0, leagueId, userId: '', userName: '', team: p.team, pick: p.pickType as PickType, nflWeek, season, dateCreated: new Date().toISOString() } as NflPickDto)));
+    async submitPicks(leagueId, { season, week }, picks) {
+      await addPicks(picks.map(p => ({ id: 0, leagueId, userId: '', userName: '', team: p.team, pick: p.pickType as PickType, nflWeek: week, season, dateCreated: new Date().toISOString() } as NflPickDto)));
     },
 
     async clearPicks() { return []; },
@@ -211,10 +211,9 @@ export function createNflAdapter(): SportAdapter {
 
     async loadCurrentScores(leagueId, userId) {
       const current = await getCurrentWeek();
-      const { season, espnWeek: weekNum, isPostSeason: postSeason } = current;
-      const nflWeek = getWeekFromEspnWeek(weekNum, postSeason);
+      const { season, weekId: nflWeek, isPostSeason: postSeason } = current;
       const [data, hasOdds, allPicksDtos] = await Promise.all([
-        getWeekScores(weekNum, season, postSeason),
+        getWeekScores(season, nflWeek),
         doOddsExist(leagueId, season, nflWeek),
         getLeaguePicks(leagueId, season, nflWeek),
       ]);
@@ -229,23 +228,21 @@ export function createNflAdapter(): SportAdapter {
       );
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
-      return { season, week: weekNum, isPostSeason: postSeason, games, allPicks: revealPicksForStartedGames(allPicks, games, userId), userPicks, hasOdds, hasActiveGames, requiredPicks: getEspnRequiredPicks(weekNum, postSeason), maxWeek: maxWeekFor(postSeason, nflWeek), maxSeason: season };
+      return { season, week: nflWeek, isPostSeason: postSeason, games, allPicks: revealPicksForStartedGames(allPicks, games, userId), userPicks, hasOdds, hasActiveGames, requiredPicks: getNflRequiredPicks(nflWeek), maxWeek: maxWeekFor(postSeason, nflWeek), maxSeason: season };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
       const frozenData = await loadScoresWithRetry();
-      const frozenIsPostSeason = isPostSeasonHelper(frozenData);
-      const isFrozenWeek = frozenData?.season?.year === season && frozenData?.week?.number === week && frozenIsPostSeason === isPostSeason;
-      const data = isFrozenWeek ? frozenData : await getWeekScores(week, season, isPostSeason);
+      const isFrozenWeek = isFrozenWeekMatch(frozenData, season, week, isPostSeason);
+      const data = isFrozenWeek ? frozenData : await getWeekScores(season, week);
       if (!data?.events?.length) return null;
-      const nflWeek = getWeekFromEspnWeek(week, isPostSeason);
-      const hasOdds = await doOddsExist(leagueId, season, nflWeek);
-      const sc = await buildSpreadCache(data.events, leagueId, season, nflWeek, hasOdds);
+      const hasOdds = await doOddsExist(leagueId, season, week);
+      const sc = await buildSpreadCache(data.events, leagueId, season, week, hasOdds);
       const games = data.events.flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
-      const allPicksDtos = await getLeaguePicks(leagueId, season, nflWeek);
+      const allPicksDtos = await getLeaguePicks(leagueId, season, week);
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
-      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds, hasActiveGames: false, requiredPicks: getEspnRequiredPicks(week, isPostSeason), maxWeek: maxWeekFor(isPostSeason, nflWeek), maxSeason: season };
+      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds, hasActiveGames: false, requiredPicks: getNflRequiredPicks(week), maxWeek: maxWeekFor(isPostSeason, week), maxSeason: season };
     },
   };
 }

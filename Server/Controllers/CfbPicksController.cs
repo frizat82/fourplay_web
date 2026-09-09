@@ -144,9 +144,8 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
 
     // CFB has no live ESPN status feed the way NFL does (see cfbAdapter.ts) — CfbSpreads.GameTime
     // is the source of truth for kickoff time, same as the frontend's own gameIsLocked check.
-    // Returns both home and away team names for started games — a pick can be on either side.
-    private static HashSet<string> StartedTeams(IEnumerable<CfbSpreads> spreads, DateTimeOffset now) =>
-        spreads.Where(s => s.GameTime <= now).SelectMany(s => new[] { s.HomeTeam, s.AwayTeam }).ToHashSet();
+    // GameHelpers.StartedTeams (shared with LeagueController's identical NFL guard) returns both
+    // home and away team names for started games — a pick can be on either side.
 
     [HttpGet("picks/{leagueId}/{cfbSlateId}")]
     public async Task<IActionResult> GetAllPicks(int leagueId, int cfbSlateId) {
@@ -165,7 +164,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         // Hide other users' picks for games that haven't kicked off yet — same rule as NFL's
         // GetLeaguePicks. Admins always see all picks, same as NFL.
         if (!isAdmin) {
-            var startedTeams = StartedTeams(spreadsTask.Result, DateTimeOffset.UtcNow);
+            var startedTeams = GameHelpers.StartedTeams(spreadsTask.Result, DateTimeOffset.UtcNow, s => s.GameTime, s => s.HomeTeam, s => s.AwayTeam);
             allPicks = allPicks
                 .Where(p => p.UserId == callerId || startedTeams.Contains(p.Team))
                 .ToList();
@@ -224,7 +223,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         // Guard: reject picks for any game that has already kicked off. Matched by team name
         // (either side) rather than an ESPN id — a team plays at most one game per slate, so
         // Team alone unambiguously identifies which CfbSpreads row a pick belongs to.
-        var startedTeams = StartedTeams(spreadsTask.Result, DateTimeOffset.UtcNow);
+        var startedTeams = GameHelpers.StartedTeams(spreadsTask.Result, DateTimeOffset.UtcNow, s => s.GameTime, s => s.HomeTeam, s => s.AwayTeam);
 
         // Guard: reject picks for a team we KNOW is excluded from the league (MAC Tue/Wed,
         // unranked, etc. — frizat-9m0). Distinct from "no matching spread at all", which stays

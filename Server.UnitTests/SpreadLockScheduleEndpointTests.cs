@@ -53,7 +53,7 @@ public class SpreadLockScheduleEndpointTests
     {
         var repo = Substitute.For<ILeagueRepository>();
         var svc = Substitute.For<INflCurrentWeekService>();
-        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(3, 3, 2026, false, "Week 3", "Standard", DateTime.UtcNow));
+        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(3, 2026, false, "Week 3", "Standard", DateTime.UtcNow));
         repo.GetNflSeasonWeekConfigsAsync().Returns([
             new NflSeasonWeekConfig { Season = 2026, WeekId = 2, WeekLabel = "Week 2", SpreadLockDatetime = new DateTime(2026, 9, 10, 18, 0, 0, DateTimeKind.Utc) },
             new NflSeasonWeekConfig { Season = 2026, WeekId = 1, WeekLabel = "Week 1", SpreadLockDatetime = new DateTime(2026, 9, 3, 18, 0, 0, DateTimeKind.Utc) },

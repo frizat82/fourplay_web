@@ -167,7 +167,7 @@ describe('ScoresPage', () => {
   });
 
   it('shows postseason wild card title', async () => {
-    await setupDefaults({ week: 1, postSeason: true });
+    await setupDefaults({ week: 19, postSeason: true });
     await renderPage();
     expect(screen.getAllByText(/Wild Card/i).length).toBeGreaterThan(0);
   });
@@ -201,7 +201,7 @@ describe('ScoresPage', () => {
   });
 
   it('postseason displays over/under icons', async () => {
-    await setupDefaults({ week: 1, postSeason: true });
+    await setupDefaults({ week: 19, postSeason: true });
     await renderPage();
     expect(screen.getAllByTestId('ArrowCircleUpIcon').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('ArrowCircleDownIcon').length).toBeGreaterThan(0);
@@ -215,7 +215,7 @@ describe('ScoresPage', () => {
     // BUF 24, MIA 10 -> total 34. Over threshold 30 (34>30 -> wins) and Under threshold 40
     // (34<40 -> ALSO wins) simultaneously — negating Over's result to get Under's would wrongly
     // report Under as a loss here.
-    await setupDefaults({ week: 1, postSeason: true, gameStarted: true });
+    await setupDefaults({ week: 19, postSeason: true, gameStarted: true });
     mockedSpreadBatch.mockResolvedValue({
       responses: { ...SPREAD_RESPONSES, BUF: createSpreadResponse('BUF', -7, 30, 40) },
     });
@@ -246,7 +246,7 @@ describe('ScoresPage', () => {
   // state. Arrows now stay a fixed neutral color; the badges are the one signal.
   it('keeps the Over/Under arrows a neutral color regardless of win/loss — the badges already carry that signal', async () => {
     // BUF 24, MIA 10 → total 34 < O/U 47.5 → Under wins (see makeScores comment above)
-    await setupDefaults({ week: 1, postSeason: true, gameStarted: true });
+    await setupDefaults({ week: 19, postSeason: true, gameStarted: true });
     await renderPage();
     const upArrow = screen.getAllByTestId('ArrowCircleUpIcon')[0];
     const downArrow = screen.getAllByTestId('ArrowCircleDownIcon')[0];
@@ -431,7 +431,7 @@ describe('ScoresPage', () => {
       // getWeekScores now serves BOTH the current week (2, via loadCurrentScores) and historical
       // navigation (week 1 — a PAST week; navigation is capped at the real current week now, so
       // this can no longer be a future week like the old week-5 version of this test used).
-      mockedGetWeekScores.mockImplementation(async (week: number) => week === 1
+      mockedGetWeekScores.mockImplementation(async (_season: number, nflWeek: number) => nflWeek === 1
         ? makeScores(1, false, true)
         : createScores({
             week: 2, postSeason: false,
@@ -478,7 +478,7 @@ describe('ScoresPage', () => {
     // getWeekScores now serves both the current week (season 2024) and the historical navigation
     // below (season 2022) — differentiate by the requested year so the initial current-week load
     // isn't overwritten by the season-2022 fixture before the snapshot is even captured.
-    mockedGetWeekScores.mockImplementation(async (_week: number, year: number) => year === 2022
+    mockedGetWeekScores.mockImplementation(async (season: number) => season === 2022
       ? createScores({ week: 2, seasonYear: 2022, gameStarted: true })
       : makeScores(2, false, true));
     await renderPage();

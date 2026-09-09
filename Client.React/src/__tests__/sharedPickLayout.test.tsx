@@ -52,7 +52,7 @@ describe('NFL PicksPage — GameCard layout regression', () => {
       competitions: [createCompetition({ homeTeam: 'KC', awayTeam: 'BUF' })],
     }]});
     vi.mocked(getNflCurrentWeek).mockResolvedValue({
-      weekId: 8, espnWeek: 8, season: 2023, isPostSeason: false,
+      weekId: 8, season: 2023, isPostSeason: false,
       weekLabel: 'Week 8', scoringFormat: 'Standard', spreadLockDatetime: new Date().toISOString(),
     });
     vi.mocked(getWeekScores).mockResolvedValue(scores);
