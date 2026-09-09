@@ -51,16 +51,14 @@ public class DemoEspnCacheService : IEspnCacheService
     // constructor-injecting the Scoped INflCurrentWeekService into this Singleton — but must use
     // the SAME keyed clock NflCurrentWeekService resolves "current" against (frizat-tf2), or this
     // and NflCurrentWeekService can silently disagree on what "current" is in DEMO_MODE.
-    public async Task<EspnScores?> GetWeekScoresAsync(int week, int year, bool postSeason = false)
+    public async Task<EspnScores?> GetWeekScoresAsync(int season, int nflWeek)
     {
-        var nflWeek = GameHelpers.GetWeekFromEspnWeek(week, year, postSeason);
-
         await using var db = await _dbContextFactory.CreateDbContextAsync();
 
         var configs = await db.NflSeasonWeekConfigs.ToListAsync();
         var windows = configs.Select(c => new SeasonWindowResolver.WeekWindow(c.Season, c.WeekStartDatetime, c.WeekEndDatetime, c.SpreadLockDatetime));
         var resolvedCurrent = SeasonWindowResolver.ResolveCurrentWeek(windows, _timeProvider.GetUtcNow().UtcDateTime);
-        var matchingConfig = configs.FirstOrDefault(c => c.Season == year && c.WeekId == nflWeek);
+        var matchingConfig = configs.FirstOrDefault(c => c.Season == season && c.WeekId == nflWeek);
         var isResolvedCurrentWeek = matchingConfig is not null && resolvedCurrent is not null
             && resolvedCurrent.Value.Season == matchingConfig.Season
             && resolvedCurrent.Value.Start == matchingConfig.WeekStartDatetime
@@ -69,7 +67,7 @@ public class DemoEspnCacheService : IEspnCacheService
         if (isResolvedCurrentWeek) return _scores;
 
         var rows = await db.NflScores
-            .Where(s => s.Season == year && s.NflWeek == nflWeek)
+            .Where(s => s.Season == season && s.NflWeek == nflWeek)
             .ToListAsync();
 
         if (rows.Count == 0) return null;
@@ -77,7 +75,7 @@ public class DemoEspnCacheService : IEspnCacheService
         var games = rows.Select(row => new FinalScoresEspnMapper.FinishedGame(
             row.Id.ToString(), row.HomeTeam, row.AwayTeam, row.HomeTeamScore, row.AwayTeamScore, row.GameTime));
 
-        return FinalScoresEspnMapper.Build(games, year, week, postSeason);
+        return FinalScoresEspnMapper.Build(games, season, nflWeek, matchingConfig?.WeekType == "PostSeason");
     }
 
     // No-op: demo data is a frozen fixture, never refreshed by a live NflScoresJob upsert.

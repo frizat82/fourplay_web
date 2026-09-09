@@ -30,8 +30,10 @@ test.describe('Scores page (authenticated)', () => {
 
   // gameStarted: true so shouldShowGamePicks() = true and badge counts are visible
   const scoresOptions = { leaguePicks, gameStarted: true };
-  // postseason variant for Over/Under badge tests
-  const postSeasonOptions = { leaguePicks, gameStarted: true, isPostSeason: true };
+  // postseason variant for Over/Under badge tests — week must be a valid internal postseason
+  // WeekId (19-22), not the regular-season default (frizat-3nv: WeekId is the only numbering
+  // used now, no more ESPN week 1-5).
+  const postSeasonOptions = { leaguePicks, gameStarted: true, isPostSeason: true, week: 20 };
 
   test('renders scores page for authenticated user', async ({ page }) => {
     await mockAuth(page, { navigateTo: '/scores', ...scoresOptions });

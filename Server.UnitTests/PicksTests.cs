@@ -4,6 +4,7 @@ using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
+using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Http;
@@ -72,8 +73,16 @@ public class PicksTests
         TestPrincipalFactory.Build(userId);
 
     /// <summary>
+    /// AddPicks's kickoff guard is now a pure NflSpreads.GameTime check (frizat-3nv) — one
+    /// spread row for BUF vs MIA at the given kickoff, scoped to this file's Season/Week.
+    /// </summary>
+    private static List<NflSpreads> MakeSpreads(DateTimeOffset bufMiaKickoff) =>
+        [ new NflSpreads { Season = Season, NflWeek = Week, HomeTeam = "BUF", AwayTeam = "MIA", GameTime = bufMiaKickoff } ];
+
+    /// <summary>
     /// Builds a minimal ESPN scores payload with two games:
     /// BUF vs MIA (at <paramref name="bufMiaKickoff"/>) and DAL vs NYG (in the future).
+    /// Only used by GetLeaguePicks tests below — AddPicks no longer reads ESPN at all.
     /// </summary>
     private static EspnScores BuildScores(DateTimeOffset bufMiaKickoff)
     {
@@ -132,7 +141,7 @@ public class PicksTests
     private static INflCurrentWeekService BuildCurrentWeekService(int week = Week, int season = Season)
     {
         var svc = Substitute.For<INflCurrentWeekService>();
-        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(week, week, season, false, "Week", "PickAgainstSpread", DateTime.UtcNow.AddDays(-1)));
+        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(week, season, false, "Week", "PickAgainstSpread", DateTime.UtcNow.AddDays(-1)));
         return svc;
     }
 
@@ -148,11 +157,9 @@ public class PicksTests
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(pastKickoff));
 
-        var espn = Substitute.For<IEspnCacheService>();
-        espn.GetScoresAsync().Returns(BuildScores(pastKickoff));
-
-        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
         var picks = new[] { MakePick("BUF") };
 
         // Act
@@ -174,11 +181,9 @@ public class PicksTests
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
         repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
 
-        var espn = Substitute.For<IEspnCacheService>();
-        espn.GetScoresAsync().Returns(BuildScores(futureKickoff));
-
-        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
         var picks = new[] { MakePick("BUF") };
 
         // Act
@@ -192,13 +197,11 @@ public class PicksTests
     [Fact]
     public async Task AddPicks_TeamNameCollisionInDifferentWeekSeason_DoesNotFalselyReject()
     {
-        // Regression: the kickoff guard used to match a pick's team against ANY cached ESPN
-        // competition by abbreviation alone, ignoring season/week — so a historical pick for
-        // "BUF" in Week 5/2023 got wrongly rejected just because the CURRENTLY cached event
-        // happens to also involve BUF (in an unrelated Week 2/2024 game that already kicked
-        // off). Real-world case: restoring historical picks whose team happened to also be
-        // playing in the live/most-recent cached game.
-        var pastKickoff = DateTimeOffset.UtcNow.AddHours(-2);
+        // Regression (historical, when this guard read a shared live ESPN cache): a pick's team
+        // could get wrongly rejected because an UNRELATED week/season's cached event happened to
+        // involve the same team abbreviation. The guard now fetches NflSpreads scoped to the
+        // pick's own (Season, NflWeek) — Season/Week 2024/2 having an already-kicked-off BUF
+        // game is structurally irrelevant to a 2023/Week 5 pick, since that query is never made.
         const int historicalSeason = 2023;
         const int historicalWeek = 5;
 
@@ -207,45 +210,38 @@ public class PicksTests
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, historicalSeason, historicalWeek).Returns([]);
         repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        // No spreads seeded for (historicalSeason, historicalWeek) — nothing to reject against.
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(DateTimeOffset.UtcNow.AddHours(-2))); // unrelated week/season, must never be consulted
 
-        var espn = Substitute.For<IEspnCacheService>();
-        espn.GetScoresAsync().Returns(BuildScores(pastKickoff)); // cached: BUF vs MIA, Week 2/2024, already kicked off
-
-        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
         var picks = new[] { new NflPickDto {
             LeagueId = LeagueId, UserId = UserId, Team = "BUF", Pick = PickType.Spread,
             NflWeek = historicalWeek, Season = historicalSeason,
         } };
 
-        // Act — this pick's own week (2023/Wk5) is what must match "current," not the
-        // unrelated cached ESPN event's week (2024/Wk2, the source of the collision bug).
         var result = await controller.AddPicks(picks, BuildCurrentWeekService(historicalWeek, historicalSeason));
 
-        // Assert — BUF's Week 2/2024 kickoff is irrelevant to this Week 5/2023 pick
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(1, ok.Value);
+        await repo.DidNotReceive().GetNflSpreadsAsync(Season, Week);
     }
 
     [Fact]
-    public async Task AddPicks_WhenEspnCacheIsEmpty_AllowsPicks()
+    public async Task AddPicks_WhenNoSpreadsExistForTheWeek_AllowsPicks()
     {
-        // Arrange — ESPN cache cold / unavailable; should not block picks
+        // Spreads not released yet for this week — nothing to reject against.
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
         repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.GetNflSpreadsAsync(Season, Week).Returns((List<NflSpreads>?)null);
 
-        var espn = Substitute.For<IEspnCacheService>();
-        espn.GetScoresAsync().Returns((EspnScores?)null);
-
-        var controller = BuildController(repo, espn, BuildPrincipal(UserId));
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
         var picks = new[] { MakePick("BUF") };
 
-        // Act
         var result = await controller.AddPicks(picks, BuildCurrentWeekService());
 
-        // Assert — no ESPN data → fail open, let picks through
         Assert.IsType<OkObjectResult>(result.Result);
     }
 

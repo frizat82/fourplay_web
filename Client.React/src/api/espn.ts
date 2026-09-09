@@ -42,9 +42,9 @@ export async function getCfbScoresForSlate(slateId: number): Promise<EspnScores 
   return data ?? null;
 }
 
-export async function getWeekScores(week: number, year: number, postSeason = false): Promise<EspnScores | null> {
-  const { data } = await http.get<EspnScores>(`/api/espn/scores/week/${week}/${year}`, {
-    params: { postSeason },
-  });
+/** Live/historical NFL scores for a specific (season, nflWeek) — our own control-table WeekId,
+ * never ESPN's own week numbering — same role as getCfbScoresForSlate() for CFB (frizat-3nv). */
+export async function getWeekScores(season: number, nflWeek: number): Promise<EspnScores | null> {
+  const { data } = await http.get<EspnScores>(`/api/espn/scores/nfl-week/${season}/${nflWeek}`);
   return data ?? null;
 }

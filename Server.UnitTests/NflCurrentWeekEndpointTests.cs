@@ -49,7 +49,7 @@ public class NflCurrentWeekEndpointTests
     public async Task GetCurrentWeek_ReturnsWeekInfo_FromNflCurrentWeekService()
     {
         var svc = Substitute.For<INflCurrentWeekService>();
-        var info = new NflWeekInfo(6, 6, 2026, false, "Week 6", "Standard", new DateTime(2026, 10, 8, 18, 0, 0, DateTimeKind.Utc));
+        var info = new NflWeekInfo(6, 2026, false, "Week 6", "Standard", new DateTime(2026, 10, 8, 18, 0, 0, DateTimeKind.Utc));
         svc.GetCurrentWeekAsync().Returns(info);
 
         var result = await BuildController(svc).GetCurrentWeek(svc);
@@ -68,7 +68,7 @@ public class NflCurrentWeekEndpointTests
         // (most recent completed week, or upcoming Week 1) — the controller just passes it through
         // unconditionally rather than re-implementing any of that logic.
         var svc = Substitute.For<INflCurrentWeekService>();
-        var info = new NflWeekInfo(18, 18, 2025, false, "Week 18", "Standard", new DateTime(2026, 1, 4, 18, 0, 0, DateTimeKind.Utc));
+        var info = new NflWeekInfo(18, 2025, false, "Week 18", "Standard", new DateTime(2026, 1, 4, 18, 0, 0, DateTimeKind.Utc));
         svc.GetCurrentWeekAsync().Returns(info);
 
         var result = await BuildController(svc).GetCurrentWeek(svc);

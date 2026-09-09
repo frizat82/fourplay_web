@@ -28,14 +28,6 @@ public class NflCurrentWeekService(ILeagueRepository repo, [FromKeyedServices(Cu
 
     private static NflWeekInfo ToWeekInfo(Models.Data.NflSeasonWeekConfig cfg) {
         var isPostSeason = cfg.WeekId > 18;
-        var espnWeek = cfg.WeekId switch {
-            <= 18 => cfg.WeekId,
-            19    => 1,  // Wild Card
-            20    => 2,  // Divisional
-            21    => 3,  // Conference Championship
-            22    => 5,  // Super Bowl (ESPN skips week 4 = Pro Bowl)
-            _     => cfg.WeekId
-        };
-        return new NflWeekInfo(cfg.WeekId, espnWeek, cfg.Season, isPostSeason, cfg.WeekLabel, cfg.ScoringFormat, cfg.SpreadLockDatetime);
+        return new NflWeekInfo(cfg.WeekId, cfg.Season, isPostSeason, cfg.WeekLabel, cfg.ScoringFormat, cfg.SpreadLockDatetime);
     }
 }
