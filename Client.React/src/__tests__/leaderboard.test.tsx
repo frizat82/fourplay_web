@@ -46,6 +46,7 @@ beforeEach(() => {
   mockedGetLeagueJuiceForSeason.mockResolvedValue({
     id: 1, leagueId: 1, leagueName: 'Demo League', season: 2023,
     juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2023-01-01T00:00:00Z',
+    teaseLocked: false, weeklyCostLocked: false,
   });
   mockLeagueJuiceEmpty(mockedGetLeagueJuice);
 });
@@ -247,8 +248,8 @@ describe('LeaderboardPage — season selector', () => {
     // constant instead of that league's own history. One shared hook (useLeagueMinSeason) fixes
     // both sports identically.
     mockedGetLeagueJuice.mockResolvedValue([
-      { id: 1, leagueId: 1, leagueName: 'Demo League', season: 2022, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2022-01-01T00:00:00Z' },
-      { id: 2, leagueId: 1, leagueName: 'Demo League', season: 2023, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2023-01-01T00:00:00Z' },
+      { id: 1, leagueId: 1, leagueName: 'Demo League', season: 2022, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2022-01-01T00:00:00Z', teaseLocked: true, weeklyCostLocked: true },
+      { id: 2, leagueId: 1, leagueName: 'Demo League', season: 2023, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2023-01-01T00:00:00Z', teaseLocked: true, weeklyCostLocked: true },
     ]);
 
     renderPage();
