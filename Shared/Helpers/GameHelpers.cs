@@ -72,8 +72,11 @@ public static class GameHelpers {
     // bracket actually exists (~Jan 2027) — the NFL discontinued the Pro Bowl GAME starting with
     // the 2026 season (announced 2026-08-26), so ESPN's postseason week numbering is expected to
     // close the old week-4 gap from here on. See docs/ESPNProBowl.md for the full writeup; update
-    // LastSeasonEspnSkippedProBowlWeek there if this guess turns out wrong.
-    private const int LastSeasonEspnSkippedProBowlWeek = 2025;
+    // this value if this guess turns out wrong. Public (not the private it was originally) so
+    // ESPNApiService.FixEspnProbBowlWeek can gate its own identical quirk-correction on the same
+    // threshold instead of carrying an independent, unconditional copy (frizat-4k9) — this and
+    // GetWeekFromEspnWeek below are the only two places this threshold is allowed to live.
+    public const int LastSeasonEspnSkippedProBowlWeek = 2025;
 
     // Through the 2025 season, ESPN skipped postseason week 4 for the Pro Bowl — Super Bowl was
     // raw ESPN week 5 (one slot past Conference Championship=3), not the 4th round it actually is.
