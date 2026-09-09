@@ -14,5 +14,15 @@ namespace FourPlayWebApp.Server.Services.Interfaces;
 /// CFP/ranked branching three times.
 /// </summary>
 public interface ICfbLiveScoreFetcher {
-    Task<EspnScores?> FetchForSlateAsync(CfbSlates slate);
+    // bypassCache: true skips the "slate has ended → replay whatever's already in the DB,
+    // cached forever" viewer-facing shortcut and always hits ESPN — CfbScoresJob's whole
+    // purpose is to discover NEW finals for a slate, including one that was missed before the
+    // slate "ended" (e.g. a scheduling-cron gap); the viewer shortcut exists to spare 100
+    // concurrent page loads from re-hitting ESPN for settled data, not to freeze a background
+    // catch-up job out of ever seeing fresh data for that slate again.
+    Task<EspnScores?> FetchForSlateAsync(CfbSlates slate, bool bypassCache = false);
+
+    // Evicts the cached settled-slate reconstruction so a fresh CfbScoresJob upsert is visible
+    // immediately instead of waiting for a process restart.
+    void InvalidateSlateCache(int slateId);
 }

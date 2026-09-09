@@ -79,4 +79,7 @@ public class DemoEspnCacheService : IEspnCacheService
 
         return FinalScoresEspnMapper.Build(games, year, week, postSeason);
     }
+
+    // No-op: demo data is a frozen fixture, never refreshed by a live NflScoresJob upsert.
+    public void InvalidateWeekCache(int season, int week) { }
 }

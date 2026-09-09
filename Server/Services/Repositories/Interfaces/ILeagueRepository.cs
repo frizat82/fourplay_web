@@ -16,6 +16,9 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
 
     // NFL Season Week Config
     Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync();
+    // Season-scoped, mirrors ICfbRepository.GetSlatesForSeasonAsync — for callers (NflScoresJob)
+    // that must never sweep every season on record, only the one currently in play.
+    Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync(int season);
 
     // NFL Weeks
     Task UpsertNflWeeksAsync(List<NflWeeks> weeks);

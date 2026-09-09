@@ -37,7 +37,12 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo) : I
         var scores = new List<CfbScores>();
 
         foreach (var slate in slates) {
-            var scoreboard = await fetcher.FetchForSlateAsync(slate);
+            // bypassCache: this job's whole purpose is discovering fresh finals — including one
+            // missed before the slate's window "ended" (frizat: exactly what happened to the
+            // 2026 Week 1 Monday-night game before the Tuesday catch-up cron existed). The
+            // viewer-facing shortcut this bypasses exists to spare page loads from re-hitting
+            // ESPN for settled data, not to freeze this job out of ever seeing new data.
+            var scoreboard = await fetcher.FetchForSlateAsync(slate, bypassCache: true);
             if (scoreboard?.Events is null) continue;
             AppendScores(scores, slate, scoreboard.Events);
         }
@@ -45,6 +50,12 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo) : I
         if (scores.Count > 0) {
             await repo.UpsertCfbScoresAsync(scores);
             Log.Information("CfbScoresJob: upserted {Count} CFB scores", scores.Count);
+
+            // The viewer-facing cache can already hold a stale reconstruction for a slate that
+            // "ended" before this run discovered new/updated finals for it.
+            foreach (var slateId in scores.Select(s => s.CfbSlateId).Distinct()) {
+                fetcher.InvalidateSlateCache(slateId);
+            }
         }
         Log.Information("CfbScoresJob: complete at {Time}", DateTime.UtcNow);
     }
