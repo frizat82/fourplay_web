@@ -51,7 +51,9 @@ public class EspnContractTests
     [Fact]
     public async Task NflScoreboard_RecentRegularSeasonWeek_DeserializesRealWireShape()
     {
-        var scores = await BuildEspnApiService().GetWeekScores(10, 2025);
+        // frizat-11t (NFL mirror): date-range now, not week=N — 2025 season Week 10's real window.
+        var scores = await BuildEspnApiService().GetScoresByDateRangeAsync(
+            new DateOnly(2025, 11, 6), new DateOnly(2025, 11, 12));
 
         Assert.NotNull(scores);
         Assert.NotEmpty(scores!.Events);
@@ -66,8 +68,9 @@ public class EspnContractTests
     [Fact]
     public async Task NflScoreboard_PostseasonWeek_DeserializesRealWireShapeAndFlagsPostSeason()
     {
-        // Week 1 postseason = Wild Card round of the completed 2025 season.
-        var scores = await BuildEspnApiService().GetWeekScores(1, 2025, postSeason: true);
+        // Wild Card round of the completed 2025 season.
+        var scores = await BuildEspnApiService().GetScoresByDateRangeAsync(
+            new DateOnly(2026, 1, 10), new DateOnly(2026, 1, 13), postSeason: true);
 
         Assert.NotNull(scores);
         Assert.NotEmpty(scores!.Events);
@@ -103,10 +106,16 @@ public class EspnContractTests
     [Fact]
     public async Task NflTeamAbbreviations_FullSeason_AllMapToKnown32TeamSet()
     {
-        var scores = await BuildEspnApiService().GetSeasonScores(2025);
-        Assert.NotNull(scores);
+        var espn = BuildEspnApiService();
+        // frizat-11t (NFL mirror): date-range now, not a bare year — covers the full 2025
+        // regular season plus its postseason, one call per season type (ESPN disambiguates by
+        // seasontype, not by date range alone).
+        var regular = await espn.GetScoresByDateRangeAsync(new DateOnly(2025, 9, 1), new DateOnly(2026, 1, 10));
+        var postseason = await espn.GetScoresByDateRangeAsync(new DateOnly(2026, 1, 10), new DateOnly(2026, 2, 15), postSeason: true);
+        Assert.NotNull(regular);
+        Assert.NotNull(postseason);
 
-        var seenAbbreviations = scores!.Events
+        var seenAbbreviations = (regular!.Events ?? []).Concat(postseason!.Events ?? [])
             .SelectMany(e => e.Competitions)
             .SelectMany(c => c.Competitors)
             .Select(c => c.Team.Abbreviation)
@@ -121,7 +130,7 @@ public class EspnContractTests
     [Fact]
     public async Task Odds_ForRealNflEvent_DeserializesRealWireShape()
     {
-        var scores = await BuildEspnApiService().GetWeekScores(10, 2025);
+        var scores = await BuildEspnApiService().GetScoresByDateRangeAsync(new DateOnly(2025, 11, 6), new DateOnly(2025, 11, 12));
         Assert.NotNull(scores);
         var eventId = int.Parse(scores!.Events.First().Id);
 
@@ -134,7 +143,7 @@ public class EspnContractTests
     [Fact]
     public async Task Odds_ForUnknownProvider_ReturnsNullNotException()
     {
-        var scores = await BuildEspnApiService().GetWeekScores(10, 2025);
+        var scores = await BuildEspnApiService().GetScoresByDateRangeAsync(new DateOnly(2025, 11, 6), new DateOnly(2025, 11, 12));
         Assert.NotNull(scores);
         var eventId = int.Parse(scores!.Events.First().Id);
 
