@@ -19,7 +19,7 @@ vi.mock('../api/espn', () => ({
   getCfbLiveGames: vi.fn(),
 }));
 
-import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, addCfbPicks } from '../api/cfb';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
@@ -185,6 +185,32 @@ describe('cfbAdapter', () => {
       expect(result.maxWeek).toBe(8);
     });
 
+    // frizat-8y7: caught by CI right after the frizat-8y4 fix landed — maxWeek: weekState.week
+    // doesn't distinguish regular season from postseason. When the current slate IS postseason
+    // (e.g. CFP Championship, slateNumber 18 -> postseason week 5), that small postseason week
+    // number leaked in as the REGULAR SEASON cap instead of the real regular-season length (13)
+    // — collapsing the regular-season selector down to 5 options instead of all 13 the moment
+    // navigation was no longer hidden behind the old static regularWeekOptions override.
+    it('caps maxWeek at the full regular-season length when the current slate is postseason', async () => {
+      // Fresh adapter — createCfbAdapter() wraps getCfbCurrentSlate in memoizeOnce, and the
+      // module-level `adapter` shared by every other test in this file has already cached its
+      // own (regular-season) "current slate" by the time this test runs.
+      const freshAdapter = createCfbAdapter();
+      const postseasonSlate: CfbSlateDto = {
+        id: 18, season: 2026, slateNumber: 18, label: 'CFP Championship',
+        slateType: 'Postseason', startDate: '2027-01-01', endDate: '2027-01-07',
+      };
+      vi.mocked(getCfbCurrentSlate).mockResolvedValue(postseasonSlate);
+      vi.mocked(getCfbSlates).mockResolvedValue([postseasonSlate]);
+      vi.mocked(getCfbSpreads).mockResolvedValue([]);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(null);
+      vi.mocked(getCfbUserPicks).mockResolvedValue([]);
+
+      const result = await freshAdapter.loadCurrentGames(1, 'user1');
+      expect(result.isPostSeason).toBe(true);
+      expect(result.maxWeek).toBe(13);
+    });
+
     it('game shows scheduled when ESPN has no matching event', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
@@ -194,6 +220,29 @@ describe('cfbAdapter', () => {
       const result = await adapter.loadCurrentGames(1, 'user1');
       expect(result.games[0].gameStatus).toBe('scheduled');
       expect(result.games[0].homeScore).toBeNull();
+    });
+  });
+
+  describe('loadCurrentScores', () => {
+    // frizat-8y7: same bug as loadCurrentGames — maxWeek: weekState.week doesn't distinguish
+    // regular season from postseason, so a postseason current slate (e.g. CFP Championship)
+    // leaked its small postseason week number in as the regular-season cap.
+    it('caps maxWeek at the full regular-season length when the current slate is postseason', async () => {
+      // Fresh adapter — see the identical note in the loadCurrentGames test above.
+      const freshAdapter = createCfbAdapter();
+      const postseasonSlate: CfbSlateDto = {
+        id: 18, season: 2026, slateNumber: 18, label: 'CFP Championship',
+        slateType: 'Postseason', startDate: '2027-01-01', endDate: '2027-01-07',
+      };
+      vi.mocked(getCfbCurrentSlate).mockResolvedValue(postseasonSlate);
+      vi.mocked(getCfbSpreads).mockResolvedValue([]);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(null);
+      vi.mocked(getCfbAllPicks).mockResolvedValue([]);
+      vi.mocked(getCfbUserPicks).mockResolvedValue([]);
+
+      const result = await freshAdapter.loadCurrentScores(1, 'user1');
+      expect(result.isPostSeason).toBe(true);
+      expect(result.maxWeek).toBe(13);
     });
   });
 
