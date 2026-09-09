@@ -20,6 +20,10 @@ export interface LeagueJuiceMappingDto {
   juiceConference: number;
   weeklyCost: number;
   dateCreated: string;
+  /** True once the season's first week/slate has started — tease points are no longer editable. */
+  teaseLocked: boolean;
+  /** True once the season's final week/slate (Super Bowl / Championship) has started — Weekly Cost is no longer editable. */
+  weeklyCostLocked: boolean;
 }
 
 export interface CreateLeagueModel {
