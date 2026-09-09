@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Jobs;
+using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
@@ -17,7 +18,7 @@ namespace FourPlayWebApp.Server.UnitTests;
 public class NflSpreadJobTests
 {
     private readonly IEspnCoreOddsService _oddsService;
-    private readonly IEspnApiService _espnApi;
+    private readonly INflLiveScoreFetcher _fetcher;
     private readonly ILeagueRepository _repo;
     private readonly INflCurrentWeekService _nflCurrentWeekService;
     private readonly IJobExecutionContext _context;
@@ -41,7 +42,7 @@ public class NflSpreadJobTests
     public NflSpreadJobTests()
     {
         _oddsService = Substitute.For<IEspnCoreOddsService>();
-        _espnApi = Substitute.For<IEspnApiService>();
+        _fetcher = Substitute.For<INflLiveScoreFetcher>();
         _repo = Substitute.For<ILeagueRepository>();
         _nflCurrentWeekService = Substitute.For<INflCurrentWeekService>();
         _context = Substitute.For<IJobExecutionContext>();
@@ -49,9 +50,25 @@ public class NflSpreadJobTests
 
         _nflCurrentWeekService.GetCurrentWeekAsync().Returns(DefaultWeek);
         _context.MergedJobDataMap.Returns(new JobDataMap());
+
+        // NflSpreadJob now resolves the current week's full control-table row (date window) to
+        // fetch by, mirroring CfbSpreadJob — matches DefaultWeek (Season=2024, WeekId=5); tests
+        // using a different current week override this with their own BuildConfig call.
+        _repo.GetNflSeasonWeekConfigsAsync(2024).Returns(new List<NflSeasonWeekConfig> { BuildConfig(weekId: 5, season: 2024) });
     }
 
-    private NflSpreadJob BuildJob() => new(_oddsService, _espnApi, _repo, _nflCurrentWeekService, _timeProvider);
+    private static NflSeasonWeekConfig BuildConfig(int weekId, int season) => new() {
+        Id = weekId,
+        Season = season,
+        WeekId = weekId,
+        WeekLabel = $"Week {weekId}",
+        WeekType = weekId > 18 ? "PostSeason" : "RegularSeason",
+        ScoringFormat = "Standard",
+        WeekStartDatetime = new DateTime(season, 11, 1, 0, 0, 0, DateTimeKind.Utc),
+        WeekEndDatetime = new DateTime(season, 11, 10, 23, 59, 59, DateTimeKind.Utc),
+    };
+
+    private NflSpreadJob BuildJob() => new(_oddsService, _fetcher, _repo, _nflCurrentWeekService, _timeProvider);
 
     // -----------------------------------------------------------------------
     // Helper builders
@@ -153,7 +170,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenGetWeekScoresReturnsNull_ReturnsImmediately_NoSpreadsAdded()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns((EspnScores?)null);
 
         await BuildJob().Execute(_context);
@@ -171,7 +188,7 @@ public class NflSpreadJobTests
     public async Task Execute_WhenAllGamesAreAlreadyFinal_NoSpreadsAdded()
     {
         // Scoreboard with a Final game — not Scheduled, so job skips it
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(statusName: TypeName.StatusFinal));
 
         await BuildJob().Execute(_context);
@@ -186,7 +203,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenDraftKingsOddsAvailable_CallsAddNewNflSpreads()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem());
@@ -199,7 +216,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenDraftKingsOddsAvailable_ParsesHomeSpreadCorrectly()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem(homeSpread: "-7", awaySpread: "+7"));
@@ -218,7 +235,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenDraftKingsOddsAvailable_ParsesDecimalSpreadCorrectly()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem(homeSpread: "-3.5", awaySpread: "+3.5"));
@@ -236,7 +253,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenDraftKingsOddsAvailable_SetsOverUnder()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem(overUnder: 48.5));
@@ -253,7 +270,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenDraftKingsOddsAvailable_PassesCorrectTeamAbbreviations()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(homeAbbr: "SF", awayAbbr: "DAL"));
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem());
@@ -276,7 +293,7 @@ public class NflSpreadJobTests
     public async Task Execute_PlusSignInSpreadString_IsStrippedBeforeParsing()
     {
         // "+7" should be parsed as 7.0 after stripping the leading plus
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem(homeSpread: "+3", awaySpread: "-3"));
@@ -299,7 +316,7 @@ public class NflSpreadJobTests
     public async Task Execute_WhenHomeSpreadIsFk_GameIsSkipped_NoSpreadsAdded()
     {
         // "FK" cannot be parsed by double.TryParse → the game is skipped via `continue`
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem(homeSpread: "FK", awaySpread: "+7"));
@@ -312,7 +329,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenAwaySpreadIsFk_GameIsSkipped_NoSpreadsAdded()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem(homeSpread: "-7", awaySpread: "FK"));
@@ -329,7 +346,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenDraftKingsNull_FallsBackToFirstAvailableProvider()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
 
         // DraftKings returns null
@@ -354,7 +371,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenDraftKingsNullAndFallbackEmpty_GameIsSkipped()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
 
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
@@ -370,7 +387,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenDraftKingsNullAndFallbackNull_GameIsSkipped()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
 
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
@@ -390,7 +407,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenOddsApiThrows_ExceptionCaught_JobDoesNotRethrow()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .ThrowsAsync(new HttpRequestException("Odds API down"));
@@ -459,7 +476,7 @@ public class NflSpreadJobTests
             }
         };
 
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>()).Returns(scoreboard);
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(scoreboard);
 
         // First game throws
         _oddsService.GetEventsWithOddsAsync(111, (int)EspnOddsProviders.DraftKings)
@@ -483,7 +500,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenZeroCompetitions_ByeWeekDetected_NoSpreadsAdded()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(emptyEvents: true));
 
         await BuildJob().Execute(_context);
@@ -495,7 +512,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_WhenZeroCompetitions_JobCompletesWithoutException()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(emptyEvents: true));
 
         var exception = await Record.ExceptionAsync(() => BuildJob().Execute(_context));
@@ -506,7 +523,7 @@ public class NflSpreadJobTests
     [Fact]
     public async Task Execute_RegularSeasonWeekWithGames_IsNotTreatedAsByeWeek()
     {
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(weekNumber: 5, seasonType: (int)TypeOfSeason.RegularSeason));
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem());
@@ -521,7 +538,8 @@ public class NflSpreadJobTests
     {
         _nflCurrentWeekService.GetCurrentWeekAsync()
             .Returns(new NflWeekInfo(21, 3, 2024, true, "Conference Championship", "Standard", PastLockTime));
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _repo.GetNflSeasonWeekConfigsAsync(2024).Returns(new List<NflSeasonWeekConfig> { BuildConfig(weekId: 21, season: 2024) });
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(weekNumber: 3, seasonType: (int)TypeOfSeason.PostSeason));
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem());
@@ -541,7 +559,8 @@ public class NflSpreadJobTests
         // Wild Card: NflCurrentWeekService returns WeekId=19, EspnWeek=1, IsPostSeason=true
         _nflCurrentWeekService.GetCurrentWeekAsync()
             .Returns(new NflWeekInfo(19, 1, 2024, true, "Wild Card Weekend", "Standard", PastLockTime));
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _repo.GetNflSeasonWeekConfigsAsync(2024).Returns(new List<NflSeasonWeekConfig> { BuildConfig(weekId: 19, season: 2024) });
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(weekNumber: 1, seasonType: (int)TypeOfSeason.PostSeason));
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem());
@@ -569,7 +588,7 @@ public class NflSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _espnApi.DidNotReceive().GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>());
+        await _fetcher.DidNotReceive().FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>());
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
@@ -581,7 +600,7 @@ public class NflSpreadJobTests
         var forceMap = new JobDataMap();
         forceMap.Put("force", true);
         _context.MergedJobDataMap.Returns(forceMap);
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem());
@@ -595,7 +614,7 @@ public class NflSpreadJobTests
     public async Task Execute_LockTimeInPast_NoForce_WritesNormally()
     {
         // DefaultWeek's lock time is already in the past — the common/happy-path case
-        _espnApi.GetWeekScores(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<bool>())
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem());
