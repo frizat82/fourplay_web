@@ -10,7 +10,8 @@ using Serilog;
 namespace FourPlayWebApp.Server.Jobs;
 
 [DisallowConcurrentExecution]
-public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo) : IJob {
+public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICfbCacheService cfbCacheService,
+    ICfbCurrentSlateService currentSlateService) : IJob {
     // CFB seasons run Aug–Jan; the season year is the calendar year the fall games start.
     private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;
 
@@ -36,13 +37,21 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo) : I
 
         var scores = new List<CfbScores>();
 
+        // Resolved once for the whole loop, not once per slate — isCurrentSlate only matters to
+        // the fetcher for the replay-mode snapshot merge (see ICfbLiveScoreFetcher's own doc
+        // comment), and every slate in this loop can be compared against the same single
+        // resolution instead of each triggering its own GetCurrentSlateAsync() DB round trip.
+        var currentSlate = await currentSlateService.GetCurrentSlateAsync();
+
         foreach (var slate in slates) {
-            // bypassCache: this job's whole purpose is discovering fresh finals — including one
-            // missed before the slate's window "ended" (frizat: exactly what happened to the
-            // 2026 Week 1 Monday-night game before the Tuesday catch-up cron existed). The
-            // viewer-facing shortcut this bypasses exists to spare page loads from re-hitting
-            // ESPN for settled data, not to freeze this job out of ever seeing new data.
-            var scoreboard = await fetcher.FetchForSlateAsync(slate, bypassCache: true);
+            // This job's whole purpose is discovering fresh finals — including one missed before
+            // the slate's window "ended" (frizat: exactly what happened to the 2026 Week 1
+            // Monday-night game before the Tuesday catch-up cron existed). fetcher is now a pure
+            // fetch with no caching (frizat-d0t) — the viewer-facing settled-cache shortcut this
+            // used to need to bypass now lives one layer up in CfbCacheService, which this job
+            // never calls except to invalidate below, mirroring NflScoresJob calling
+            // INflLiveScoreFetcher directly.
+            var scoreboard = await fetcher.FetchForSlateAsync(slate, isCurrentSlate: slate.Id == currentSlate?.Id);
             if (scoreboard?.Events is null) continue;
             AppendScores(scores, slate, scoreboard.Events);
         }
@@ -54,7 +63,7 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo) : I
             // The viewer-facing cache can already hold a stale reconstruction for a slate that
             // "ended" before this run discovered new/updated finals for it.
             foreach (var slateId in scores.Select(s => s.CfbSlateId).Distinct()) {
-                fetcher.InvalidateSlateCache(slateId);
+                cfbCacheService.InvalidateSlateCache(slateId);
             }
         }
         Log.Information("CfbScoresJob: complete at {Time}", DateTime.UtcNow);

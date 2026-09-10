@@ -19,18 +19,14 @@ public class EspnControllerTests
 {
     private readonly IEspnCacheService _espnCacheService;
     private readonly ICfbCacheService _cfbCacheService;
-    private readonly ICfbLiveScoreFetcher _cfbFetcher;
-    private readonly ICfbRepository _cfbRepo;
     private readonly EspnController _sut;
 
     public EspnControllerTests()
     {
         _espnCacheService = Substitute.For<IEspnCacheService>();
         _cfbCacheService = Substitute.For<ICfbCacheService>();
-        _cfbFetcher = Substitute.For<ICfbLiveScoreFetcher>();
-        _cfbRepo = Substitute.For<ICfbRepository>();
 
-        _sut = new EspnController(_espnCacheService, _cfbCacheService, _cfbFetcher, _cfbRepo);
+        _sut = new EspnController(_espnCacheService, _cfbCacheService);
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -129,15 +125,15 @@ public class EspnControllerTests
         Assert.IsType<EspnScores>(ok.Value);
     }
 
-    // ── GetCfbScoresForSlate (direct/uncached, specific slate — mirrors GetWeekScores) ─
+    // ── GetCfbScoresForSlate (settled-or-live for a specific slate — mirrors GetWeekScores;
+    //    frizat-d0t: now delegates to ICfbCacheService.GetSlateScoresAsync instead of resolving
+    //    the slate + calling ICfbLiveScoreFetcher directly) ─
 
     [Fact]
     public async Task GetCfbScoresForSlate_ReturnsOk_WithScores()
     {
-        var slate = new CfbSlates { Id = 7, Season = 2026 };
-        _cfbRepo.GetSlateByIdAsync(7).Returns(slate);
         var scores = new EspnScores();
-        _cfbFetcher.FetchForSlateAsync(slate).Returns(scores);
+        _cfbCacheService.GetSlateScoresAsync(7).Returns(scores);
 
         var result = await _sut.GetCfbScoresForSlate(7);
 
@@ -148,13 +144,12 @@ public class EspnControllerTests
     [Fact]
     public async Task GetCfbScoresForSlate_ReturnsOk_Empty_WhenSlateNotFound()
     {
-        _cfbRepo.GetSlateByIdAsync(999).Returns((CfbSlates?)null);
+        _cfbCacheService.GetSlateScoresAsync(999).Returns((EspnScores?)null);
 
         var result = await _sut.GetCfbScoresForSlate(999);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.IsType<EspnScores>(ok.Value);
-        await _cfbFetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
     }
 
     // ── GetLiveGames ─────────────────────────────────────────────────────────
