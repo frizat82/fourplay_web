@@ -1,4 +1,4 @@
-export type WeekResult = 'Won' | 'Lost' | 'MissingPicks' | 'MissingGameResults';
+export type WeekResult = 'Won' | 'Lost' | 'MissingPicks' | 'MissingGameResults' | 'Excluded';
 
 export interface LeaderboardWeekResults {
   week: number;

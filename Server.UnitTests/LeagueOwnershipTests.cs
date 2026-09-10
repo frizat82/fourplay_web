@@ -257,6 +257,60 @@ public class LeagueOwnershipTests
         await repo.DidNotReceive().UpdateLeagueJuiceMappingAsync(Arg.Any<LeagueJuiceMapping>());
     }
 
+    // frizat-o3x: StartWeek shares tease points' lock boundary — changing it after the season's
+    // own week 1 has already started is exactly the same "retroactively changes an
+    // already-decided week's terms" hazard that locked Juice/JuiceDivisional/JuiceConference.
+    [Fact]
+    public async Task UpdateJuice_RejectsStartWeekChange_OnceSeasonHasStarted()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5, StartWeek = 1 });
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
+            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+                FirstGameOfWeekStartDatetime = new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc) },
+        });
+
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 5, StartWeek: 2), BuildScheduleSource(repo));
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceive().UpdateLeagueJuiceMappingAsync(Arg.Any<LeagueJuiceMapping>());
+    }
+
+    [Fact]
+    public async Task UpdateJuice_AllowsStartWeekChange_BeforeSeasonHasStarted()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5, StartWeek = 1 });
+        // Far-future date, so the season hasn't started yet — no config row needed for this repo
+        // call since GetNflSeasonWeekConfigsAsync isn't stubbed with any matching rows, i.e. the
+        // season genuinely has no known start date yet.
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig>());
+
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 5, StartWeek: 3), BuildScheduleSource(repo));
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).UpdateLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.StartWeek == 3));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    [InlineData(-1)]
+    public async Task UpdateJuice_RejectsStartWeek_OutsideOneToFiveRange(int invalidStartWeek)
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5, StartWeek = 1 });
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig>());
+
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(13, 10, 6, 5, StartWeek: invalidStartWeek), BuildScheduleSource(repo));
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceive().UpdateLeagueJuiceMappingAsync(Arg.Any<LeagueJuiceMapping>());
+    }
+
     [Fact]
     public async Task UpdateJuice_AllowsWeeklyCostChange_EvenAfterSeasonHasStarted()
     {

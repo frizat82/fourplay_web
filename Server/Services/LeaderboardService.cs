@@ -27,8 +27,9 @@ public class LeaderboardService(
             var leagueScores = await leagueRepository.GetAllNflScoresForSeasonAsync((int)seasonYear);
             var leagueSpreads = await leagueRepository.GetAllNflSpreadsForSeasonAsync((int)seasonYear);
             var leagueInfo = await leagueRepository.GetLeagueJuiceMappingAsync(leagueId);
+            var seasonJuice = leagueInfo.FirstOrDefault(x => x.Season == seasonYear);
 
-            if (leagueInfo.Count == 0 || leagueInfo.All(x => x.Season != seasonYear)) {
+            if (seasonJuice is null) {
                 logger.LogError("League info not found.");
                 return leaderboard;
             }
@@ -49,7 +50,7 @@ public class LeaderboardService(
                     User = user.User
                 };
                 for (int week = 1; week <= maxWeek; week++) {
-                    var weekResult = await CalculatePicks(leagueId, seasonYear, leagueScores, spreadsByWeek[week], user, week, now);
+                    var weekResult = await CalculatePicks(leagueId, seasonYear, leagueScores, spreadsByWeek[week], user, week, now, seasonJuice.StartWeek);
                     userPoints.WeekResults[week - 1] = weekResult;
                 }
                 leaderboard.Add(userPoints);
@@ -65,10 +66,19 @@ public class LeaderboardService(
 
 
     private async Task<LeaderboardWeekResults> CalculatePicks(int leagueId, long seasonYear,
-        List<NflScores> userScores, IEnumerable<NflSpreads> weekSpreads, LeagueUserMapping user, int week, DateTimeOffset now) {
+        List<NflScores> userScores, IEnumerable<NflSpreads> weekSpreads, LeagueUserMapping user, int week, DateTimeOffset now, int startWeek) {
         var weekResult = new LeaderboardWeekResults {
             Week = week
         };
+
+        // frizat-o3x: a week before the league's configured StartWeek needs no pick/spread
+        // evaluation at all — it's not a win, loss, or pending state, just excluded from the
+        // league's season entirely (see LeaderboardSettlementHelper for why this must never be
+        // confused with MissingPicks/MissingGameResults).
+        if (GameHelpers.IsWeekExcludedFromSeason(week, startWeek)) {
+            weekResult.WeekResult = WeekResult.Excluded;
+            return weekResult;
+        }
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var spreadCalculatorBuilder = scope.ServiceProvider.GetRequiredService<ISpreadCalculatorBuilder>();
@@ -143,7 +153,7 @@ public class LeaderboardService(
             return leaderboard;
         }
 
-        return LeaderboardSettlementHelper.SettleWeeks(leaderboard, leagueJuice.WeeklyCost, maxWeek);
+        return LeaderboardSettlementHelper.SettleWeeks(leaderboard, leagueJuice.WeeklyCost, maxWeek, leagueJuice.StartWeek);
     }
 
 }

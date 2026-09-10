@@ -172,6 +172,14 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
           color: 'info.main',
           fontWeight: 500,
         };
+      // frizat-o3x: a week before the league's configured StartWeek — not a win, loss, or
+      // pending state, so it must not read as a loss (the `default` case below, error/red).
+      case 'Excluded':
+        return {
+          backgroundColor: 'action.hover',
+          color: 'text.disabled',
+          fontWeight: 500,
+        };
       default:
         return {
           backgroundColor: alpha(theme.palette.error.main, 0.16),
