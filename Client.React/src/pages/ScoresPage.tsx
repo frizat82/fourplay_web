@@ -12,6 +12,7 @@ import WeekYearSelector from '../components/WeekYearSelector';
 import NoLeague from '../components/NoLeague';
 import QueryErrorAlert from '../components/QueryErrorAlert';
 import SpreadRelease from '../components/SpreadRelease';
+import ExcludedWeekBanner from '../components/ExcludedWeekBanner';
 import GameCardGridSkeleton from '../components/GameCardSkeleton';
 import TeamArt from '../components/sports/TeamArt';
 import RankBadge from '../components/sports/RankBadge';
@@ -20,10 +21,11 @@ import PickDialog from '../components/PickDialog';
 import FieldPosition from '../components/FieldPosition';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { isGameDecided, isGameFinal, isGameLive, isConsistentRedZone, spreadLabel } from '../utils/gameHelpers';
+import { isGameDecided, isGameFinal, isGameLive, isConsistentRedZone, spreadLabel, isWeekExcludedFromSeason } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
+import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
@@ -110,6 +112,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   const maxWeek = currentMaxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
   const maxSeason = currentMaxSeason ?? new Date().getFullYear();
   const minSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
+  const startWeek = useLeagueStartWeek(currentLeague, data?.season ?? new Date().getFullYear());
 
   const handleWeekChange = useCallback((week: number, meta?: { isPostSeason?: boolean }) => {
     const season = data?.season ?? new Date().getFullYear();
@@ -192,6 +195,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   // "no odds for the week I'm looking at" is the correct condition on its own (mirrors the
   // identical PicksPage.tsx fix, frizat-8y4).
   const oddsNotReady = !data.hasOdds;
+  const isWeekExcluded = isWeekExcludedFromSeason(data.week, startWeek);
 
   const games = showOnlyMyPicks
     ? sortedGames.filter(g =>
@@ -230,6 +234,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
       {oddsNotReady ? (
         <SpreadRelease sport={adapter.sport} />
+      ) : isWeekExcluded ? (
+        <ExcludedWeekBanner startWeek={startWeek} />
       ) : (
         <Grid container spacing={2}>
           {/* Controls row */}

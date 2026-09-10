@@ -150,6 +150,34 @@ describe('ScoresPage', () => {
     expect(screen.getByTestId('week-year-selector-container')).toBeInTheDocument();
   });
 
+  // frizat-u66: a league with StartWeek > 1 excludes weeks before it from scoring — the Scores
+  // page must say so clearly instead of showing an ordinary score grid that implies the week
+  // counts toward standings when it doesn't.
+  it('shows the excluded-week notice, not the score grid, for a week before the league StartWeek', async () => {
+    await setupDefaults({ week: 2 });
+    mockedGetLeagueJuice.mockResolvedValue([{
+      id: 1, leagueId: 1, leagueName: 'Test League', season: 2024,
+      juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5,
+      startWeek: 3, dateCreated: '', teaseLocked: false, weeklyCostLocked: false,
+    }]);
+    renderWithClient(<ScoresPage adapter={createNflAdapter()} />);
+    await screen.findByText(/Week Not Scored/i);
+    expect(screen.getByText(/starts scoring at Week 3/i)).toBeInTheDocument();
+    expect(screen.queryByText('24')).toBeNull();
+  });
+
+  it('shows the ordinary score grid, not the excluded-week notice, for a week at or after the league StartWeek', async () => {
+    await setupDefaults({ week: 2, gameStarted: true });
+    mockedGetLeagueJuice.mockResolvedValue([{
+      id: 1, leagueId: 1, leagueName: 'Test League', season: 2024,
+      juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5,
+      startWeek: 2, dateCreated: '', teaseLocked: false, weeklyCostLocked: false,
+    }]);
+    await renderPage();
+    expect(screen.queryByText(/Week Not Scored/i)).toBeNull();
+    expect(screen.getByText('24')).toBeInTheDocument();
+  });
+
   it('shows week title when scores available', async () => {
     await setupDefaults({ week: 5 });
     await renderPage();
