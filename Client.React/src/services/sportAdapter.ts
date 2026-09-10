@@ -159,7 +159,8 @@ export interface SportAdapter {
   /** Stable sport identifier — used as the React Query cache key prefix */
   sport: 'nfl' | 'cfb';
   pollIntervalMs: number;
-  /** SSE endpoint URL for live score push. Undefined on adapters that don't support it (e.g. CFB). */
+  /** SSE endpoint URL for live score push. Both nflAdapter and cfbAdapter set a real one today
+   * (CFB's is /api/cfb/live-stream); undefined only for an adapter with no SSE support at all. */
   sseUrl?: string;
   // loadJerseys is optional — if defined, PicksPage shows jerseys when data is non-empty
   weekSelectorConfig: {
