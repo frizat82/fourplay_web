@@ -38,13 +38,22 @@ describe('FieldPosition', () => {
     expect(screen.getByTestId('possession-arrow')).toHaveTextContent('◀');
   });
 
-  it('applies red zone styling when isRedZone is true', () => {
-    render(<FieldPosition situation={buildSituation({ isRedZone: true })} />);
+  it('applies red zone styling when isRedZone is true and yardLine actually supports it', () => {
+    render(<FieldPosition situation={buildSituation({ isRedZone: true, yardLine: 15 })} />);
     expect(screen.getByTestId('field-position-bar')).toHaveAttribute('data-redzone', 'true');
   });
 
   it('does not apply red zone styling when isRedZone is false', () => {
     render(<FieldPosition situation={buildSituation({ isRedZone: false })} />);
+    expect(screen.getByTestId('field-position-bar')).toHaveAttribute('data-redzone', 'false');
+  });
+
+  // frizat: live bug report — ESPN's own situation.isRedZone was observed true with yardLine=35
+  // (not within 20 of either goal), and this card's red border trusted the raw flag directly while
+  // the stripe below it (correctly) didn't, so the two visually contradicted each other. Both now
+  // go through the same isConsistentRedZone check (utils/gameHelpers.ts).
+  it('does not apply red zone styling when isRedZone is true but yardLine is inconsistent (midfield)', () => {
+    render(<FieldPosition situation={buildSituation({ isRedZone: true, yardLine: 35 })} />);
     expect(screen.getByTestId('field-position-bar')).toHaveAttribute('data-redzone', 'false');
   });
 

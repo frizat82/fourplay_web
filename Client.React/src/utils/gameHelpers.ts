@@ -2,6 +2,7 @@ import type { Competition, Competitor, EspnScores, Event, TypeName, HomeAway, Es
 import { toLocalDisplay } from './time';
 import type { PickType } from '../types/picks';
 import type { GameStatusValue } from '../services/sportAdapter';
+import type { GameSituation } from '../types/liveGame';
 
 /** True only once a game has finished — the canonical GameView.gameStatus check. */
 export function isGameFinal(status: GameStatusValue): boolean {
@@ -325,6 +326,16 @@ export function isHomeAway(value: HomeAway, expected: 'home' | 'away') {
     return expected === 'away' ? value === 0 : value === 1;
   }
   return value === expected;
+}
+
+// ESPN's live situation.isRedZone flag has been observed true with a yardLine nowhere near
+// either goal (e.g. yardLine=35 mid-drive, likely a momentarily-stale value right after a play).
+// The actual red zone is the 20 yards nearest whichever goal the ball is closest to, so cross-
+// check the flag against yardLine before trusting it — anything that draws a "red zone" UI
+// element (the ScoresPage card border, FieldPosition's stripe) must use this, not the raw flag,
+// so the two can never visually disagree with each other the way they did before this existed.
+export function isConsistentRedZone(situation: Pick<GameSituation, 'isRedZone' | 'yardLine'>): boolean {
+  return situation.isRedZone && (situation.yardLine <= 20 || situation.yardLine >= 80);
 }
 
 function isRecordType(value: EspnRecordType, expected: 'total' | 'road' | 'home') {
