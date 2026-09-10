@@ -20,7 +20,7 @@ import PickDialog from '../components/PickDialog';
 import FieldPosition from '../components/FieldPosition';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { isGameDecided, isGameFinal, isGameLive, spreadLabel } from '../utils/gameHelpers';
+import { isGameDecided, isGameFinal, isGameLive, isConsistentRedZone, spreadLabel } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
@@ -282,7 +282,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                 const ac = game.awayCovers ?? null;
                 const ov = game.overWins ?? null;
                 const uv = game.underWins ?? null;
-                const isCardRedZone = isLive && Boolean(game.situation?.isRedZone);
+                const isCardRedZone = isLive && game.situation != null && isConsistentRedZone(game.situation);
 
                 return (
                   <Grid size={{ xs: 12, md: 6, lg: 4 }} key={game.id}>
