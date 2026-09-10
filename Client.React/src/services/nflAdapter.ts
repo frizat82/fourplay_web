@@ -12,6 +12,7 @@ import {
   isPostSeason as isPostSeasonHelper,
   isGameOver, isGameStarted, toGameStatus,
   computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins,
+  mergeLiveSituation,
 } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, PickView, PickType } from './sportAdapter';
 import { revealPicksForStartedGames, memoizeOnce } from './sportAdapter';
@@ -106,9 +107,7 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
         const home = getHomeTeamAbbr(comp);
         const away = getAwayTeamAbbr(comp);
         const live = liveGames.find(g => g.homeTeam === home && g.awayTeam === away);
-        // Merge period/clock from LiveGame into the situation so ScoresPage can display "Q3 8:42"
-        const sit = live?.situation ?? null;
-        map.set(`${home}-${away}`, sit || live?.period ? { ...(sit ?? { possessionTeam: null, isHomePossession: false, yardLine: 0, down: 0, distance: 0, isRedZone: false, downDistanceText: '' }), period: live?.period, displayClock: live?.displayClock } : null);
+        map.set(`${home}-${away}`, mergeLiveSituation(live));
       }
     }
   } catch { /* live games unavailable */ }
