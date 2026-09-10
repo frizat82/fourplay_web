@@ -13,7 +13,7 @@ import NoLeague from '../components/NoLeague';
 import QueryErrorAlert from '../components/QueryErrorAlert';
 import SpreadRelease from '../components/SpreadRelease';
 import GameCardGridSkeleton from '../components/GameCardSkeleton';
-import TeamHelmet from '../components/sports/TeamHelmet';
+import TeamArt from '../components/sports/TeamArt';
 import RankBadge from '../components/sports/RankBadge';
 import UserPicksMatrix from '../components/UserPicksMatrix';
 import PickDialog from '../components/PickDialog';
@@ -254,6 +254,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
           {showMatrixView ? (
             <Grid size={12}>
               <UserPicksMatrix
+                sport={adapter.sport}
                 users={users}
                 picks={(data.allPicks ?? []).map(p => ({
                   id: 0, leagueId: 0, userId: p.userId, userName: p.userName,
@@ -292,13 +293,13 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                     >
                       {/* Score header */}
                       <Stack direction="row" alignItems="center" justifyContent="space-between">
-                        <TeamHelmet abbr={game.awayTeam} size={50} />
+                        <TeamArt abbr={game.awayTeam} sport={adapter.sport} size={50} />
                         <Typography variant="h6">{isFinal || isLive ? game.awayScore : ''}</Typography>
                         <Typography variant="body2" textAlign="center">
                           {isFinal ? 'Final' : isLive ? (game.situation?.period && game.situation?.displayClock ? `Q${game.situation.period} ${game.situation.displayClock}` : 'Live') : new Date(game.gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                         </Typography>
                         <Typography variant="h6">{isFinal || isLive ? game.homeScore : ''}</Typography>
-                        <TeamHelmet abbr={game.homeTeam} size={50} />
+                        <TeamArt abbr={game.homeTeam} sport={adapter.sport} size={50} />
                       </Stack>
 
                       {/* Field position — shared by both NFL and CFB adapters, which populate GameSituation identically */}
@@ -411,6 +412,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
       {dialogState && (
         <PickDialog
+          sport={adapter.sport}
           open={dialogState.open}
           onClose={() => setDialogState(null)}
           teamAbbr={dialogState.teamAbbr}

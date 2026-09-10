@@ -169,18 +169,6 @@ export function getHomeTeam(competition: Competition) {
   return found;
 }
 
-export function getAwayTeamLogo(competition: Competition) {
-  return getTeamLogo(getAwayTeamAbbr(competition));
-}
-
-export function getHomeTeamLogo(competition: Competition) {
-  return getTeamLogo(getHomeTeamAbbr(competition));
-}
-
-export function getTeamLogo(teamAbbr: string) {
-  return `/Icons/Teams/${teamAbbr.toLowerCase()}.png`;
-}
-
 export function getTeamScore(competitor: Competitor): number {
   const raw = competitor.score as unknown;
   if (typeof raw === 'number') return raw;

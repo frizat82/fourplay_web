@@ -15,11 +15,12 @@ import {
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import ArrowCircleDownIcon from '@mui/icons-material/ArrowCircleDown';
 import CloseIcon from '@mui/icons-material/Close';
-import TeamHelmet from './sports/TeamHelmet';
+import TeamArt from './sports/TeamArt';
 
 interface PickDialogProps {
   open: boolean;
   onClose: () => void;
+  sport: 'nfl' | 'cfb';
   userNames: string[];
   userNamesOver: string[];
   userNamesUnder: string[];
@@ -30,6 +31,7 @@ interface PickDialogProps {
 export default function PickDialog({
   open,
   onClose,
+  sport,
   userNames,
   userNamesOver,
   userNamesUnder,
@@ -48,7 +50,7 @@ export default function PickDialog({
         <Stack direction="row" alignItems="center" gap={1}>
           {pickType === 'Spread' && (
             <>
-              <TeamHelmet abbr={teamAbbr} size={44} />
+              <TeamArt abbr={teamAbbr} sport={sport} size={44} />
               <Typography variant="h5" fontWeight={700}>{teamAbbr}</Typography>
             </>
           )}
