@@ -8,6 +8,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 - Added: leagues can now set a Start Week (1-5, default 1) on the Juice tab so a league's season can skip early weeks — mainly for CFB leagues that want to skip week 1's often lopsided matchups. Weeks before it require no picks, don't appear on the leaderboard, and aren't billed the weekly cost; the following week settles normally, not as a doubled pot
 - Added: Picks and Scores now show a clear "Week Not Scored" notice instead of an ordinary pick grid for any week before a league's configured Start Week, so members don't submit picks that silently don't count; the server also rejects a direct pick submission for those weeks
+- Fixed: the Scores page's live-update connection could silently go dead for the rest of a game — a dropped network blip, laptop sleep, or wifi/mobile handoff now triggers an automatic reconnect instead of leaving live scores stuck until you reload the page
 
 ## 2026-09-09
 

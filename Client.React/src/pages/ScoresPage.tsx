@@ -27,6 +27,7 @@ import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
+import { useReconnectingEventSource } from '../utils/useReconnectingEventSource';
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
 
@@ -99,15 +100,12 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     return () => document.removeEventListener('visibilitychange', h);
   }, []);
 
-  // SSE — primary update mechanism when on current NFL week with active games; polling above
-  // is the fallback (and the only mechanism at all for adapters with no sseUrl, e.g. CFB).
-  useEffect(() => {
-    if (!isCurrentWeek || !isPageVisible || !leaguesLoaded || !data?.hasActiveGames || !adapter.sseUrl) return;
-    const es = new EventSource(adapter.sseUrl, { withCredentials: true });
-    es.onmessage = () => void refetch();
-    es.onerror = () => es.close(); // fallback polling takes over
-    return () => es.close();
-  }, [isCurrentWeek, isPageVisible, leaguesLoaded, data?.hasActiveGames, adapter.sseUrl, refetch]);
+  // SSE — primary update mechanism when on current NFL/CFB week with active games; polling
+  // above is the fallback. Reconnects with backoff on drop and immediately on the browser's
+  // `online` event (frizat-a2u) — a dropped connection alone doesn't change any of these gating
+  // conditions, so without this the stream stayed dead for the rest of the page session.
+  const sseEnabled = isCurrentWeek && isPageVisible && leaguesLoaded && !!data?.hasActiveGames && !!adapter.sseUrl;
+  useReconnectingEventSource(sseEnabled ? adapter.sseUrl : null, () => void refetch());
 
   const maxWeek = currentMaxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
   const maxSeason = currentMaxSeason ?? new Date().getFullYear();
