@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-10
+
+- Added: leagues can now set a Start Week (1-5, default 1) on the Juice tab so a league's season can skip early weeks — mainly for CFB leagues that want to skip week 1's often lopsided matchups. Weeks before it require no picks, don't appear on the leaderboard, and aren't billed the weekly cost; the following week settles normally, not as a doubled pot
+
 ## 2026-09-09
 
 - Fixed: a live game's Scores card could show the red "red zone" border while the field position bar below it showed the ball outside any red zone — both now agree, since ESPN's red zone flag can be momentarily inconsistent with the actual yard line

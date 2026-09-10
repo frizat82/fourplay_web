@@ -135,7 +135,7 @@ export default function LeaguePortalPage() {
   // Juice settings
   const [juiceMappings, setJuiceMappings] = useState<LeagueJuiceMappingDto[]>([]);
   const [selectedSeason, setSelectedSeason] = useState(CURRENT_SEASON);
-  const [juiceForm, setJuiceForm] = useState({ juice: 0, juiceDivisional: 0, juiceConference: 0, weeklyCost: 0 });
+  const [juiceForm, setJuiceForm] = useState({ juice: 0, juiceDivisional: 0, juiceConference: 0, weeklyCost: 0, startWeek: 1 });
   const [savingJuice, setSavingJuice] = useState(false);
   const [rollingForward, setRollingForward] = useState(false);
 
@@ -225,9 +225,10 @@ export default function LeaguePortalPage() {
         juiceDivisional: mapping.juiceDivisional,
         juiceConference: mapping.juiceConference,
         weeklyCost: mapping.weeklyCost,
+        startWeek: mapping.startWeek,
       });
     } else {
-      setJuiceForm({ juice: 0, juiceDivisional: 0, juiceConference: 0, weeklyCost: 0 });
+      setJuiceForm({ juice: 0, juiceDivisional: 0, juiceConference: 0, weeklyCost: 0, startWeek: 1 });
     }
   }, [selectedSeason]);
 
@@ -969,11 +970,13 @@ function InviteStatusTable({ title, rows, showActions = false }: { title: string
   );
 }
 
+const START_WEEK_OPTIONS = [1, 2, 3, 4, 5];
+
 interface JuiceTabProps {
   availableSeasons: number[];
   selectedSeason: number;
   onSeasonChange: (s: number) => void;
-  juiceForm: { juice: number; juiceDivisional: number; juiceConference: number; weeklyCost: number };
+  juiceForm: { juice: number; juiceDivisional: number; juiceConference: number; weeklyCost: number; startWeek: number };
   onJuiceFormChange: (field: string, value: number) => void;
   hasMappingForSeason: boolean;
   locked: boolean;
@@ -1000,6 +1003,8 @@ function JuiceTab({
   const weeklyCostField = useNumericField(juiceForm.weeklyCost, (n) => onJuiceFormChange('weeklyCost', n), { integerOnly: true });
   const teaseDisabled = locked || teaseLocked;
   const weeklyCostDisabled = locked || weeklyCostLocked;
+  // Start Week shares tease points' lock boundary — see LeagueController.UpdateLeagueJuice.
+  const startWeekDisabled = teaseDisabled;
 
   return (
     <Box>
@@ -1038,8 +1043,25 @@ function JuiceTab({
           Weekly Cost is locked once the season's final week has started.
         </Typography>
       )}
+      {juiceForm.startWeek > 1 && (
+        <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+          Weeks 1–{juiceForm.startWeek - 1} won't require picks or appear on the leaderboard for this league — Week {juiceForm.startWeek} is treated as a normal first week.
+        </Typography>
+      )}
 
       <Stack spacing={2} sx={{ maxWidth: 400 }}>
+        <FormControl size="small" disabled={startWeekDisabled}>
+          <InputLabel>Start Week</InputLabel>
+          <Select
+            value={juiceForm.startWeek}
+            label="Start Week"
+            onChange={(e) => onJuiceFormChange('startWeek', Number(e.target.value))}
+          >
+            {START_WEEK_OPTIONS.map((w) => (
+              <MenuItem key={w} value={w}>{w === 1 ? '1 (default — full season)' : w}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         <TextField
           label="Tease Pts (Regular Season)"
           type="number"

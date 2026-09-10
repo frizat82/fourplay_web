@@ -122,6 +122,32 @@ public class LeaderboardServiceTests {
 
     }
 
+    // frizat-o3x: a league with StartWeek > 1 must mark every week before it Excluded — never
+    // MissingPicks/MissingGameResults, which LeaderboardSettlementHelper would otherwise (before
+    // this feature) risk treating as a false all-lost push and doubling the pot for the league's
+    // real first week.
+    [Fact]
+    public async Task CalculateRegularSeasonPicks_MarksWeeksBeforeStartWeekAsExcluded_NotMissingPicks() {
+        var dbFactory = new DbContextFactoryStub();
+        await dbFactory.PopulateUserTestData();
+        await dbFactory.PopulateScoresTestDataAsync();
+        var dbContext = await dbFactory.CreateDbContextAsync();
+        var juiceMapping = dbContext.LeagueJuiceMapping.Single();
+        juiceMapping.StartWeek = 2;
+        await dbContext.SaveChangesAsync();
+
+        var repository = new LeagueRepository(dbFactory);
+        var spreadCalculatorBuilder =
+            new SpreadCalculatorBuilder(repository, new MemoryCache(new MemoryCacheOptions()));
+        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
+
+        var result = await service.BuildLeaderboard(1, 2024);
+
+        Assert.Equal(WeekResult.Excluded, result.First().WeekResults[0].WeekResult); // week 1
+        Assert.NotEqual(WeekResult.Excluded, result.First().WeekResults[1].WeekResult); // week 2 — real
+    }
+
     [Fact]
     public async Task CalculateUserTotals_ReturnsCorrectTotals_WithMultipleWinnersAndLosers() {
         // Arrange
@@ -509,6 +535,38 @@ public class LeaderboardServiceTests {
 
         Assert.Single(result);
         Assert.Equal(WeekResult.Won, result[0].WeekResults[0].WeekResult);
+    }
+
+    // frizat-o3x: mirrors CalculateRegularSeasonPicks_MarksWeeksBeforeStartWeekAsExcluded on the
+    // CFB side — a league with StartWeek=2 must mark slate 1 Excluded, never MissingPicks.
+    [Fact]
+    public async Task CfbBuildLeaderboard_MarksSlatesBeforeStartWeekAsExcluded_NotMissingPicks() {
+        var userId = Guid.NewGuid().ToString();
+        var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId);
+
+        leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(
+            new LeagueJuiceMapping { Id = 1, LeagueId = 1, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5, StartWeek = 2 });
+
+        var slate1 = new CfbSlates { Id = 1, Season = 2025, SlateNumber = 1, SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+        var slate2 = new CfbSlates { Id = 2, Season = 2025, SlateNumber = 2, SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+        cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate1, slate2]);
+        // Slate 2 needs its own spreads/scores/picks so BuildLeaderboard doesn't just see an empty
+        // slate — reuse the same fixture shape slate 1 already has in BuildCfbMocks.
+        cfbRepo.GetSpreadsForSlateAsync(2).Returns((IEnumerable<CfbSpreads>)[
+            new CfbSpreads { Id = 2, CfbSlateId = 2, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true }
+        ]);
+        cfbRepo.GetScoresForSlateAsync(2).Returns((IEnumerable<CfbScores>)[
+            new CfbScores { Id = 2, CfbSlateId = 2, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal }
+        ]);
+        picksRepo.GetUserPicksAsync(1, 2, userId).Returns((IEnumerable<CfbPicks>)[
+            new CfbPicks { UserId = userId, LeagueId = 1, CfbSlateId = 2, Team = "IU", PickType = PickType.Spread, Season = 2025 }
+        ]);
+
+        var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
+        var result = await service.BuildLeaderboard(1, 2025);
+
+        Assert.Equal(WeekResult.Excluded, result[0].WeekResults[0].WeekResult); // slate 1
+        Assert.NotEqual(WeekResult.Excluded, result[0].WeekResults[1].WeekResult); // slate 2 — real
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Enum;
 
@@ -20,10 +21,20 @@ public static class LeaderboardSettlementHelper {
     // excluded from both buckets and their Score stays untouched until their own pick resolves.
     // The push-doubling pot roll only ever fires once a week is genuinely fully decided — a
     // provisional split must never trigger, or skip, it.
-    public static List<LeaderboardModel> SettleWeeks(List<LeaderboardModel> leaderboard, long baseWeeklyCost, int weekCount) {
+    public static List<LeaderboardModel> SettleWeeks(List<LeaderboardModel> leaderboard, long baseWeeklyCost, int weekCount, int startWeek = 1) {
         var currentWeeklyCost = baseWeeklyCost;
 
         for (int i = 0; i < weekCount; i++) {
+            // frizat-o3x: a week before the league's configured StartWeek — no bucketing, no Score
+            // change, no pot growth. Takes startWeek explicitly (rather than inferring exclusion
+            // by scanning for WeekResult.Excluded cells) so this boundary can't silently drift if
+            // a future producer ever populates WeekResults a different way — a week/index compare
+            // is exact where a "did every producer mark this cell the same way" scan is inferred.
+            // Without this, an all-excluded week is indistinguishable from an all-MissingPicks
+            // week (zero winners, zero losers, not pending) and would otherwise fall into the push
+            // branch below, doubling the pot for the league's real first week.
+            if (GameHelpers.IsWeekExcludedFromSeason(i + 1, startWeek)) continue;
+
             var weekPending = IsWeekPending(leaderboard, i);
             var winners = new List<LeaderboardWeekResults>();
             var losers = new List<LeaderboardWeekResults>();

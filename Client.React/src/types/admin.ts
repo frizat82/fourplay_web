@@ -19,8 +19,10 @@ export interface LeagueJuiceMappingDto {
   juiceDivisional: number;
   juiceConference: number;
   weeklyCost: number;
+  /** Which week/slate this league's season effectively starts at (default 1 = no exclusion). Shares teaseLocked below. */
+  startWeek: number;
   dateCreated: string;
-  /** True once the season's first week/slate has started — tease points are no longer editable. */
+  /** True once the season's first week/slate has started — tease points and Start Week are no longer editable. */
   teaseLocked: boolean;
   /** True once the season's final week/slate (Super Bowl / Championship) has started — Weekly Cost is no longer editable. */
   weeklyCostLocked: boolean;
@@ -95,6 +97,7 @@ export interface LeagueJuiceUpdateDto {
   juiceDivisional: number;
   juiceConference: number;
   weeklyCost: number;
+  startWeek: number;
 }
 
 export interface LeagueCreateDto {
