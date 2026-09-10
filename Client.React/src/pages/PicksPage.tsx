@@ -247,6 +247,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
               <Grid size={{ xs: 12, lg: 4 }} key={game.id}>
                 <GameCard
                   mode="pick"
+                  sport={adapter.sport}
                   homeTeam={game.homeTeam}
                   awayTeam={game.awayTeam}
                   homeSpread={game.homeSpread}

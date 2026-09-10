@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import GameCard from '../components/sports/GameCard';
 
-vi.mock('../components/sports/TeamHelmet', () => ({
+vi.mock('../components/sports/TeamArt', () => ({
   default: ({ abbr }: { abbr: string }) => <div data-testid={`helmet-${abbr}`}>{abbr}</div>,
 }));
 
@@ -13,6 +13,7 @@ vi.mock('../components/WeatherIcon', () => ({
 }));
 
 const baseProps = {
+  sport: 'nfl' as const,
   homeTeam: 'KC',
   awayTeam: 'BUF',
   homeSpread: -3,
