@@ -19,6 +19,16 @@ export function isGameDecided(status: GameStatusValue): boolean {
   return isGameFinal(status) || isGameLive(status);
 }
 
+/**
+ * Mirrors Shared/Helpers/GameHelpers.cs's IsWeekExcludedFromSeason exactly — a league's
+ * configured StartWeek (frizat-o3x) excludes any earlier week/slate from scoring. `week` is
+ * whichever week/slate number the currently-viewed page is on (NFL week or CFB slate number,
+ * both already unified under GameView/WeekState — no sport branching needed here).
+ */
+export function isWeekExcludedFromSeason(week: number, startWeek: number): boolean {
+  return week < startWeek;
+}
+
 // Through the 2025 season, ESPN skipped postseason week 4 for the Pro Bowl (Super Bowl was raw
 // ESPN week 5). Must match the backend's GameHelpers.LastSeasonEspnSkippedProBowlWeek exactly —
 // see docs/ESPNProBowl.md and Shared/Helpers/GameHelpers.cs's identical constant (frizat-4k9).
