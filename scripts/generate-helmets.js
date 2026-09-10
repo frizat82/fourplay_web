@@ -9,11 +9,15 @@ const fs = require('fs');
 const path = require('path');
 
 const OUT_DIR = path.join(__dirname, '..', 'Client.React', 'public', 'Icons', 'Helmets');
-fs.mkdirSync(OUT_DIR, { recursive: true });
 
 // ── Team colors ──────────────────────────────────────────────────────────────
-const TEAMS = {
-  // NFL
+// Two separate objects (not one merged dict) because a few abbreviations are shared by an NFL
+// team and a CFB team — MIA (Dolphins/Hurricanes), CIN (Bengals/Bearcats), TEN
+// (Titans/Volunteers). A single flat object would silently let the CFB entry clobber the NFL
+// one (or vice versa) at the same key; download-team-logos.js needs both, distinctly, to
+// download sport-scoped real logos (frizat-cwj) — keeping them separate here is the source of
+// truth both scripts share, rather than one script regex-parsing the other's merged output.
+const NFL_TEAMS = {
   ARI:  { primary: '#97233f', secondary: '#ffb612' },
   ATL:  { primary: '#a71930', secondary: '#000000' },
   BAL:  { primary: '#241773', secondary: '#9e7c0c' },
@@ -46,7 +50,10 @@ const TEAMS = {
   TB:   { primary: '#d50a0a', secondary: '#34302b' },
   TEN:  { primary: '#0c2340', secondary: '#4b92db' },
   WAS:  { primary: '#5a1414', secondary: '#ffb612' },
-  // CFB — Power programs + regular Top 25 appearances
+};
+
+const CFB_TEAMS = {
+  // Power programs + regular Top 25 appearances
   ALA:  { primary: '#9e1b32', secondary: '#828a8f' },
   ARK:  { primary: '#9d2235', secondary: '#ffffff' },
   ASU:  { primary: '#8c1d40', secondary: '#ffc627' },
@@ -90,7 +97,7 @@ const TEAMS = {
   VT:   { primary: '#861f41', secondary: '#cf4420' },
   WASH: { primary: '#33006f', secondary: '#e8d3a2' },
   WIS:  { primary: '#c5050c', secondary: '#f7f7f7' },
-  // CFB — additional Top 25 programs
+  // Additional Top 25 programs
   APP:  { primary: '#000000', secondary: '#ffb612' },
   ARMY: { primary: '#000000', secondary: '#d4af37' },
   BOIS: { primary: '#0033a0', secondary: '#d64309' },
@@ -121,16 +128,6 @@ const TEAMS = {
   UTSA: { primary: '#f15a22', secondary: '#002147' },
   WMU:  { primary: '#6c4023', secondary: '#ffc62f' },
 };
-
-// ── Pick text color that contrasts against the primary background ─────────────
-function textColor(hex) {
-  const r = parseInt(hex.slice(1,3), 16);
-  const g = parseInt(hex.slice(3,5), 16);
-  const b = parseInt(hex.slice(5,7), 16);
-  // Perceived luminance
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.45 ? '#111111' : '#ffffff';
-}
 
 // ── Badge SVG — clean shield, no text (abbr shown below in TeamHelmet component)
 function makeBadge(abbr, primary, secondary) {
@@ -169,12 +166,26 @@ function makeBadge(abbr, primary, secondary) {
 </svg>`;
 }
 
-// ── Generate files ──────────────────────────────────────────────────────────
-let count = 0;
-for (const [abbr, { primary, secondary }] of Object.entries(TEAMS)) {
-  const svg = makeBadge(abbr, primary, secondary);
-  const file = path.join(OUT_DIR, `${abbr.toLowerCase()}.svg`);
-  fs.writeFileSync(file, svg, 'utf8');
-  count++;
+function generate() {
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  // Merged in NFL-then-CFB order, matching the flat dict this used to be — a CFB team sharing an
+  // NFL team's abbreviation (MIA/CIN/TEN) still wins the single shared Helmets slot, unchanged
+  // from prior behavior. Fixing that collision for the *synthetic badge* set is a separate,
+  // pre-existing concern outside this script's scope.
+  const merged = { ...NFL_TEAMS, ...CFB_TEAMS };
+  let count = 0;
+  for (const [abbr, { primary, secondary }] of Object.entries(merged)) {
+    const svg = makeBadge(abbr, primary, secondary);
+    const file = path.join(OUT_DIR, `${abbr.toLowerCase()}.svg`);
+    fs.writeFileSync(file, svg, 'utf8');
+    count++;
+  }
+  console.log(`✓ Generated ${count} team badge SVGs → ${OUT_DIR}`);
 }
-console.log(`✓ Generated ${count} team badge SVGs → ${OUT_DIR}`);
+
+// Only regenerate the SVGs when run directly (`node scripts/generate-helmets.js`) — a module
+// require()-ing this file for NFL_TEAMS/CFB_TEAMS (e.g. download-team-logos.js) must not have the
+// side effect of rewriting every Helmets SVG on disk.
+if (require.main === module) generate();
+
+module.exports = { NFL_TEAMS, CFB_TEAMS };
