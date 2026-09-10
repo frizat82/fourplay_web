@@ -122,9 +122,14 @@ public class CfbLeaderboardService(
             return result;
         }
 
+        // One calculator per slate (mirrors LeaderboardService.IsPickAWinner's per-week pattern)
+        // rather than rebuilding it per pick — the full spreads list is the odds source every
+        // pick's team lookup resolves against, same shape CfbPicksController.GetSpreads already
+        // constructs from.
+        var spreadCalculator = new SpreadCalculator(spreads, juice);
         var allWon = picks.All(pick => {
             try {
-                return DidPickWin(pick, spreads, scores, juice);
+                return DidPickWin(pick, spreads, scores, spreadCalculator);
             } catch (Exception ex) {
                 logger.LogError(ex, "Error evaluating CFB pick {@Pick}", pick);
                 return false;
@@ -144,7 +149,7 @@ public class CfbLeaderboardService(
         return result;
     }
 
-    private static bool DidPickWin(CfbPicks pick, List<CfbSpreads> spreads, List<CfbScores> scores, double juice) {
+    private static bool DidPickWin(CfbPicks pick, List<CfbSpreads> spreads, List<CfbScores> scores, ISpreadCalculator spreadCalculator) {
         var spread = spreads.FirstOrDefault(s => s.HomeTeam == pick.Team || s.AwayTeam == pick.Team);
         if (spread is null) return true;
 
@@ -154,14 +159,8 @@ public class CfbLeaderboardService(
         var isHome = spread.HomeTeam == pick.Team;
         var teamScore = isHome ? score.HomeTeamScore : score.AwayTeamScore;
         var otherScore = isHome ? score.AwayTeamScore : score.HomeTeamScore;
-        var rawSpread = isHome ? spread.HomeTeamSpread : spread.AwayTeamSpread;
 
-        return pick.PickType switch {
-            PickType.Spread => teamScore + rawSpread + juice - otherScore > 0,
-            PickType.Over => teamScore + otherScore > spread.OverUnder - juice,
-            PickType.Under => teamScore + otherScore < spread.OverUnder + juice,
-            _ => false,
-        };
+        return spreadCalculator.DidUserWinPick(pick.Team, teamScore, otherScore, pick.PickType);
     }
 
     private static List<LeaderboardModel> CalculateTotals(List<LeaderboardModel> leaderboard,
