@@ -202,6 +202,59 @@ describe('nflAdapter', () => {
     });
   });
 
+  // frizat-66c: when ESPN's live feed gives period/displayClock (e.g. "Q3") but the fuller
+  // situation sub-object is momentarily absent (a real, apparently common gap in ESPN's own live
+  // payload — between snaps, right after a play, etc.), the old code fabricated a full placeholder
+  // situation object (yardLine: 0, downDistanceText: '') merged with the real period/clock — so
+  // FieldPosition rendered a ball at a fake position with a blank down-distance caption instead of
+  // rendering nothing. CFB's cfbAdapter.ts never had this bug (fetchCfbEspnData only merges
+  // period/clock onto a REAL situation, returning null otherwise) — this mirrors that exact,
+  // already-correct behavior so NFL and CFB share one shape again.
+  describe('situation mapping', () => {
+    // situation (ball/down-distance, FieldPosition) and period/displayClock (status line) are
+    // two independently-nullable concerns — a real ESPN gap at halftime (no active down, so no
+    // situation detail) must not also blank out the "Q2 0:00" status line, which only needs
+    // LiveGame's own top-level period/displayClock, not anything nested inside situation.
+    it('does not fabricate a placeholder situation when ESPN gives period/clock but no full situation detail — but still surfaces period/displayClock for the status line', async () => {
+      vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
+      vi.mocked(doOddsExist).mockResolvedValue(false);
+      vi.mocked(getLiveGames).mockResolvedValue([{
+        homeTeam: 'KC', awayTeam: 'BUF', homeScore: 24, awayScore: 17,
+        isCompleted: false, kickoffUtc: new Date().toISOString(),
+        situation: null, period: 2, displayClock: '0:00',
+      }]);
+
+      const result = await adapter.loadCurrentScores(1, 'user1');
+
+      expect(result.games[0].situation).toBeNull();
+      expect(result.games[0].period).toBe(2);
+      expect(result.games[0].displayClock).toBe('0:00');
+    });
+
+    it('surfaces a real situation object unmodified, alongside period/displayClock as separate fields', async () => {
+      vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
+      vi.mocked(doOddsExist).mockResolvedValue(false);
+      vi.mocked(getLiveGames).mockResolvedValue([{
+        homeTeam: 'KC', awayTeam: 'BUF', homeScore: 24, awayScore: 17,
+        isCompleted: false, kickoffUtc: new Date().toISOString(),
+        situation: {
+          possessionTeam: 'KC', isHomePossession: true, yardLine: 35,
+          down: 3, distance: 7, isRedZone: false, downDistanceText: '3rd & 7 at KC 35',
+        },
+        period: 3, displayClock: '8:42',
+      }]);
+
+      const result = await adapter.loadCurrentScores(1, 'user1');
+
+      expect(result.games[0].situation).toEqual({
+        possessionTeam: 'KC', isHomePossession: true, yardLine: 35,
+        down: 3, distance: 7, isRedZone: false, downDistanceText: '3rd & 7 at KC 35',
+      });
+      expect(result.games[0].period).toBe(3);
+      expect(result.games[0].displayClock).toBe('8:42');
+    });
+  });
+
   describe('config', () => {
     it('has pollIntervalMs > 0', () => {
       expect(adapter.pollIntervalMs).toBeGreaterThan(0);
