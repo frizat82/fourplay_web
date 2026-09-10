@@ -94,7 +94,14 @@ export interface GameView {
   homeRecord?: string;
   awayRecord?: string;
   // Scores page extras
+  // situation is the ball/down-distance detail FieldPosition renders — genuinely null (not
+  // fabricated) whenever ESPN's live feed omits it (frizat-66c). period/displayClock are a
+  // SEPARATE, independently-populated concern (ScoresPage's "Q3 8:42" status line) sourced from
+  // LiveGame's own top-level fields, not nested inside situation — ESPN (and our LiveGame model)
+  // already keeps these two apart; do not re-merge them into one object.
   situation?: import('../types/liveGame').GameSituation | null;
+  period?: number;
+  displayClock?: string;
   homeCovers?: boolean | null;  // null = not final / no odds
   awayCovers?: boolean | null;  // computed independently — NOT !homeCovers (teased spreads aren't mirror images)
   overWins?: boolean | null;
