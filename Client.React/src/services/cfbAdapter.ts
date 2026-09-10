@@ -1,6 +1,6 @@
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
-import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins, getCfbRequiredPicks, isGameLive, mergeLiveSituation } from '../utils/gameHelpers';
+import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins, getCfbRequiredPicks, isGameLive } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
@@ -50,7 +50,7 @@ function buildGamesFromEspn(
   spreads: CfbSpreadDto[],
   espnData: EspnScores | null,
   dbScores: CfbScoreDto[],
-  situationMap: Map<string, import('../types/liveGame').GameSituation | null>,
+  liveGameMap: Map<string, import('../types/liveGame').LiveGame>,
 ): GameView[] {
   // frizat: joined by home team abbreviation, not an ESPN event id — a team plays at most one
   // game per slate (the scope every caller of this function already loads spreads/scores at), so
@@ -116,10 +116,13 @@ function buildGamesFromEspn(
       spreadPostedAt: sp.dateCreated,
       homeRank: sp.homeTeamRank,
       awayRank: sp.awayTeamRank,
-      // No hardcoded fallback — matches NFL exactly. Real situation data comes from
-      // situationMap (built from getCfbLiveGames(), see fetchCfbEspnData) when ESPN provides it;
-      // otherwise honestly null rather than showing a fabricated down/distance.
-      situation: situationMap.get(key) ?? null,
+      // situation and period/displayClock are two independently-nullable concerns (frizat-66c) —
+      // situation is honestly null (never fabricated) whenever ESPN's live feed omits it (e.g.
+      // halftime, no active down); period/displayClock are the status-line clock, populated
+      // separately from LiveGame's own top-level fields even when situation itself is null.
+      situation: liveGameMap.get(key)?.situation ?? null,
+      period: liveGameMap.get(key)?.period,
+      displayClock: liveGameMap.get(key)?.displayClock,
     };
   });
 }
@@ -151,21 +154,20 @@ function cfbPickToPickView(pick: CfbPickDto, teamToHomeTeam: Map<string, string>
 // Always keyed by the control-table-resolved slate id — never ESPN's own implicit "current"
 // scoreboard, which has its own notion of "current" (e.g. the last-completed slate during any gap
 // in play) that can disagree with CfbSeasonWeekConfigs. Same fix as nflAdapter.ts's loadCurrentGames.
-async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores | null; situations: Map<string, import('../types/liveGame').GameSituation | null> }> {
+async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores | null; liveGameMap: Map<string, import('../types/liveGame').LiveGame> }> {
   const [espn, liveGames] = await Promise.all([
     getCfbScoresForSlate(slate.id),
     getCfbLiveGames().catch(() => []),
   ]);
-  // Build situation map from live games
-  const situations = new Map<string, import('../types/liveGame').GameSituation | null>();
+  const liveGameMap = new Map<string, import('../types/liveGame').LiveGame>();
   for (const live of liveGames) {
-    situations.set(`${live.homeTeam}-${live.awayTeam}`, mergeLiveSituation(live));
+    liveGameMap.set(`${live.homeTeam}-${live.awayTeam}`, live);
   }
-  return { espn, situations };
+  return { espn, liveGameMap };
 }
 
 async function loadSlate(leagueId: number, _userId: string, slateId: number, slate: CfbSlateDto): Promise<{ games: GameView[]; userPicks: PickView[] }> {
-  const [spreads, picks, dbScores, { espn, situations }] = await Promise.all([
+  const [spreads, picks, dbScores, { espn, liveGameMap }] = await Promise.all([
     getCfbSpreads(leagueId, slateId),
     getCfbUserPicks(leagueId, slateId),
     getCfbDbScores(slateId),
@@ -173,7 +175,7 @@ async function loadSlate(leagueId: number, _userId: string, slateId: number, sla
   ]);
   const teamToHomeTeam = buildTeamToHomeTeamMap(spreads);
   return {
-    games: buildGamesFromEspn(spreads, espn, dbScores, situations),
+    games: buildGamesFromEspn(spreads, espn, dbScores, liveGameMap),
     userPicks: picks.map(p => cfbPickToPickView(p, teamToHomeTeam)),
   };
 }
@@ -194,13 +196,13 @@ export function createCfbAdapter(): SportAdapter {
   }
 
   async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
-    const [spreads, allPickDtos, dbScores, { espn, situations }] = await Promise.all([
+    const [spreads, allPickDtos, dbScores, { espn, liveGameMap }] = await Promise.all([
       getCfbSpreads(leagueId, slate.id),
       getCfbAllPicks(leagueId, slate.id),
       getCfbDbScores(slate.id),
       fetchCfbEspnData(slate),
     ]);
-    const games = buildGamesFromEspn(spreads, espn, dbScores, situations);
+    const games = buildGamesFromEspn(spreads, espn, dbScores, liveGameMap);
     const teamToHomeTeam = buildTeamToHomeTeamMap(spreads);
     const allPicks = allPickDtos.map(p => cfbPickToPickView(p, teamToHomeTeam));
     const userPicks = allPicks.filter(p => p.userId === userId);

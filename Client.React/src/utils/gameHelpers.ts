@@ -2,7 +2,7 @@ import type { Competition, Competitor, EspnScores, Event, TypeName, HomeAway, Es
 import { toLocalDisplay } from './time';
 import type { PickType } from '../types/picks';
 import type { GameStatusValue } from '../services/sportAdapter';
-import type { GameSituation, LiveGame } from '../types/liveGame';
+import type { GameSituation } from '../types/liveGame';
 
 /** True only once a game has finished — the canonical GameView.gameStatus check. */
 export function isGameFinal(status: GameStatusValue): boolean {
@@ -27,19 +27,6 @@ export function isGameDecided(status: GameStatusValue): boolean {
  */
 export function isWeekExcludedFromSeason(week: number, startWeek: number): boolean {
   return week < startWeek;
-}
-
-/**
- * Shared by nflAdapter.ts and cfbAdapter.ts (frizat-66c) — merges a LiveGame's top-level
- * period/displayClock onto its REAL situation only; never fabricates one. ESPN's live feed
- * genuinely omits the fuller situation sub-object sometimes (between snaps, right after a play)
- * even while still giving period/clock — CFB's fetchCfbEspnData already handled this correctly;
- * NFL's buildSituationMap used to fabricate a placeholder (yardLine: 0, downDistanceText: '')
- * whenever situation was null but period existed, rendering a ball at a fake position with a
- * blank caption instead of nothing. One implementation now, so the two can't drift again.
- */
-export function mergeLiveSituation(live: LiveGame | null | undefined): GameSituation | null {
-  return live?.situation ? { ...live.situation, period: live.period, displayClock: live.displayClock } : null;
 }
 
 // Through the 2025 season, ESPN skipped postseason week 4 for the Pro Bowl (Super Bowl was raw

@@ -211,21 +211,27 @@ describe('nflAdapter', () => {
   // period/clock onto a REAL situation, returning null otherwise) — this mirrors that exact,
   // already-correct behavior so NFL and CFB share one shape again.
   describe('situation mapping', () => {
-    it('does not fabricate a placeholder situation when ESPN gives period/clock but no full situation detail', async () => {
+    // situation (ball/down-distance, FieldPosition) and period/displayClock (status line) are
+    // two independently-nullable concerns — a real ESPN gap at halftime (no active down, so no
+    // situation detail) must not also blank out the "Q2 0:00" status line, which only needs
+    // LiveGame's own top-level period/displayClock, not anything nested inside situation.
+    it('does not fabricate a placeholder situation when ESPN gives period/clock but no full situation detail — but still surfaces period/displayClock for the status line', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
       vi.mocked(doOddsExist).mockResolvedValue(false);
       vi.mocked(getLiveGames).mockResolvedValue([{
         homeTeam: 'KC', awayTeam: 'BUF', homeScore: 24, awayScore: 17,
         isCompleted: false, kickoffUtc: new Date().toISOString(),
-        situation: null, period: 3, displayClock: '8:42',
+        situation: null, period: 2, displayClock: '0:00',
       }]);
 
       const result = await adapter.loadCurrentScores(1, 'user1');
 
       expect(result.games[0].situation).toBeNull();
+      expect(result.games[0].period).toBe(2);
+      expect(result.games[0].displayClock).toBe('0:00');
     });
 
-    it('merges period/clock onto a real situation object without fabricating any of its fields', async () => {
+    it('surfaces a real situation object unmodified, alongside period/displayClock as separate fields', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
       vi.mocked(doOddsExist).mockResolvedValue(false);
       vi.mocked(getLiveGames).mockResolvedValue([{
@@ -243,8 +249,9 @@ describe('nflAdapter', () => {
       expect(result.games[0].situation).toEqual({
         possessionTeam: 'KC', isHomePossession: true, yardLine: 35,
         down: 3, distance: 7, isRedZone: false, downDistanceText: '3rd & 7 at KC 35',
-        period: 3, displayClock: '8:42',
       });
+      expect(result.games[0].period).toBe(3);
+      expect(result.games[0].displayClock).toBe('8:42');
     });
   });
 
