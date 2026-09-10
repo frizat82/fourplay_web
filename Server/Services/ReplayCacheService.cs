@@ -108,4 +108,15 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
 
     // No-op: replay mode drives fixed captured snapshots, never a live NflScoresJob upsert.
     public void InvalidateWeekCache(int season, int week) { }
+
+    // Replay mode drives one fixed game/slate through scheduled->final — it has no concept of
+    // "other slates" (mirrors GetWeekScoresAsync's identical NFL constraint). Always returns the
+    // current snapshot regardless of which slateId was requested — the CFB Scores/Picks page
+    // (cfbAdapter.ts's loadScoresForSlate) always asks for the one real slate the replay game
+    // was seeded into (frizat-d0t: this endpoint now goes through ICfbCacheService.
+    // GetSlateScoresAsync instead of ICfbLiveScoreFetcher.FetchForSlateAsync directly).
+    public Task<EspnScores?> GetSlateScoresAsync(int slateId) => Task.FromResult<EspnScores?>(_snapshots[_index]);
+
+    // No-op: replay mode drives fixed captured snapshots, never a live CfbScoresJob upsert.
+    public void InvalidateSlateCache(int slateId) { }
 }

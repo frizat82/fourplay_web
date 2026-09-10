@@ -95,7 +95,7 @@ public class CfbRankingCaptureJobTests
         // unranked sentinel) is not a rank, so it's never persisted at all, not even as a row.
         var slate = BuildSlate();
         _repo.GetSlatesForSeasonAsync(2026).Returns([slate]);
-        _fetcher.FetchForSlateAsync(slate).Returns(BuildScoreboard(homeRank: 3, awayRank: 99));
+        _fetcher.FetchForSlateAsync(slate, Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 3, awayRank: 99));
 
         IEnumerable<CfbRanking>? saved = null;
         await _repo.AddRankingsAsync(Arg.Do<IEnumerable<CfbRanking>>(r => saved = r));
@@ -113,7 +113,7 @@ public class CfbRankingCaptureJobTests
     {
         var slate = BuildSlate();
         _repo.GetSlatesForSeasonAsync(2026).Returns([slate]);
-        _fetcher.FetchForSlateAsync(slate).Returns(BuildScoreboard());
+        _fetcher.FetchForSlateAsync(slate, Arg.Any<bool>()).Returns(BuildScoreboard());
 
         await BuildJob().Execute(_context);
 
@@ -125,7 +125,7 @@ public class CfbRankingCaptureJobTests
     {
         var slate = BuildSlate();
         _repo.GetSlatesForSeasonAsync(2026).Returns([slate]);
-        _fetcher.FetchForSlateAsync(slate).Returns((EspnScores?)null);
+        _fetcher.FetchForSlateAsync(slate, Arg.Any<bool>()).Returns((EspnScores?)null);
 
         await BuildJob().Execute(_context);
 
@@ -144,7 +144,7 @@ public class CfbRankingCaptureJobTests
 
         await BuildJob().Execute(_context);
 
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
         await _repo.DidNotReceive().AddRankingsAsync(Arg.Any<IEnumerable<CfbRanking>>());
     }
 
@@ -154,7 +154,7 @@ public class CfbRankingCaptureJobTests
         // This job captures rankings only — no odds/spread concern at all, unlike CfbSpreadJob.
         var slate = BuildSlate();
         _repo.GetSlatesForSeasonAsync(2026).Returns([slate]);
-        _fetcher.FetchForSlateAsync(slate).Returns(BuildScoreboard(homeRank: 3));
+        _fetcher.FetchForSlateAsync(slate, Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 3));
 
         await BuildJob().Execute(_context);
 
