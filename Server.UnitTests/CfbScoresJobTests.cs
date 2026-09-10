@@ -21,16 +21,24 @@ public class CfbScoresJobTests
 {
     private readonly ICfbLiveScoreFetcher _fetcher;
     private readonly ICfbRepository _repo;
+    private readonly ICfbCacheService _cfbCacheService;
+    private readonly ICfbCurrentSlateService _currentSlateService;
     private readonly IJobExecutionContext _context;
 
     public CfbScoresJobTests()
     {
         _fetcher = Substitute.For<ICfbLiveScoreFetcher>();
         _repo = Substitute.For<ICfbRepository>();
+        _cfbCacheService = Substitute.For<ICfbCacheService>();
+        _currentSlateService = Substitute.For<ICfbCurrentSlateService>();
         _context = Substitute.For<IJobExecutionContext>();
+        // Default: no resolved current slate, so existing tests (which never set this up) keep
+        // exercising isCurrentSlate: false for every slate, unchanged by this dependency's
+        // addition.
+        _currentSlateService.GetCurrentSlateAsync().Returns((CfbSlateInfo?)null);
     }
 
-    private CfbScoresJob BuildJob() => new(_fetcher, _repo);
+    private CfbScoresJob BuildJob() => new(_fetcher, _repo, _cfbCacheService, _currentSlateService);
 
     // Dates relative to "now" (not a fixed calendar date) so this slate is always "currently
     // active" for the SeasonWindowResolver-based gate CfbScoresJob now checks before fetching —
@@ -105,19 +113,47 @@ public class CfbScoresJobTests
         await _repo.DidNotReceive().UpsertCfbScoresAsync(Arg.Any<IEnumerable<CfbScores>>());
     }
 
-    // /code-review: the fix for today's real production incident (a missed Monday-night game
-    // that a re-run of this job couldn't recover, because the viewer-facing cache/DB-shortcut
-    // permanently stopped calling ESPN for an "ended" slate) is this one bypassCache:true argument
-    // — pin it explicitly so a future refactor can't silently drop it back to the default.
+    // frizat-d0t: the fix for the original production incident (a missed Monday-night game that
+    // a re-run of this job couldn't recover, because the viewer-facing cache/DB-shortcut
+    // permanently stopped calling ESPN for an "ended" slate) is now structural rather than a
+    // bypassCache:true flag to remember to pass — the fetcher this job calls is a pure fetch with
+    // no cache/DB-shortcut branch to accidentally hit (that logic moved to CfbCacheService,
+    // which this job never calls except to invalidate below).
     [Fact]
-    public async Task Execute_AlwaysFetchesWithBypassCacheTrue_SoAnEndedSlateCanStillRecoverAMissedGame()
+    public async Task Execute_AlwaysCallsTheFetcherDirectly_SoAnEndedSlateCanStillRecoverAMissedGame()
     {
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
         _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns((EspnScores?)null);
 
         await BuildJob().Execute(_context);
 
-        await _fetcher.Received(1).FetchForSlateAsync(Arg.Any<CfbSlates>(), bypassCache: true);
+        await _fetcher.Received(1).FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
+    }
+
+    // The viewer-facing settled cache can already hold a stale reconstruction for a slate that
+    // "ended" before this run discovered new/updated finals for it — mirrors NflScoresJob's
+    // identical invalidation of EspnCacheService.
+    [Fact]
+    public async Task Execute_WhenScoresUpserted_InvalidatesTheSlateCache()
+    {
+        var slate = BuildSlate();
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([slate]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
+
+        await BuildJob().Execute(_context);
+
+        _cfbCacheService.Received(1).InvalidateSlateCache(slate.Id);
+    }
+
+    [Fact]
+    public async Task Execute_WhenNoScoresUpserted_NeverInvalidatesAnySlateCache()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns((EspnScores?)null);
+
+        await BuildJob().Execute(_context);
+
+        _cfbCacheService.DidNotReceiveWithAnyArgs().InvalidateSlateCache(default);
     }
 
     [Fact]

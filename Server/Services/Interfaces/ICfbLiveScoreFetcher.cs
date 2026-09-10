@@ -12,17 +12,19 @@ namespace FourPlayWebApp.Server.Services.Interfaces;
 /// CfbScoresJob (frizat-703.6) so the DB-upsert jobs (CfbScoresJob, CfbSpreadJob) and
 /// CfbCacheService's live-serving path share one implementation instead of maintaining the
 /// CFP/ranked branching three times.
+///
+/// Pure fetch — no caching (frizat-d0t). The settled-slate DB-reconstruction + cache that used to
+/// live here (with a bypassCache flag CfbScoresJob set to skip it) moved to
+/// CfbCacheService.GetSlateScoresAsync, mirroring where NFL's equivalent already lived
+/// (EspnCacheService.GetWeekScoresAsync) — CfbScoresJob now calls this fetcher directly, the same
+/// way NflScoresJob already calls INflLiveScoreFetcher directly.
 /// </summary>
 public interface ICfbLiveScoreFetcher {
-    // bypassCache: true skips the "slate has ended → replay whatever's already in the DB,
-    // cached forever" viewer-facing shortcut and always hits ESPN — CfbScoresJob's whole
-    // purpose is to discover NEW finals for a slate, including one that was missed before the
-    // slate "ended" (e.g. a scheduling-cron gap); the viewer shortcut exists to spare 100
-    // concurrent page loads from re-hitting ESPN for settled data, not to freeze a background
-    // catch-up job out of ever seeing fresh data for that slate again.
-    Task<EspnScores?> FetchForSlateAsync(CfbSlates slate, bool bypassCache = false);
-
-    // Evicts the cached settled-slate reconstruction so a fresh CfbScoresJob upsert is visible
-    // immediately instead of waiting for a process restart.
-    void InvalidateSlateCache(int slateId);
+    // isCurrentSlate: callers already need to know this themselves (CfbCacheService, to decide
+    // whether to bypass its settled cache; CfbScoresJob, resolved once before its slate loop) —
+    // passed in rather than re-resolved here, which used to mean a second
+    // ICfbCurrentSlateService.GetCurrentSlateAsync() DB round trip on every live fetch just to
+    // re-derive a fact the caller already had. Only used here to decide whether to merge in the
+    // replay-mode snapshot (see FetchForSlateAsync's own comment).
+    Task<EspnScores?> FetchForSlateAsync(CfbSlates slate, bool isCurrentSlate);
 }

@@ -1,11 +1,9 @@
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
-using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
@@ -13,31 +11,20 @@ namespace FourPlayWebApp.Server.UnitTests;
 
 /// <summary>
 /// frizat-703.6: CFP week=999/date-filter, ranked-team-filter, and legacy date-range branching
-/// extracted from CfbScoresJob into a shared fetcher — both the DB-upsert job and CfbCacheService's
-/// live-serving path use this same implementation instead of duplicating the logic.
+/// extracted from CfbScoresJob into a shared fetcher. frizat-d0t: this fetcher is now a PURE
+/// fetch, no caching — the settled-slate DB-reconstruction + cache that used to live here (with
+/// its own current-slate exemption and window-ended gating) moved to
+/// CfbCacheService.GetSlateScoresAsync (see CfbCacheServiceTests.cs for that coverage), mirroring
+/// where NFL's equivalent already lived (EspnCacheService.GetWeekScoresAsync). This file now only
+/// covers the pure ESPN-call shape — none of it exercises the replay-mode snapshot merge (that
+/// needs a registered ReplayCacheService, which none of these tests set up), so every call below
+/// passes isCurrentSlate: false.
 /// </summary>
 public class CfbLiveScoreFetcherTests {
     private readonly ICfbApiService _cfbApi = Substitute.For<ICfbApiService>();
-    private readonly ICfbRepository _cfbRepo = Substitute.For<ICfbRepository>();
-    private readonly ICfbCurrentSlateService _currentSlateService = Substitute.For<ICfbCurrentSlateService>();
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IMemoryCache _settledCache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IServiceProvider _serviceProvider = new ServiceCollection().BuildServiceProvider();
 
-    public CfbLiveScoreFetcherTests() {
-        // Default: no persisted rows for any slate, so existing tests (which never seed the repo)
-        // keep exercising the live-ESPN branch exactly as before this DB-first check was added.
-        _cfbRepo.GetScoresForSlateAsync(Arg.Any<int>()).Returns((IEnumerable<CfbScores>)[]);
-        // Default: no resolved "current" slate, so existing tests (which never care about the
-        // current-slate exemption) keep exercising slateHasEnded exactly as before that check
-        // was added.
-        _currentSlateService.GetCurrentSlateAsync().Returns((CfbSlateInfo?)null);
-        var services = new ServiceCollection();
-        services.AddSingleton(_cfbRepo);
-        services.AddSingleton(_currentSlateService);
-        _scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
-    }
-
-    private CfbLiveScoreFetcher BuildFetcher() => new(_cfbApi, _scopeFactory, _settledCache);
+    private CfbLiveScoreFetcher BuildFetcher() => new(_cfbApi, _serviceProvider);
 
     private static EspnScores BuildScoreboard(
         string eventId = "401677183",
@@ -100,7 +87,7 @@ public class CfbLiveScoreFetcherTests {
         var slate = BuildRegularSeasonSlate();
         _cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate).Returns(BuildScoreboardWithRanking(homeRank: 99, awayRank: 99));
 
-        var result = await BuildFetcher().FetchForSlateAsync(slate);
+        var result = await BuildFetcher().FetchForSlateAsync(slate, isCurrentSlate: false);
 
         Assert.NotNull(result);
         Assert.Single(result!.Events!);
@@ -111,7 +98,7 @@ public class CfbLiveScoreFetcherTests {
         var slate = BuildRegularSeasonSlate();
         _cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate).Returns(BuildScoreboardWithRanking(homeRank: 5, awayRank: 99));
 
-        var result = await BuildFetcher().FetchForSlateAsync(slate);
+        var result = await BuildFetcher().FetchForSlateAsync(slate, isCurrentSlate: false);
 
         Assert.NotNull(result);
         Assert.Single(result!.Events!);
@@ -140,7 +127,7 @@ public class CfbLiveScoreFetcherTests {
         _cfbApi.GetScoresByDateRangeAsync(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7))
             .Returns(BuildScoreboardWithRanking(date: new DateTimeOffset(2026, 9, 5, 1, 0, 0, TimeSpan.Zero)));
 
-        var result = await BuildFetcher().FetchForSlateAsync(slate);
+        var result = await BuildFetcher().FetchForSlateAsync(slate, isCurrentSlate: false);
 
         await _cfbApi.Received(1).GetScoresByDateRangeAsync(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7));
         await _cfbApi.DidNotReceiveWithAnyArgs().GetCfpGamesAsync();
@@ -187,7 +174,7 @@ public class CfbLiveScoreFetcherTests {
         };
         _cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate).Returns(scoreboard);
 
-        var result = await BuildFetcher().FetchForSlateAsync(slate);
+        var result = await BuildFetcher().FetchForSlateAsync(slate, isCurrentSlate: false);
 
         Assert.NotNull(result);
         var evt = Assert.Single(result!.Events!);
@@ -209,7 +196,7 @@ public class CfbLiveScoreFetcherTests {
     public async Task FetchForSlateAsync_CfpSlate_UsesCfpGamesAsync_NotWeekQuery() {
         _cfbApi.GetCfpGamesAsync().Returns(BuildScoreboard());
 
-        var result = await BuildFetcher().FetchForSlateAsync(BuildCfpSlate());
+        var result = await BuildFetcher().FetchForSlateAsync(BuildCfpSlate(), isCurrentSlate: false);
 
         await _cfbApi.Received(1).GetCfpGamesAsync();
         await _cfbApi.DidNotReceive().GetScoresByDateRangeAsync(Arg.Any<DateOnly>(), Arg.Any<DateOnly>());
@@ -222,7 +209,7 @@ public class CfbLiveScoreFetcherTests {
         var wrongRound = BuildScoreboard(date: new DateTimeOffset(2026, 1, 1, 18, 0, 0, TimeSpan.Zero));
         _cfbApi.GetCfpGamesAsync().Returns(wrongRound);
 
-        var result = await BuildFetcher().FetchForSlateAsync(BuildCfpSlate());
+        var result = await BuildFetcher().FetchForSlateAsync(BuildCfpSlate(), isCurrentSlate: false);
 
         Assert.Null(result);
     }
@@ -243,137 +230,10 @@ public class CfbLiveScoreFetcherTests {
 
     [Fact]
     public async Task FetchForSlateAsync_MissingEspnWeekNumber_ReturnsNull_NeverCallsEspn() {
-        var result = await BuildFetcher().FetchForSlateAsync(BuildSlateMissingWeekNumber());
+        var result = await BuildFetcher().FetchForSlateAsync(BuildSlateMissingWeekNumber(), isCurrentSlate: false);
 
         Assert.Null(result);
         await _cfbApi.DidNotReceiveWithAnyArgs().GetScoresByDateRangeAsync(default, default);
         await _cfbApi.DidNotReceive().GetCfpGamesAsync();
-    }
-
-    // /code-review caught the DB-first branch silently defaulting a missing EspnWeekNumber to
-    // week 0 instead of applying the same guard the ESPN-fallback path already used — even with
-    // persisted rows present, a slate with no week number is a data-integrity problem, not
-    // something to paper over.
-    [Fact]
-    public async Task FetchForSlateAsync_MissingEspnWeekNumber_ReturnsNull_EvenWithPersistedRows() {
-        var slate = BuildSlateMissingWeekNumber(); // EndDate 2025-12-20 — already ended
-        var rows = new List<CfbScores> {
-            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = new DateTimeOffset(2025, 12, 19, 18, 0, 0, TimeSpan.Zero) },
-        };
-        _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)rows);
-
-        var result = await BuildFetcher().FetchForSlateAsync(slate);
-
-        Assert.Null(result);
-        await _cfbApi.DidNotReceiveWithAnyArgs().GetScoresByDateRangeAsync(default, default);
-        await _cfbApi.DidNotReceive().GetCfpGamesAsync();
-    }
-
-    // ── DB-first: a slate whose games are already persisted (always FINAL — CfbScoresJob only
-    // writes finished games) is served from CfbScores instead of a live ESPN call, so 100
-    // concurrent viewers of the same past slate share one DB read instead of each hitting ESPN. ──
-
-    [Fact]
-    public async Task FetchForSlateAsync_WhenDbHasPersistedRowsForTheSlate_ReturnsDbBuiltScores_NeverCallsEspn() {
-        var slate = BuildRegularSeasonSlate();
-        var rows = new List<CfbScores> {
-            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero) },
-        };
-        _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)rows);
-
-        var result = await BuildFetcher().FetchForSlateAsync(slate);
-
-        Assert.NotNull(result);
-        var comp = result!.Events!.Single().Competitions[0];
-        var home = comp.Competitors.Single(c => c.HomeAway == HomeAway.Home);
-        Assert.Equal("OSU", home.Team.Abbreviation);
-        Assert.Equal(28, home.Score);
-        Assert.Equal(TypeName.StatusFinal, comp.Status.Type.Name);
-        await _cfbApi.DidNotReceiveWithAnyArgs().GetScoresByDateRangeAsync(default, default);
-        await _cfbApi.DidNotReceive().GetCfpGamesAsync();
-    }
-
-    // frizat: cfbAdapter.ts's current-slate path now always calls this fetcher for whichever
-    // slate the control table (ICfbCurrentSlateService) resolves as current — that slate must
-    // always be live-fetched, even if its own calendar window looks "ended" and persisted rows
-    // exist, or the demo's frozen in-progress fixture data never surfaces for it.
-    [Fact]
-    public async Task FetchForSlateAsync_WhenSlateIsTheResolvedCurrentSlate_AlwaysCallsEspn_EvenWithPersistedRowsAndEndedWindow() {
-        var slate = BuildRegularSeasonSlate();
-        var rows = new List<CfbScores> {
-            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero) },
-        };
-        _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)rows);
-        _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
-            slate.Id, slate.Season, slate.SlateNumber, slate.Label, slate.SlateType,
-            slate.StartDate, slate.EndDate, null, DateTime.UtcNow));
-        _cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate).Returns(BuildScoreboardWithRanking());
-
-        await BuildFetcher().FetchForSlateAsync(slate);
-
-        await _cfbApi.Received(1).GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate);
-    }
-
-    [Fact]
-    public async Task FetchForSlateAsync_WhenDbHasNoRowsForTheSlate_FallsBackToEspn() {
-        var slate = BuildRegularSeasonSlate();
-        _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)[]);
-        _cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate).Returns(BuildScoreboardWithRanking());
-
-        var result = await BuildFetcher().FetchForSlateAsync(slate);
-
-        Assert.NotNull(result);
-        await _cfbApi.Received(1).GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate);
-    }
-
-    // /code-review caught a real bug: gating DB-first purely on "rows.Count > 0" means the moment
-    // ONE game in a multi-game slate finishes and gets persisted, every subsequent call for that
-    // slate permanently stops calling ESPN — the rest of the slate's still-in-progress games are
-    // never discovered or persisted. This backs BOTH CfbScoresJob (which would then never finish
-    // collecting that slate's scores) AND CfbCacheService's live poll of the CURRENT slate (which
-    // would freeze the Scores page for every other game in progress). DB-first must only kick in
-    // once the slate's own window has fully ended — while a slate is still active, ESPN is always
-    // the source of truth regardless of how many of its games have already been persisted.
-    [Fact]
-    public async Task FetchForSlateAsync_WhenSlateStillActiveWithPartialRows_StillCallsEspn_NotJustDbRows() {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var activeSlate = new CfbSlates {
-            Id = 9, Season = 2026, SlateNumber = 3, Label = "Week 3", SlateType = "RegularSeason",
-            StartDate = today.AddDays(-1), EndDate = today.AddDays(1), EspnWeekNumber = 3, ScoringFormat = "Spread",
-        };
-        // One game in this slate already finished and was persisted; the rest are still live.
-        var partialRows = new List<CfbScores> {
-            new() { Id = 1, CfbSlateId = activeSlate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = DateTimeOffset.UtcNow.AddHours(-3) },
-        };
-        _cfbRepo.GetScoresForSlateAsync(activeSlate.Id).Returns((IEnumerable<CfbScores>)partialRows);
-        _cfbApi.GetScoresByDateRangeAsync(activeSlate.StartDate, activeSlate.EndDate)
-            .Returns(BuildScoreboardWithRanking(date: DateTimeOffset.UtcNow));
-
-        var result = await BuildFetcher().FetchForSlateAsync(activeSlate);
-
-        await _cfbApi.Received(1).GetScoresByDateRangeAsync(activeSlate.StartDate, activeSlate.EndDate);
-        Assert.NotNull(result);
-        Assert.Single(result!.Events!);
-    }
-
-    // A settled slate's DB-built response is immutable (a persisted row is always FINAL) — once
-    // built, repeated requests for the same slate should be served from an in-memory cache instead
-    // of re-querying the DB every time, so concurrent viewers of the same settled slate share one
-    // DB read total, not one DB read each.
-    [Fact]
-    public async Task FetchForSlateAsync_CachesTheDbBuiltResult_SecondCallForSameSlateNeverHitsDbAgain() {
-        var slate = BuildRegularSeasonSlate(); // EndDate 2025-9-28 — already ended
-        var rows = new List<CfbScores> {
-            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero) },
-        };
-        _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)rows);
-
-        var fetcher = BuildFetcher();
-        var first = await fetcher.FetchForSlateAsync(slate);
-        var second = await fetcher.FetchForSlateAsync(slate);
-
-        Assert.NotNull(first);
-        Assert.NotNull(second);
-        await _cfbRepo.Received(1).GetScoresForSlateAsync(slate.Id);
     }
 }
