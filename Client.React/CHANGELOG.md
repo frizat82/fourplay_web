@@ -6,6 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-09-09
 
+- Fixed: a live game's Scores card could show the red "red zone" border while the field position bar below it showed the ball outside any red zone — both now agree, since ESPN's red zone flag can be momentarily inconsistent with the actual yard line
 - Added: real ESPN team logos as an opt-in alternative to the synthetic shield badges on Picks, Scores, and the picks matrix — off by default, no visible change yet
 - Fixed: the admin Job Manager page had one generically-labeled "Run Scores Job" / "Run Spreads Job" button that only ever ran NFL's job, with no way to trigger CFB's scores or spreads jobs at all — each sport now has its own clearly-labeled button
 - Fixed: a league's Tease Pts and Weekly Cost settings could be edited at any point in the season, with no protection against changing already-decided weeks' terms — Tease Pts now lock once the season starts, and Weekly Cost locks once the season's final week (Super Bowl / Championship) starts
