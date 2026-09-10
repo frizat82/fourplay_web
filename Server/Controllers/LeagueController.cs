@@ -444,17 +444,25 @@ public class LeagueController(
         if (!isMember)
             return Forbid();
 
-        // Fetch weeks, this week's spreads, existing picks, and the current-week guard
-        // concurrently — none of these depend on each other's results.
+        // Fetch weeks, this week's spreads, existing picks, the current-week guard, and this
+        // league's juice mapping (for the StartWeek guard below) concurrently — none of these
+        // depend on each other's results.
         var weekTask          = repo.GetNflWeeksAsync(first.Season);
         var spreadsTask       = repo.GetNflSpreadsAsync(first.Season, first.NflWeek);
         var existingPicksTask = repo.GetUserNflPicksAsync(authenticatedUserId, first.LeagueId, first.Season, first.NflWeek);
         var currentWeekTask   = currentWeekService.GetCurrentWeekAsync();
-        await Task.WhenAll(weekTask, spreadsTask, existingPicksTask, currentWeekTask);
+        var juiceMappingTask  = repo.GetLeagueJuiceMappingAsync(first.LeagueId, first.Season);
+        await Task.WhenAll(weekTask, spreadsTask, existingPicksTask, currentWeekTask, juiceMappingTask);
 
         var weekId        = weekTask.Result;
         var spreads       = spreadsTask.Result ?? [];
         var existingPicks = existingPicksTask.Result;
+
+        // frizat-u66: defense in depth backing the frontend gate — a league that has excluded
+        // this week via StartWeek must reject a submission for it even if attempted directly.
+        var startWeekError = GameHelpers.ValidateWeekNotExcluded(first.NflWeek, juiceMappingTask.Result?.StartWeek);
+        if (startWeekError is not null)
+            return BadRequest(startWeekError);
 
         // Guard: picks are only accepted for the currently open week per the control table —
         // the per-game kickoff guard below never fires for a future week (its games haven't

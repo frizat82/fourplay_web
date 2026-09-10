@@ -12,6 +12,7 @@ import WeekYearSelector from '../components/WeekYearSelector';
 import NoLeague from '../components/NoLeague';
 import QueryErrorAlert from '../components/QueryErrorAlert';
 import SpreadRelease from '../components/SpreadRelease';
+import ExcludedWeekBanner from '../components/ExcludedWeekBanner';
 import GameCard, { type PickState } from '../components/sports/GameCard';
 import GameCardGridSkeleton from '../components/GameCardSkeleton';
 import { useSession } from '../services/session';
@@ -19,8 +20,9 @@ import { useAuth } from '../services/auth';
 import type { SportAdapter, GameView, PickType, WeekState } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useToast } from '../services/toast';
-import { isGameDecided } from '../utils/gameHelpers';
+import { isGameDecided, isWeekExcludedFromSeason } from '../utils/gameHelpers';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
+import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
 
 // Pick key: "gameId|team|pickType" — stable across NFL and CFB
@@ -74,6 +76,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const maxWeek = currentMaxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
   const maxSeason = currentMaxSeason ?? new Date().getFullYear();
   const minSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
+  const startWeek = useLeagueStartWeek(currentLeague, season);
 
   const existingPicks = useMemo(
     () => new Set((data?.userPicks ?? []).map(p => pickKey(p.gameId, p.team, p.pickType))),
@@ -178,6 +181,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   // also had to be true for the *current* week specifically, or a stale isCurrentWeek flag
   // left a spread-less future week's pick buttons fully clickable (frizat-8y4).
   const oddsNotReady = !hasOdds;
+  const isWeekExcluded = isWeekExcludedFromSeason(week, startWeek);
 
   const hasUnlockedGames = games.some(g => !gameIsLocked(g));
   const isPostSeasonSlate = isPostSeason;
@@ -211,6 +215,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
 
       {oddsNotReady ? (
         <SpreadRelease sport={adapter.sport} />
+      ) : isWeekExcluded ? (
+        <ExcludedWeekBanner startWeek={startWeek} />
       ) : (
         <Grid container spacing={2}>
           {hasUnlockedGames && (remainingPicks > 0 || userPicks.size > 0) && (
