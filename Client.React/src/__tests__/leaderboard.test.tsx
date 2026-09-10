@@ -45,7 +45,7 @@ beforeEach(() => {
   mockedGetLeagueJuiceForSeason.mockReset();
   mockedGetLeagueJuiceForSeason.mockResolvedValue({
     id: 1, leagueId: 1, leagueName: 'Demo League', season: 2023,
-    juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2023-01-01T00:00:00Z',
+    juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, startWeek: 1, dateCreated: '2023-01-01T00:00:00Z',
     teaseLocked: false, weeklyCostLocked: false,
   });
   mockLeagueJuiceEmpty(mockedGetLeagueJuice);
@@ -248,8 +248,8 @@ describe('LeaderboardPage — season selector', () => {
     // constant instead of that league's own history. One shared hook (useLeagueMinSeason) fixes
     // both sports identically.
     mockedGetLeagueJuice.mockResolvedValue([
-      { id: 1, leagueId: 1, leagueName: 'Demo League', season: 2022, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2022-01-01T00:00:00Z', teaseLocked: true, weeklyCostLocked: true },
-      { id: 2, leagueId: 1, leagueName: 'Demo League', season: 2023, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: '2023-01-01T00:00:00Z', teaseLocked: true, weeklyCostLocked: true },
+      { id: 1, leagueId: 1, leagueName: 'Demo League', season: 2022, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, startWeek: 1, dateCreated: '2022-01-01T00:00:00Z', teaseLocked: true, weeklyCostLocked: true },
+      { id: 2, leagueId: 1, leagueName: 'Demo League', season: 2023, juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, startWeek: 1, dateCreated: '2023-01-01T00:00:00Z', teaseLocked: true, weeklyCostLocked: true },
     ]);
 
     renderPage();
@@ -406,6 +406,23 @@ describe('LeaderboardPage — week-cell colors', () => {
     const theme = createAppTheme(mode);
     const expected = alpha(theme.palette[paletteKey].main, 0.16);
     expect(cell).toHaveStyle({ backgroundColor: expected });
+  });
+
+  // frizat-o3x: a week before the league's configured StartWeek must not fall into the `default`
+  // (error/red, "Lost") styling branch — it's neither a win, a loss, nor pending.
+  it('does not style an Excluded week cell as a loss (error/red)', async () => {
+    mockedGetLeaderboard.mockResolvedValue([
+      createLeaderboardEntry({
+        userId: '123', userName: 'TestUser', rank: '1', total: 5,
+        weekResults: [createLeaderboardWeekResult({ week: 1, score: 42, weekResult: 'Excluded' })],
+      }),
+    ]);
+
+    renderPage('light');
+    const cell = (await screen.findByText('42')).closest('td');
+    const theme = createAppTheme('light');
+    const lossColor = alpha(theme.palette.error.main, 0.16);
+    expect(cell).not.toHaveStyle({ backgroundColor: lossColor });
   });
 });
 

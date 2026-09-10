@@ -25,4 +25,7 @@ public record AdminLeagueCostDto(
     decimal Cost
 );
 
-public record LeagueJuiceUpdateDto(int Juice, int JuiceDivisional, int JuiceConference, int WeeklyCost);
+// StartWeek defaults to 1 (no exclusion) — existing callers that don't yet know about it keep
+// today's behavior unchanged; a real PUT from the frontend always sends the league's current
+// value, same full-replace contract the other three fields already use.
+public record LeagueJuiceUpdateDto(int Juice, int JuiceDivisional, int JuiceConference, int WeeklyCost, int StartWeek = 1);

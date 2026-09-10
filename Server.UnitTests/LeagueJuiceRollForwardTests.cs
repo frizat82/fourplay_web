@@ -9,8 +9,8 @@ namespace FourPlayWebApp.Server.UnitTests;
 // mocks needed.
 public class LeagueJuiceRollForwardTests
 {
-    private static LeagueJuiceMapping MakeMapping(int leagueId, int season, int juice = 13, int juiceDivisional = 10, int juiceConference = 6, int weeklyCost = 5) =>
-        new() { LeagueId = leagueId, Season = season, Juice = juice, JuiceDivisional = juiceDivisional, JuiceConference = juiceConference, WeeklyCost = weeklyCost };
+    private static LeagueJuiceMapping MakeMapping(int leagueId, int season, int juice = 13, int juiceDivisional = 10, int juiceConference = 6, int weeklyCost = 5, int startWeek = 1) =>
+        new() { LeagueId = leagueId, Season = season, Juice = juice, JuiceDivisional = juiceDivisional, JuiceConference = juiceConference, WeeklyCost = weeklyCost, StartWeek = startWeek };
 
     // ── FindPriorSeasonMapping ─────────────────────────────────────────────────
 
@@ -45,9 +45,9 @@ public class LeagueJuiceRollForwardTests
     // ── BuildMapping ───────────────────────────────────────────────────────────
 
     [Fact]
-    public void BuildMapping_CopiesAllFourValuesFromPriorSeason_WhenGiven()
+    public void BuildMapping_CopiesAllFiveValuesFromPriorSeason_WhenGiven()
     {
-        var prior = MakeMapping(1, 2025, juice: 20, juiceDivisional: 15, juiceConference: 8, weeklyCost: 12);
+        var prior = MakeMapping(1, 2025, juice: 20, juiceDivisional: 15, juiceConference: 8, weeklyCost: 12, startWeek: 3);
 
         var result = LeagueJuiceRollForward.BuildMapping(1, 2026, prior);
 
@@ -57,12 +57,13 @@ public class LeagueJuiceRollForwardTests
         Assert.Equal(15, result.JuiceDivisional);
         Assert.Equal(8, result.JuiceConference);
         Assert.Equal(12, result.WeeklyCost);
+        Assert.Equal(3, result.StartWeek);
     }
 
     [Fact]
     public void BuildMapping_FallsBackToEntityDefaults_WhenNoPriorSeasonGiven()
     {
-        // Deliberately NOT re-hardcoding 13/10/6/5 here — asserting against the entity's own
+        // Deliberately NOT re-hardcoding 13/10/6/5/1 here — asserting against the entity's own
         // defaults (new LeagueJuiceMapping()) so this test can't silently drift from them.
         var expectedDefaults = new LeagueJuiceMapping();
 
@@ -74,5 +75,6 @@ public class LeagueJuiceRollForwardTests
         Assert.Equal(expectedDefaults.JuiceDivisional, result.JuiceDivisional);
         Assert.Equal(expectedDefaults.JuiceConference, result.JuiceConference);
         Assert.Equal(expectedDefaults.WeeklyCost, result.WeeklyCost);
+        Assert.Equal(expectedDefaults.StartWeek, result.StartWeek);
     }
 }

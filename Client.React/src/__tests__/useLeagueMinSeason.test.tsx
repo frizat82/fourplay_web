@@ -13,7 +13,7 @@ const mockedGetLeagueJuice = vi.mocked(getLeagueJuice);
 function makeJuiceMapping(season: number): LeagueJuiceMappingDto {
   return {
     id: season, leagueId: 1, leagueName: 'Demo League', season,
-    juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, dateCreated: `${season}-01-01T00:00:00Z`,
+    juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5, startWeek: 1, dateCreated: `${season}-01-01T00:00:00Z`,
     teaseLocked: true, weeklyCostLocked: true,
   };
 }

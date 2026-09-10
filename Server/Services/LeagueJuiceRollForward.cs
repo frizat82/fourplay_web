@@ -10,7 +10,7 @@ public static class LeagueJuiceRollForward {
     public static LeagueJuiceMapping? FindPriorSeasonMapping(int toSeason, IEnumerable<LeagueJuiceMapping> allMappingsForLeague) =>
         allMappingsForLeague.Where(m => m.Season < toSeason).MaxBy(m => m.Season);
 
-    // copyFrom's four values are copied verbatim when given; otherwise the entity's own property
+    // copyFrom's five values are copied verbatim when given; otherwise the entity's own property
     // defaults (Juice=13 etc.) supply the fallback — never re-hardcode those numbers here.
     public static LeagueJuiceMapping BuildMapping(int leagueId, int toSeason, LeagueJuiceMapping? copyFrom) {
         var mapping = new LeagueJuiceMapping { LeagueId = leagueId, Season = toSeason, DateCreated = DateTimeOffset.UtcNow };
@@ -19,6 +19,9 @@ public static class LeagueJuiceRollForward {
             mapping.JuiceDivisional = copyFrom.JuiceDivisional;
             mapping.JuiceConference = copyFrom.JuiceConference;
             mapping.WeeklyCost = copyFrom.WeeklyCost;
+            // frizat-o3x: without this, rolling a league's settings forward to a new season would
+            // silently reset a deliberately-configured StartWeek back to the default (1).
+            mapping.StartWeek = copyFrom.StartWeek;
         }
         return mapping;
     }
