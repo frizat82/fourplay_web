@@ -7,7 +7,7 @@ import {
   getHomeTeamAbbr, getAwayTeamAbbr,
   getHomeTeam, getAwayTeam,
   getHomeTeamScore, getAwayTeamScore,
-  getTeamRecord, getTeamLogo,
+  getTeamRecord,
   getWeekFromEspnWeek, getNflWeekName, getNflRequiredPicks,
   isPostSeason as isPostSeasonHelper,
   isGameOver, isGameStarted, toGameStatus,
@@ -62,8 +62,6 @@ function competitionToGameView(
     } : undefined,
     homeRecord: getTeamRecord(getHomeTeam(competition)),
     awayRecord: getTeamRecord(getAwayTeam(competition)),
-    homeLogo: getTeamLogo(homeAbbr),
-    awayLogo: getTeamLogo(awayAbbr),
     situation: situationMap?.get(key) ?? null,
     spreadPostedAt: spreadCache[homeAbbr]?.dateCreated ?? spreadCache[awayAbbr]?.dateCreated ?? null,
   };
