@@ -1,6 +1,6 @@
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
-import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins, getCfbRequiredPicks, isGameLive } from '../utils/gameHelpers';
+import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins, getCfbRequiredPicks, isGameLive, mergeLiveSituation } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
@@ -159,8 +159,7 @@ async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores 
   // Build situation map from live games
   const situations = new Map<string, import('../types/liveGame').GameSituation | null>();
   for (const live of liveGames) {
-    const sit = live.situation ? { ...live.situation, period: live.period, displayClock: live.displayClock } : null;
-    situations.set(`${live.homeTeam}-${live.awayTeam}`, sit);
+    situations.set(`${live.homeTeam}-${live.awayTeam}`, mergeLiveSituation(live));
   }
   return { espn, situations };
 }
