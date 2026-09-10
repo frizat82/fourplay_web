@@ -18,6 +18,7 @@ public class LeagueJuiceMappingConfiguration : IEntityTypeConfiguration<LeagueJu
         entity.Property(e => e.Juice).HasDefaultValue(13);
         entity.Property(e => e.JuiceConference).HasDefaultValue(6);
         entity.Property(e => e.JuiceDivisional).HasDefaultValue(10);
+        entity.Property(e => e.StartWeek).HasDefaultValue(1);
 
         entity.HasOne(e => e.League)
             .WithMany(l => l.LeagueJuiceMappings)

@@ -66,6 +66,16 @@ public class CfbLeaderboardService(
 
                 for (int i = 0; i < slates.Count; i++) {
                     var slate = slates[i];
+
+                    // frizat-o3x: a slate before the league's configured StartWeek needs no
+                    // spread/score/pick fetch at all — checked here, before any DB call, not
+                    // inside EvaluateSlate, so an excluded slate costs zero round trips per user
+                    // instead of three wasted ones.
+                    if (GameHelpers.IsWeekExcludedFromSeason(slate.SlateNumber, juiceMapping.StartWeek)) {
+                        userModel.WeekResults[i] = new LeaderboardWeekResults { Week = slate.SlateNumber, WeekResult = WeekResult.Excluded };
+                        continue;
+                    }
+
                     // GetSpreadsForSlateAsync now returns the full FBS slate, not just league-eligible
                     // games (frizat-9m0) — scoring/MissingPicks must only ever consider eligible ones.
                     var spreads = (await cfbRepository.GetSpreadsForSlateAsync(slate.Id)).WhereLeagueEligible().ToList();
@@ -156,5 +166,5 @@ public class CfbLeaderboardService(
 
     private static List<LeaderboardModel> CalculateTotals(List<LeaderboardModel> leaderboard,
         LeagueJuiceMapping juiceMapping, int slateCount) =>
-        LeaderboardSettlementHelper.SettleWeeks(leaderboard, juiceMapping.WeeklyCost, slateCount);
+        LeaderboardSettlementHelper.SettleWeeks(leaderboard, juiceMapping.WeeklyCost, slateCount, juiceMapping.StartWeek);
 }
