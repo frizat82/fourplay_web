@@ -203,6 +203,19 @@ public static class GameHelpers {
     // sides can never drift on the boundary (e.g. off-by-one between "< " and "<=").
     public static bool IsWeekExcludedFromSeason(int week, int startWeek) => week < startWeek;
 
+    // Shared by LeagueController.AddPicks and CfbPicksController.AddPicks (frizat-u66) — was two
+    // byte-identical guard blocks, one per controller, differing only in which week/slate number
+    // got passed in. Takes `startWeek` as a nullable int (not the LeagueJuiceMapping entity
+    // itself) since that entity lives in Server.Models.Data, which Shared can't reference — a
+    // missing mapping fails open via the `?? 1` default (StartWeek's own EF default), matching
+    // every league that predates this feature.
+    public static string? ValidateWeekNotExcluded(int week, int? startWeek) {
+        var effectiveStartWeek = startWeek ?? 1;
+        return IsWeekExcludedFromSeason(week, effectiveStartWeek)
+            ? $"Picks aren't accepted before this league's configured Start Week ({effectiveStartWeek})."
+            : null;
+    }
+
     // Shared by LeagueController.AddPicks (NflSpreads) and CfbPicksController.AddPicks
     // (CfbSpreads) — was two byte-identical private methods, one per controller, differing only
     // in the spread row's concrete type. Pure control-table timestamp check, no ESPN dependency.
