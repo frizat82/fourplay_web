@@ -12,7 +12,6 @@ import {
   isPostSeason as isPostSeasonHelper,
   isGameOver, isGameStarted, toGameStatus,
   computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins,
-  mergeLiveSituation,
 } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, PickView, PickType } from './sportAdapter';
 import { revealPicksForStartedGames, memoizeOnce } from './sportAdapter';
@@ -28,11 +27,12 @@ function competitionToGameView(
   competition: Competition,
   event: Event,
   spreadCache: Record<string, SpreadResponse>,
-  situationMap?: Map<string, import('../types/liveGame').GameSituation | null>
+  liveGameMap?: Map<string, import('../types/liveGame').LiveGame>
 ): GameView {
   const homeAbbr = getHomeTeamAbbr(competition);
   const awayAbbr = getAwayTeamAbbr(competition);
   const key = `${homeAbbr}-${awayAbbr}`;
+  const live = liveGameMap?.get(key);
   const homeScore = getHomeTeamScore(competition);
   const awayScore = getAwayTeamScore(competition);
   const homeSpreadVal = spreadCache[homeAbbr]?.spread ?? null;
@@ -63,7 +63,14 @@ function competitionToGameView(
     } : undefined,
     homeRecord: getTeamRecord(getHomeTeam(competition)),
     awayRecord: getTeamRecord(getAwayTeam(competition)),
-    situation: situationMap?.get(key) ?? null,
+    // situation and period/displayClock are two independently-nullable concerns (frizat-66c) —
+    // situation is ball/down-distance detail for FieldPosition, genuinely null whenever ESPN's
+    // live feed omits it (between snaps, right after a play); period/displayClock are the
+    // status-line clock, sourced from LiveGame's own top-level fields and populated separately
+    // even when situation itself is null (e.g. halftime, where there's no active down at all).
+    situation: live?.situation ?? null,
+    period: live?.period,
+    displayClock: live?.displayClock,
     spreadPostedAt: spreadCache[homeAbbr]?.dateCreated ?? spreadCache[awayAbbr]?.dateCreated ?? null,
   };
 }
@@ -98,8 +105,11 @@ async function buildSpreadCache(
   return resp.responses ?? {};
 }
 
-async function buildSituationMap(events: Event[]): Promise<Map<string, import('../types/liveGame').GameSituation | null>> {
-  const map = new Map<string, import('../types/liveGame').GameSituation | null>();
+// frizat-66c: returns the raw LiveGame per matchup (not a pre-merged/derived situation) so
+// competitionToGameView can read situation and period/displayClock as the two independently-
+// nullable concerns they actually are — never fabricating one from the presence of the other.
+async function buildLiveGameMap(events: Event[]): Promise<Map<string, import('../types/liveGame').LiveGame>> {
+  const map = new Map<string, import('../types/liveGame').LiveGame>();
   try {
     const liveGames = await getLiveGames();
     for (const event of events) {
@@ -107,7 +117,7 @@ async function buildSituationMap(events: Event[]): Promise<Map<string, import('.
         const home = getHomeTeamAbbr(comp);
         const away = getAwayTeamAbbr(comp);
         const live = liveGames.find(g => g.homeTeam === home && g.awayTeam === away);
-        map.set(`${home}-${away}`, mergeLiveSituation(live));
+        if (live) map.set(`${home}-${away}`, live);
       }
     }
   } catch { /* live games unavailable */ }
@@ -214,11 +224,11 @@ export function createNflAdapter(): SportAdapter {
         doOddsExist(leagueId, season, nflWeek),
         getLeaguePicks(leagueId, season, nflWeek),
       ]);
-      const [sc, situationMap] = await Promise.all([
+      const [sc, liveGameMap] = await Promise.all([
         buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, hasOdds),
-        buildSituationMap(data?.events ?? []),
+        buildLiveGameMap(data?.events ?? []),
       ]);
-      const games = (data?.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc, situationMap)));
+      const games = (data?.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc, liveGameMap)));
       // Use typed helpers on raw competitions — not string comparison on already-mapped GameView
       const hasActiveGames = (data?.events ?? []).some(ev =>
         ev.competitions.some(c => isGameStarted(c) && !isGameOver(c))

@@ -300,7 +300,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <TeamArt abbr={game.awayTeam} sport={adapter.sport} size={50} />
                         <Typography variant="h6">{isFinal || isLive ? game.awayScore : ''}</Typography>
                         <Typography variant="body2" textAlign="center">
-                          {isFinal ? 'Final' : isLive ? (game.situation?.period && game.situation?.displayClock ? `Q${game.situation.period} ${game.situation.displayClock}` : 'Live') : new Date(game.gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                          {isFinal ? 'Final' : isLive ? (game.period && game.displayClock ? `Q${game.period} ${game.displayClock}` : 'Live') : new Date(game.gameTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                         </Typography>
                         <Typography variant="h6">{isFinal || isLive ? game.homeScore : ''}</Typography>
                         <TeamArt abbr={game.homeTeam} sport={adapter.sport} size={50} />
