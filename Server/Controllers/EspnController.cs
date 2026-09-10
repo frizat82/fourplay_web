@@ -1,6 +1,5 @@
 using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Services.Interfaces;
-using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Shared.Models.Enum;
@@ -13,9 +12,7 @@ namespace FourPlayWebApp.Server.Controllers;
 [Route("api/[controller]")]
 public class EspnController(
     IEspnCacheService espnCacheService,
-    ICfbCacheService cfbCacheService,
-    ICfbLiveScoreFetcher cfbFetcher,
-    ICfbRepository cfbRepo)
+    ICfbCacheService cfbCacheService)
     : ControllerBase {
     // Route is our own (season, nflWeek) — NflSeasonWeekConfig.WeekId — never ESPN's own week
     // numbering, matching GetCfbScoresForSlate's shape below (frizat-3nv).
@@ -48,18 +45,16 @@ public class EspnController(
     }
 
     /// <summary>
-    /// Live CFB scores for a SPECIFIC (typically non-current) slate — direct/uncached, same role
-    /// as GetWeekScores() for NFL. Used when browsing a past or future slate, which isn't repeatedly
-    /// polled the way the current slate is.
+    /// CFB scores for a SPECIFIC (typically non-current) slate — settled slates served from a
+    /// cached DB reconstruction, same role as GetWeekScores() for NFL (frizat-d0t unification).
+    /// Used when browsing a past or future slate, which isn't repeatedly polled the way the
+    /// current slate is.
     /// </summary>
     [HttpGet("cfb/scores/slate/{slateId:int}")]
     [ProducesResponseType(typeof(EspnScores), StatusCodes.Status200OK)]
     public async Task<ActionResult<EspnScores?>> GetCfbScoresForSlate(int slateId)
     {
-        var slate = await cfbRepo.GetSlateByIdAsync(slateId);
-        if (slate is null) return Ok(new EspnScores());
-
-        var scores = await cfbFetcher.FetchForSlateAsync(slate);
+        var scores = await cfbCacheService.GetSlateScoresAsync(slateId);
         return Ok(scores ?? new EspnScores());
     }
 
