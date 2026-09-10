@@ -94,8 +94,6 @@ export interface GameView {
   homeRecord?: string;
   awayRecord?: string;
   // Scores page extras
-  homeLogo?: string;
-  awayLogo?: string;
   situation?: import('../types/liveGame').GameSituation | null;
   homeCovers?: boolean | null;  // null = not final / no odds
   awayCovers?: boolean | null;  // computed independently — NOT !homeCovers (teased spreads aren't mirror images)

@@ -3,6 +3,10 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import UserPicksMatrix from '../components/UserPicksMatrix';
 import type { NflPickDto } from '../types/picks';
 
+vi.mock('../components/sports/TeamLogo', () => ({
+  default: ({ abbr }: { abbr: string }) => <div data-testid={`team-art-${abbr}`}>{abbr}</div>,
+}));
+
 const picks: NflPickDto[] = [
   { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Spread', season: 2025, nflWeek: 1, leagueId: 1, dateCreated: '2025-09-01T00:00:00Z' },
 ];
@@ -10,7 +14,7 @@ const picks: NflPickDto[] = [
 function renderMatrix(mode: 'light' | 'dark') {
   return render(
     <ThemeProvider theme={createTheme({ palette: { mode } })}>
-      <UserPicksMatrix users={['alice']} picks={picks} spreads={{}} requiredPicks={1} />
+      <UserPicksMatrix sport="nfl" users={['alice']} picks={picks} spreads={{}} requiredPicks={1} />
     </ThemeProvider>,
   );
 }
@@ -56,7 +60,7 @@ describe('UserPicksMatrix — text-only badges (no team logo)', () => {
     ];
     render(
       <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix users={['alice']} picks={cfbPicks} spreads={{}} requiredPicks={1} />
+        <UserPicksMatrix sport="nfl" users={['alice']} picks={cfbPicks} spreads={{}} requiredPicks={1} />
       </ThemeProvider>,
     );
     const label = screen.getByText('UTSA');
@@ -74,7 +78,7 @@ describe('UserPicksMatrix — Over/Under shown as a bold word, not a small icon'
     ];
     render(
       <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix users={['alice']} picks={overPick} spreads={{}} requiredPicks={1} />
+        <UserPicksMatrix sport="nfl" users={['alice']} picks={overPick} spreads={{}} requiredPicks={1} />
       </ThemeProvider>,
     );
     expect(screen.getByText('OVER')).toBeInTheDocument();
@@ -86,7 +90,7 @@ describe('UserPicksMatrix — Over/Under shown as a bold word, not a small icon'
     ];
     render(
       <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix users={['alice']} picks={underPick} spreads={{}} requiredPicks={1} />
+        <UserPicksMatrix sport="nfl" users={['alice']} picks={underPick} spreads={{}} requiredPicks={1} />
       </ThemeProvider>,
     );
     expect(screen.getByText('UNDER')).toBeInTheDocument();
@@ -104,7 +108,7 @@ describe('UserPicksMatrix — Over/Under shown as a bold word, not a small icon'
     ];
     const { container } = render(
       <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix users={['alice']} picks={overPick} spreads={{}} requiredPicks={1} />
+        <UserPicksMatrix sport="nfl" users={['alice']} picks={overPick} spreads={{}} requiredPicks={1} />
       </ThemeProvider>,
     );
     expect(container.querySelector('[data-testid="ArrowCircleUpIcon"]')).not.toBeInTheDocument();
@@ -131,7 +135,7 @@ describe('UserPicksMatrix — Over/Under shown as a bold word, not a small icon'
     ];
     render(
       <ThemeProvider theme={createTheme({ palette: { mode } })}>
-        <UserPicksMatrix users={['alice']} picks={pick} spreads={spread ? { KC: spread } : {}} requiredPicks={1} />
+        <UserPicksMatrix sport="nfl" users={['alice']} picks={pick} spreads={spread ? { KC: spread } : {}} requiredPicks={1} />
       </ThemeProvider>,
     );
     const teamLabel = screen.getByText('KC');
@@ -146,6 +150,7 @@ describe('UserPicksMatrix — Over/Under shown as a bold word, not a small icon'
     const { container } = render(
       <ThemeProvider theme={createTheme()}>
         <UserPicksMatrix
+          sport="nfl"
           users={['alice']}
           picks={picks}
           spreads={{ KC: { team: 'KC', isWinner: true, isOverWinner: true, isUnderWinner: false, spread: -3, over: 45, under: 45 } }}
@@ -155,6 +160,22 @@ describe('UserPicksMatrix — Over/Under shown as a bold word, not a small icon'
     );
     expect(container.querySelector('[data-testid="CheckCircleIcon"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-testid="CancelIcon"]')).not.toBeInTheDocument();
+  });
+});
+
+describe('UserPicksMatrix — logos mode (VITE_TEAM_ART_MODE=logos)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('renders the team logo (TeamArt) instead of text-only badges when in logos mode', () => {
+    vi.stubEnv('VITE_TEAM_ART_MODE', 'logos');
+    renderMatrix('light');
+    expect(screen.getByTestId('team-art-KC')).toBeInTheDocument();
+  });
+
+  it('still renders text-only badges (no TeamArt) in the default badges mode', () => {
+    renderMatrix('light');
+    expect(screen.queryByTestId('team-art-KC')).not.toBeInTheDocument();
+    expect(screen.getByText('KC')).toBeInTheDocument();
   });
 });
 
@@ -171,7 +192,7 @@ describe('UserPicksMatrix — Over/Under is an alternate pick type, not an addit
   it('renders exactly one badge per required-pick column, regardless of pick type', () => {
     render(
       <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={3} />
+        <UserPicksMatrix sport="nfl" users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={3} />
       </ThemeProvider>,
     );
     expect(screen.getAllByRole('columnheader')).toHaveLength(4); // User + Pick 1-3
@@ -183,7 +204,7 @@ describe('UserPicksMatrix — Over/Under is an alternate pick type, not an addit
   it('column count always equals requiredPicks', () => {
     render(
       <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={4} />
+        <UserPicksMatrix sport="nfl" users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={4} />
       </ThemeProvider>,
     );
     expect(screen.getAllByRole('columnheader')).toHaveLength(5); // User + Pick 1-4

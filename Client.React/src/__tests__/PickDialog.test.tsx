@@ -8,6 +8,7 @@ describe('PickDialog', () => {
     render(
       <PickDialog
         open
+        sport="nfl"
         onClose={vi.fn()}
         userNames={['Alice', 'Bob']}
         userNamesOver={[]}
@@ -26,6 +27,7 @@ describe('PickDialog', () => {
     render(
       <PickDialog
         open
+        sport="nfl"
         onClose={vi.fn()}
         userNames={[]}
         userNamesOver={['Carlos']}
@@ -43,6 +45,7 @@ describe('PickDialog', () => {
     render(
       <PickDialog
         open
+        sport="nfl"
         onClose={vi.fn()}
         userNames={[]}
         userNamesOver={[]}
@@ -64,6 +67,7 @@ describe('PickDialog', () => {
     render(
       <PickDialog
         open
+        sport="nfl"
         onClose={onClose}
         userNames={['Alice']}
         userNamesOver={[]}
