@@ -245,6 +245,55 @@ public class PicksTests
         Assert.IsType<OkObjectResult>(result.Result);
     }
 
+    // frizat-u66: defense in depth backing the frontend gate — a league that has excluded this
+    // week via StartWeek must reject a pick submission for it even if attempted directly,
+    // regardless of whether the per-game kickoff guard above would otherwise have allowed it.
+    [Fact]
+    public async Task AddPicks_WhenWeekIsBeforeLeagueStartWeek_ReturnsBadRequest()
+    {
+        var futureKickoff = DateTimeOffset.UtcNow.AddHours(2);
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
+        repo.GetLeagueJuiceMappingAsync(LeagueId, Season).Returns(
+            new LeagueJuiceMapping { LeagueId = LeagueId, Season = Season, StartWeek = Week + 1 });
+
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
+        var picks = new[] { MakePick("BUF") };
+
+        // BuildCurrentWeekService defaults to this file's Week/Season, so this pick is otherwise
+        // "for the current week" — StartWeek must reject it independently of that guard.
+        var result = await controller.AddPicks(picks, BuildCurrentWeekService());
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("start", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await repo.DidNotReceive().AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>());
+    }
+
+    [Fact]
+    public async Task AddPicks_WhenNoLeagueJuiceMappingExists_AllowsPicks()
+    {
+        // Fail-open: no mapping means no configured restriction, matching StartWeek's own
+        // property default (1) — must not newly break every league that predates this feature.
+        var futureKickoff = DateTimeOffset.UtcNow.AddHours(2);
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
+        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
+        repo.GetLeagueJuiceMappingAsync(LeagueId, Season).Returns((LeagueJuiceMapping?)null);
+
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
+        var picks = new[] { MakePick("BUF") };
+
+        var result = await controller.AddPicks(picks, BuildCurrentWeekService());
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
     /// <summary>
     /// frizat-8n3: AddPicks must use the authenticated user's ID from the JWT claim,
     /// not the UserId in the request DTO. Without the fix, a user can submit picks on
