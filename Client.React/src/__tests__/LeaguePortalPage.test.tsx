@@ -128,6 +128,7 @@ function makeJuice(season: number, overrides?: Partial<Pick<LeagueJuiceMappingDt
     juiceDivisional: 10,
     juiceConference: 6,
     weeklyCost: 5,
+    startWeek: 1,
     dateCreated: '2026-06-29T00:00:00Z',
     teaseLocked: false,
     weeklyCostLocked: false,
@@ -212,6 +213,36 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
     expect(screen.getByLabelText(/Tease Pts \(Conference\)/i)).not.toBeDisabled();
     expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
     expect(screen.getByText(/Weekly Cost is locked once the season's final week has started/i)).toBeInTheDocument();
+  });
+
+  // frizat-o3x: Start Week shares tease points' lock boundary — same rationale as Tease Pts.
+  it('locks Start Week when tease is locked, not when only Weekly Cost is locked', async () => {
+    mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON, { teaseLocked: true, weeklyCostLocked: false })]);
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    await waitFor(() => expect(screen.getByLabelText(/Tease Pts \(Regular Season\)/i)).toHaveValue(13));
+    // MUI Select's displayed value/accessible name isn't reliably queryable in JSDOM (same gotcha
+    // as the Season selector elsewhere in this file) — index into the comboboxes by DOM order
+    // instead: [0] Season, [1] Start Week. aria-disabled reflects the FormControl's disabled state.
+    expect(screen.getAllByRole('combobox')[1]).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('leaves Start Week editable when only Weekly Cost is locked', async () => {
+    mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON, { teaseLocked: false, weeklyCostLocked: true })]);
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    await waitFor(() => expect(screen.getByLabelText(/Cost Per Week/i)).toHaveValue(5));
+    expect(screen.getAllByRole('combobox')[1]).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('shows the season-starts-late explanation once Start Week is set above 1', async () => {
+    mockedGetJuice.mockResolvedValue([{ ...makeJuice(CURRENT_SEASON), startWeek: 3 }]);
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    await waitFor(() => expect(screen.getByText(/Weeks 1–2 won't require picks/i)).toBeInTheDocument());
   });
 
   it('shows the server\'s specific rejection message when a save is rejected by a lock, instead of a generic failure toast', async () => {

@@ -152,6 +152,7 @@ public class LeagueController(
                 JuiceDivisional = m.JuiceDivisional,
                 JuiceConference = m.JuiceConference,
                 WeeklyCost = m.WeeklyCost,
+                StartWeek = m.StartWeek,
                 DateCreated = m.DateCreated,
                 TeaseLocked = teaseLocked,
                 WeeklyCostLocked = weeklyCostLocked,
@@ -180,6 +181,7 @@ public class LeagueController(
             JuiceDivisional = mapping.JuiceDivisional,
             JuiceConference = mapping.JuiceConference,
             WeeklyCost = mapping.WeeklyCost,
+            StartWeek = mapping.StartWeek,
             DateCreated = mapping.DateCreated,
             TeaseLocked = teaseLocked,
             WeeklyCostLocked = weeklyCostLocked,
@@ -835,10 +837,15 @@ public class LeagueController(
         if (existing is null) return NotFound($"No juice mapping for league {leagueId} season {season}.");
         var (teaseLocked, weeklyCostLocked) = lockStateTask.Result;
 
+        if (dto.StartWeek is < 1 or > 5)
+            return BadRequest("Start Week must be between 1 and 5.");
+
+        // frizat-o3x: StartWeek shares tease points' lock boundary — same "retroactively changes
+        // an already-decided week's terms" hazard as Juice/JuiceDivisional/JuiceConference.
         var teaseChanged = dto.Juice != existing.Juice || dto.JuiceDivisional != existing.JuiceDivisional
-            || dto.JuiceConference != existing.JuiceConference;
+            || dto.JuiceConference != existing.JuiceConference || dto.StartWeek != existing.StartWeek;
         if (teaseLocked && teaseChanged)
-            return BadRequest("Tease points can't be changed once the season has started.");
+            return BadRequest("Tease points and Start Week can't be changed once the season has started.");
         if (weeklyCostLocked && dto.WeeklyCost != existing.WeeklyCost)
             return BadRequest("Weekly Cost can't be changed once the season's final week has started.");
 
@@ -846,6 +853,7 @@ public class LeagueController(
         existing.JuiceDivisional = dto.JuiceDivisional;
         existing.JuiceConference = dto.JuiceConference;
         existing.WeeklyCost = dto.WeeklyCost;
+        existing.StartWeek = dto.StartWeek;
         await repo.UpdateLeagueJuiceMappingAsync(existing);
         return NoContent();
     }

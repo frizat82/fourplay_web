@@ -197,6 +197,12 @@ public static class GameHelpers {
         return times.Count > 0 && times.All(t => t <= now);
     }
 
+    // Shared by LeaderboardService.CalculatePicks (NFL week) and CfbLeaderboardService.EvaluateSlate
+    // (CFB slate number) — a league's configured StartWeek (LeagueJuiceMapping.StartWeek, frizat-o3x)
+    // excludes every week/slate before it from that league's season entirely. One predicate so both
+    // sides can never drift on the boundary (e.g. off-by-one between "< " and "<=").
+    public static bool IsWeekExcludedFromSeason(int week, int startWeek) => week < startWeek;
+
     // Shared by LeagueController.AddPicks (NflSpreads) and CfbPicksController.AddPicks
     // (CfbSpreads) — was two byte-identical private methods, one per controller, differing only
     // in the spread row's concrete type. Pure control-table timestamp check, no ESPN dependency.

@@ -156,4 +156,48 @@ public class LeaderboardSettlementHelperTests {
         Assert.Equal(10, result.Single(u => u.User.Id == "c").WeekResults[2].Score);
         Assert.Equal(-20, result.Single(u => u.User.Id == "b").WeekResults[2].Score);
     }
+
+    // frizat-o3x: a league that excludes its early week(s) via StartWeek has every member's
+    // WeekResult for that index set to Excluded (LeaderboardService/CfbLeaderboardService's own
+    // job, not this helper's) AND passes the same startWeek explicitly — SettleWeeks trusts the
+    // parameter, not a scan of the cells, as the source of truth for which weeks to skip. Before
+    // this fix, an all-Excluded week looked exactly like an all-MissingPicks week — zero winners,
+    // zero losers, not "pending" — and fell into the SAME push branch as a genuine all-lost week,
+    // doubling the pot for the league's real first week. That is exactly the bug this bead exists
+    // to prevent ("week 2 would be a normal week").
+    [Fact]
+    public void SettleWeeks_ExcludedWeek_IsSkippedEntirely_NextRealWeekSettlesAtBaseCost() {
+        var leaderboard = new List<LeaderboardModel> {
+            // Week 1 (index 0) excluded for the whole league — nobody was ever asked to pick.
+            MakeUser("w1", WeekResult.Excluded, WeekResult.Won),
+            MakeUser("l1", WeekResult.Excluded, WeekResult.Lost),
+        };
+
+        var result = LeaderboardSettlementHelper.SettleWeeks(leaderboard, baseWeeklyCost: 10, weekCount: 2, startWeek: 2);
+
+        // Excluded week: no score change, not treated as a push.
+        Assert.Equal(0, result.Single(u => u.User.Id == "w1").WeekResults[0].Score);
+        Assert.Equal(0, result.Single(u => u.User.Id == "l1").WeekResults[0].Score);
+        // Week 2 (the league's real first week): settles at the untouched base cost, NOT doubled.
+        Assert.Equal(10, result.Single(u => u.User.Id == "w1").WeekResults[1].Score);
+        Assert.Equal(-10, result.Single(u => u.User.Id == "l1").WeekResults[1].Score);
+    }
+
+    [Fact]
+    public void SettleWeeks_ExcludedWeek_DoesNotSuppressARealPushInTheFollowingWeek() {
+        var leaderboard = new List<LeaderboardModel> {
+            // Week 1 excluded; week 2 is a genuine all-won push; week 3 is decided mixed.
+            MakeUser("a", WeekResult.Excluded, WeekResult.Won, WeekResult.Won),
+            MakeUser("b", WeekResult.Excluded, WeekResult.Won, WeekResult.Lost),
+        };
+
+        var result = LeaderboardSettlementHelper.SettleWeeks(leaderboard, baseWeeklyCost: 10, weekCount: 3, startWeek: 2);
+
+        // Week 2: still a real push — everyone scores 0, pot doubles for week 3.
+        Assert.Equal(0, result.Single(u => u.User.Id == "a").WeekResults[1].Score);
+        Assert.Equal(0, result.Single(u => u.User.Id == "b").WeekResults[1].Score);
+        // Week 3: settles at the doubled $20, proving the excluded week didn't reset/suppress it.
+        Assert.Equal(20, result.Single(u => u.User.Id == "a").WeekResults[2].Score);
+        Assert.Equal(-20, result.Single(u => u.User.Id == "b").WeekResults[2].Score);
+    }
 }
