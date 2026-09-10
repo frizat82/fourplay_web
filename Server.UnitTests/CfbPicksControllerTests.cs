@@ -241,6 +241,52 @@ public class CfbPicksControllerTests
         Assert.IsType<OkObjectResult>(result);
     }
 
+    // ── AddPicks — league StartWeek guard (frizat-u66) ───────────────────────
+
+    [Fact]
+    public async Task AddPicks_WhenSlateIsBeforeLeagueStartWeek_ReturnsBadRequest()
+    {
+        // MakeSlate defaults to slateNumber=1 — a league with StartWeek=2 must reject it, even
+        // though the kickoff guard and current-slate guard above would otherwise allow it.
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
+        _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(
+            new LeagueJuiceMapping { LeagueId = 1, Season = 2025, StartWeek = 2 });
+        var request = new AddCfbPicksRequest
+        {
+            LeagueId = 1, CfbSlateId = 1, Season = 2025,
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
+        };
+
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Contains("start", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+    }
+
+    [Fact]
+    public async Task AddPicks_WhenNoLeagueJuiceMappingExists_AllowsPicks()
+    {
+        // Fail-open: no mapping means no configured restriction, matching StartWeek's own
+        // property default (1) — must not newly break every league that predates this feature.
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
+        _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
+        _repo.AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>()).Returns(Task.CompletedTask);
+        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns((LeagueJuiceMapping?)null);
+        var request = new AddCfbPicksRequest
+        {
+            LeagueId = 1, CfbSlateId = 1, Season = 2025,
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
+        };
+
+        var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
     // ── AddPicks — required-pick-count cap ──────────────────────────────────
 
     [Fact]

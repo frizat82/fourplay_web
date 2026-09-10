@@ -168,6 +168,39 @@ describe('PicksPage', () => {
     expect(screen.getByTestId('week-year-selector-container')).toBeInTheDocument();
   });
 
+  // frizat-u66: a league with StartWeek > 1 excludes weeks before it from scoring
+  // (LeaderboardService.CalculatePicks / CfbLeaderboardService.BuildLeaderboard short-circuit
+  // to WeekResult.Excluded) — the Picks page must say so clearly instead of showing an
+  // ordinary, fully-pickable grid whose submissions are silently discarded.
+  it('shows the excluded-week notice, not pick buttons, for a week before the league StartWeek', async () => {
+    await setupDefaults({ week: 2 });
+    mockedGetLeagueJuice.mockResolvedValue([{
+      id: 1, leagueId: 1, leagueName: 'Test League', season: 2024,
+      juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5,
+      startWeek: 3, dateCreated: '', teaseLocked: false, weeklyCostLocked: false,
+    }]);
+    renderWithClient(<PicksPage adapter={createNflAdapter()} />);
+    await screen.findByText(/Week Not Scored/i);
+    expect(screen.getByText(/starts scoring at Week 3/i)).toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: /^Pick /i })).toHaveLength(0);
+    // Decision (frizat-u66): excluded weeks stay navigable rather than hidden/disabled in the
+    // selector — spreads are still real for these weeks, the empty-state message is what
+    // communicates exclusion, not a restricted selector range.
+    expect(screen.getByTestId('week-year-selector-container')).toBeInTheDocument();
+  });
+
+  it('shows the ordinary pick grid, not the excluded-week notice, for a week at or after the league StartWeek', async () => {
+    await setupDefaults({ week: 2 });
+    mockedGetLeagueJuice.mockResolvedValue([{
+      id: 1, leagueId: 1, leagueName: 'Test League', season: 2024,
+      juice: 13, juiceDivisional: 10, juiceConference: 6, weeklyCost: 5,
+      startWeek: 2, dateCreated: '', teaseLocked: false, weeklyCostLocked: false,
+    }]);
+    await renderPage();
+    expect(screen.queryByText(/Week Not Scored/i)).toBeNull();
+    expect(screen.getAllByRole('button', { name: /^Pick /i }).length).toBeGreaterThan(0);
+  });
+
   it('shows picks remaining for week 2 with no existing picks', async () => {
     await setupDefaults({ week: 2 });
     await renderPage();

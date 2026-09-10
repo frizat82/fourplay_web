@@ -9,6 +9,15 @@ import type { NflPickDto, PickType, SpreadCalculationResponse, SpreadResponse } 
  * hook existed. Call from a `beforeEach` alongside the file's own mock resets; override with a
  * real resolved value only in a test that specifically exercises the per-league floor.
  */
+/**
+ * Resets a mocked `getLeagueJuice` and resolves it to no juice-mapping history, so both
+ * `useLeagueMinSeason` and `useLeagueStartWeek` (frizat-u66 — reuses the same
+ * `['leagueJuice', leagueId]` query rather than a second per-season fetch) fall back to their
+ * defaults (sport-wide minSeason; StartWeek 1, nothing excluded) — the default every
+ * pre-existing Picks/Scores/Leaderboard test was written against before either hook existed.
+ * Call from a `beforeEach` alongside the file's own mock resets; override with a real resolved
+ * value only in a test that specifically exercises the per-league floor or StartWeek gating.
+ */
 export function mockLeagueJuiceEmpty(mockedGetLeagueJuice: Mock) {
   mockedGetLeagueJuice.mockReset();
   mockedGetLeagueJuice.mockResolvedValue([]);

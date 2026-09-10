@@ -199,16 +199,23 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         if (!await leagueRepo.UserExistsInLeagueAsync(userId, request.LeagueId))
             return Forbid();
 
-        // None of these four depend on each other's results, so fetch them concurrently.
+        // None of these five depend on each other's results, so fetch them concurrently.
         var spreadsTask = cfbRepo.GetSpreadsForSlateAsync(request.CfbSlateId);
         var existingPicksTask = repo.GetUserPicksAsync(request.LeagueId, request.CfbSlateId, userId);
         var slateTask = cfbRepo.GetSlateByIdAsync(request.CfbSlateId);
         var currentSlateTask = currentSlateService.GetCurrentSlateAsync();
-        await Task.WhenAll(spreadsTask, existingPicksTask, slateTask, currentSlateTask);
+        var juiceMappingTask = leagueRepo.GetLeagueJuiceMappingAsync(request.LeagueId, request.Season);
+        await Task.WhenAll(spreadsTask, existingPicksTask, slateTask, currentSlateTask, juiceMappingTask);
 
         var slate = slateTask.Result;
         if (slate is null)
             return BadRequest("Cfb Slate Does Not Exist");
+
+        // frizat-u66: defense in depth backing the frontend gate — a league that has excluded
+        // this slate via StartWeek must reject a submission for it even if attempted directly.
+        var startWeekError = GameHelpers.ValidateWeekNotExcluded(slate.SlateNumber, juiceMappingTask.Result?.StartWeek);
+        if (startWeekError is not null)
+            return BadRequest(startWeekError);
 
         // Guard: picks are only accepted for the currently open slate per the control table —
         // worse than NFL's equivalent gap, a spread-less future slate has empty
