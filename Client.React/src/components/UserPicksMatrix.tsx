@@ -10,16 +10,22 @@ import {
 } from '@mui/material';
 import type { NflPickDto, SpreadCalculationResponse } from '../types/picks';
 import { stickyColumnSx } from '../utils/tableStyles';
+import TeamLogo from './sports/TeamLogo';
+import { getTeamArtMode } from '../utils/teamArt';
 
 interface UserPicksMatrixProps {
+  sport: 'nfl' | 'cfb';
   users: string[];
   picks: NflPickDto[];
   spreads: Record<string, SpreadCalculationResponse>;
   requiredPicks: number;
 }
 
-export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }: UserPicksMatrixProps) {
+export default function UserPicksMatrix({ sport, users, picks, spreads, requiredPicks }: UserPicksMatrixProps) {
   const isDark = useTheme().palette.mode === 'dark';
+  // Read once per render, not once per cell — VITE_TEAM_ART_MODE is a build-time constant that
+  // can't change mid-render, and this table renders one cell per (user × requiredPicks).
+  const isLogosMode = getTeamArtMode() === 'logos';
 
   const getWinner = (teamAbbr: string, pickType: NflPickDto['pick']) => {
     const calc = spreads[teamAbbr];
@@ -59,10 +65,16 @@ export default function UserPicksMatrix({ users, picks, spreads, requiredPicks }
         {/* frizat: the helmet logo + 9px label was hard to read at a glance against the
             win/loss color-coded background — text-only, much larger, reads clearly instead.
             CFB abbreviations run up to 4 chars (UTSA, UNLV, WASH) vs NFL's 2-3 — shrink to fit
-            the fixed 60px badge width rather than overflowing it. */}
-        <Typography sx={{ fontSize: pick.team.length > 3 ? 16 : 22, fontWeight: 800, letterSpacing: '0.02em' }}>
-          {pick.team}
-        </Typography>
+            the fixed 60px badge width rather than overflowing it. frizat-cwj: that lesson only
+            applies to the icon-sized synthetic badge — a real logo at 32px plus its own label
+            stays readable, so 'logos' mode gets both instead of text-only. */}
+        {isLogosMode ? (
+          <TeamLogo abbr={pick.team} sport={sport} size={32} showLabel />
+        ) : (
+          <Typography sx={{ fontSize: pick.team.length > 3 ? 16 : 22, fontWeight: 800, letterSpacing: '0.02em' }}>
+            {pick.team}
+          </Typography>
+        )}
         {/* frizat: the badge used to signal win/loss three ways at once — the tinted background,
             a colored OVER/UNDER label, and a corner check/cancel icon — reported as cluttered
             and hard to read. The background alone now carries that signal; this label stays the

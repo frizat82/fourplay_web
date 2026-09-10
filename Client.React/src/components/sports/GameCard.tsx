@@ -1,6 +1,6 @@
 import { Box, Button, Card, CardContent, Chip, Stack, Typography } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
-import TeamHelmet from './TeamHelmet';
+import TeamArt from './TeamArt';
 import RankBadge from './RankBadge';
 import WeatherIcon from '../WeatherIcon';
 import { isGameFinal, isGameLive, spreadLabel } from '../../utils/gameHelpers';
@@ -10,6 +10,7 @@ import type { GameStatusValue } from '../../services/sportAdapter';
 export type PickState = 'none' | 'pending' | 'submitted';
 
 export interface GameCardProps {
+  sport: 'nfl' | 'cfb';
   homeTeam: string;
   awayTeam: string;
   homeSpread: number | null;
@@ -73,6 +74,7 @@ function statusChip(status: GameStatusValue | undefined, gameTime: string) {
 
 
 export default function GameCard({
+  sport,
   homeTeam, awayTeam, homeSpread, awaySpread, gameTime,
   mode,
   homeScore, awayScore, gameStatus, gameDetail,
@@ -164,7 +166,7 @@ export default function GameCard({
     <Box textAlign="center">
       {jerseyUrl
         ? <img src={jerseyUrl} width={50} alt={abbr} />
-        : <TeamHelmet abbr={abbr} size={50} showLabel={false} />}
+        : <TeamArt abbr={abbr} sport={sport} size={50} showLabel={false} />}
       <Typography variant="caption" display="block" sx={{ lineHeight: 1.2, opacity: 0.85 }}>
         {abbr}
       </Typography>
