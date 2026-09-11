@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-11
+
+- Fixed: the Scores page could sit on stale scores after switching away from the tab and back — the polling pause for a hidden tab resumed correctly, but nothing forced an immediate refresh, so it just waited out the usual 5-20 minute interval instead of updating right away
+
 ## 2026-09-10
 
 - Added: leagues can now set a Start Week (1-5, default 1) on the Juice tab so a league's season can skip early weeks — mainly for CFB leagues that want to skip week 1's often lopsided matchups. Weeks before it require no picks, don't appear on the leaderboard, and aren't billed the weekly cost; the following week settles normally, not as a doubled pot

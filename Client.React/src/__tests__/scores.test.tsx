@@ -496,6 +496,69 @@ describe('ScoresPage', () => {
     });
   });
 
+  // frizat: "score not updating — if I change focus and come back it doesn't auto update".
+  // The visibilitychange handler only paused/resumed the refetchInterval gate — resuming a
+  // gate doesn't itself trigger a fetch, so React Query just waited for the next 5-20min tick.
+  // refetchOnWindowFocus is globally disabled (main.tsx) for other pages' sake, so this page
+  // must explicitly refetch on becoming visible again instead of relying on that default.
+  describe('tab visibility refresh', () => {
+    const setHidden = (hidden: boolean) => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+
+    afterEach(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    });
+
+    it('refetches immediately when the tab regains visibility, without waiting for the poll interval', async () => {
+      const liveComp = createCompetition({
+        homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10,
+        liveStatus: { name: 'status_in_progress', period: 2, displayClock: '5:00' },
+      });
+      mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(2));
+      mockedGetWeekScores.mockResolvedValue(createScores({
+        week: 2, postSeason: false,
+        events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
+      }));
+      mockedGetLiveGames.mockResolvedValue([]);
+      mockedDoOddsExist.mockResolvedValue(true);
+      mockedGetLeaguePicks.mockResolvedValue([]);
+      mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
+      await renderPage();
+      expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0);
+
+      mockedGetWeekScores.mockClear();
+
+      // Tab goes to background — no fetch just from hiding.
+      await act(async () => { setHidden(true); });
+      expect(mockedGetWeekScores).not.toHaveBeenCalled();
+
+      // Tab regains focus — must refetch right away, not wait for the poll interval.
+      await act(async () => { setHidden(false); });
+      await waitFor(() => expect(mockedGetWeekScores).toHaveBeenCalled());
+    });
+
+    it('does not refetch on regained visibility when viewing a historical week', async () => {
+      await setupDefaults({ week: 2 });
+      await renderPage();
+
+      const user = userEvent.setup();
+      await user.click(screen.getAllByRole('combobox')[1]);
+      await user.click(screen.getByRole('option', { name: /week 1/i }));
+      await waitFor(() => expect(screen.getAllByText(/DAL/i).length).toBeGreaterThan(0));
+
+      mockedGetWeekScores.mockClear();
+
+      await act(async () => { setHidden(true); });
+      await act(async () => { setHidden(false); });
+      // Give any stray async work a tick, then assert no extra fetch was made for static
+      // historical data (a real regression here would call getWeekScores again).
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(mockedGetWeekScores).not.toHaveBeenCalled();
+    });
+  });
+
   it('season selector keeps the current season navigable after viewing a historical season', async () => {
     // Regression (mirrors the equivalent PicksPage test): navigating into a past season used to
     // permanently shrink the selector's range to "minSeason..whatever season you're viewing" —
