@@ -664,4 +664,51 @@ describe('PicksPage', () => {
       );
     });
   });
+
+  // Same underlying bug/fix as ScoresPage.tsx's "tab visibility refresh" tests: refetchInterval
+  // alone doesn't trigger an immediate fetch on regaining focus, and refetchOnWindowFocus is
+  // disabled globally (main.tsx), so this page's live-week query needs its own override.
+  describe('tab visibility refresh', () => {
+    const setHidden = (hidden: boolean) => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('visibilitychange'));
+    };
+
+    afterEach(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    });
+
+    it('refetches immediately when the tab regains visibility, without waiting for the poll interval', async () => {
+      await setupDefaults();
+      await renderPage();
+
+      mockedGetWeekScores.mockClear();
+
+      await act(async () => { setHidden(true); });
+      expect(mockedGetWeekScores).not.toHaveBeenCalled();
+
+      await act(async () => { setHidden(false); });
+      await waitFor(() => expect(mockedGetWeekScores).toHaveBeenCalled());
+    });
+
+    it('does not refetch on regained visibility when viewing a historical week', async () => {
+      await setupDefaults({ week: 2 });
+      await renderPage();
+
+      const user = userEvent.setup();
+      await user.click(screen.getAllByRole('combobox')[1]);
+      await user.click(screen.getByRole('option', { name: /week 1/i }));
+      await waitFor(() => expect(mockedGetWeekScores).toHaveBeenCalledWith(expect.anything(), 1));
+
+      mockedGetWeekScores.mockClear();
+
+      await act(async () => { setHidden(true); });
+      await act(async () => { setHidden(false); });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(mockedGetWeekScores).not.toHaveBeenCalled();
+    });
+  });
 });

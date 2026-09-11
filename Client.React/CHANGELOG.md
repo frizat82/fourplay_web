@@ -6,7 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-09-11
 
-- Fixed: the Scores page could sit on stale scores after switching away from the tab and back — the polling pause for a hidden tab resumed correctly, but nothing forced an immediate refresh, so it just waited out the usual 5-20 minute interval instead of updating right away
+- Fixed: the Scores and Picks pages could sit on stale data after switching away from the tab and back — the polling pause for a hidden tab resumed correctly, but nothing forced an immediate refresh, so it just waited out the usual 5-20 minute interval instead of updating right away
 
 ## 2026-09-10
 

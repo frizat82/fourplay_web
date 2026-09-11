@@ -87,27 +87,26 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     refetchInterval: query => isCurrentWeek && isPageVisible && adapter.pollIntervalMs > 0
       ? (query.state.data?.hasActiveGames ? adapter.pollIntervalMs : adapter.pollIntervalMs * 4)
       : false,
+    // refetchOnWindowFocus is disabled globally (main.tsx) for other pages' sake, but the live
+    // current-week query needs it: refetchInterval only pauses/resumes background polling — that
+    // alone doesn't trigger an immediate fetch on regaining focus, so without this override the
+    // page just waits out the next 5-20min poll tick after a tab switch away and back. React
+    // Query's own focusManager already listens for `visibilitychange` under the hood, so this
+    // reuses that built-in mechanism (scoped to just this query) instead of hand-rolling a second
+    // listener. Scoped to the live week only — a historical week's data can't have changed.
+    refetchOnWindowFocus: () => isCurrentWeek,
     placeholderData: keepPreviousData,
   });
 
   const { maxWeek: currentMaxWeek, maxSeason: currentMaxSeason, routeToCurrentIfMatches } =
     useCurrentWeekNav(isCurrentWeek, data, setWeekState);
 
-  // Page visibility — pause polling for a hidden tab rather than burn cycles/battery on it, and
-  // refetch immediately on regaining visibility. refetchOnWindowFocus is disabled globally
-  // (main.tsx) for other pages' sake, so resuming the refetchInterval gate alone isn't enough —
-  // React Query would just wait for the next 5-20min tick, which is exactly what "switched tabs
-  // away and back, score didn't update" looks like. Only worth it for the live current-week
-  // query; a historical week's data won't have changed while the tab was hidden.
+  // Page visibility — pause polling for a hidden tab rather than burn cycles/battery on it.
   useEffect(() => {
-    const h = () => {
-      const visible = !document.hidden;
-      setIsPageVisible(visible);
-      if (visible && isCurrentWeek && enabled) void refetch();
-    };
+    const h = () => setIsPageVisible(!document.hidden);
     document.addEventListener('visibilitychange', h);
     return () => document.removeEventListener('visibilitychange', h);
-  }, [isCurrentWeek, enabled, refetch]);
+  }, []);
 
   // SSE — primary update mechanism when on current NFL/CFB week with active games; polling
   // above is the fallback. Reconnects with backoff on drop and immediately on the browser's
