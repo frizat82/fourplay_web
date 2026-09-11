@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { forgotPassword } from '../../api/auth';
 import { useToast } from '../../services/toast';
 import { buildAbsoluteUrl } from '../../utils/url';
+import { extractApiErrorMessage } from '../../utils/apiError';
 
 const schema = z.object({
   email: z.string().email('Invalid email'),
@@ -31,8 +32,11 @@ export default function ForgotPasswordPage() {
         resetUrl: buildAbsoluteUrl('/account/resetpassword'),
       });
       navigate('/account/forgotpasswordconfirmation', { replace: true });
-    } catch {
-      toast.push('Error requesting password reset', 'error');
+    } catch (error) {
+      // The "forgot" rate limiter (Program.cs: 3 attempts/hour per IP, shared with reset-password)
+      // returns a bare 429 — surface that distinctly rather than a generic message that gives a
+      // rate-limited user no indication that retrying immediately won't help.
+      toast.push(extractApiErrorMessage(error, 'Error requesting password reset'), 'error');
     }
   };
 

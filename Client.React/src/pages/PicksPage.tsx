@@ -61,6 +61,12 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       : adapter.loadCurrentGames(currentLeague!, user!.userId),
     enabled,
     refetchInterval: isCurrentWeek && adapter.pollIntervalMs > 0 ? adapter.pollIntervalMs : false,
+    // refetchOnWindowFocus is disabled globally (main.tsx) for other pages' sake, but the live
+    // current-week query needs it: refetchInterval alone doesn't trigger an immediate fetch on
+    // regaining focus, so without this override the page would wait out the next 5-20min poll
+    // tick after a tab switch away and back (same fix as ScoresPage.tsx). Scoped to the live
+    // week only — a historical week's data can't have changed.
+    refetchOnWindowFocus: () => isCurrentWeek,
     placeholderData: keepPreviousData,
   });
 
