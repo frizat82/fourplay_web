@@ -497,18 +497,23 @@ describe('ScoresPage', () => {
   });
 
   // frizat: "score not updating — if I change focus and come back it doesn't auto update".
-  // The visibilitychange handler only paused/resumed the refetchInterval gate — resuming a
-  // gate doesn't itself trigger a fetch, so React Query just waited for the next 5-20min tick.
-  // refetchOnWindowFocus is globally disabled (main.tsx) for other pages' sake, so this page
-  // must explicitly refetch on becoming visible again instead of relying on that default.
+  // The page's own visibilitychange handler only paused/resumed the refetchInterval gate —
+  // resuming a gate doesn't itself trigger a fetch, so React Query just waited for the next
+  // 5-20min tick. refetchOnWindowFocus is globally disabled (main.tsx) for other pages' sake, so
+  // this query overrides it back on for itself, scoped to the live current week — React Query's
+  // own focusManager (which listens on `window`, separately from the page's own `document`
+  // listener above) then handles the immediate refetch on regaining visibility.
   describe('tab visibility refresh', () => {
     const setHidden = (hidden: boolean) => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
       document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('visibilitychange'));
     };
 
     afterEach(() => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
     });
 
     it('refetches immediately when the tab regains visibility, without waiting for the poll interval', async () => {
