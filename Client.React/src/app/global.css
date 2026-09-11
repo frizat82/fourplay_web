@@ -8,6 +8,9 @@
   --ink-2: #334155;
   --accent: #ff6b35;
   --primary: #1a2847;
+  /* Mirrors theme.ts's palette.background.paper (light) — the Card/Paper surface color, distinct
+     from the body's own --bg-1/--bg-2/--bg-3. Keep these two in sync if either changes. */
+  --paper: #ffffff;
   --safe-inset-top: env(safe-area-inset-top);
   --safe-inset-bottom: env(safe-area-inset-bottom);
   --safe-inset-left: env(safe-area-inset-left);
@@ -15,6 +18,8 @@
 }
 
 [data-theme='dark'] {
+  /* Mirrors theme.ts's palette.background.paper (dark). */
+  --paper: #1a2440;
   --bg-1: #0f1729;
   /* Was #1a2440 — byte-for-byte identical to theme.ts's dark-mode background.paper. On a page
      long enough to scroll well past the first viewport (e.g. the ever-growing Changelog), the
@@ -109,6 +114,24 @@ input[type="checkbox"],
 input[type="radio"] {
   -webkit-appearance: checkbox;
   appearance: checkbox;
+}
+
+/* Safari/Chrome ignore an input's own `background` for an autofilled field and paint their own
+   solid highlight straight onto it (blue on iOS Safari, yellow on Chrome) — the input's own
+   `background-color` CSS can't override this, only `box-shadow` can. On a dark-themed MUI
+   outlined TextField this clashes with the Card/Paper the field sits in, right where the
+   floating label crosses the border — reported as the Email field's label looking broken/
+   misaligned on Login/Forgot Password. `transition` with an absurd delay prevents a flash of the
+   browser's native color before ours applies. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--ink-1);
+  caret-color: var(--ink-1);
+  -webkit-box-shadow: 0 0 0 100px var(--paper) inset;
+  box-shadow: 0 0 0 100px var(--paper) inset;
+  transition: background-color 600000s 0s, color 600000s 0s;
 }
 
 button {

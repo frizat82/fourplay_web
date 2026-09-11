@@ -250,7 +250,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                 one defaulted to unstyled contained (reads as inert navy) and the other used
                 contained secondary (the brand orange reserved for real CTAs like Share). Same
                 matching, neutral treatment for both now. */}
-            {data?.allPicks.length && data.allPicks.length > 0 && (
+            {(data?.allPicks.length ?? 0) > 0 && (
               <Button variant="outlined" color="info" onClick={() => setShowMatrixView(p => !p)}>
                 {showMatrixView ? 'Show Standard View' : 'Show As Matrix'}
               </Button>
