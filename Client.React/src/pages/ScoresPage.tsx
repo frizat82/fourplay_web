@@ -87,6 +87,14 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     refetchInterval: query => isCurrentWeek && isPageVisible && adapter.pollIntervalMs > 0
       ? (query.state.data?.hasActiveGames ? adapter.pollIntervalMs : adapter.pollIntervalMs * 4)
       : false,
+    // refetchOnWindowFocus is disabled globally (main.tsx) for other pages' sake, but the live
+    // current-week query needs it: refetchInterval only pauses/resumes background polling — that
+    // alone doesn't trigger an immediate fetch on regaining focus, so without this override the
+    // page just waits out the next 5-20min poll tick after a tab switch away and back. React
+    // Query's own focusManager already listens for `visibilitychange` under the hood, so this
+    // reuses that built-in mechanism (scoped to just this query) instead of hand-rolling a second
+    // listener. Scoped to the live week only — a historical week's data can't have changed.
+    refetchOnWindowFocus: () => isCurrentWeek,
     placeholderData: keepPreviousData,
   });
 
@@ -242,7 +250,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                 one defaulted to unstyled contained (reads as inert navy) and the other used
                 contained secondary (the brand orange reserved for real CTAs like Share). Same
                 matching, neutral treatment for both now. */}
-            {data?.allPicks.length && data.allPicks.length > 0 && (
+            {(data?.allPicks.length ?? 0) > 0 && (
               <Button variant="outlined" color="info" onClick={() => setShowMatrixView(p => !p)}>
                 {showMatrixView ? 'Show Standard View' : 'Show As Matrix'}
               </Button>
