@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { resetPassword } from '../../api/auth';
 import { decodeBase64Url, isValidBase64Url } from '../../utils/base64';
 import { useToast } from '../../services/toast';
+import { extractApiErrorMessage } from '../../utils/apiError';
 
 const schema = z
   .object({
@@ -57,8 +58,11 @@ export default function ResetPasswordPage() {
         token,
       });
       navigate('/account/resetpasswordconfirmation', { replace: true });
-    } catch {
-      toast.push('Error resetting password', 'error');
+    } catch (error) {
+      // Same "forgot" rate limiter as ForgotPasswordPage (Program.cs: 3 attempts/hour per IP,
+      // shared between the two endpoints) — surface a 429 distinctly rather than the generic
+      // message that gives no indication retrying immediately won't help.
+      toast.push(extractApiErrorMessage(error, 'Error resetting password'), 'error');
     }
   };
 

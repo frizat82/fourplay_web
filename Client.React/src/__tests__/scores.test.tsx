@@ -301,6 +301,20 @@ describe('ScoresPage', () => {
     expect(myPicksButton.className).not.toMatch(/Secondary/);
   });
 
+  // frizat: `data?.allPicks.length && data.allPicks.length > 0 && (<Button/>)` — when nobody has
+  // picked yet, allPicks.length is 0 (falsy but not boolean), so `&&` short-circuits to the
+  // literal number 0 and React renders it as stray text next to the controls row (reported live:
+  // a bare "0" floating next to "Show Only My Picks" on a week with no picks yet).
+  it('does not render a stray "0" in the controls row when nobody has picked yet', async () => {
+    await setupDefaults({ picks: [], gameStarted: true });
+    const { container } = await renderPage();
+
+    expect(screen.queryByRole('button', { name: /show as matrix/i })).toBeNull();
+    const controlsRow = screen.getByRole('button', { name: /show only my picks/i }).closest('.MuiGrid-root');
+    expect(controlsRow?.textContent).not.toMatch(/^0/);
+    expect(container.textContent).not.toContain('0Show Only My Picks');
+  });
+
   // /code-review caught that the removed shield icon was the ONLY win/loss signal for a team
   // nobody in the league picked — the badge/icon-button pair used pickCount === 0 to both hide
   // the count bubble AND disable the button, and MUI's disabled state flattens `color` to gray
@@ -493,6 +507,74 @@ describe('ScoresPage', () => {
         await vi.advanceTimersByTimeAsync(POLL_MS);
       });
       expect(mockedGetWeekScores).toHaveBeenCalled();
+    });
+  });
+
+  // frizat: "score not updating — if I change focus and come back it doesn't auto update".
+  // The page's own visibilitychange handler only paused/resumed the refetchInterval gate —
+  // resuming a gate doesn't itself trigger a fetch, so React Query just waited for the next
+  // 5-20min tick. refetchOnWindowFocus is globally disabled (main.tsx) for other pages' sake, so
+  // this query overrides it back on for itself, scoped to the live current week — React Query's
+  // own focusManager (which listens on `window`, separately from the page's own `document`
+  // listener above) then handles the immediate refetch on regaining visibility.
+  describe('tab visibility refresh', () => {
+    const setHidden = (hidden: boolean) => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('visibilitychange'));
+    };
+
+    afterEach(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    });
+
+    it('refetches immediately when the tab regains visibility, without waiting for the poll interval', async () => {
+      const liveComp = createCompetition({
+        homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10,
+        liveStatus: { name: 'status_in_progress', period: 2, displayClock: '5:00' },
+      });
+      mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(2));
+      mockedGetWeekScores.mockResolvedValue(createScores({
+        week: 2, postSeason: false,
+        events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
+      }));
+      mockedGetLiveGames.mockResolvedValue([]);
+      mockedDoOddsExist.mockResolvedValue(true);
+      mockedGetLeaguePicks.mockResolvedValue([]);
+      mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
+      await renderPage();
+      expect(screen.getAllByText(/BUF/i).length).toBeGreaterThan(0);
+
+      mockedGetWeekScores.mockClear();
+
+      // Tab goes to background — no fetch just from hiding.
+      await act(async () => { setHidden(true); });
+      expect(mockedGetWeekScores).not.toHaveBeenCalled();
+
+      // Tab regains focus — must refetch right away, not wait for the poll interval.
+      await act(async () => { setHidden(false); });
+      await waitFor(() => expect(mockedGetWeekScores).toHaveBeenCalled());
+    });
+
+    it('does not refetch on regained visibility when viewing a historical week', async () => {
+      await setupDefaults({ week: 2 });
+      await renderPage();
+
+      const user = userEvent.setup();
+      await user.click(screen.getAllByRole('combobox')[1]);
+      await user.click(screen.getByRole('option', { name: /week 1/i }));
+      await waitFor(() => expect(screen.getAllByText(/DAL/i).length).toBeGreaterThan(0));
+
+      mockedGetWeekScores.mockClear();
+
+      await act(async () => { setHidden(true); });
+      await act(async () => { setHidden(false); });
+      // Give any stray async work a tick, then assert no extra fetch was made for static
+      // historical data (a real regression here would call getWeekScores again).
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(mockedGetWeekScores).not.toHaveBeenCalled();
     });
   });
 
