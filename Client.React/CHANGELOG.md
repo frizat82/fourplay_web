@@ -7,6 +7,9 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 ## 2026-09-11
 
 - Fixed: the Scores and Picks pages could sit on stale data after switching away from the tab and back — the polling pause for a hidden tab resumed correctly, but nothing forced an immediate refresh, so it just waited out the usual 5-20 minute interval instead of updating right away
+- Fixed: a stray "0" could appear next to the Scores page's "Show Only My Picks" button on a week with no picks yet
+- Fixed: Forgot Password and Reset Password showed the same generic error for any failure, including being rate-limited (3 attempts/hour) — a rate-limited user now sees a clear "too many attempts, wait a few minutes" message instead
+- Fixed: the Email field's floating label could look broken on Login/Forgot Password when the browser autofilled it — the browser's own autofill highlight color now matches the app's theme instead of clashing with it
 
 ## 2026-09-10
 

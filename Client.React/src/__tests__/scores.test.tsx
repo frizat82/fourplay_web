@@ -301,6 +301,20 @@ describe('ScoresPage', () => {
     expect(myPicksButton.className).not.toMatch(/Secondary/);
   });
 
+  // frizat: `data?.allPicks.length && data.allPicks.length > 0 && (<Button/>)` — when nobody has
+  // picked yet, allPicks.length is 0 (falsy but not boolean), so `&&` short-circuits to the
+  // literal number 0 and React renders it as stray text next to the controls row (reported live:
+  // a bare "0" floating next to "Show Only My Picks" on a week with no picks yet).
+  it('does not render a stray "0" in the controls row when nobody has picked yet', async () => {
+    await setupDefaults({ picks: [], gameStarted: true });
+    const { container } = await renderPage();
+
+    expect(screen.queryByRole('button', { name: /show as matrix/i })).toBeNull();
+    const controlsRow = screen.getByRole('button', { name: /show only my picks/i }).closest('.MuiGrid-root');
+    expect(controlsRow?.textContent).not.toMatch(/^0/);
+    expect(container.textContent).not.toContain('0Show Only My Picks');
+  });
+
   // /code-review caught that the removed shield icon was the ONLY win/loss signal for a team
   // nobody in the league picked — the badge/icon-button pair used pickCount === 0 to both hide
   // the count bubble AND disable the button, and MUI's disabled state flattens `color` to gray
