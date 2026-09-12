@@ -263,13 +263,32 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             .ToList();
 
         var requiredPicks = GameHelpers.GetCfbRequiredPicks(slate.SlateNumber);
-        if (newPicks.Count + existingPicks.Count > requiredPicks)
+        // Atomic: re-checks the cap and inserts inside one advisory-lock-held transaction — see
+        // PickConcurrencyGuard and LeagueController.AddPicks's identical NFL guard.
+        var added = await repo.TryAddPicksAsync(newPicks, userId, request.LeagueId, request.Season, request.CfbSlateId, requiredPicks);
+        if (!added)
             return BadRequest($"Too many picks. Maximum allowed for this slate is {requiredPicks}");
 
-        if (newPicks.Count > 0)
-            await repo.AddPicksAsync(newPicks);
-
         return Ok(new AddCfbPicksResponseDto(newPicks.Count));
+    }
+
+    // Self-service pick removal — mirrors LeagueController.RemoveMyPick for NFL. Lets a user
+    // unselect their own pick any time before its game kicks off; identified by natural key
+    // (Team/PickType), not Id. Idempotent: removing an already-gone pick still returns 204.
+    [HttpDelete("picks/mine")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> RemoveMyPick([FromBody] CfbPickDto dto) {
+        var userId = CurrentUserId;
+        if (!await leagueRepo.UserExistsInLeagueAsync(userId, dto.LeagueId))
+            return Forbid();
+
+        var spreads = await cfbRepo.GetSpreadsForSlateAsync(dto.CfbSlateId);
+        var startedTeams = GameHelpers.StartedTeams(spreads, DateTimeOffset.UtcNow, s => s.GameTime, s => s.HomeTeam, s => s.AwayTeam);
+        if (startedTeams.Contains(dto.Team))
+            return BadRequest($"Pick cannot be removed: {dto.Team}'s game has already kicked off.");
+
+        await repo.TryRemovePickAsync(userId, dto.LeagueId, dto.Season, dto.CfbSlateId, dto.Team, dto.PickType);
+        return NoContent();
     }
 
     [HttpDelete("picks/{leagueId}/{cfbSlateId}")]

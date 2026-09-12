@@ -508,11 +508,38 @@ public class LeagueController(
             .Where(p => !existingKeys.Contains((p.Team, p.NflWeek, p.Season, p.LeagueId)))
             .ToList();
         var requiredPicks = GameHelpers.GetRequiredPicks(first.NflWeek);
-        if (newPicks.Count + existingPicks.Count > requiredPicks)
+        // Cap check + insert happen atomically inside one advisory-lock-held transaction, so two
+        // concurrent submissions (double-click, two tabs) can never both squeeze past the cap —
+        // see PickConcurrencyGuard.
+        var added = await repo.TryAddNflPicksAsync(newPicks, authenticatedUserId, first.LeagueId, first.Season, first.NflWeek, requiredPicks);
+        if (!added)
             return BadRequest($"Too many picks. Maximum allowed for week {first.NflWeek} is {requiredPicks}");
-        await repo.AddNflPicksAsync(newPicks);
         memoryCache.Remove($"picks_{first.LeagueId}_{first.Season}_{first.NflWeek}");
         return Ok(newPicks.Count);
+    }
+
+    // Self-service pick removal — unlike the admin-only bulk RemovePicks below, this lets a user
+    // unselect their own pick any time before its game kicks off. Identified by natural key
+    // (Team/Pick/NflWeek/Season/LeagueId), not Id, since the frontend already has these from the
+    // picks it displays. Idempotent: removing an already-gone pick still returns 204.
+    [HttpDelete("picks/mine")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> RemoveMyPick([FromBody] NflPickDto dto) {
+        var authenticatedUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(authenticatedUserId))
+            return Unauthorized();
+
+        if (!await repo.UserExistsInLeagueAsync(authenticatedUserId, dto.LeagueId))
+            return Forbid();
+
+        var spreads = await repo.GetNflSpreadsAsync(dto.Season, dto.NflWeek) ?? [];
+        var startedTeams = GameHelpers.StartedTeams(spreads, DateTimeOffset.UtcNow, s => s.GameTime, s => s.HomeTeam, s => s.AwayTeam);
+        if (startedTeams.Contains(dto.Team))
+            return BadRequest($"Pick cannot be removed: {dto.Team}'s game has already kicked off.");
+
+        await repo.TryRemoveNflPickAsync(authenticatedUserId, dto.LeagueId, dto.Season, dto.NflWeek, dto.Team, dto.Pick);
+        memoryCache.Remove($"picks_{dto.LeagueId}_{dto.Season}_{dto.NflWeek}");
+        return NoContent();
     }
 
     [HttpDelete("picks")]

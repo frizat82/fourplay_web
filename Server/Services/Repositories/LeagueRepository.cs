@@ -433,6 +433,35 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await db.SaveChangesAsync();
     }
 
+    public async Task<bool> TryAddNflPicksAsync(IEnumerable<NflPicks> newPicks, string userId, int leagueId, int season, int week, int requiredPicks) {
+        var picksList = newPicks.ToList();
+        if (picksList.Count == 0) return true;
+
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await PickConcurrencyGuard.RunLockedAsync(db, $"nfl:{userId}:{leagueId}:{season}:{week}", async () => {
+            var existingCount = await db.NflPicks.CountAsync(p =>
+                p.UserId == userId && p.LeagueId == leagueId && p.Season == season && p.NflWeek == week);
+            if (existingCount + picksList.Count > requiredPicks) return false;
+
+            await db.NflPicks.AddRangeAsync(picksList);
+            await db.SaveChangesAsync();
+            return true;
+        });
+    }
+
+    public async Task<bool> TryRemoveNflPickAsync(string userId, int leagueId, int season, int week, string team, PickType pickType) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await PickConcurrencyGuard.RunLockedAsync(db, $"nfl:{userId}:{leagueId}:{season}:{week}", async () => {
+            var pick = await db.NflPicks.FirstOrDefaultAsync(p =>
+                p.UserId == userId && p.LeagueId == leagueId && p.Season == season && p.NflWeek == week &&
+                p.Team == team && p.Pick == pickType);
+            if (pick is null) return false;
+
+            db.NflPicks.Remove(pick);
+            await db.SaveChangesAsync();
+            return true;
+        });
+    }
 
 // Remove operations
     public async Task RemoveNflScoresAsync(IEnumerable<NflScores> scores) {
