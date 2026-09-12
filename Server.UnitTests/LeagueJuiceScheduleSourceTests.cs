@@ -302,6 +302,24 @@ public class LeagueJuiceScheduleSourceTests
         Assert.Equal(new DateTime(2026, 2, 8, 20, 0, 0, DateTimeKind.Utc), lockTime); // 2pm CST = 20:00 UTC
     }
 
+    // frizat: a league created after the season's literal week 1 already locked previously had
+    // Tease Pts/Start Week frozen forever, because this always checked week 1's lock time
+    // regardless of the league's own configured StartWeek. The optional startWeek param lets
+    // callers (LeagueController) check the league's OWN boundary instead — defaults to 1 so
+    // GetCandidatesAsync's scheduler above (which genuinely always means the literal week 1) is
+    // unaffected.
+    [Fact]
+    public void GetSeasonStartLockTimeUtc_UsesGivenStartWeek_NotAlwaysWeek1() {
+        var nflConfigs = new[] {
+            MakeNflWeek(2025, 1, new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc)),
+            MakeNflWeek(2025, 3, new DateTime(2025, 9, 18, 20, 20, 0, DateTimeKind.Utc)),
+        };
+
+        var lockTime = LeagueJuiceScheduleSource.GetSeasonStartLockTimeUtc(LeagueType.Nfl, 2025, nflConfigs, [], startWeek: 3);
+
+        Assert.Equal(new DateTime(2025, 9, 18, 19, 0, 0, DateTimeKind.Utc), lockTime); // week 3's lock, not week 1's
+    }
+
     [Fact]
     public void GetSeasonStartLockTimeUtc_Cfb_ResolvesSlate1LockTime() {
         var cfbConfigs = new[] { MakeCfbSlate(2025, 1, new DateOnly(2025, 8, 23)) };

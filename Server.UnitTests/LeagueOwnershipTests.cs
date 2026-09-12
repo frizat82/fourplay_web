@@ -200,6 +200,14 @@ public class LeagueOwnershipTests
     private static LeagueJuiceScheduleSource BuildScheduleSource(ILeagueRepository repo, ICfbRepository? cfbRepo = null) =>
         new(repo, cfbRepo ?? EmptyCfbRepo(), TimeProvider.System);
 
+    // CreateLeague's Start Week default needs both current-week services — unconfigured
+    // substitutes default IsSeasonActiveAsync() to false (NSubstitute's bool default), so
+    // ResolveInitialStartWeekAsync short-circuits to 1 without ever calling
+    // GetCurrentWeekAsync/GetCurrentSlateAsync, matching every existing CreateLeague test's
+    // implicit expectation (StartWeek = 1) unless a test configures these explicitly.
+    private static (INflCurrentWeekService NflWeek, ICfbCurrentSlateService CfbSlate) StubCurrentWeekServices() =>
+        (Substitute.For<INflCurrentWeekService>(), Substitute.For<ICfbCurrentSlateService>());
+
     [Fact]
     public async Task UpdateJuice_ReturnsForbid_WhenCallerIsNotOwnerOrAdmin()
     {
@@ -292,6 +300,50 @@ public class LeagueOwnershipTests
 
         Assert.IsType<NoContentResult>(result);
         await repo.Received(1).UpdateLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.StartWeek == 3));
+    }
+
+    // A league created after the season's literal week 1 already locked previously had Tease
+    // Pts/Start Week frozen forever — the lock check always compared against week 1, regardless of
+    // what the league's own StartWeek was. Week 3 is in the past (locked) but week 1 for THIS
+    // league is irrelevant: its own configured StartWeek is 3, so the lock boundary must be week
+    // 3's kickoff too, and that's what CreateLeague's new default lets a late-created league use.
+    [Fact]
+    public async Task UpdateJuice_AllowsTeaseAndStartWeekChange_WhenLeagueOwnStartWeekHasNotLockedYet_EvenThoughSeasonWeek1Has()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        // This league's own StartWeek is already 3 (e.g. auto-defaulted at creation, mid-season).
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5, StartWeek = 3 });
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
+            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+                FirstGameOfWeekStartDatetime = new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc) }, // in the past
+            new() { Season = 2025, WeekId = 3, WeekLabel = "Week 3", WeekType = "Regular Season", ScoringFormat = "Standard",
+                FirstGameOfWeekStartDatetime = new DateTime(2099, 9, 18, 20, 20, 0, DateTimeKind.Utc) }, // far future
+        });
+
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(20, 15, 9, 5, StartWeek: 4), BuildScheduleSource(repo));
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).UpdateLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.Juice == 20 && m.StartWeek == 4));
+    }
+
+    // Mirror of the test above, at the opposite boundary: once the league's OWN StartWeek (3, not
+    // week 1) has itself started, tease points/Start Week lock exactly like they always have.
+    [Fact]
+    public async Task UpdateJuice_RejectsTeaseChange_OnceLeagueOwnStartWeekHasStarted()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
+        repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5, StartWeek = 3 });
+        repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
+            new() { Season = 2025, WeekId = 3, WeekLabel = "Week 3", WeekType = "Regular Season", ScoringFormat = "Standard",
+                FirstGameOfWeekStartDatetime = new DateTime(2025, 9, 18, 20, 20, 0, DateTimeKind.Utc) }, // in the past
+        });
+
+        var result = await ctrl.UpdateLeagueJuice(1, 2025, new LeagueJuiceUpdateDto(14, 10, 6, 5, StartWeek: 3), BuildScheduleSource(repo));
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await repo.DidNotReceive().UpdateLeagueJuiceMappingAsync(Arg.Any<LeagueJuiceMapping>());
     }
 
     [Theory]
@@ -714,12 +766,105 @@ public class LeagueOwnershipTests
         repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(createdLeague));
 
         var dto = new LeagueCreateDto("My League", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
-        var result = await ctrl.CreateLeague(dto) as OkObjectResult;
+        var (nflWeekSvc, cfbSlateSvc) = StubCurrentWeekServices();
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, cfbSlateSvc) as OkObjectResult;
 
         Assert.NotNull(result);
         await repo.Received(1).AddLeagueInfoAsync(Arg.Is<LeagueInfo>(l => l.LeagueName == "My League" && l.OwnerUserId == OwnerId));
         await repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.Season == 2025 && m.Juice == 13));
         await repo.Received(1).AddLeagueUserMappingAsync(Arg.Is<LeagueUserMapping>(m => m.UserId == OwnerId));
+    }
+
+    // ── CreateLeague's Start Week default (fix for a league created mid-season getting Tease
+    // Pts/Start Week frozen forever at the wrong value — see LeagueController.ResolveInitialStartWeekAsync) ──
+
+    [Fact]
+    public async Task CreateLeague_DefaultsStartWeekToCurrentNflWeek_WhenSeasonAlreadyActive()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+        repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl }));
+        var nflWeekSvc = Substitute.For<INflCurrentWeekService>();
+        nflWeekSvc.IsSeasonActiveAsync().Returns(true);
+        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(3, 2025, false, "Week 3", "Standard", DateTime.UtcNow));
+
+        var dto = new LeagueCreateDto("L", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, Substitute.For<ICfbCurrentSlateService>());
+
+        Assert.IsType<OkObjectResult>(result);
+        await repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.StartWeek == 3));
+    }
+
+    [Fact]
+    public async Task CreateLeague_DefaultsStartWeekToCurrentCfbSlate_WhenSeasonAlreadyActive()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        ctrl.ControllerContext.HttpContext.Request.Headers.Origin = "https://cfb.ivleague.xyz";
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+        repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Cfb }));
+        var cfbSlateSvc = Substitute.For<ICfbCurrentSlateService>();
+        cfbSlateSvc.IsSeasonActiveAsync().Returns(true);
+        cfbSlateSvc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(1, 2025, 4, "Slate 4", "Regular Season",
+            new DateOnly(2025, 9, 20), new DateOnly(2025, 9, 26), null, new DateTime(2025, 9, 20, 12, 0, 0, DateTimeKind.Utc)));
+
+        var dto = new LeagueCreateDto("L", LeagueType.Cfb, OwnerId, 2025, 13, 10, 6, 5);
+        var result = await ctrl.CreateLeague(dto, Substitute.For<INflCurrentWeekService>(), cfbSlateSvc);
+
+        Assert.IsType<OkObjectResult>(result);
+        await repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.StartWeek == 4));
+    }
+
+    [Fact]
+    public async Task CreateLeague_DefaultsStartWeekToOne_WhenSeasonNotActive()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+        repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl }));
+        var nflWeekSvc = Substitute.For<INflCurrentWeekService>();
+        nflWeekSvc.IsSeasonActiveAsync().Returns(false); // off-season — created ahead of the season
+
+        var dto = new LeagueCreateDto("L", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, Substitute.For<ICfbCurrentSlateService>());
+
+        Assert.IsType<OkObjectResult>(result);
+        await repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.StartWeek == 1));
+        // Never even asked for the current week — IsSeasonActiveAsync's false already settled it.
+        await nflWeekSvc.DidNotReceive().GetCurrentWeekAsync();
+    }
+
+    [Fact]
+    public async Task CreateLeague_DefaultsStartWeekToOne_WhenCurrentWeekBelongsToADifferentSeason()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+        repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl }));
+        var nflWeekSvc = Substitute.For<INflCurrentWeekService>();
+        nflWeekSvc.IsSeasonActiveAsync().Returns(true);
+        // "Now" resolves to 2024's season, but this league is explicitly being created for 2025.
+        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(18, 2024, false, "Week 18", "Standard", DateTime.UtcNow));
+
+        var dto = new LeagueCreateDto("L", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, Substitute.For<ICfbCurrentSlateService>());
+
+        Assert.IsType<OkObjectResult>(result);
+        await repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.StartWeek == 1));
+    }
+
+    [Fact]
+    public async Task CreateLeague_ClampsStartWeekDefaultToFive_WhenCreatedDeepIntoTheSeason()
+    {
+        var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
+        repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
+        repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl }));
+        var nflWeekSvc = Substitute.For<INflCurrentWeekService>();
+        nflWeekSvc.IsSeasonActiveAsync().Returns(true);
+        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(9, 2025, false, "Week 9", "Standard", DateTime.UtcNow));
+
+        var dto = new LeagueCreateDto("L", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, Substitute.For<ICfbCurrentSlateService>());
+
+        Assert.IsType<OkObjectResult>(result);
+        await repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.StartWeek == 5));
     }
 
     // frizat-d6l: self-serve league creation — any authenticated user may create a league now,
@@ -736,7 +881,8 @@ public class LeagueOwnershipTests
 
         // AttackerId is spoofed as the owner in the request body — caller is OwnerId, not admin.
         var dto = new LeagueCreateDto("My League", LeagueType.Nfl, AttackerId, 2025, 0, 0, 0, 0);
-        var result = await ctrl.CreateLeague(dto) as OkObjectResult;
+        var (nflWeekSvc, cfbSlateSvc) = StubCurrentWeekServices();
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, cfbSlateSvc) as OkObjectResult;
 
         Assert.NotNull(result);
         await repo.Received(1).AddLeagueInfoAsync(Arg.Is<LeagueInfo>(l => l.OwnerUserId == OwnerId));
@@ -772,7 +918,8 @@ public class LeagueOwnershipTests
         repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
 
         var dto = new LeagueCreateDto("My League", LeagueType.Nfl, OwnerId, 2025, 0, 0, 0, 0);
-        var result = await ctrl.CreateLeague(dto);
+        var (nflWeekSvc, cfbSlateSvc) = StubCurrentWeekServices();
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, cfbSlateSvc);
 
         Assert.IsType<BadRequestObjectResult>(result);
         await repo.DidNotReceive().AddLeagueInfoAsync(Arg.Any<LeagueInfo>());
@@ -788,7 +935,8 @@ public class LeagueOwnershipTests
         repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(createdLeague));
 
         var dto = new LeagueCreateDto("My League", LeagueType.Cfb, OwnerId, 2025, 0, 0, 0, 0);
-        var result = await ctrl.CreateLeague(dto);
+        var (nflWeekSvc, cfbSlateSvc) = StubCurrentWeekServices();
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, cfbSlateSvc);
 
         Assert.IsType<OkObjectResult>(result);
     }
@@ -803,7 +951,8 @@ public class LeagueOwnershipTests
         repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
 
         var dto = new LeagueCreateDto("My League", LeagueType.Nfl, OwnerId, 2025, 0, 0, 0, 0);
-        var result = await ctrl.CreateLeague(dto);
+        var (nflWeekSvc, cfbSlateSvc) = StubCurrentWeekServices();
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, cfbSlateSvc);
 
         Assert.IsType<BadRequestObjectResult>(result);
     }
@@ -818,7 +967,8 @@ public class LeagueOwnershipTests
         repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
 
         var dto = new LeagueCreateDto("My League", LeagueType.Nfl, OwnerId, 2025, 0, 0, 0, 0);
-        var result = await ctrl.CreateLeague(dto);
+        var (nflWeekSvc, cfbSlateSvc) = StubCurrentWeekServices();
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, cfbSlateSvc);
 
         Assert.IsType<BadRequestObjectResult>(result);
     }
@@ -1248,7 +1398,8 @@ public class LeagueOwnershipTests
         repo.LeagueExistsAsync(Arg.Any<string>()).Returns(true);
 
         var dto = new LeagueCreateDto("Existing League", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
-        var result = await ctrl.CreateLeague(dto);
+        var (nflWeekSvc, cfbSlateSvc) = StubCurrentWeekServices();
+        var result = await ctrl.CreateLeague(dto, nflWeekSvc, cfbSlateSvc);
 
         Assert.IsType<ConflictObjectResult>(result);
     }

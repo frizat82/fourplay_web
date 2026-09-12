@@ -95,13 +95,14 @@ public class LeagueJuiceScheduleSource(ILeagueRepository leagueRepo, ICfbReposit
     // frizat: LeagueController.UpdateLeagueJuice/GetLeagueJuiceForSeason's single-season lock
     // check — season-scoped repo calls (not GetCandidatesAsync's own full-table fetch above,
     // which genuinely needs every season at once for the batch scheduler) so a single request
-    // only pulls the 1-2 config rows it actually needs.
-    public async Task<(bool TeaseLocked, bool WeeklyCostLocked)> GetJuiceLockStateAsync(LeagueType leagueType, int season) {
+    // only pulls the 1-2 config rows it actually needs. `startWeek` must be the mapping's own
+    // current StartWeek (not always 1) — see GetSeasonStartLockTimeUtc's comment.
+    public async Task<(bool TeaseLocked, bool WeeklyCostLocked)> GetJuiceLockStateAsync(LeagueType leagueType, int season, int startWeek) {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         IEnumerable<NflSeasonWeekConfig> nflConfigs = leagueType == LeagueType.Cfb ? [] : await leagueRepo.GetNflSeasonWeekConfigsAsync(season);
         IEnumerable<CfbSeasonWeekConfig> cfbConfigs = leagueType == LeagueType.Cfb ? await cfbRepo.GetWeekConfigsForSeasonAsync(season) : [];
 
-        var teaseLockTime = GetSeasonStartLockTimeUtc(leagueType, season, nflConfigs, cfbConfigs);
+        var teaseLockTime = GetSeasonStartLockTimeUtc(leagueType, season, nflConfigs, cfbConfigs, startWeek);
         var weeklyCostLockTime = GetSeasonEndLockTimeUtc(leagueType, season, nflConfigs, cfbConfigs);
         return (teaseLockTime is not null && now >= teaseLockTime, weeklyCostLockTime is not null && now >= weeklyCostLockTime);
     }
@@ -125,10 +126,19 @@ public class LeagueJuiceScheduleSource(ILeagueRepository leagueRepo, ICfbReposit
         return week is null ? null : LockTimeUtc(DateOnly.FromDateTime(week.FirstGameOfWeekStartDatetime!.Value));
     }
 
-    // Tease points (Juice/JuiceDivisional/JuiceConference) lock here — week/slate 1's own start.
+    // Tease points (Juice/JuiceDivisional/JuiceConference) AND Start Week lock together, here —
+    // at the league's OWN currently-configured Start Week's own kickoff, not always week/slate 1.
+    // `startWeek` defaults to 1 for GetCandidatesAsync above (the Juice Reminder/Lock scheduler
+    // genuinely always means the season's literal week 1 — it exists to auto-fill a league that
+    // never configured Juice at all before the season proper begins). LeagueController's editable-
+    // or-not checks pass the mapping's actual StartWeek instead: a league created after the
+    // season's week 1 already locked previously had Tease Pts/Start Week frozen at whatever the
+    // create-league form happened to submit, forever, with no way to ever configure them — this
+    // parameterization is what lets CreateLeague's own Start Week default (see LeagueController)
+    // — and any further edits before that week's own kickoff — actually take effect.
     public static DateTime? GetSeasonStartLockTimeUtc(LeagueType leagueType, int season,
-        IEnumerable<NflSeasonWeekConfig> nflConfigs, IEnumerable<CfbSeasonWeekConfig> cfbConfigs) =>
-        GetWeekLockTimeUtc(leagueType, season, 1, nflConfigs, cfbConfigs);
+        IEnumerable<NflSeasonWeekConfig> nflConfigs, IEnumerable<CfbSeasonWeekConfig> cfbConfigs, int startWeek = 1) =>
+        GetWeekLockTimeUtc(leagueType, season, startWeek, nflConfigs, cfbConfigs);
 
     // WeeklyCost locks here — the season's final week (NFL WeekId 22 Super Bowl) or slate (CFB
     // slate 18 Championship), per CLAUDE.md's pick-count tables (/pick-rules).
