@@ -58,6 +58,17 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     Task AddNflSpreadsAsync(IEnumerable<NflSpreads> spreads);
     Task AddNflPicksAsync(IEnumerable<NflPicks> picks);
 
+    // Atomically checks the (user, league, season, week) pick count against requiredPicks and
+    // inserts newPicks only if it still fits, all under one advisory-lock-held transaction —
+    // see PickConcurrencyGuard. Returns false (nothing written) if the cap would be exceeded.
+    Task<bool> TryAddNflPicksAsync(IEnumerable<NflPicks> newPicks, string userId, int leagueId, int season, int week, int requiredPicks);
+
+    // Removes a single pick (identified by its natural key, not Id) for the authenticated user,
+    // under the same advisory lock TryAddNflPicksAsync uses — so an add and a remove for the same
+    // (user, league, season, week) can never interleave unsafely. Idempotent: returns false (no-op)
+    // if no matching pick exists, rather than throwing.
+    Task<bool> TryRemoveNflPickAsync(string userId, int leagueId, int season, int week, string team, PickType pickType);
+
     // Remove operations
     Task RemoveNflScoresAsync(IEnumerable<NflScores> scores);
     Task RemoveNflSpreadsAsync(IEnumerable<NflSpreads> spreads);
