@@ -4,6 +4,11 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-12
+
+- Fixed: a league created after its season had already started got Tease Pts and Start Week permanently locked at whatever the creation form submitted, with no way to ever configure them — the lock now protects a league's own configured Start Week, not always the season's literal week 1, and a new league defaults Start Week to whichever week is currently underway instead of always 1
+- Fixed: changing a league's Start Week on the Juice tab could silently fail to save even when the change was allowed
+
 ## 2026-09-11
 
 - Fixed: the Scores and Picks pages could sit on stale data after switching away from the tab and back — the polling pause for a hidden tab resumed correctly, but nothing forced an immediate refresh, so it just waited out the usual 5-20 minute interval instead of updating right away

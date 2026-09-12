@@ -285,6 +285,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         existing.JuiceDivisional = mapping.JuiceDivisional;
         existing.JuiceConference = mapping.JuiceConference;
         existing.WeeklyCost = mapping.WeeklyCost;
+        existing.StartWeek = mapping.StartWeek;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
     }
