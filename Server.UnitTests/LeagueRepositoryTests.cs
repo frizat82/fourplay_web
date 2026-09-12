@@ -449,6 +449,27 @@ public class LeagueRepositoryTests
         Assert.NotNull(mapping.UpdatedAt);
     }
 
+    // StartWeek shipped (frizat-o3x) alongside Juice/JuiceDivisional/JuiceConference/WeeklyCost,
+    // but this method never copied it onto the entity it actually saves — LeagueController.
+    // UpdateLeagueJuice would return 204 (success) while the Start Week change silently reverted,
+    // since this method re-fetches its own tracked entity from a fresh DbContext and only copies
+    // specific properties across.
+    [Fact]
+    public async Task UpdateLeagueJuiceMappingAsync_PersistsStartWeek()
+    {
+        var factory = new DbContextFactoryStub(nameof(UpdateLeagueJuiceMappingAsync_PersistsStartWeek));
+        var seedDb = factory.CreateDbContext();
+        seedDb.LeagueJuiceMapping.Add(new LeagueJuiceMapping { Id = 1, LeagueId = 1, Season = 2025, Juice = 13, StartWeek = 1 });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new LeagueRepository(factory);
+        await repo.UpdateLeagueJuiceMappingAsync(new LeagueJuiceMapping { Id = 1, LeagueId = 1, Season = 2025, Juice = 13, StartWeek = 3 });
+
+        var db = factory.CreateDbContext();
+        var mapping = await db.LeagueJuiceMapping.SingleAsync(m => m.Id == 1);
+        Assert.Equal(3, mapping.StartWeek);
+    }
+
     // /code-review: the controller's real call shape (LeagueController.UpdateLeagueJuice) always
     // passes a mapping fetched via GetLeagueJuiceMappingAsync, which .Include()s the League
     // navigation — so `mapping.League` is a populated, detached LeagueInfo snapshot from whenever
