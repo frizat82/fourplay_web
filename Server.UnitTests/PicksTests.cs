@@ -180,7 +180,7 @@ public class PicksTests
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
-        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
         repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
 
         var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
@@ -209,7 +209,7 @@ public class PicksTests
         repo.GetNflWeeksAsync(historicalSeason).Returns([new NflWeeks { Id = 99, NflWeek = historicalWeek, Season = historicalSeason }]);
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, historicalSeason, historicalWeek).Returns([]);
-        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
         // No spreads seeded for (historicalSeason, historicalWeek) — nothing to reject against.
         repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(DateTimeOffset.UtcNow.AddHours(-2))); // unrelated week/season, must never be consulted
 
@@ -234,7 +234,7 @@ public class PicksTests
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
-        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
         repo.GetNflSpreadsAsync(Season, Week).Returns((List<NflSpreads>?)null);
 
         var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
@@ -269,7 +269,7 @@ public class PicksTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Contains("start", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
-        await repo.DidNotReceive().AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>());
+        await repo.DidNotReceive().TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     [Fact]
@@ -282,7 +282,7 @@ public class PicksTests
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
-        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
         repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
         repo.GetLeagueJuiceMappingAsync(LeagueId, Season).Returns((LeagueJuiceMapping?)null);
 
@@ -311,7 +311,7 @@ public class PicksTests
         repo.UserExistsInLeagueAsync(jwtUserId, LeagueId).Returns(true);
         // After the fix the controller will use jwtUserId; set up mock for that userId
         repo.GetUserNflPicksAsync(jwtUserId, LeagueId, Season, Week).Returns([]);
-        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
 
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns((EspnScores?)null);
@@ -334,9 +334,10 @@ public class PicksTests
         var result = await controller.AddPicks([pick], BuildCurrentWeekService());
 
         // Assert — picks saved must use the JWT claim userId, not the DTO value
-        await repo.Received(1).AddNflPicksAsync(
+        await repo.Received(1).TryAddNflPicksAsync(
             Arg.Is<IEnumerable<NflPicks>>(picks =>
-                picks.All(p => p.UserId == jwtUserId)));
+                picks.All(p => p.UserId == jwtUserId)),
+            jwtUserId, LeagueId, Season, Week, Arg.Any<int>());
     }
 
     /// <summary>
@@ -359,7 +360,7 @@ public class PicksTests
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
-        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
 
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns(BuildScores(futureKickoff));
@@ -390,7 +391,7 @@ public class PicksTests
         var result = await controller.AddPicks([MakePick("BUF")], Substitute.For<INflCurrentWeekService>());
 
         Assert.IsType<ForbidResult>(result.Result);
-        await repo.DidNotReceive().AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>());
+        await repo.DidNotReceive().TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     /// <summary>
@@ -411,7 +412,7 @@ public class PicksTests
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([existingPick]);
-        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
 
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns((EspnScores?)null);
@@ -423,8 +424,9 @@ public class PicksTests
 
         // Must be OK (not a bad request) but no new picks inserted
         Assert.IsType<OkObjectResult>(result.Result);
-        await repo.Received(1).AddNflPicksAsync(
-            Arg.Is<IEnumerable<NflPicks>>(picks => !picks.Any()));
+        await repo.Received(1).TryAddNflPicksAsync(
+            Arg.Is<IEnumerable<NflPicks>>(picks => !picks.Any()),
+            UserId, LeagueId, Season, Week, Arg.Any<int>());
     }
 
     // ── AddPicks — current-week-only guard (frizat-8y4: nothing previously stopped a pick
@@ -448,7 +450,7 @@ public class PicksTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Contains("current", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
-        await repo.DidNotReceive().AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>());
+        await repo.DidNotReceive().TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     [Fact]
@@ -467,7 +469,7 @@ public class PicksTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Contains("current", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
-        await repo.DidNotReceive().AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>());
+        await repo.DidNotReceive().TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     [Fact]
@@ -477,7 +479,7 @@ public class PicksTests
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
-        repo.AddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>()).Returns(Task.CompletedTask);
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
 
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns((EspnScores?)null);
@@ -732,5 +734,129 @@ public class PicksTests
         var returned = Assert.IsAssignableFrom<IEnumerable<NflPickDto>>(ok.Value).ToList();
         // Both picks must be visible — the game has kicked off even though ESPN cache is stale
         Assert.Equal(2, returned.Count);
+    }
+
+    // ── AddPicks — cap enforcement now delegates to the atomic TryAddNflPicksAsync guard ──────
+
+    /// <summary>
+    /// TryAddNflPicksAsync is the authoritative cap check (atomic, advisory-lock-held — see
+    /// PickConcurrencyGuard); this test just confirms the controller surfaces its "no room" result
+    /// as a 400, exactly as the old inline count check did. The real concurrency guarantee itself
+    /// can only be proven against real Postgres (Testcontainers) — see PickConcurrencyTests.
+    /// </summary>
+    [Fact]
+    public async Task AddPicks_WhenTryAddNflPicksAsyncReportsNoRoom_ReturnsBadRequest()
+    {
+        var futureKickoff = DateTimeOffset.UtcNow.AddHours(2);
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>())
+            .Returns(false);
+
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
+        var result = await controller.AddPicks([MakePick("BUF")], BuildCurrentWeekService());
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("Too many picks", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ── RemoveMyPick — self-service pick removal ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task RemoveMyPick_WhenGameHasNotKickedOff_RemovesPickAndReturnsNoContent()
+    {
+        var futureKickoff = DateTimeOffset.UtcNow.AddHours(2);
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
+        repo.TryRemoveNflPickAsync(UserId, LeagueId, Season, Week, "BUF", PickType.Spread).Returns(true);
+
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
+        var result = await controller.RemoveMyPick(MakePick("BUF"));
+
+        Assert.IsType<NoContentResult>(result);
+        await repo.Received(1).TryRemoveNflPickAsync(UserId, LeagueId, Season, Week, "BUF", PickType.Spread);
+    }
+
+    [Fact]
+    public async Task RemoveMyPick_WhenGameHasKickedOff_ReturnsBadRequest_AndNeverCallsRemove()
+    {
+        var pastKickoff = DateTimeOffset.UtcNow.AddHours(-2);
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(pastKickoff));
+
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
+        var result = await controller.RemoveMyPick(MakePick("BUF"));
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Contains("kicked off", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await repo.DidNotReceive().TryRemoveNflPickAsync(
+            Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<PickType>());
+    }
+
+    /// <summary>
+    /// A user can never remove a pick they don't own: the repository lookup inside
+    /// TryRemoveNflPickAsync is always scoped to the authenticated caller's own userId (never the
+    /// DTO's), so a spoofed DTO simply finds nothing to remove. This test locks in that the
+    /// controller passes the JWT claim id, not any value from the request body.
+    /// </summary>
+    [Fact]
+    public async Task RemoveMyPick_UsesJwtClaimUserId_NotDtoUserId()
+    {
+        const string jwtUserId = "jwt-user-id";
+        const string attackerUserId = "attacker-user-id";
+        var futureKickoff = DateTimeOffset.UtcNow.AddHours(2);
+
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.UserExistsInLeagueAsync(jwtUserId, LeagueId).Returns(true);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
+
+        var dto = new NflPickDto {
+            LeagueId = LeagueId, UserId = attackerUserId, Team = "BUF",
+            Pick = PickType.Spread, NflWeek = Week, Season = Season,
+        };
+
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(jwtUserId));
+        await controller.RemoveMyPick(dto);
+
+        await repo.Received(1).TryRemoveNflPickAsync(jwtUserId, LeagueId, Season, Week, "BUF", PickType.Spread);
+    }
+
+    /// <summary>
+    /// Idempotent: removing a pick that's already gone (double-fire, retried request) is a
+    /// no-op success, not an error — TryRemoveNflPickAsync returning false just means "nothing to
+    /// remove," which the endpoint still reports as 204.
+    /// </summary>
+    [Fact]
+    public async Task RemoveMyPick_WhenPickAlreadyRemoved_StillReturnsNoContent()
+    {
+        var futureKickoff = DateTimeOffset.UtcNow.AddHours(2);
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
+        repo.TryRemoveNflPickAsync(UserId, LeagueId, Season, Week, "BUF", PickType.Spread).Returns(false);
+
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
+        var result = await controller.RemoveMyPick(MakePick("BUF"));
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveMyPick_ReturnsForbid_WhenUserNotInLeague()
+    {
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(false);
+
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
+        var result = await controller.RemoveMyPick(MakePick("BUF"));
+
+        Assert.IsType<ForbidResult>(result);
+        await repo.DidNotReceive().TryRemoveNflPickAsync(
+            Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<PickType>());
     }
 }

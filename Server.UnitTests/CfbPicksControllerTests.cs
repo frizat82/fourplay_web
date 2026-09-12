@@ -109,7 +109,7 @@ public class CfbPicksControllerTests
             Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
         };
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
-        _repo.AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>()).Returns(Task.CompletedTask);
+        _repo.TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
 
         var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
@@ -127,6 +127,7 @@ public class CfbPicksControllerTests
             new() { UserId = UserId, LeagueId = 1, CfbSlateId = 1, Team = "ORE" }
         };
         _repo.GetUserPicksAsync(1, 1, UserId).Returns(existing);
+        _repo.TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
 
         var request = new AddCfbPicksRequest
         {
@@ -136,7 +137,12 @@ public class CfbPicksControllerTests
 
         var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
-        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+        // TryAddPicksAsync is still called (mirrors NFL's AddPicks — see PicksTests.cs's
+        // AddPicks_DeduplicatesByKey_NotReferenceEquality) but with an empty list; its own
+        // count==0 short-circuit makes this a no-op rather than the controller special-casing it.
+        await _repo.Received(1).TryAddPicksAsync(
+            Arg.Is<IEnumerable<CfbPicks>>(picks => !picks.Any()),
+            UserId, 1, 2025, 1, Arg.Any<int>());
         Assert.IsType<OkObjectResult>(result);
     }
 
@@ -157,7 +163,7 @@ public class CfbPicksControllerTests
         var result = await BuildController().AddPicks(request, Substitute.For<ICfbCurrentSlateService>());
 
         Assert.IsType<ForbidResult>(result);
-        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+        await _repo.DidNotReceive().TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     [Fact]
@@ -180,7 +186,7 @@ public class CfbPicksControllerTests
         var result = await BuildController().AddPicks(request, Substitute.For<ICfbCurrentSlateService>());
 
         Assert.IsType<BadRequestObjectResult>(result);
-        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+        await _repo.DidNotReceive().TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     // ── AddPicks — kickoff guard ─────────────────────────────────────────────
@@ -201,7 +207,7 @@ public class CfbPicksControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("kicked off", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
-        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+        await _repo.DidNotReceive().TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     [Fact]
@@ -210,7 +216,7 @@ public class CfbPicksControllerTests
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
-        _repo.AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>()).Returns(Task.CompletedTask);
+        _repo.TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
@@ -229,7 +235,7 @@ public class CfbPicksControllerTests
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([]);
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
-        _repo.AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>()).Returns(Task.CompletedTask);
+        _repo.TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
         var request = new AddCfbPicksRequest
         {
             LeagueId = 1, CfbSlateId = 1, Season = 2025,
@@ -263,7 +269,7 @@ public class CfbPicksControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("start", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
-        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+        await _repo.DidNotReceive().TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     [Fact]
@@ -274,7 +280,7 @@ public class CfbPicksControllerTests
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
-        _repo.AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>()).Returns(Task.CompletedTask);
+        _repo.TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
         _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns((LeagueJuiceMapping?)null);
         var request = new AddCfbPicksRequest
         {
@@ -309,11 +315,14 @@ public class CfbPicksControllerTests
             ]
         };
 
+        // TryAddPicksAsync's cap check is now the sole (atomic) enforcement point — see
+        // PickConcurrencyGuard — so this deliberately leaves it unstubbed: NSubstitute's default
+        // `false` for an unconfigured Task<bool> member exercises the same "no room" branch a real
+        // over-cap count would hit inside the advisory-lock-held transaction.
         var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("Too many picks", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
-        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
     }
 
     // ── AddPicks — current-slate-only guard (frizat-8y4: nothing previously stopped a pick
@@ -338,7 +347,7 @@ public class CfbPicksControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("current", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
-        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+        await _repo.DidNotReceive().TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     [Fact]
@@ -357,7 +366,7 @@ public class CfbPicksControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("current", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
-        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+        await _repo.DidNotReceive().TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     [Fact]
@@ -382,7 +391,7 @@ public class CfbPicksControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("current", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
-        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+        await _repo.DidNotReceive().TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     // ── GetAllPicks — membership + pick-reveal gate ─────────────────────────
@@ -695,6 +704,80 @@ public class CfbPicksControllerTests
         var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
         Assert.IsType<BadRequestObjectResult>(result);
-        await _repo.DidNotReceive().AddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>());
+        await _repo.DidNotReceive().TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
+    }
+
+    // ── RemoveMyPick — self-service pick removal (mirrors NFL's PicksTests.RemoveMyPick_*) ────
+
+    private static CfbPickDto MakeCfbPick(string team) => new() {
+        LeagueId = 1, CfbSlateId = 1, Season = 2025, Team = team, PickType = PickType.Spread,
+    };
+
+    [Fact]
+    public async Task RemoveMyPick_WhenGameHasNotKickedOff_RemovesPickAndReturnsNoContent()
+    {
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
+        _repo.TryRemovePickAsync(UserId, 1, 2025, 1, "ORE", PickType.Spread).Returns(true);
+
+        var result = await BuildController().RemoveMyPick(MakeCfbPick("ORE"));
+
+        Assert.IsType<NoContentResult>(result);
+        await _repo.Received(1).TryRemovePickAsync(UserId, 1, 2025, 1, "ORE", PickType.Spread);
+    }
+
+    [Fact]
+    public async Task RemoveMyPick_WhenGameHasKickedOff_ReturnsBadRequest_AndNeverCallsRemove()
+    {
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(-2))]);
+
+        var result = await BuildController().RemoveMyPick(MakeCfbPick("ORE"));
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Contains("kicked off", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await _repo.DidNotReceive().TryRemovePickAsync(
+            Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<PickType>());
+    }
+
+    /// <summary>
+    /// Mirrors NFL's RemoveMyPick_UsesJwtClaimUserId_NotDtoUserId — ownership is always scoped to
+    /// the JWT claim id, never any UserId in the request body (CfbPickDto has no UserId field at
+    /// all, so this locks in CurrentUserId being what's actually passed through).
+    /// </summary>
+    [Fact]
+    public async Task RemoveMyPick_UsesJwtClaimUserId()
+    {
+        const string jwtUserId = "jwt-user-id";
+        _leagueRepo.UserExistsInLeagueAsync(jwtUserId, 1).Returns(true);
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
+
+        await BuildController(jwtUserId).RemoveMyPick(MakeCfbPick("ORE"));
+
+        await _repo.Received(1).TryRemovePickAsync(jwtUserId, 1, 2025, 1, "ORE", PickType.Spread);
+    }
+
+    /// <summary>
+    /// Idempotent: removing an already-gone pick is still a 204, not an error.
+    /// </summary>
+    [Fact]
+    public async Task RemoveMyPick_WhenPickAlreadyRemoved_StillReturnsNoContent()
+    {
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
+        _repo.TryRemovePickAsync(UserId, 1, 2025, 1, "ORE", PickType.Spread).Returns(false);
+
+        var result = await BuildController().RemoveMyPick(MakeCfbPick("ORE"));
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task RemoveMyPick_ReturnsForbid_WhenUserNotInLeague()
+    {
+        _leagueRepo.UserExistsInLeagueAsync(UserId, 1).Returns(false);
+
+        var result = await BuildController().RemoveMyPick(MakeCfbPick("ORE"));
+
+        Assert.IsType<ForbidResult>(result);
+        await _repo.DidNotReceive().TryRemovePickAsync(
+            Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<PickType>());
     }
 }
