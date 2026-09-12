@@ -118,10 +118,10 @@ public class LeagueController(
     // GetJuiceLockStateAsync instance method GetLeagueJuiceForSeason/UpdateLeagueJuice use —
     // those look up exactly one season, so a per-season DB round trip there is the cheaper
     // fetch; here, fetching per-row instead of once would be N round trips for N seasons).
-    private static (bool TeaseLocked, bool WeeklyCostLocked) GetJuiceLockState(LeagueType leagueType, int season,
+    private static (bool TeaseLocked, bool WeeklyCostLocked) GetJuiceLockState(LeagueType leagueType, int season, int startWeek,
         IEnumerable<NflSeasonWeekConfig> nflConfigs, IEnumerable<CfbSeasonWeekConfig> cfbConfigs) {
         var now = DateTimeOffset.UtcNow.UtcDateTime;
-        var teaseLockTime = LeagueJuiceScheduleSource.GetSeasonStartLockTimeUtc(leagueType, season, nflConfigs, cfbConfigs);
+        var teaseLockTime = LeagueJuiceScheduleSource.GetSeasonStartLockTimeUtc(leagueType, season, nflConfigs, cfbConfigs, startWeek);
         var weeklyCostLockTime = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(leagueType, season, nflConfigs, cfbConfigs);
         return (teaseLockTime is not null && now >= teaseLockTime, weeklyCostLockTime is not null && now >= weeklyCostLockTime);
     }
@@ -143,7 +143,7 @@ public class LeagueController(
         var cfbConfigs = leagueType == LeagueType.Cfb ? await cfbRepo.GetAllWeekConfigsAsync() : [];
 
         var dtoMappings = mappings.Select(m => {
-            var (teaseLocked, weeklyCostLocked) = GetJuiceLockState(leagueType, m.Season, nflConfigs, cfbConfigs);
+            var (teaseLocked, weeklyCostLocked) = GetJuiceLockState(leagueType, m.Season, m.StartWeek, nflConfigs, cfbConfigs);
             return new LeagueJuiceMappingDto {
                 LeagueId = m.LeagueId,
                 LeagueName = m.League.LeagueName,
@@ -171,7 +171,7 @@ public class LeagueController(
         var mapping = await repo.GetLeagueJuiceMappingAsync(leagueId, season);
         if (mapping == null) return Ok(null);
 
-        var (teaseLocked, weeklyCostLocked) = await scheduleSource.GetJuiceLockStateAsync(mapping.League.LeagueType, season);
+        var (teaseLocked, weeklyCostLocked) = await scheduleSource.GetJuiceLockStateAsync(mapping.League.LeagueType, season, mapping.StartWeek);
 
         var dtoMapping = new LeagueJuiceMappingDto {
             LeagueId = mapping.LeagueId,
@@ -694,7 +694,8 @@ public class LeagueController(
     [HttpPost("create")]
     [ProducesResponseType(typeof(LeagueInfoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> CreateLeague([FromBody] LeagueCreateDto dto) {
+    public async Task<IActionResult> CreateLeague([FromBody] LeagueCreateDto dto,
+            [FromServices] INflCurrentWeekService nflWeekService, [FromServices] ICfbCurrentSlateService cfbSlateService) {
         // Mirrors useSportContext's own host-prefix check (Client.React/src/services/sport.tsx) —
         // the frontend locks the Sport field to the current subdomain, but a crafted/replayed
         // request could still send a mismatched LeagueType directly without this backstop.
@@ -725,6 +726,7 @@ public class LeagueController(
             JuiceDivisional = dto.JuiceDivisional,
             JuiceConference = dto.JuiceConference,
             WeeklyCost = dto.WeeklyCost,
+            StartWeek = await ResolveInitialStartWeekAsync(dto.LeagueType, dto.Season, nflWeekService, cfbSlateService),
             DateCreated = DateTimeOffset.UtcNow,
         });
         await repo.AddLeagueUserMappingAsync(new LeagueUserMapping {
@@ -733,6 +735,27 @@ public class LeagueController(
             DateCreated = DateTimeOffset.UtcNow,
         });
         return Ok(new LeagueInfoDto { Id = league.Id, LeagueName = league.LeagueName, LeagueType = league.LeagueType, OwnerUserId = league.OwnerUserId, DateCreated = league.DateCreated });
+    }
+
+    // A league created after its own sport's season has already started defaults its Start Week
+    // to whatever week/slate is happening right now, instead of always defaulting to 1 (full
+    // season) — a commissioner setting up a pool mid-season shouldn't be stuck requiring picks for
+    // weeks that were already played before their league existed. Falls back to 1 when the season
+    // isn't active (preseason or off-season) or the currently-active week belongs to a different
+    // season than the one being created for — both cases where 1 is already correct and nothing
+    // needs excluding. Clamped to 5 (Juice's own StartWeek range) rather than rejecting creation
+    // outright for a league started deep into the season — best effort, matching the existing
+    // 1-5 validation in UpdateLeagueJuice.
+    private static async Task<int> ResolveInitialStartWeekAsync(LeagueType leagueType, int season,
+            INflCurrentWeekService nflWeekService, ICfbCurrentSlateService cfbSlateService) {
+        if (leagueType == LeagueType.Cfb) {
+            if (!await cfbSlateService.IsSeasonActiveAsync()) return 1;
+            var slate = await cfbSlateService.GetCurrentSlateAsync();
+            return slate is not null && slate.Season == season ? Math.Clamp(slate.SlateNumber, 1, 5) : 1;
+        }
+        if (!await nflWeekService.IsSeasonActiveAsync()) return 1;
+        var week = await nflWeekService.GetCurrentWeekAsync();
+        return week.Season == season ? Math.Clamp(week.WeekId, 1, 5) : 1;
     }
 
     // Prefers Origin (sent on every state-changing fetch, including same-origin ones — see
@@ -836,14 +859,17 @@ public class LeagueController(
         var (league, error) = await LoadOwnedLeagueAsync(leagueId);
         if (error is not null) return error;
 
-        // Independent of each other — kick both off before awaiting instead of paying for two
-        // sequential round trips.
-        var existingTask = repo.GetLeagueJuiceMappingAsync(leagueId, season);
-        var lockStateTask = scheduleSource.GetJuiceLockStateAsync(league!.LeagueType, season);
-        await Task.WhenAll(existingTask, lockStateTask);
-        var existing = existingTask.Result;
+        var existing = await repo.GetLeagueJuiceMappingAsync(leagueId, season);
         if (existing is null) return NotFound($"No juice mapping for league {leagueId} season {season}.");
-        var (teaseLocked, weeklyCostLocked) = lockStateTask.Result;
+        // Lock boundary is the mapping's OWN currently-configured StartWeek, not always week/slate
+        // 1 — see LeagueJuiceScheduleSource.GetSeasonStartLockTimeUtc's comment. A league created
+        // after the season's literal week 1 already locked previously had Tease Pts/Start Week
+        // frozen forever at whatever the create-league form happened to submit; this lets
+        // CreateLeague's own Start Week default (computed from the current week/slate at creation
+        // time) actually stay editable until ITS OWN kickoff, not the season's. Needs `existing`
+        // first, so this can no longer run in parallel with the fetch above — an acceptable cost
+        // for a settings-save endpoint, not a hot path.
+        var (teaseLocked, weeklyCostLocked) = await scheduleSource.GetJuiceLockStateAsync(league!.LeagueType, season, existing.StartWeek);
 
         if (dto.StartWeek is < 1 or > 5)
             return BadRequest("Start Week must be between 1 and 5.");
