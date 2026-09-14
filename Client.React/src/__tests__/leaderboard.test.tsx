@@ -58,6 +58,7 @@ const mockAdapter: SportAdapter = {
   loadCurrentScores: vi.fn(),
   loadHistoricalScores: vi.fn(),
   submitPicks: vi.fn(),
+  removePick: vi.fn(),
   clearPicks: vi.fn(),
   currentSeasonYear: vi.fn().mockResolvedValue(2023),
   pollIntervalMs: 0,
