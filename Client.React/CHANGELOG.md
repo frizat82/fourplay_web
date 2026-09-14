@@ -4,6 +4,11 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-14
+
+- Added: picks on the Picks page now save and unselect instantly, one tap at a time — no more Submit/Clear buttons. You can change your mind on any pick right up until its game kicks off
+- Added: a "Your Picks" summary on the home page showing this week's picks for each of your leagues at a glance, with no need to open the Picks page
+
 ## 2026-09-12
 
 - Fixed: a league created after its season had already started got Tease Pts and Start Week permanently locked at whatever the creation form submitted, with no way to ever configure them — the lock now protects a league's own configured Start Week, not always the season's literal week 1, and a new league defaults Start Week to whichever week is currently underway instead of always 1

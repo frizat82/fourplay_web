@@ -30,13 +30,13 @@ test('CFB replay — pick, live SSE update, settle against real captured ESPN va
     await page.goto('/picks');
 
     // ── Scheduled: the real IND @ ATL game is pickable (replay slate — 1 required pick) ──
+    // frizat-immediate-pick-toggle: picking now writes immediately (no Submit step), and a pick
+    // stays in the clickable "picked" state — not "locked in" — until its own game kicks off,
+    // which for this still-scheduled game hasn't happened yet at this point in the test.
     const indButton = page.getByRole('button', { name: /^Pick IND/i });
     await expect(indButton).toBeVisible({ timeout: 15_000 });
     await indButton.click();
-    await expect(page.getByRole('button', { name: /IND picked/i })).toBeVisible();
-
-    await page.getByRole('button', { name: /^Submit Pick\(s\)$/i }).click();
-    await expect(page.getByRole('button', { name: /IND locked in/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: /IND picked/i })).toBeVisible({ timeout: 10_000 });
 
     // The Championship slate also has the real IU @ MIA game (14-7) — scope every score assertion
     // to the IND @ ATL card specifically so e.g. its "14" isn't ambiguous with IU's real "14".
