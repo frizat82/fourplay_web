@@ -1,5 +1,5 @@
 import { loadScoresWithRetry, getWeekScores, getLiveGames } from '../api/espn';
-import { getUserPicks, doOddsExist, spreadBatch, addPicks, getLeaguePicks, getNflCurrentWeek } from '../api/league';
+import { getUserPicks, doOddsExist, spreadBatch, addPicks, removeMyPick, getLeaguePicks, getNflCurrentWeek } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import type { Competition, Event } from '../types/espn';
 import type { NflPickDto, SpreadResponse } from '../types/picks';
@@ -208,6 +208,10 @@ export function createNflAdapter(): SportAdapter {
 
     async submitPicks(leagueId, { season, week }, picks) {
       await addPicks(picks.map(p => ({ id: 0, leagueId, userId: '', userName: '', team: p.team, pick: p.pickType as PickType, nflWeek: week, season, dateCreated: new Date().toISOString() } as NflPickDto)));
+    },
+
+    async removePick(leagueId, { season, week }, pick) {
+      await removeMyPick({ id: 0, leagueId, userId: '', userName: '', team: pick.team, pick: pick.pickType as PickType, nflWeek: week, season, dateCreated: new Date().toISOString() } as NflPickDto);
     },
 
     async clearPicks() { return []; },

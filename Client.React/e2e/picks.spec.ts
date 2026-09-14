@@ -43,59 +43,53 @@ test.describe('Picks page (authenticated)', () => {
     await expect(page.getByRole('button', { name: /\bpicked\b/i })).toBeVisible({ timeout: 3000 });
   });
 
-  test('submit button disabled with no picks selected', async ({ page }) => {
+  // frizat-immediate-pick-toggle: no more Submit/Clear step — a click writes to the backend
+  // right away, and a picked-but-not-yet-kicked-off team stays clickable to unselect it.
+  test('clicking a Pick button immediately calls POST /api/league/picks', async ({ page }) => {
     await mockAuth(page, { navigateTo: '/picks' });
 
     await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
 
-    // The submit button text is "Submit Pick(s)"
-    const submitButton = page.getByRole('button', { name: /submit pick\(s\)/i });
-    await expect(submitButton).toBeVisible({ timeout: 5000 });
-    await expect(submitButton).toBeDisabled();
-  });
-
-  test('submit button enabled after picking a team', async ({ page }) => {
-    await mockAuth(page, { navigateTo: '/picks' });
-
-    await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
-
-    // Submit should start disabled
-    const submitButton = page.getByRole('button', { name: /submit pick\(s\)/i });
-    await expect(submitButton).toBeDisabled({ timeout: 5000 });
-
-    // Click the first Pick button — matches "Pick BUF", "Pick MIA" etc.
-    await page.getByRole('button', { name: /^Pick \w/i }).first().click();
-
-    // Submit should now be enabled
-    await expect(submitButton).toBeEnabled({ timeout: 3000 });
-  });
-
-  test('submitting picks calls POST /api/league/picks', async ({ page }) => {
-    await mockAuth(page, { navigateTo: '/picks' });
-
-    await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
-
-    // Click the first Pick button — matches "Pick BUF", "Pick MIA" etc.
-    await page.getByRole('button', { name: /^Pick \w/i }).first().click();
-
-    // Wait for the submit button to become enabled
-    const submitButton = page.getByRole('button', { name: /submit pick\(s\)/i });
-    await expect(submitButton).toBeEnabled({ timeout: 3000 });
-
-    // Set up a promise to capture the POST request before clicking submit
     const picksPostRequest = page.waitForRequest(
       (req) => req.url().includes('/api/league/picks') && req.method() === 'POST'
     );
 
-    await submitButton.click();
+    await page.getByRole('button', { name: /^Pick \w/i }).first().click();
 
-    // Verify the POST request was made
     const request = await picksPostRequest;
     expect(request.method()).toBe('POST');
     expect(request.url()).toContain('/api/league/picks');
 
-    // Verify the request body contains picks
     const body = JSON.parse(request.postData() ?? '[]') as unknown[];
     expect(body.length).toBeGreaterThan(0);
+  });
+
+  test('clicking a picked (unlocked) team immediately calls DELETE /api/league/picks/mine', async ({ page }) => {
+    await mockAuth(page, { navigateTo: '/picks' });
+
+    await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
+
+    await page.getByRole('button', { name: /^Pick \w/i }).first().click();
+    const pickedButton = page.getByRole('button', { name: /\bpicked\b/i }).first();
+    await expect(pickedButton).toBeVisible({ timeout: 3000 });
+
+    const removeRequest = page.waitForRequest(
+      (req) => req.url().includes('/api/league/picks/mine') && req.method() === 'DELETE'
+    );
+
+    await pickedButton.click();
+
+    const request = await removeRequest;
+    expect(request.method()).toBe('DELETE');
+  });
+
+  test('never shows a Submit or Clear button', async ({ page }) => {
+    await mockAuth(page, { navigateTo: '/picks' });
+
+    await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: /^Pick \w/i }).first().click();
+
+    await expect(page.getByRole('button', { name: /submit pick/i })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: /clear selected/i })).not.toBeVisible();
   });
 });

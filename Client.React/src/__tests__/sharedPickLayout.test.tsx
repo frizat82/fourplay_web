@@ -81,7 +81,7 @@ describe('NFL PicksPage — GameCard layout regression', () => {
 // ─── CFB regression ──────────────────────────────────────────────────────────
 vi.mock('../api/cfb', () => ({
   getCfbCurrentSlate: vi.fn(), getCfbSlates: vi.fn(), getCfbSpreads: vi.fn(), getCfbScores: vi.fn(),
-  getCfbUserPicks: vi.fn(), addCfbPicks: vi.fn(), deleteCfbPicks: vi.fn(),
+  getCfbUserPicks: vi.fn(), addCfbPicks: vi.fn(), deleteCfbPicks: vi.fn(), removeMyCfbPick: vi.fn(),
 }));
 // Single espn mock covering both NFL and CFB needs
 vi.mock('../api/espn', () => ({
@@ -133,7 +133,21 @@ describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {
     });
   });
 
-  it('shows Locked in when pick already submitted', async () => {
+  // frizat-immediate-pick-toggle: an existing pick only renders as locked/uneditable once its
+  // game has actually kicked off — this fixture's spread.gameTime is 2030 (always in the
+  // future), so a submitted pick for it must stay clickable ("Picked"), not "Locked in".
+  it('shows a clickable Picked (not Locked in) for an already-submitted pick whose game has not kicked off', async () => {
+    vi.mocked(getCfbUserPicks).mockResolvedValue([
+      { id: 1, userId: 'u1', userName: 'u1', leagueId: 1, cfbSlateId: 1, team: 'MICH', pickType: 'Spread', season: 2025 }
+    ]);
+    renderWithClient(<PicksPage adapter={createCfbAdapter()} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /MICH picked/i })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /locked in/i })).toBeNull();
+  });
+
+  it('shows Locked in for an already-submitted pick whose game has kicked off', async () => {
+    const startedSpread: CfbSpreadDto = { ...spread, gameTime: '2020-10-11T20:00:00Z' };
+    vi.mocked(getCfbSpreads).mockResolvedValue([startedSpread]);
     vi.mocked(getCfbUserPicks).mockResolvedValue([
       { id: 1, userId: 'u1', userName: 'u1', leagueId: 1, cfbSlateId: 1, team: 'MICH', pickType: 'Spread', season: 2025 }
     ]);
