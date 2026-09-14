@@ -34,6 +34,7 @@ vi.mock('../services/toast', () => ({ useToast: () => toastState }));
 vi.mock('../api/espn', () => ({ getScores: vi.fn(), loadScoresWithRetry: vi.fn(), getWeekScores: vi.fn(), getLiveGames: vi.fn() }));
 vi.mock('../api/league', () => ({
   addPicks: vi.fn(),
+  removeMyPick: vi.fn(),
   doOddsExist: vi.fn(),
   getUserPicks: vi.fn(),
   spreadBatch: vi.fn(),
@@ -44,7 +45,7 @@ vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
 
 import { getScores, loadScoresWithRetry, getWeekScores } from '../api/espn';
-import { addPicks, doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
+import { addPicks, removeMyPick, doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
 
@@ -55,6 +56,7 @@ const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetUserPicks = vi.mocked(getUserPicks);
 const mockedSpreadBatch = vi.mocked(spreadBatch);
 const mockedAddPicks = vi.mocked(addPicks);
+const mockedRemoveMyPick = vi.mocked(removeMyPick);
 const mockedGetLeagueJuice = vi.mocked(getLeagueJuice);
 const mockedGetAllJerseys = vi.mocked(getAllJerseys);
 const mockedGetNextSpreadJob = vi.mocked(getNextSpreadJob);
@@ -140,6 +142,7 @@ describe('PicksPage', () => {
     mockedGetUserPicks.mockReset();
     mockedSpreadBatch.mockReset();
     mockedAddPicks.mockReset();
+    mockedRemoveMyPick.mockReset();
     mockedGetAllJerseys.mockReset();
     mockedGetNextSpreadJob.mockReset();
     mockLeagueJuiceEmpty(mockedGetLeagueJuice);
@@ -246,44 +249,24 @@ describe('PicksPage', () => {
     expect(screen.getByText(/Picks Remaining \(1\)/i)).toBeInTheDocument();
   });
 
-  it('submit button disabled when no user picks made', async () => {
+  // frizat-immediate-pick-toggle: selecting/unselecting a pick now writes to the backend
+  // immediately (no Submit/Clear step) — see PicksPage.tsx's applyPickChange.
+  it('clicking Pick immediately calls addPicks and shows Picked', async () => {
     await setupDefaults();
-    await renderPage();
-    const submit = screen.getByRole('button', { name: /submit pick/i });
-    expect(submit).toBeDisabled();
-  });
-
-  it('submit and clear buttons enabled when user makes picks', async () => {
-    await setupDefaults();
+    mockedAddPicks.mockResolvedValue(1);
     await renderPage();
 
-    const pickButtons = screen.getAllByRole('button', { name: /^Pick /i });
-    await userEvent.click(pickButtons[0]);
+    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
+    await userEvent.click(pickButton);
 
-    await waitFor(() => {
-      const submit = screen.getByRole('button', { name: /submit pick/i });
-      const clear = screen.getByRole('button', { name: /clear selected picks/i });
-      expect(submit).not.toBeDisabled();
-      expect(clear).not.toBeDisabled();
-    });
+    await screen.findByRole('button', { name: /picked/i });
+    expect(mockedAddPicks).toHaveBeenCalledTimes(1);
   });
 
-  // frizat: /style-guide audit — Submit and Clear were both contained/equal-size, reading as
-  // two equal-strength CTAs when Submit is the primary action and Clear is a rare, lesser one.
-  // Clear also used color="warning" as a small filled button — the exact configuration the
-  // style guide documents as unreadable in both modes for pick-state buttons.
-  it('demotes Clear to an outlined button so Submit reads as the primary action', async () => {
+  it('pick button toggles to picked and back, calling removeMyPick on unselect', async () => {
     await setupDefaults();
-    await renderPage();
-    const submit = screen.getByRole('button', { name: /submit pick/i });
-    const clear = screen.getByRole('button', { name: /clear selected picks/i });
-    expect(submit.className).toMatch(/MuiButton-contained/);
-    expect(clear.className).toMatch(/MuiButton-outlined/);
-    expect(clear.className).not.toMatch(/warning/i);
-  });
-
-  it('pick button toggles to picked and back', async () => {
-    await setupDefaults();
+    mockedAddPicks.mockResolvedValue(1);
+    mockedRemoveMyPick.mockResolvedValue(undefined);
     await renderPage();
 
     const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
@@ -296,14 +279,57 @@ describe('PicksPage', () => {
     await waitFor(() => {
       expect(screen.getAllByRole('button', { name: /^Pick /i }).length).toBeGreaterThan(0);
     });
+    expect(mockedRemoveMyPick).toHaveBeenCalledTimes(1);
   });
 
-  it('clear button disabled when no user picks selected', async () => {
-    const existing = [createPick({ team: 'BUF' })];
-    await setupDefaults({ existingPicks: existing });
+  it('rolls back the optimistic pick and shows an error toast when addPicks rejects', async () => {
+    await setupDefaults();
+    mockedAddPicks.mockRejectedValue(new Error('server rejected the pick'));
     await renderPage();
-    const clear = screen.getByRole('button', { name: /clear selected picks/i });
-    expect(clear).toBeDisabled();
+
+    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
+    await userEvent.click(pickButton);
+
+    // Optimistic update shows "Picked" immediately, then reverts once the request fails
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /^Pick /i }).length).toBeGreaterThan(0);
+    });
+    expect(toastState.push).toHaveBeenCalledWith('Error adding pick', 'error');
+  });
+
+  it('rolls back the optimistic removal and shows an error toast when removeMyPick rejects', async () => {
+    const existing = [createPick({ team: 'BUF' })];
+    await setupDefaults({ existingPicks: existing, gameDate: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() });
+    mockedRemoveMyPick.mockRejectedValue(new Error('server rejected the removal'));
+    await renderPage();
+
+    // BUF's game hasn't kicked off, so its existing pick renders as the clickable "Picked" state
+    const pickedButton = await screen.findByRole('button', { name: /picked/i });
+    await userEvent.click(pickedButton);
+
+    // Reverts back to "Picked" once the rejection is handled — the pick was never actually removed
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /picked/i }).length).toBe(1));
+    expect(toastState.push).toHaveBeenCalledWith('Error removing pick', 'error');
+  });
+
+  it('a second click on the same pick while the first request is in flight does not fire a duplicate call', async () => {
+    await setupDefaults();
+    let resolveAdd!: (value: number) => void;
+    mockedAddPicks.mockImplementation(() => new Promise(resolve => { resolveAdd = resolve; }));
+    await renderPage();
+
+    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
+    await userEvent.click(pickButton);
+    // Optimistic update already flipped this to "Picked" — click it again immediately, before
+    // the first request resolves, simulating a fast double-click.
+    const pickedButton = await screen.findByRole('button', { name: /picked/i });
+    await userEvent.click(pickedButton);
+
+    resolveAdd(1);
+    await waitFor(() => expect(mockedAddPicks).toHaveBeenCalledTimes(1));
+    // The second click hit removeMyPick's code path (pickState !== 'none' → unselect), which
+    // must also have been guarded off since the pick's key was already in flight from the add.
+    expect(mockedRemoveMyPick).not.toHaveBeenCalled();
   });
 
   it('disables remaining pick buttons when total picks reach max', async () => {
@@ -325,53 +351,28 @@ describe('PicksPage', () => {
     });
   });
 
-  it('clears only user picks and keeps existing picks', async () => {
+  it('existing picks whose games have kicked off show as Locked in and stay non-interactive', async () => {
+    // setupDefaults defaults gameStarted to false (unstarted, future kickoff) — must explicitly
+    // ask for started games here so both existing picks' games have actually kicked off.
     const existing = [
       createPick({ team: 'BUF' }),
       createPick({ team: 'DAL' }),
     ];
-    await setupDefaults({ existingPicks: existing });
+    await setupDefaults({ existingPicks: existing, gameStarted: true });
     await renderPage();
 
-    // Existing server picks show as "Locked in" (submitted state, disabled)
-    const initialLocked = screen.getAllByRole('button', { name: /locked in/i }).length;
-    expect(initialLocked).toBe(2);
-
-    // Add one new user (pending) pick — it shows as "Picked" (enabled)
-    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
-    await userEvent.click(pickButton);
-
-    await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: /picked/i }).length).toBe(1);
-    });
-
-    await userEvent.click(screen.getByRole('button', { name: /clear selected picks/i }));
-
-    // After clearing, user pick gone; existing locked picks remain
-    await waitFor(() => {
-      expect(screen.queryAllByRole('button', { name: /picked/i }).length).toBe(0);
-      expect(screen.getAllByRole('button', { name: /locked in/i }).length).toBe(2);
-    });
+    expect(screen.getAllByRole('button', { name: /locked in/i }).length).toBe(2);
+    expect(screen.queryAllByRole('button', { name: /picked/i }).length).toBe(0);
   });
 
-  it('submit picks clears user picks and reloads existing', async () => {
-    await setupDefaults();
-    mockedAddPicks.mockResolvedValue(1);
-    mockedGetUserPicks.mockResolvedValue([createPick({ team: 'BUF' })]);
-
+  it('an existing pick whose game has not kicked off renders as clickable Picked, not Locked in', async () => {
+    const existing = [createPick({ team: 'BUF' })];
+    const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    await setupDefaults({ existingPicks: existing, gameDate: futureDate });
     await renderPage();
-    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
-    await userEvent.click(pickButton);
 
-    await userEvent.click(screen.getByRole('button', { name: /submit pick/i }));
-
-    await waitFor(() => {
-      expect(mockedAddPicks).toHaveBeenCalledTimes(1);
-      const submit = screen.getByRole('button', { name: /submit pick/i });
-      const clear = screen.getByRole('button', { name: /clear selected picks/i });
-      expect(submit).toBeDisabled();
-      expect(clear).toBeDisabled();
-    });
+    await screen.findByRole('button', { name: /picked/i });
+    expect(screen.queryAllByRole('button', { name: /locked in/i }).length).toBe(0);
   });
 
   it('season selector keeps the current season navigable after viewing a historical season', async () => {
@@ -436,14 +437,16 @@ describe('PicksPage', () => {
     await setupDefaults({ existingPicks: existing });
     await renderPage();
 
-    expect(screen.queryByRole('button', { name: /submit pick/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /clear selected picks/i })).toBeNull();
+    // At the cap: no "Pick" buttons left, and the "Picks Remaining" banner is gone (no more
+    // Submit/Clear buttons to check now that selection writes to the backend immediately).
+    expect(screen.queryAllByRole('button', { name: /^Pick /i })).toHaveLength(0);
+    expect(screen.queryByText(/Picks Remaining/i)).toBeNull();
   });
 
-  it('shows "Submit picks before gametime" header text', async () => {
+  it('shows guidance to tap a team when picks remain', async () => {
     await setupDefaults();
     await renderPage();
-    expect(screen.getByText(/Submit picks before gametime/i)).toBeInTheDocument();
+    expect(screen.getByText(/tap a team to pick it/i)).toBeInTheDocument();
   });
 
   it('pick buttons enabled before game kickoff time', async () => {
@@ -577,8 +580,9 @@ describe('PicksPage', () => {
   });
 
   // ── Background refresh behavior (frizat-mon.5) ─────────────────────────────
-  // The poll refetch must be invisible: no spinner, and pending (unsubmitted)
-  // selections must survive. NFL poll interval is 300s (nflAdapter.pollIntervalMs).
+  // The poll refetch must be invisible (no spinner), and since a pick is written to the server
+  // immediately on click, it must still show as picked once the next poll returns server truth.
+  // NFL poll interval is 300s (nflAdapter.pollIntervalMs).
   describe('background poll refresh', () => {
     const POLL_MS = 300_000;
 
@@ -586,14 +590,18 @@ describe('PicksPage', () => {
       vi.useRealTimers();
     });
 
-    it('preserves pending picks across a background poll refetch', async () => {
+    it('keeps showing a pick as Picked across a background poll once the backend confirms it', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       await setupDefaults();
+      mockedAddPicks.mockResolvedValue(1);
       await renderPage();
 
       await user.click(screen.getAllByRole('button', { name: /^Pick /i })[0]);
       await screen.findByRole('button', { name: /picked/i });
+
+      // Simulate the pick now being real, server-side: the next poll's getUserPicks reflects it.
+      mockedGetUserPicks.mockResolvedValue([createPick({ team: 'BUF' })]);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(POLL_MS);
@@ -619,17 +627,22 @@ describe('PicksPage', () => {
       expect(screen.getAllByRole('button', { name: /^Pick /i }).length).toBeGreaterThan(0);
     });
 
-    it('drops a pending pick with a toast when its game locks during refetch', async () => {
+    // frizat-immediate-pick-toggle: a pick is never auto-dropped anymore — it was already
+    // written to the server the moment it was made. Once its game locks, the pick simply becomes
+    // non-interactive ("Locked in") instead of disappearing.
+    it('flips an existing pick from clickable Picked to Locked in once its game locks during refetch', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
       await setupDefaults({ gameDate: futureDate });
+      mockedAddPicks.mockResolvedValue(1);
       await renderPage();
 
       await user.click(screen.getAllByRole('button', { name: /^Pick /i })[0]);
       await screen.findByRole('button', { name: /picked/i });
 
-      // Next poll: same games but kickoff has passed
+      // Next poll: server now confirms the pick, and BUF/MIA's kickoff has passed
+      mockedGetUserPicks.mockResolvedValue([createPick({ team: 'BUF' })]);
       const pastDate = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       const startedScores = createScores({
         week: 2,
@@ -657,11 +670,9 @@ describe('PicksPage', () => {
         await vi.advanceTimersByTimeAsync(POLL_MS);
       });
 
+      // Still the user's pick — just no longer editable
       expect(screen.queryByRole('button', { name: /picked/i })).toBeNull();
-      expect(toastState.push).toHaveBeenCalledWith(
-        expect.stringMatching(/game.*(started|kicked off)/i),
-        expect.anything(),
-      );
+      expect(screen.getByRole('button', { name: /locked in/i })).toBeInTheDocument();
     });
   });
 

@@ -1,4 +1,4 @@
-import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks } from '../api/cfb';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks, removeMyCfbPick } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins, getCfbRequiredPicks, isGameLive } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
@@ -267,6 +267,14 @@ export function createCfbAdapter(): SportAdapter {
         team: p.team,
         pickType: p.pickType,
       })));
+    },
+
+    async removePick(leagueId, { season, week, isPostSeason }, pick) {
+      const slates = await getSlates();
+      const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
+      const slate = slates.find(s => s.slateNumber === slateNum);
+      if (!slate) return;
+      await removeMyCfbPick({ leagueId, cfbSlateId: slate.id, season, team: pick.team, pickType: pick.pickType });
     },
 
     async clearPicks(leagueId, { week, isPostSeason }) {

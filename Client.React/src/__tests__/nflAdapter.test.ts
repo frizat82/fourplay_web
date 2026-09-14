@@ -13,6 +13,7 @@ vi.mock('../api/league', () => ({
   doOddsExist: vi.fn(),
   spreadBatch: vi.fn(),
   addPicks: vi.fn(),
+  removeMyPick: vi.fn(),
   getNflCurrentWeek: vi.fn(),
   getLeaguePicks: vi.fn(),
 }));

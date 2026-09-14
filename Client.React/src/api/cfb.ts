@@ -55,10 +55,27 @@ export async function addCfbPicks(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ leagueId, cfbSlateId, season, picks }),
   });
-  if (!res.ok) return { added: 0 };
+  // Throws (rather than the old silent `{ added: 0 }` fallback) so a rejection — cap exceeded,
+  // game already kicked off — actually reaches the caller. With immediate per-click submission,
+  // the caller's optimistic UI update depends on this to know when to roll back.
+  if (!res.ok) throw new Error(`Failed to add pick(s) (${res.status})`);
   return res.json();
 }
 
 export async function deleteCfbPicks(leagueId: number, cfbSlateId: number): Promise<void> {
   await fetch(`${BASE}/picks/${leagueId}/${cfbSlateId}`, { method: 'DELETE' });
+}
+
+// Self-service removal of one of the caller's own picks, any time before its game kicks off —
+// identified by natural key (team/pickType/slate/season/league). The server always resolves
+// ownership from the JWT, never from this body. Unlike this file's other functions, a failed
+// request THROWS rather than silently returning a fallback value — the caller relies on this to
+// roll back its optimistic UI update.
+export async function removeMyCfbPick(pick: { leagueId: number; cfbSlateId: number; season: number; team: string; pickType: string }): Promise<void> {
+  const res = await fetch(`${BASE}/picks/mine`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pick),
+  });
+  if (!res.ok) throw new Error(`Failed to remove pick (${res.status})`);
 }
