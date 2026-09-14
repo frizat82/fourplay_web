@@ -131,7 +131,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   };
 
   const remainingPicks = requiredPicks - existingPicks.size;
-  const isPicksLocked = () => remainingPicks <= 0;
+  const picksAtCap = remainingPicks <= 0;
 
   // Writes the click's effect into the query cache immediately (so the button's state flips with
   // no round-trip delay), fires the real request, and rolls back to the pre-click snapshot if the
@@ -160,7 +160,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   };
 
   const selectPick = (gameId: string, team: string, pickType: PickType = 'Spread') => {
-    if (isPicksLocked() || !currentLeague || !user) return;
+    if (picksAtCap || !currentLeague || !user) return;
     const key = pickKey(gameId, team, pickType);
     void applyPickChange(
       key,
@@ -261,6 +261,14 @@ export default function PicksPage({ adapter }: PicksPageProps) {
             const overPickState = pickStateFor(game.id, game.homeTeam, 'Over');
             const underPickState = pickStateFor(game.id, game.homeTeam, 'Under');
             const locked = gameIsLocked(game);
+            // A game can be individually unlocked (hasn't kicked off yet) while the league-wide
+            // pick cap is already full — e.g. Monday Night Football sitting there Sunday night
+            // once all 4 picks are locked in from earlier games. `locked` alone only reflects this
+            // game's own kickoff time, so an at-cap game's "Pick" buttons rendered enabled and
+            // clicking silently no-opped (selectPick's own picksAtCap bail-out) instead of
+            // being visibly disabled. Only gates the *unpicked* ("Pick") buttons — an already-picked
+            // team must stay clickable to unselect even while at the cap.
+            const disableUnpicked = locked || picksAtCap;
 
             return (
               <Grid size={{ xs: 12, lg: 4 }} key={game.id}>
@@ -284,14 +292,14 @@ export default function PicksPage({ adapter }: PicksPageProps) {
                   isPostSeason={isPostSeasonSlate}
                   homePickState={homePickState}
                   awayPickState={awayPickState}
-                  locked={locked}
+                  locked={disableUnpicked}
                   onPickHome={() => homePickState !== 'none' ? unselectPick(game.id, game.homeTeam) : selectPick(game.id, game.homeTeam)}
                   onPickAway={() => awayPickState !== 'none' ? unselectPick(game.id, game.awayTeam) : selectPick(game.id, game.awayTeam)}
                   overValue={isPostSeasonSlate ? game.overThreshold : undefined}
                   underValue={isPostSeasonSlate ? game.underThreshold : undefined}
                   overPickState={overPickState}
                   underPickState={underPickState}
-                  overUnderLocked={locked && overPickState === 'none'}
+                  overUnderLocked={disableUnpicked && overPickState === 'none'}
                   onPickOver={() => overPickState !== 'none' ? unselectPick(game.id, game.homeTeam, 'Over') : selectPick(game.id, game.homeTeam, 'Over')}
                   onPickUnder={() => underPickState !== 'none' ? unselectPick(game.id, game.homeTeam, 'Under') : selectPick(game.id, game.homeTeam, 'Under')}
                 />
