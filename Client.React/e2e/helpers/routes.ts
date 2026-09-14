@@ -135,6 +135,12 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    // ── DELETE /api/league/picks/mine — self-service unselect (frizat-immediate-pick-toggle) ──
+    if (url.match(/\/api\/league\/picks\/mine$/) && method === 'DELETE') {
+      void route.fulfill({ status: 204 });
+      return;
+    }
+
     // ── Odds exists ──────────────────────────────────────────────────────────
     if (url.includes('/api/league/') && url.includes('/odds/') && url.endsWith('/exists') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
