@@ -12,6 +12,7 @@ vi.mock('../api/cfb', () => ({
   getCfbAllPicks: vi.fn(),
   addCfbPicks: vi.fn(),
   deleteCfbPicks: vi.fn(),
+  removeMyCfbPick: vi.fn(),
 }));
 
 vi.mock('../api/espn', () => ({
@@ -19,7 +20,7 @@ vi.mock('../api/espn', () => ({
   getCfbLiveGames: vi.fn(),
 }));
 
-import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks } from '../api/cfb';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, removeMyCfbPick } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
@@ -260,6 +261,28 @@ describe('cfbAdapter', () => {
       expect(addCfbPicks).toHaveBeenCalledWith(1, slate.id, 2026, [
         { team: 'MICH', pickType: 'Spread' },
       ]);
+    });
+  });
+
+  describe('removePick', () => {
+    it('resolves the slate for the given week and sends leagueId/slateId/season/team/pickType', async () => {
+      vi.mocked(getCfbSlates).mockResolvedValue([slate]);
+      vi.mocked(removeMyCfbPick).mockResolvedValue(undefined);
+
+      await adapter.removePick(1, { season: 2026, week: 8, isPostSeason: false }, { gameId: 'MICH', team: 'MICH', pickType: 'Spread' });
+
+      expect(removeMyCfbPick).toHaveBeenCalledWith({
+        leagueId: 1, cfbSlateId: slate.id, season: 2026, team: 'MICH', pickType: 'Spread',
+      });
+    });
+
+    it('propagates a rejection from removeMyCfbPick (caller relies on this to roll back)', async () => {
+      vi.mocked(getCfbSlates).mockResolvedValue([slate]);
+      vi.mocked(removeMyCfbPick).mockRejectedValue(new Error('kicked off'));
+
+      await expect(
+        adapter.removePick(1, { season: 2026, week: 8, isPostSeason: false }, { gameId: 'MICH', team: 'MICH', pickType: 'Spread' })
+      ).rejects.toThrow('kicked off');
     });
   });
 

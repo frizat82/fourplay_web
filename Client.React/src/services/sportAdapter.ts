@@ -155,6 +155,11 @@ export interface SportAdapter {
   loadCurrentGames(leagueId: number, userId: string): Promise<LoadedWeek>;
   loadHistoricalGames(leagueId: number, userId: string, week: WeekState): Promise<LoadedWeek | null>;
   submitPicks(leagueId: number, state: WeekState, picks: { gameId: string; team: string; pickType: PickType }[]): Promise<void>;
+  // Self-service removal of one of the caller's own picks — any time before its game kicks off
+  // (the server is the authoritative guard; this never trusts client-side lock state alone).
+  // Throws on failure (cap/lock rejection, network error) so the caller can roll back its
+  // optimistic UI update.
+  removePick(leagueId: number, state: WeekState, pick: { gameId: string; team: string; pickType: PickType }): Promise<void>;
   clearPicks(leagueId: number, state: WeekState): Promise<PickView[]>;
   loadJerseys?(season: number, week: number): Promise<Record<string, string>>;
 

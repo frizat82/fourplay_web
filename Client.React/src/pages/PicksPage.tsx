@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -17,10 +17,11 @@ import GameCard, { type PickState } from '../components/sports/GameCard';
 import GameCardGridSkeleton from '../components/GameCardSkeleton';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import type { SportAdapter, GameView, PickType, WeekState } from '../services/sportAdapter';
+import type { SportAdapter, GameView, LoadedWeek, PickType, WeekState } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useToast } from '../services/toast';
 import { isGameDecided, isWeekExcludedFromSeason } from '../utils/gameHelpers';
+import { extractApiErrorMessage } from '../utils/apiError';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
@@ -47,15 +48,22 @@ export default function PicksPage({ adapter }: PicksPageProps) {
 
   // null = live current week (polls in background); non-null = historical navigation
   const [weekState, setWeekState] = useState<WeekState | null>(null);
-  // Pending (unsubmitted) selections — local state only, never touched by refetches
-  const [userPicks, setUserPicks] = useState<Set<string>>(new Set());
-  const [storingPicks, setStoringPicks] = useState(false);
+  // Pick keys with a select/unselect request currently in flight — guards against a second
+  // click on the same pick firing a duplicate request while the first is still outstanding.
+  // Not "unsubmitted" state: every pick is written to the server immediately on click.
+  // A ref, not useState: two synchronous clicks (before React re-renders) would otherwise both
+  // read the same stale, pre-update set and the guard would never actually catch anything.
+  const inFlightKeysRef = useRef<Set<string>>(new Set());
 
   const isCurrentWeek = weekState === null;
   const enabled = leaguesLoaded && !!currentLeague && !!user?.userId;
+  const queryKey = useMemo(
+    () => [adapter.sport, 'picks', currentLeague, user?.userId, weekState] as const,
+    [adapter.sport, currentLeague, user?.userId, weekState],
+  );
 
   const { data, isLoading, isPlaceholderData, isError, refetch } = useQuery({
-    queryKey: [adapter.sport, 'picks', currentLeague, user?.userId, weekState],
+    queryKey,
     queryFn: () => weekState
       ? adapter.loadHistoricalGames(currentLeague!, user!.userId, weekState)
       : adapter.loadCurrentGames(currentLeague!, user!.userId),
@@ -74,6 +82,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     useCurrentWeekNav(isCurrentWeek, data, setWeekState);
 
   const games = useMemo(() => sortGamesByTimeThenRank(data?.games ?? []), [data]);
+  const gameById = useMemo(() => new Map(games.map(g => [g.id, g])), [games]);
   const hasOdds = data?.hasOdds ?? false;
   const requiredPicks = data?.requiredPicks ?? 4;
   const season = weekState?.season ?? data?.season ?? new Date().getFullYear();
@@ -84,22 +93,14 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const minSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
   const startWeek = useLeagueStartWeek(currentLeague, season);
 
+  // Every pick — whether it's always been there or was optimistically added/removed by this
+  // session's own click just now — lives in data.userPicks. There is no separate "pending"
+  // bucket anymore: a background refetch (poll/SSE) simply replaces this with server truth,
+  // which is also what corrects an optimistic update if it ever drifts.
   const existingPicks = useMemo(
     () => new Set((data?.userPicks ?? []).map(p => pickKey(p.gameId, p.team, p.pickType))),
     [data],
   );
-
-  // Reconcile pending selections after each (background) refresh: drop only picks
-  // that are now submitted server-side or whose game has locked since selection.
-  useEffect(() => {
-    if (!data) return;
-    const lockedIds = new Set(games.filter(gameIsLocked).map(g => g.id));
-    const kept = [...userPicks].filter(k => !existingPicks.has(k) && !lockedIds.has(k.split('|')[0]));
-    if (kept.length === userPicks.size) return;
-    const droppedByLock = [...userPicks].some(k => !existingPicks.has(k) && lockedIds.has(k.split('|')[0]));
-    setUserPicks(new Set(kept));
-    if (droppedByLock) toast.push('Selection removed — game already kicked off', 'warning');
-  }, [data, games, existingPicks, userPicks, toast]);
 
   // frizat-d2h: Show Jerseys toggle removed for now (likely permanent removal pending a
   // copyright review of the jersey images). adapter.loadJerseys and the underlying
@@ -117,49 +118,67 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     // available week and meta.isPostSeason — that call drives the load. No-op here.
   }, []);
 
-  // Pick management
+  // Pick management — 'submitted' means locked/uneditable (the game has kicked off); 'pending'
+  // is repurposed here from its original "not yet sent to the server" meaning to "picked and
+  // still editable" — GameCard already renders that state as a clickable "Picked" button, which
+  // is exactly what an unlocked pick needs. Every pick reflected here IS persisted server-side
+  // the moment its own request resolves; there is no unsubmitted state anymore.
   const pickStateFor = (gameId: string, team: string, pickType = 'Spread'): PickState => {
     const key = pickKey(gameId, team, pickType);
-    if (existingPicks.has(key)) return 'submitted';
-    if (userPicks.has(key)) return 'pending';
-    return 'none';
+    if (!existingPicks.has(key)) return 'none';
+    const game = gameById.get(gameId);
+    return game && gameIsLocked(game) ? 'submitted' : 'pending';
   };
 
-  const remainingPicks = requiredPicks - userPicks.size - existingPicks.size;
+  const remainingPicks = requiredPicks - existingPicks.size;
   const isPicksLocked = () => remainingPicks <= 0;
 
-  const selectPick = (gameId: string, team: string, pickType: PickType = 'Spread') => {
-    if (isPicksLocked()) return;
-    setUserPicks(prev => new Set(prev).add(pickKey(gameId, team, pickType)));
-  };
-
-  const unselectPick = (gameId: string, team: string, pickType: PickType = 'Spread') => {
-    const key = pickKey(gameId, team, pickType);
-    setUserPicks(prev => { const s = new Set(prev); s.delete(key); return s; });
-  };
-
-  const handleSubmit = async () => {
-    if (!currentLeague || userPicks.size === 0) return;
-    setStoringPicks(true);
+  // Writes the click's effect into the query cache immediately (so the button's state flips with
+  // no round-trip delay), fires the real request, and rolls back to the pre-click snapshot if the
+  // server rejects it (cap exceeded, game kicked off since page load, network error) — surfacing
+  // the actual reason via the existing extractApiErrorMessage helper. inFlightKeysRef guards
+  // against a second click on the same pick firing a duplicate request before the first settles.
+  const applyPickChange = async (
+    key: string,
+    mutatePicks: (prevPicks: LoadedWeek['userPicks']) => LoadedWeek['userPicks'],
+    action: () => Promise<void>,
+    fallbackMessage: string,
+  ) => {
+    if (inFlightKeysRef.current.has(key) || !currentLeague) return;
+    inFlightKeysRef.current.add(key);
+    const previous = queryClient.getQueryData<LoadedWeek | null>(queryKey);
+    queryClient.setQueryData<LoadedWeek | null | undefined>(queryKey, old =>
+      old ? { ...old, userPicks: mutatePicks(old.userPicks) } : old);
     try {
-      const picks = [...userPicks].map(key => {
-        const [gameId, team, pickType] = key.split('|');
-        return { gameId, team, pickType: pickType as PickType };
-      });
-      await adapter.submitPicks(currentLeague, { season, week, isPostSeason }, picks);
-      toast.push(`${picks.length} Pick(s) Added`, 'success');
-      setUserPicks(new Set());
-      await queryClient.invalidateQueries({ queryKey: [adapter.sport, 'picks', currentLeague] });
-    } catch {
-      toast.push('Error Adding Picks', 'error');
+      await action();
+    } catch (err) {
+      queryClient.setQueryData(queryKey, previous);
+      toast.push(extractApiErrorMessage(err, fallbackMessage), 'error');
     } finally {
-      setStoringPicks(false);
+      inFlightKeysRef.current.delete(key);
     }
   };
 
-  const handleClear = () => {
-    // Clear only pending (unsubmitted) user picks — existing submitted picks stay
-    setUserPicks(new Set());
+  const selectPick = (gameId: string, team: string, pickType: PickType = 'Spread') => {
+    if (isPicksLocked() || !currentLeague || !user) return;
+    const key = pickKey(gameId, team, pickType);
+    void applyPickChange(
+      key,
+      picks => [...picks, { gameId, team, pickType, userId: user.userId, userName: user.name ?? '' }],
+      () => adapter.submitPicks(currentLeague, { season, week, isPostSeason }, [{ gameId, team, pickType }]),
+      'Error adding pick',
+    );
+  };
+
+  const unselectPick = (gameId: string, team: string, pickType: PickType = 'Spread') => {
+    if (!currentLeague) return;
+    const key = pickKey(gameId, team, pickType);
+    void applyPickChange(
+      key,
+      picks => picks.filter(p => !(p.gameId === gameId && p.team === team && p.pickType === pickType)),
+      () => adapter.removePick(currentLeague, { season, week, isPostSeason }, { gameId, team, pickType }),
+      'Error removing pick',
+    );
   };
 
   // isLoading covers the very first load; isPlaceholderData covers navigating to a week whose
@@ -225,25 +244,13 @@ export default function PicksPage({ adapter }: PicksPageProps) {
         <ExcludedWeekBanner startWeek={startWeek} />
       ) : (
         <Grid container spacing={2}>
-          {hasUnlockedGames && (remainingPicks > 0 || userPicks.size > 0) && (
+          {hasUnlockedGames && remainingPicks > 0 && (
             <Grid size={12}>
-              {remainingPicks > 0 && (
-                <Stack spacing={1} alignItems="center">
-                  <Typography variant="h6">Picks Remaining ({remainingPicks})</Typography>
-                  <Typography variant="h6">Submit picks before gametime</Typography>
-                </Stack>
-              )}
-              <Stack direction="row" spacing={2} justifyContent="space-between" sx={{ mt: 2 }}>
-                <Button variant="contained" color="success" disabled={storingPicks || userPicks.size === 0} onClick={handleSubmit}>
-                  {storingPicks ? 'Submitting…' : 'Submit Pick(s)'}
-                </Button>
-                {/* frizat: /style-guide audit — both buttons were equal-weight contained, and
-                    Clear used color="warning" as a small filled button, the exact configuration
-                    the style guide documents as unreadable in both modes for pick-state buttons.
-                    Outlined demotes Clear to secondary, matching its rare, lower-stakes role. */}
-                <Button variant="outlined" disabled={userPicks.size === 0} onClick={handleClear}>
-                  Clear Selected Picks
-                </Button>
+              <Stack spacing={0.5} alignItems="center">
+                <Typography variant="h6">Picks Remaining ({remainingPicks})</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Tap a team to pick it — tap again to change your mind before kickoff
+                </Typography>
               </Stack>
             </Grid>
           )}

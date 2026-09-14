@@ -105,6 +105,13 @@ export async function addPicks(picks: NflPickDto[]) {
   return data;
 }
 
+// Self-service removal of one of the caller's own picks, any time before its game kicks off —
+// identified by natural key (team/pick/week/season/league), not id. The server always resolves
+// ownership from the JWT, never from this body, so id/userId/userName are irrelevant here.
+export async function removeMyPick(pick: NflPickDto) {
+  await http.delete('/api/league/picks/mine', { data: pick });
+}
+
 export async function spreadBatch(
   leagueId: number,
   season: number,
