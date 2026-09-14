@@ -8,6 +8,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 - Added: picks on the Picks page now save and unselect instantly, one tap at a time — no more Submit/Clear buttons. You can change your mind on any pick right up until its game kicks off
 - Added: a "Your Picks" summary on the home page showing this week's picks for each of your leagues at a glance, with no need to open the Picks page
+- Fixed: once all your picks were made for the week, Pick buttons on a game that hadn't kicked off yet (like Monday Night Football) still showed as tappable but silently did nothing — they're now disabled until you unselect an existing pick
 
 ## 2026-09-12
 

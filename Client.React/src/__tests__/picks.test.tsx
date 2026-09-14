@@ -443,6 +443,61 @@ describe('PicksPage', () => {
     expect(screen.queryByText(/Picks Remaining/i)).toBeNull();
   });
 
+  // Bug report: 4 picks made and locked (their games kicked off), but a later, not-yet-started
+  // game (e.g. MNF) still rendered enabled "Pick" buttons — clicking silently no-opped (selectPick
+  // bails out on isPicksLocked()) instead of being visibly disabled. `locked` on GameCard was
+  // wired only to that specific game's own kickoff time, never to the pick cap.
+  it('disables Pick buttons for a not-yet-started game once the pick cap is reached', async () => {
+    const week = 2;
+    const futureDate = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+    const scores = createScores({
+      week,
+      postSeason: false,
+      events: [
+        {
+          id: '1', season: { year: 2024, type: 2 }, week: { number: week }, date: new Date().toISOString(),
+          competitions: [createCompetition({ homeTeam: 'BUF', awayTeam: 'MIA', gameStarted: true })],
+        },
+        {
+          id: '2', season: { year: 2024, type: 2 }, week: { number: week }, date: new Date().toISOString(),
+          competitions: [createCompetition({ homeTeam: 'DAL', awayTeam: 'NYG', gameStarted: true })],
+        },
+        {
+          id: '3', season: { year: 2024, type: 2 }, week: { number: week }, date: futureDate,
+          competitions: [createCompetition({ homeTeam: 'SEA', awayTeam: 'SF', gameStarted: false, date: futureDate })],
+        },
+      ],
+    });
+
+    mockedGetScores.mockResolvedValue(scores);
+    mockedGetWeekScores.mockResolvedValue(scores);
+    mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, false));
+    mockedDoOddsExist.mockResolvedValue(true);
+    mockedGetUserPicks.mockResolvedValue([
+      createPick({ team: 'BUF' }), createPick({ team: 'MIA' }),
+      createPick({ team: 'DAL' }), createPick({ team: 'NYG' }),
+    ]);
+    mockedGetAllJerseys.mockResolvedValue({});
+    mockedGetNextSpreadJob.mockResolvedValue(null);
+    mockedSpreadBatch.mockResolvedValue({
+      responses: {
+        BUF: createSpreadResponse('BUF', -7, 47.5, 47.5),
+        MIA: createSpreadResponse('MIA', 7, 47.5, 47.5),
+        DAL: createSpreadResponse('DAL', -3.5, 44, 44),
+        NYG: createSpreadResponse('NYG', 3.5, 44, 44),
+        SEA: createSpreadResponse('SEA', -3, 44, 44),
+        SF: createSpreadResponse('SF', 3, 44, 44),
+      },
+    });
+
+    await renderPage();
+
+    const seaButton = screen.getByRole('button', { name: /^Pick SEA$/i });
+    const sfButton = screen.getByRole('button', { name: /^Pick SF$/i });
+    expect(seaButton).toBeDisabled();
+    expect(sfButton).toBeDisabled();
+  });
+
   it('shows guidance to tap a team when picks remain', async () => {
     await setupDefaults();
     await renderPage();
