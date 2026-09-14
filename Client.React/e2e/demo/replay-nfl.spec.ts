@@ -23,13 +23,13 @@ test('NFL replay — pick, live update, settle against real captured ESPN values
     await page.goto('/picks');
 
     // ── Scheduled: the real IND @ ATL game is pickable ──────────────────────
+    // frizat-immediate-pick-toggle: picking now writes immediately (no Submit step), and a pick
+    // stays in the clickable "picked" state — not "locked in" — until its own game kicks off,
+    // which for this still-scheduled game hasn't happened yet at this point in the test.
     const indButton = page.getByRole('button', { name: /^Pick IND/i });
     await expect(indButton).toBeVisible({ timeout: 15_000 });
     await indButton.click();
-    await expect(page.getByRole('button', { name: /IND picked/i })).toBeVisible();
-
-    await page.getByRole('button', { name: /^Submit Pick\(s\)$/i }).click();
-    await expect(page.getByRole('button', { name: /IND locked in/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: /IND picked/i })).toBeVisible({ timeout: 10_000 });
 
     // ── Advance to halftime (real: IND 13, ATL 14, end of Q2) — scores page updates without reload ──
     // ScoresPage renders halftime the same as any other live state — "Q{period} {clock}" — it has

@@ -188,6 +188,12 @@ export async function setupCfbRoutes(page: Page, options: SetupCfbRoutesOptions 
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ added: 1 }) });
       return;
     }
+    // Self-service unselect (frizat-immediate-pick-toggle) — must also come before the broader
+    // /api/cfb/picks/<league>/<slate> DELETE handler below, which is the admin-only bulk one.
+    if (url.match(/\/api\/cfb\/picks\/mine$/) && method === 'DELETE') {
+      void route.fulfill({ status: 204 });
+      return;
+    }
     if (url.match(/\/api\/cfb\/picks\/\d+\/\d+\/user$/) && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userPicks) });
       return;
