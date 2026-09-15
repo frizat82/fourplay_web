@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Box,
   Button,
@@ -23,6 +23,8 @@ import {
   Tabs,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -727,19 +729,31 @@ export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter })
   );
 }
 
+type MissingPicksState = 'no-active-week' | 'missing' | 'all-picked';
+
+/**
+ * frizat-6sc/frizat-e3l: single source of truth for a member's current-week pick-completion
+ * state — backs both the per-row MissingPicksChip label/color AND the "Missing Only" filter
+ * predicate, so the two can never silently disagree on who counts as missing.
+ */
+function computeMissingPicksState(picksMade: number, requiredPicks: number | null): MissingPicksState {
+  if (requiredPicks == null) return 'no-active-week';
+  return picksMade < requiredPicks ? 'missing' : 'all-picked';
+}
+
 /**
  * frizat-6sc: commissioner "who's missing picks" indicator for one member's current-week row.
- * requiredPicks is null when there's no current week/slate to resolve (e.g. off-season) — shown
- * as a neutral "No Active Week" state rather than hiding the whole column, so the feature stays
- * discoverable year-round instead of only appearing once a commissioner already knows to check
- * mid-season.
+ * Takes the already-computed state/picksMade (frizat-e3l: MembersTab computes this once per
+ * member alongside the "Missing Only" filter, rather than each row re-deriving it here too).
+ * "no-active-week" (no current week/slate to resolve, e.g. off-season) shows a neutral "No
+ * Active Week" state rather than hiding the whole column, so the feature stays discoverable
+ * year-round instead of only appearing once a commissioner already knows to check mid-season.
  */
-function MissingPicksChip({ member, picksByUser, requiredPicks }: { member: LeagueUserMappingDto; picksByUser: Map<string, number>; requiredPicks: number | null }) {
-  if (requiredPicks == null) {
+function MissingPicksChip({ member, state, picksMade, requiredPicks }: { member: LeagueUserMappingDto; state: MissingPicksState; picksMade: number; requiredPicks: number | null }) {
+  if (state === 'no-active-week') {
     return <Chip size="small" data-testid={`missing-picks-${member.id}`} label="No Active Week" variant="outlined" />;
   }
-  const picksMade = picksByUser.get(member.userId) ?? 0;
-  const isMissing = picksMade < requiredPicks;
+  const isMissing = state === 'missing';
   return (
     <Chip
       size="small"
@@ -773,12 +787,44 @@ interface MembersTabProps {
   onCancelMembershipInvite: (id: number) => void;
 }
 
+// frizat-e3l: the Members table (Name/Email/Joined/This Week/Actions, wrapped in the standard
+// overflowX:auto mobile-data-table pattern) was still cramped on a 390px iOS viewport even with
+// that wrapper — reported as "ugly and hard to use." Shrinks table text on mobile, mirroring
+// UserPicksMatrix.tsx's MATRIX_SIZE approach (frizat-2aa): one config object, not scattered
+// isMobile ternaries. Kept as a JS isMobile lookup (not pure MUI sx breakpoints) for the same
+// reason as that component — tests assert the concrete value via a mocked window.matchMedia.
+const MEMBERS_MOBILE_FONT_SIZE = '0.75rem';
+
 function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, picksByUser, requiredPicks, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   // Server-computed — the formula differs by sport (and, per policy, could change again), so this
   // must not be re-derived client-side. See LeagueController.ComputeLeagueCost.
   const cost = costDto?.cost ?? 0;
   const { share, copy } = useShareLink();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true });
+  const cellFontSize = isMobile ? MEMBERS_MOBILE_FONT_SIZE : undefined;
+
+  // frizat-e3l: "so I can just see WHO's missing" — a fast filter to the exact question a
+  // commissioner is checking this page for, rather than making them scan the full roster.
+  // A member with no current week/slate ("no-active-week") isn't missing anything — there's
+  // nothing to have picked yet — so the filter excludes them, it doesn't treat every off-season
+  // member as delinquent.
+  //
+  // Computed once per member here (memoized on the inputs that actually change it), not
+  // re-derived inside MissingPicksChip per row — avoids doing the same lookup+branch twice for
+  // every visible row when the filter is active.
+  const [showMissingOnly, setShowMissingOnly] = useState(false);
+  const membersWithState = useMemo(
+    () => members.map((m) => {
+      const picksMade = picksByUser.get(m.userId) ?? 0;
+      return { member: m, picksMade, state: computeMissingPicksState(picksMade, requiredPicks) };
+    }),
+    [members, picksByUser, requiredPicks]
+  );
+  const visibleMembers = showMissingOnly
+    ? membersWithState.filter((x) => x.state === 'missing')
+    : membersWithState;
 
   const inviteUrl = inviteLink ? `${window.location.origin}/join/${inviteLink.token}` : '';
 
@@ -797,6 +843,17 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, pic
           which applies between wrapped lines too. */}
       <Stack direction="row" spacing={2} useFlexGap alignItems="center" sx={{ mb: 2 }} flexWrap="wrap">
         <Chip label={`${count} member${count !== 1 ? 's' : ''} · $${cost}/season`} color="primary" variant="outlined" />
+        {/* /style-guide: view/filter toggles are neutral (variant="outlined" color="info", no
+            icon), matching ScoresPage.tsx's "Show As Matrix"/"Show Only My Picks" — not a brand
+            CTA and not a warning, even though it filters to the "Missing" state's own color. */}
+        <Button
+          variant="outlined"
+          color="info"
+          size="small"
+          onClick={() => setShowMissingOnly((v) => !v)}
+        >
+          {showMissingOnly ? 'Show All Members' : 'Missing Only'}
+        </Button>
         <Button startIcon={<PersonAddIcon />} variant="outlined" size="small" onClick={onInvite}>
           Invite Player
         </Button>
@@ -880,12 +937,19 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, pic
         <CircularProgress />
       ) : (
         <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small">
+          {/* frizat-e3l: fontSize applied once here (every MuiTableCell-root inside), not
+              repeated per-cell — cellFontSize is a single value shared by every column. */}
+          <Table size="small" sx={{ '& .MuiTableCell-root': { fontSize: cellFontSize } }}>
             <TableHead>
               <TableRow>
                 <TableCell sx={stickyColumnSx}>Name</TableCell>
                 <TableCell>Email</TableCell>
-                <TableCell>Joined</TableCell>
+                {/* frizat-e3l: dropped on mobile — least essential column, and reclaiming its
+                    width plus the smaller font above is what gets "This Week" (the column people
+                    open this page to check) close to fully visible without horizontal scroll on
+                    a 390px viewport — verified via Chrome DevTools MCP against a real 390x844
+                    render, not just this file's jsdom tests (which can't measure real layout). */}
+                {!isMobile && <TableCell>Joined</TableCell>}
                 {/* frizat-6sc: column always shown, not hidden off-season, so the feature stays
                     discoverable year-round — an off-season commissioner sees a neutral "No
                     Active Week" chip per row instead of the column vanishing entirely. */}
@@ -894,20 +958,22 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, pic
               </TableRow>
             </TableHead>
             <TableBody>
-              {members.length === 0 && (
+              {visibleMembers.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5}>
-                    <Typography color="text.secondary" variant="body2">No members yet</Typography>
+                  <TableCell colSpan={isMobile ? 4 : 5}>
+                    <Typography color="text.secondary" variant="body2">
+                      {showMissingOnly ? 'No members are missing picks right now' : 'No members yet'}
+                    </Typography>
                   </TableCell>
                 </TableRow>
               )}
-              {members.map((m) => (
+              {visibleMembers.map(({ member: m, picksMade, state }) => (
                 <TableRow key={m.id}>
                   <TableCell sx={stickyColumnSx}>{m.userName ?? m.userId}</TableCell>
                   <TableCell>{m.email ?? m.userId}</TableCell>
-                  <TableCell>{new Date(m.dateCreated).toLocaleDateString()}</TableCell>
+                  {!isMobile && <TableCell>{new Date(m.dateCreated).toLocaleDateString()}</TableCell>}
                   <TableCell>
-                    <MissingPicksChip member={m} picksByUser={picksByUser} requiredPicks={requiredPicks} />
+                    <MissingPicksChip member={m} state={state} picksMade={picksMade} requiredPicks={requiredPicks} />
                   </TableCell>
                   <TableCell align="right">
                     <Button
