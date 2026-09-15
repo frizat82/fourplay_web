@@ -123,6 +123,23 @@ export interface PickView {
   userName: string;
 }
 
+/** Counts picks per userId — pure, sport-agnostic. Shared by nflAdapter's and cfbAdapter's own
+ *  getMissingPicks (frizat-8ni) so the per-user tally logic exists exactly once. */
+export function countPicksByUser(picks: { userId: string }[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const p of picks) counts.set(p.userId, (counts.get(p.userId) ?? 0) + 1);
+  return counts;
+}
+
+export interface MissingPicksResult {
+  /** Picks made this week/slate, keyed by userId. A member with no entry has made 0 picks. */
+  picksByUser: Map<string, number>;
+  /** Required pick count for the current week/slate, or null when there's no current week/slate
+   *  to resolve (e.g. off-season) — callers should show no indicator at all in that case, not
+   *  treat every member as missing. */
+  requiredPicks: number | null;
+}
+
 export interface WeekState {
   season: number;
   week: number;
@@ -166,6 +183,11 @@ export interface SportAdapter {
   // Scores page
   loadCurrentScores(leagueId: number, userId: string): Promise<LoadedScores>;
   loadHistoricalScores(leagueId: number, userId: string, week: WeekState): Promise<LoadedScores | null>;
+
+  // Commissioner "who's missing picks" view (frizat-6sc/frizat-8ni) — reuses this adapter's own
+  // memoized current-week/slate resolution, same as loadCurrentGames/loadCurrentScores, rather
+  // than re-resolving "what's current" from scratch via a second, competing mechanism.
+  getMissingPicks(leagueId: number): Promise<MissingPicksResult>;
 
   // Shared config
   /** Stable sport identifier — used as the React Query cache key prefix */
