@@ -11,6 +11,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: the Scores page's matrix view was much too large on mobile — team badges, logos, and text are now sized to fit more of the grid on a phone screen instead of needing constant horizontal scrolling
 - Added: a "Missing Only" filter on the Members tab's roster, so commissioners can jump straight to who still needs to pick; the table itself is also sized to fit better on a phone screen
 - Fixed: usernames can no longer be set to an email address, at registration or when changing your username later
+- Added: accounts that never confirm their email are now automatically removed after 24 hours, so an abandoned or mistyped registration doesn't permanently tie up someone else's real email address
 
 ## 2026-09-14
 
