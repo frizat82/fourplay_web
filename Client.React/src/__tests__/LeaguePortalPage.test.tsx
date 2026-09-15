@@ -496,6 +496,113 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
   });
 });
 
+describe('LeaguePortalPage (frizat-e3l: Missing Only filter)', () => {
+  function seedTwoMembersOneMissing() {
+    mockedGetMappings.mockResolvedValue([
+      makeMember(),
+      { ...makeMember(), id: 2, userId: 'user-two', userName: 'bob', email: 'bob@example.com' },
+    ]);
+    // frizat's default beforeEach picks (4 of 4) stay untouched; bob has only submitted 2.
+    mockedGetLeaguePicks.mockResolvedValue([
+      { id: 1, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'KC', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+      { id: 2, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'DAL', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+      { id: 3, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'MIA', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+      { id: 4, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'BUF', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+      { id: 5, leagueId: 1, userId: 'user-two', userName: 'bob', team: 'SEA', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+      { id: 6, leagueId: 1, userId: 'user-two', userName: 'bob', team: 'NYG', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+    ]);
+  }
+
+  it('shows a "Missing Only" toggle that hides fully-picked members and reveals only members still missing picks', async () => {
+    seedTwoMembersOneMissing();
+    renderPage();
+    await screen.findByText('bob@example.com');
+    expect(screen.getByText('frizat@example.com')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /missing only/i }));
+
+    expect(screen.getByText('bob@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('frizat@example.com')).not.toBeInTheDocument();
+  });
+
+  it('toggling back to "Show All Members" restores the full member list', async () => {
+    seedTwoMembersOneMissing();
+    renderPage();
+    await screen.findByText('bob@example.com');
+
+    await userEvent.click(screen.getByRole('button', { name: /missing only/i }));
+    expect(screen.queryByText('frizat@example.com')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /show all members/i }));
+    expect(await screen.findByText('frizat@example.com')).toBeInTheDocument();
+  });
+
+  // A member with no current week/slate to resolve ("No Active Week") isn't missing anything —
+  // there's nothing to have picked yet — so the filter must exclude them, not include them as if
+  // every off-season member were delinquent.
+  it('excludes "No Active Week" members from the Missing Only filter, with a clear empty state', async () => {
+    mockedGetNflCurrentWeek.mockRejectedValue(new Error('no current week configured'));
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    await userEvent.click(screen.getByRole('button', { name: /missing only/i }));
+
+    expect(screen.queryByText('frizat@example.com')).not.toBeInTheDocument();
+    expect(screen.getByText(/no members.*missing picks/i)).toBeInTheDocument();
+  });
+});
+
+describe('LeaguePortalPage (frizat-e3l: mobile sizing)', () => {
+  const originalMatchMedia = window.matchMedia;
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+  });
+
+  function mockViewport(matches: boolean) {
+    window.matchMedia = ((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+  }
+
+  it('renders smaller Members-table text on a mobile viewport than on desktop', async () => {
+    mockViewport(true);
+    renderPage();
+    const cell = await screen.findByText('frizat@example.com');
+
+    expect(cell).toHaveStyle({ fontSize: '0.75rem' });
+  });
+
+  it('keeps the larger desktop Members-table text when not on a mobile viewport', async () => {
+    mockViewport(false);
+    renderPage();
+    const cell = await screen.findByText('frizat@example.com');
+
+    expect(cell).not.toHaveStyle({ fontSize: '0.75rem' });
+  });
+
+  // frizat-e3l: dropping the least-essential column is what actually gets "This Week" within
+  // reach without horizontal scroll on a 390px viewport — shrinking font alone wasn't enough.
+  it('drops the "Joined" column on mobile but keeps it on desktop', async () => {
+    mockViewport(true);
+    renderPage();
+    await screen.findByText('frizat@example.com');
+    expect(screen.queryByText('Joined')).not.toBeInTheDocument();
+
+    mockViewport(false);
+    renderPage();
+    await screen.findAllByText('frizat@example.com');
+    expect(screen.getByText('Joined')).toBeInTheDocument();
+  });
+});
+
 describe('LeaguePortalPage (no leagues yet)', () => {
   it('shows an empty state with a Create League call to action instead of a dead end', async () => {
     sessionState.ownedLeagues = [];
