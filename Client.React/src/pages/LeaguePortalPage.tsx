@@ -76,6 +76,13 @@ import { stickyColumnSx } from '../utils/tableStyles';
 
 const CURRENT_SEASON = new Date().getFullYear();
 
+// frizat-ndz: purely a UI display-retention window (how long a stale "Link expired" message stays
+// visible before we stop rendering it), independent of LeagueInviteLinkService's own 24h link
+// validity window on the backend (Server/Services/LeagueInviteLinkService.cs) — the two happen to
+// share the number 24 today, but changing one has no reason to move the other. Named separately
+// so a future reader doesn't assume they're the same knob.
+const EXPIRED_LINK_HIDE_AFTER_MS = 24 * 60 * 60 * 1000;
+
 const userLabel = (u: UserSummaryDto) => u.email ?? u.userName ?? u.id;
 
 /** Shared <option> list for the three admin user-picker dialogs (Create League owner, Add User, Assign Owner). */
@@ -850,32 +857,33 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, pic
 
   const inviteUrl = inviteLink ? `${window.location.origin}/join/${inviteLink.token}` : '';
 
-  const linkExpired = inviteLink ? new Date(inviteLink.expiresAt) < new Date() : false;
+  const expiresAtMs = inviteLink ? new Date(inviteLink.expiresAt).getTime() : null;
+  const nowMs = new Date().getTime();
+  const linkExpired = expiresAtMs != null && expiresAtMs < nowMs;
   const expiresLabel = inviteLink
     ? linkExpired
       ? `Expired ${new Date(inviteLink.expiresAt).toLocaleString()}`
       : `Expires ${new Date(inviteLink.expiresAt).toLocaleString()}`
     : '';
+  // frizat-ndz: a link expired 1 second ago is still worth surfacing (the owner may not have
+  // noticed yet), but showing "Link expired" forever adds nothing once it's been sitting expired
+  // for over a day — the owner isn't coming back to look. Past that point, stop rendering the
+  // block entirely, same as if no link had ever been generated (the "Generate Invite Link" button
+  // above is the only remaining affordance, same as it already is in the never-generated case).
+  // Explicitly `linkExpired &&` — "expired more than a day" is a subset of "expired," sharing the
+  // same expiresAtMs/nowMs rather than re-parsing/re-fetching-now independently of it.
+  const expiredMoreThanADay = linkExpired && nowMs - expiresAtMs! > EXPIRED_LINK_HIDE_AFTER_MS;
 
   return (
     <Box>
-      {/* useFlexGap: Stack's default margin-based spacing only separates items within the same
-          flex line — with flexWrap="wrap" on a narrow (mobile) viewport, buttons that wrap onto
-          their own line end up touching with zero gap. useFlexGap switches to real CSS `gap`,
-          which applies between wrapped lines too. */}
+      {/* frizat-ndz: Invite Player/Generate Invite Link/Add User are member-management actions —
+          kept in their own stable row, separate from the Missing Only filter toggle below (whose
+          label length changes when clicked, which previously shifted where these wrapped to when
+          all five sat in one flex row). useFlexGap: Stack's default margin-based spacing only
+          separates items within the same flex line — with flexWrap="wrap" on a narrow (mobile)
+          viewport, buttons that wrap onto their own line end up touching with zero gap. useFlexGap
+          switches to real CSS `gap`, which applies between wrapped lines too. */}
       <Stack direction="row" spacing={2} useFlexGap alignItems="center" sx={{ mb: 2 }} flexWrap="wrap">
-        <Chip label={`${count} member${count !== 1 ? 's' : ''} · $${cost}/season`} color="primary" variant="outlined" />
-        {/* /style-guide: view/filter toggles are neutral (variant="outlined" color="info", no
-            icon), matching ScoresPage.tsx's "Show As Matrix"/"Show Only My Picks" — not a brand
-            CTA and not a warning, even though it filters to the "Missing" state's own color. */}
-        <Button
-          variant="outlined"
-          color="info"
-          size="small"
-          onClick={() => setShowMissingOnly((v) => !v)}
-        >
-          {showMissingOnly ? 'Show All Members' : 'Missing Only'}
-        </Button>
         <Button startIcon={<PersonAddIcon />} variant="outlined" size="small" onClick={onInvite}>
           Invite Player
         </Button>
@@ -911,7 +919,7 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, pic
         Invite Link works the same way, but gives you one shareable link for your whole group instead of one email at a time.
       </Typography>
 
-      {inviteLink && (
+      {inviteLink && !expiredMoreThanADay && (
         <Box sx={{ mb: 3, p: 2, border: 1, borderColor: linkExpired ? 'warning.main' : 'divider', borderRadius: 1, maxWidth: 520 }}>
           <Stack spacing={1}>
             {linkExpired ? (
@@ -954,6 +962,25 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, pic
           </Stack>
         </Box>
       )}
+
+      {/* frizat-ndz: member-count + the Missing Only filter live directly above the table they
+          affect, in their own row separate from the invite/add-user actions above — reported as
+          confusing when mixed together, and this row's own label-length change (on toggle) no
+          longer has any other buttons next to it to shift around. */}
+      <Stack direction="row" spacing={2} useFlexGap alignItems="center" sx={{ mb: 2 }} flexWrap="wrap">
+        <Chip label={`${count} member${count !== 1 ? 's' : ''} · $${cost}/season`} color="primary" variant="outlined" />
+        {/* /style-guide: view/filter toggles are neutral (variant="outlined" color="info", no
+            icon), matching ScoresPage.tsx's "Show As Matrix"/"Show Only My Picks" — not a brand
+            CTA and not a warning, even though it filters to the "Missing" state's own color. */}
+        <Button
+          variant="outlined"
+          color="info"
+          size="small"
+          onClick={() => setShowMissingOnly((v) => !v)}
+        >
+          {showMissingOnly ? 'Show All Members' : 'Missing Only'}
+        </Button>
+      </Stack>
 
       {/* frizat-05h: scoped to just the "This Week" column's own data, not a full QueryErrorAlert
           page replacement — the rest of the Members tab (roster, invite actions) still works
