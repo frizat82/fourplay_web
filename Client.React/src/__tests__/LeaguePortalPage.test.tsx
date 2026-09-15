@@ -440,14 +440,36 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     expect(screen.getByTestId('missing-picks-2')).toHaveTextContent('Missing (2/4)');
   });
 
-  it('keeps the "This Week" column visible with a neutral state when there is no current NFL week to resolve (off-season)', async () => {
+  // frizat-05h: getNflCurrentWeek() never legitimately resolves to "nothing" for NFL — it either
+  // returns a real week or throws (nflAdapter.ts's own standing comment). A throw here is a real
+  // control-table/network failure, not off-season — this test previously (wrongly) asserted the
+  // same neutral "No Active Week" chip CFB's legitimate null-slate case gets, which meant a real
+  // outage was indistinguishable from "nothing to pick right now." Split from the CFB off-season
+  // test below, which is the actually-correct neutral-state case.
+  it('surfaces a visible error state (not the neutral "No Active Week" chip) when the NFL current-week fetch genuinely fails', async () => {
     mockedGetNflCurrentWeek.mockRejectedValue(new Error('no current week configured'));
 
     renderPage();
     await screen.findByText('frizat@example.com');
 
     expect(screen.getByText('This Week')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('No Active Week'));
+    await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('Unavailable'));
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn.t load this week.s picks/i);
+  });
+
+  it('retrying after a failed missing-picks fetch re-fetches and clears the error state', async () => {
+    mockedGetNflCurrentWeek.mockRejectedValueOnce(new Error('no current week configured'));
+    renderPage();
+    await screen.findByText('frizat@example.com');
+    await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('Unavailable'));
+
+    mockedGetNflCurrentWeek.mockResolvedValue({
+      weekId: 2, season: CURRENT_SEASON, isPostSeason: false, weekLabel: 'Week 2', scoringFormat: 'Standard', spreadLockDatetime: '',
+    });
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+    await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('All Picked'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('keeps the "This Week" column visible with a neutral state when there is no current CFB slate (off-season)', async () => {
@@ -539,9 +561,15 @@ describe('LeaguePortalPage (frizat-e3l: Missing Only filter)', () => {
 
   // A member with no current week/slate to resolve ("No Active Week") isn't missing anything —
   // there's nothing to have picked yet — so the filter must exclude them, not include them as if
-  // every off-season member were delinquent.
+  // every off-season member were delinquent. CFB's legitimate null-current-slate resolution is
+  // the only genuine "no active week" case — NFL's getNflCurrentWeek() never resolves to nothing,
+  // it either succeeds or throws (frizat-05h), so this must not be simulated via a rejected NFL
+  // mock (that's the 'error' case, covered separately below).
   it('excludes "No Active Week" members from the Missing Only filter, with a clear empty state', async () => {
-    mockedGetNflCurrentWeek.mockRejectedValue(new Error('no current week configured'));
+    sportContext.sport = 'CFB';
+    sportContext.isCfb = true;
+    sportContext.isNfl = false;
+    mockedGetCfbCurrentSlate.mockResolvedValue(null);
     renderPage();
     await screen.findByText('frizat@example.com');
 
@@ -549,6 +577,24 @@ describe('LeaguePortalPage (frizat-e3l: Missing Only filter)', () => {
 
     expect(screen.queryByText('frizat@example.com')).not.toBeInTheDocument();
     expect(screen.getByText(/no members.*missing picks/i)).toBeInTheDocument();
+  });
+
+  // frizat-05h /code-review finding: a genuine fetch error must never produce the same confident-
+  // looking empty state as "confirmed nobody's missing" — that's exactly the false-confidence
+  // failure mode this bead exists to eliminate, just reachable through the filter instead of the
+  // unfiltered view. The filter must not apply at all while the fetch is known to be broken.
+  it('does not let the Missing Only filter claim "no members are missing" during a genuine fetch error', async () => {
+    seedTwoMembersOneMissing();
+    mockedGetNflCurrentWeek.mockRejectedValue(new Error('control table unavailable'));
+    renderPage();
+    await screen.findByText('frizat@example.com');
+    await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('Unavailable'));
+
+    await userEvent.click(screen.getByRole('button', { name: /missing only/i }));
+
+    expect(screen.queryByText(/no members.*missing picks/i)).not.toBeInTheDocument();
+    expect(screen.getByText('frizat@example.com')).toBeInTheDocument();
+    expect(screen.getByText('bob@example.com')).toBeInTheDocument();
   });
 });
 

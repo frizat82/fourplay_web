@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import {
-  Alert,
   Box,
-  Button,
   CircularProgress,
   FormControl,
   InputLabel,
@@ -19,6 +17,7 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import PageHeader from '../../components/PageHeader';
+import { InlineQueryErrorAlert } from '../../components/QueryErrorAlert';
 import { getAllLeaguesCost } from '../../api/league';
 import { useAllLeaguesMinSeason } from '../../utils/useAllLeaguesMinSeason';
 import { buildDescendingSeasonRange } from '../../utils/seasonRange';
@@ -69,12 +68,7 @@ export default function AdminLeagueCostsPage() {
       )}
 
       {!isLoading && isError && (
-        <Alert
-          severity="error"
-          action={<Button color="inherit" size="small" onClick={() => void refetch()}>Retry</Button>}
-        >
-          Couldn&apos;t load league costs. Check your connection and try again.
-        </Alert>
+        <InlineQueryErrorAlert entityName="league costs" onRetry={() => void refetch()} />
       )}
 
       {!isLoading && !isError && costs?.length === 0 && (
