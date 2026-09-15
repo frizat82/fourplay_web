@@ -55,7 +55,14 @@ vi.mock('../api/league', () => ({
   getLeagueInvitations: vi.fn().mockResolvedValue([]),
   getLeagueMembershipInvites: vi.fn().mockResolvedValue([]),
   cancelMembershipInvite: vi.fn(),
+  getNflCurrentWeek: vi.fn(),
+  getLeaguePicks: vi.fn(),
 }));
+vi.mock('../api/cfb', () => ({
+  getCfbCurrentSlate: vi.fn(),
+  getCfbAllPicks: vi.fn(),
+}));
+import { getCfbCurrentSlate, getCfbAllPicks } from '../api/cfb';
 import {
   getLeagueUserMappings,
   getLeagueJuice,
@@ -72,6 +79,8 @@ import {
   cancelMembershipInvite,
   generateInviteLink,
   inviteToLeague,
+  getNflCurrentWeek,
+  getLeaguePicks,
   type LeagueInviteLinkDto,
   type InvitationDto,
   type MembershipInviteStatusDto,
@@ -92,6 +101,10 @@ const mockedGetUsers = vi.mocked(getUsers);
 const mockedCreateLeague = vi.mocked(createLeague);
 const mockedAddLeagueUserMapping = vi.mocked(addLeagueUserMapping);
 const mockedDeleteLeague = vi.mocked(deleteLeague);
+const mockedGetNflCurrentWeek = vi.mocked(getNflCurrentWeek);
+const mockedGetLeaguePicks = vi.mocked(getLeaguePicks);
+const mockedGetCfbCurrentSlate = vi.mocked(getCfbCurrentSlate);
+const mockedGetCfbAllPicks = vi.mocked(getCfbAllPicks);
 
 const CURRENT_SEASON = new Date().getFullYear();
 
@@ -150,6 +163,16 @@ beforeEach(() => {
   sessionState.ownedLeagues = [makeLeague()];
   mockedGetMappings.mockResolvedValue([makeMember()]);
   mockedGetCost.mockResolvedValue(cost);
+  // Default member fully picked, so pre-existing tests that don't care about frizat-6sc's
+  // missing-picks column never see it show up as an unexpected "Missing" state.
+  mockedGetNflCurrentWeek.mockResolvedValue({
+    weekId: 2, season: CURRENT_SEASON, isPostSeason: false, weekLabel: 'Week 2', scoringFormat: 'Standard', spreadLockDatetime: '',
+  });
+  mockedGetLeaguePicks.mockResolvedValue([1, 2, 3, 4].map(n => ({
+    id: n, leagueId: 1, userId: makeMember().userId, userName: 'frizat', team: 'KC', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '',
+  })));
+  mockedGetCfbCurrentSlate.mockResolvedValue(null);
+  mockedGetCfbAllPicks.mockResolvedValue([]);
   mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON - 1)]);
   mockedUpdateJuice.mockResolvedValue(undefined);
   mockedGetAllLeagues.mockResolvedValue([]);
@@ -385,6 +408,85 @@ describe('LeaguePortalPage (owner, non-admin)', () => {
 
     await waitFor(() => expect(mockedDeleteLeague).toHaveBeenCalledWith(1));
     expect(toastPush).toHaveBeenCalledWith(expect.stringMatching(/deleted/i), 'success');
+  });
+});
+
+describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () => {
+  it('shows "Missing" for a member short on picks and "All Picked" for one who is done', async () => {
+    mockedGetMappings.mockResolvedValue([
+      makeMember(),
+      { ...makeMember(), id: 2, userId: 'user-two', userName: 'bob', email: 'bob@example.com' },
+    ]);
+    // frizat's default beforeEach picks (4 of 4) stay untouched; bob has only submitted 2.
+    mockedGetLeaguePicks.mockResolvedValue([
+      { id: 1, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'KC', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+      { id: 2, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'DAL', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+      { id: 3, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'MIA', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+      { id: 4, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'BUF', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+      { id: 5, leagueId: 1, userId: 'user-two', userName: 'bob', team: 'SEA', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+      { id: 6, leagueId: 1, userId: 'user-two', userName: 'bob', team: 'NYG', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+    ]);
+
+    renderPage();
+    await screen.findByText('bob@example.com');
+
+    await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('All Picked'));
+    expect(screen.getByTestId('missing-picks-2')).toHaveTextContent('Missing (2/4)');
+  });
+
+  it('keeps the "This Week" column visible with a neutral state when there is no current NFL week to resolve (off-season)', async () => {
+    mockedGetNflCurrentWeek.mockRejectedValue(new Error('no current week configured'));
+
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(screen.getByText('This Week')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('No Active Week'));
+  });
+
+  it('keeps the "This Week" column visible with a neutral state when there is no current CFB slate (off-season)', async () => {
+    sportContext.sport = 'CFB';
+    sportContext.isCfb = true;
+    sportContext.isNfl = false;
+    mockedGetCfbCurrentSlate.mockResolvedValue(null);
+
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(screen.getByText('This Week')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('No Active Week'));
+  });
+
+  it('uses the CFB current-slate/all-picks path, not the NFL one, on the CFB site', async () => {
+    sportContext.sport = 'CFB';
+    sportContext.isCfb = true;
+    sportContext.isNfl = false;
+    mockedGetCfbCurrentSlate.mockResolvedValue({
+      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '',
+    });
+    mockedGetCfbAllPicks.mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('Missing (0/4)'));
+    expect(mockedGetNflCurrentWeek).not.toHaveBeenCalled();
+  });
+
+  // /simplify efficiency finding: the missing-picks fetch only matters while the Members tab
+  // (where it renders) is actually showing — no point resolving current-week + all-picks data
+  // for a commissioner sitting on Settings or Info.
+  it('does not fetch missing-picks data while the Settings tab is active, only once back on Members', async () => {
+    renderPage();
+    await screen.findByText('frizat@example.com');
+    mockedGetLeaguePicks.mockClear();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    await waitFor(() => expect(screen.getByLabelText(/Tease Pts \(Regular Season\)/i)).toBeInTheDocument());
+    expect(mockedGetLeaguePicks).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Members' }));
+    await waitFor(() => expect(mockedGetLeaguePicks).toHaveBeenCalled());
   });
 });
 
