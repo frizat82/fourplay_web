@@ -41,6 +41,7 @@ import { isAdmin } from '../utils/auth';
 import { extractApiErrorMessage } from '../utils/apiError';
 import { useShareLink } from '../utils/useShareLink';
 import { useNumericField } from '../utils/useNumericField';
+import { useMissingPicks } from '../utils/useMissingPicks';
 import {
   getLeagueUserMappings,
   getLeagueJuice,
@@ -109,6 +110,10 @@ export default function LeaguePortalPage() {
 
   const [selectedLeague, setSelectedLeague] = useState<LeagueInfoDto | null>(null);
   const [tab, setTab] = useState(0);
+
+  // Commissioner "who's missing picks" indicator (frizat-6sc) — current week/slate only, and
+  // only fetched while the Members tab (where it renders) is actually the active tab.
+  const { picksByUser, requiredPicks: missingPicksRequired } = useMissingPicks(selectedLeague?.id ?? null, isCfb, tab === 0);
 
   // Members
   const [members, setMembers] = useState<LeagueUserMappingDto[]>([]);
@@ -510,6 +515,8 @@ export default function LeaguePortalPage() {
               loading={loadingMembers}
               costDto={costDto}
               isAdmin={admin}
+              picksByUser={picksByUser}
+              requiredPicks={missingPicksRequired}
               onRemove={setRemoveTarget}
               onInvite={() => setInviteOpen(true)}
               onAddUser={openAddUser}
@@ -719,12 +726,38 @@ export default function LeaguePortalPage() {
   );
 }
 
+/**
+ * frizat-6sc: commissioner "who's missing picks" indicator for one member's current-week row.
+ * requiredPicks is null when there's no current week/slate to resolve (e.g. off-season) — shown
+ * as a neutral "No Active Week" state rather than hiding the whole column, so the feature stays
+ * discoverable year-round instead of only appearing once a commissioner already knows to check
+ * mid-season.
+ */
+function MissingPicksChip({ member, picksByUser, requiredPicks }: { member: LeagueUserMappingDto; picksByUser: Map<string, number>; requiredPicks: number | null }) {
+  if (requiredPicks == null) {
+    return <Chip size="small" data-testid={`missing-picks-${member.id}`} label="No Active Week" variant="outlined" />;
+  }
+  const picksMade = picksByUser.get(member.userId) ?? 0;
+  const isMissing = picksMade < requiredPicks;
+  return (
+    <Chip
+      size="small"
+      data-testid={`missing-picks-${member.id}`}
+      label={isMissing ? `Missing (${picksMade}/${requiredPicks})` : 'All Picked'}
+      color={isMissing ? 'warning' : 'success'}
+      variant={isMissing ? 'filled' : 'outlined'}
+    />
+  );
+}
+
 interface MembersTabProps {
   leagueName: string;
   members: LeagueUserMappingDto[];
   loading: boolean;
   costDto: LeagueCostDto | null;
   isAdmin: boolean;
+  picksByUser: Map<string, number>;
+  requiredPicks: number | null;
   onRemove: (m: LeagueUserMappingDto) => void;
   onInvite: () => void;
   onAddUser: () => void;
@@ -739,7 +772,7 @@ interface MembersTabProps {
   onCancelMembershipInvite: (id: number) => void;
 }
 
-function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
+function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, picksByUser, requiredPicks, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   // Server-computed — the formula differs by sport (and, per policy, could change again), so this
   // must not be re-derived client-side. See LeagueController.ComputeLeagueCost.
@@ -852,13 +885,17 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, onR
                 <TableCell sx={stickyColumnSx}>Name</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>Joined</TableCell>
+                {/* frizat-6sc: column always shown, not hidden off-season, so the feature stays
+                    discoverable year-round — an off-season commissioner sees a neutral "No
+                    Active Week" chip per row instead of the column vanishing entirely. */}
+                <TableCell>This Week</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {members.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4}>
+                  <TableCell colSpan={5}>
                     <Typography color="text.secondary" variant="body2">No members yet</Typography>
                   </TableCell>
                 </TableRow>
@@ -868,6 +905,9 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, onR
                   <TableCell sx={stickyColumnSx}>{m.userName ?? m.userId}</TableCell>
                   <TableCell>{m.email ?? m.userId}</TableCell>
                   <TableCell>{new Date(m.dateCreated).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <MissingPicksChip member={m} picksByUser={picksByUser} requiredPicks={requiredPicks} />
+                  </TableCell>
                   <TableCell align="right">
                     <Button
                       size="small"

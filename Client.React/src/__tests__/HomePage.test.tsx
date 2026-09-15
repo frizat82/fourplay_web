@@ -1,22 +1,39 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import { useSportContext } from '../services/sport';
 import HomePage from '../pages/HomePage';
+import type { UserInfo } from '../types/auth';
 
 vi.mock('../services/sport', () => ({
   useSportContext: vi.fn(() => ({ sport: 'NFL', isCfb: false, isNfl: true })),
 }));
 
-vi.mock('../services/auth', () => ({
-  useAuth: () => ({ user: null }),
+// Matches the established authState idiom used across the suite (picks.test.tsx, scores.test.tsx,
+// etc.) — a plain mutable object the mock closes over, mutated per-test — rather than a vi.fn()
+// spy with a full AuthContextValue shape most tests here never read.
+const authState = { user: null as UserInfo | null };
+vi.mock('../services/auth', () => ({ useAuth: () => authState }));
+
+// OwnerCostSummary (rendered whenever isAuthed) reads useSession — no owned leagues by default
+// so it stays a no-op (returns null) for tests that don't care about it.
+vi.mock('../services/session', () => ({
+  useSession: () => ({ ownedLeagues: [] }),
 }));
 
+beforeEach(() => {
+  authState.user = null;
+});
+
 function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -47,6 +64,18 @@ describe('HomePage — unauthenticated navigation', () => {
     expect(screen.queryByRole('link', { name: /^register$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /register with invite/i })).not.toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: /login/i }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('HomePage — authenticated hero CTA', () => {
+  // frizat-ccm: the authenticated "Make Picks" button used SportsTennisIcon — a literal tennis
+  // racket, thematically wrong for a football pick'em app on its primary post-login CTA.
+  it('shows a football icon, not a tennis racket, on the "Make Picks" button', () => {
+    authState.user = { userId: '1', name: 'Alice', claims: [] };
+    renderPage();
+    const makePicksButton = screen.getByRole('link', { name: /make picks/i });
+    expect(within(makePicksButton).getByTestId('SportsFootballIcon')).toBeInTheDocument();
+    expect(within(makePicksButton).queryByTestId('SportsTennisIcon')).not.toBeInTheDocument();
   });
 });
 
