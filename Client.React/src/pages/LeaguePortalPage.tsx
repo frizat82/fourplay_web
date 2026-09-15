@@ -124,7 +124,7 @@ export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter })
 
   // Commissioner "who's missing picks" indicator (frizat-6sc) — current week/slate only, and
   // only fetched while the Members tab (where it renders) is actually the active tab.
-  const { picksByUser, requiredPicks: missingPicksRequired, isError: missingPicksError, refetch: refetchMissingPicks } =
+  const { picksByUser, requiredPicks: missingPicksRequired, weekLabel: missingPicksWeekLabel, isError: missingPicksError, refetch: refetchMissingPicks } =
     useMissingPicks(adapter, selectedLeague?.id ?? null, tab === 0);
 
   // Members
@@ -529,6 +529,7 @@ export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter })
               isAdmin={admin}
               picksByUser={picksByUser}
               requiredPicks={missingPicksRequired}
+              weekLabel={missingPicksWeekLabel}
               missingPicksError={missingPicksError}
               onRetryMissingPicks={refetchMissingPicks}
               onRemove={setRemoveTarget}
@@ -793,6 +794,7 @@ interface MembersTabProps {
   isAdmin: boolean;
   picksByUser: Map<string, number>;
   requiredPicks: number | null;
+  weekLabel: string | null;
   missingPicksError: boolean;
   onRetryMissingPicks: () => void;
   onRemove: (m: LeagueUserMappingDto) => void;
@@ -817,7 +819,7 @@ interface MembersTabProps {
 // reason as that component — tests assert the concrete value via a mocked window.matchMedia.
 const MEMBERS_MOBILE_FONT_SIZE = '0.75rem';
 
-function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, picksByUser, requiredPicks, missingPicksError, onRetryMissingPicks, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
+function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, picksByUser, requiredPicks, weekLabel, missingPicksError, onRetryMissingPicks, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   // Server-computed — the formula differs by sport (and, per policy, could change again), so this
   // must not be re-derived client-side. See LeagueController.ComputeLeagueCost.
@@ -1010,8 +1012,26 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, pic
                 {!isMobile && <TableCell>Joined</TableCell>}
                 {/* frizat-6sc: column always shown, not hidden off-season, so the feature stays
                     discoverable year-round — an off-season commissioner sees a neutral "No
-                    Active Week" chip per row instead of the column vanishing entirely. */}
-                <TableCell>This Week</TableCell>
+                    Active Week" chip per row instead of the column vanishing entirely.
+                    frizat-4bv: shows the real resolved week/slate (e.g. "Week 12") instead of a
+                    generic static label whenever one's available — falls back to "This Week" for
+                    the off-season/no-active-week and fetch-error cases, where there's no real
+                    week to name. /code-review: postseason labels ("Conference Championships",
+                    "CFP Quarterfinals") are far longer than "This Week"/"Week 12" — the width
+                    this column was tuned around on a 390px viewport (frizat-e3l dropped the
+                    "Joined" column specifically to fit this one without horizontal scroll).
+                    Capped + ellipsized via CSS (full text always available via the native title
+                    tooltip) rather than guessing a safe character budget per label, so it can
+                    never force scroll back regardless of how long a future label turns out to be. */}
+                <TableCell>
+                  <Box
+                    component="span"
+                    title={weekLabel ?? undefined}
+                    sx={{ display: 'inline-block', maxWidth: '10ch', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}
+                  >
+                    {weekLabel ?? 'This Week'}
+                  </Box>
+                </TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
