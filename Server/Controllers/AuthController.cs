@@ -271,6 +271,14 @@ public class AuthController(
             return BadRequest(response);
         }
 
+        // frizat-o23: checked before either registration path does any lookup, so a bad Username
+        // fails cheaply instead of burning an invite-link/invitation-code round-trip first.
+        if (IsEmailShaped(user.Username.Trim())) {
+            response.IsSuccess = false;
+            response.Errors = new List<string> { "Username cannot be an email address." };
+            return BadRequest(response);
+        }
+
         // Invite-link registration path (shareable link, no per-email code required)
         if (!string.IsNullOrWhiteSpace(user.InviteLinkToken)) {
             var link = await leagueInviteLinkService.ValidateAsync(user.InviteLinkToken);
@@ -394,6 +402,16 @@ public class AuthController(
         var origin = $"{uri.Scheme}://{uri.Authority}";
         return allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// frizat-o23: Username and Email are two distinct identifiers (Username is shown everywhere
+    /// in the UI — league rosters, picks, leaderboard; Email is private contact info) — a
+    /// username must never be email-shaped, regardless of whose email it resembles. Shared by
+    /// both CreateUser registration paths and ChangeUsername so the rule can't drift between
+    /// them. Uses MailAddress's own parser rather than a hand-rolled email regex.
+    /// </summary>
+    private static bool IsEmailShaped(string value) => System.Net.Mail.MailAddress.TryCreate(value, out _);
+
     [HttpPost("forgot-password")]
     [AllowAnonymous] // User is not logged in
     [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("forgot")]
@@ -477,6 +495,11 @@ public class AuthController(
             return BadRequest("Invalid request.");
 
         var newUsername = model.NewUsername.Trim();
+
+        // frizat-o23: checked before CheckPasswordAsync — same reasoning as CurrentPassword above,
+        // fail cheaply before touching Identity's password verification.
+        if (IsEmailShaped(newUsername))
+            return BadRequest("Username cannot be an email address.");
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await userManager.FindByIdAsync(userId!);
