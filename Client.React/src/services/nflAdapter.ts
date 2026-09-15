@@ -14,7 +14,7 @@ import {
   computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins,
 } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, PickView, PickType } from './sportAdapter';
-import { revealPicksForStartedGames, memoizeOnce } from './sportAdapter';
+import { revealPicksForStartedGames, memoizeOnce, countPicksByUser } from './sportAdapter';
 
 // Cap navigation at the real current week, not a hardcoded season length — once the season
 // moves into the postseason the full regular season (18) is legitimately browsable/complete;
@@ -254,6 +254,14 @@ export function createNflAdapter(): SportAdapter {
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);
       return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds, hasActiveGames: false, requiredPicks: getNflRequiredPicks(week), maxWeek: maxWeekFor(isPostSeason, week), maxSeason: season };
+    },
+
+    // ─── Commissioner missing-picks (frizat-8ni) ───────────────────────────────
+
+    async getMissingPicks(leagueId) {
+      const current = await getCurrentWeek();
+      const picks = await getLeaguePicks(leagueId, current.season, current.weekId);
+      return { picksByUser: countPicksByUser(picks), requiredPicks: getNflRequiredPicks(current.weekId) };
     },
   };
 }

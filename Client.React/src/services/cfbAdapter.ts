@@ -5,7 +5,7 @@ import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../type
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, PickType, WeekState } from './sportAdapter';
-import { revealPicksForStartedGames, memoizeOnce } from './sportAdapter';
+import { revealPicksForStartedGames, memoizeOnce, countPicksByUser } from './sportAdapter';
 
 /** Map CFB backend status strings to canonical GameStatusValue */
 
@@ -312,6 +312,15 @@ export function createCfbAdapter(): SportAdapter {
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate);
       if (games.length === 0) return null;
       return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: getCfbRequiredPicks(slateNum), maxWeek: week, maxSeason: season };
+    },
+
+    // ─── Commissioner missing-picks (frizat-8ni) ───────────────────────────────
+
+    async getMissingPicks(leagueId) {
+      const active = await getCurrentSlate();
+      if (!active) return { picksByUser: new Map(), requiredPicks: null };
+      const picks = await getCfbAllPicks(leagueId, active.id);
+      return { picksByUser: countPicksByUser(picks), requiredPicks: getCfbRequiredPicks(active.slateNumber) };
     },
   };
 }
