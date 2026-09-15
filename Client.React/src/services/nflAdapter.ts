@@ -261,7 +261,11 @@ export function createNflAdapter(): SportAdapter {
     async getMissingPicks(leagueId) {
       const current = await getCurrentWeek();
       const picks = await getLeaguePicks(leagueId, current.season, current.weekId);
-      return { picksByUser: countPicksByUser(picks), requiredPicks: getNflRequiredPicks(current.weekId) };
+      return {
+        picksByUser: countPicksByUser(picks),
+        requiredPicks: getNflRequiredPicks(current.weekId),
+        weekLabel: current.weekLabel,
+      };
     },
   };
 }

@@ -440,6 +440,50 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     expect(screen.getByTestId('missing-picks-2')).toHaveTextContent('Missing (2/4)');
   });
 
+  // frizat-4bv: the column header shows the actual resolved week/slate instead of a generic
+  // static label — reuses getCurrentWeek()'s own weekLabel, already fetched for getMissingPicks.
+  it('shows the real current week label in the column header instead of the generic "This Week"', async () => {
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(screen.getByText('Week 2')).toBeInTheDocument(); // default beforeEach's weekLabel
+    expect(screen.queryByText('This Week')).not.toBeInTheDocument();
+  });
+
+  it('shows the real current slate label for CFB too', async () => {
+    sportContext.sport = 'CFB';
+    sportContext.isCfb = true;
+    sportContext.isNfl = false;
+    mockedGetCfbCurrentSlate.mockResolvedValue({
+      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '',
+    });
+    mockedGetCfbAllPicks.mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(screen.getByText('Week 3')).toBeInTheDocument();
+    expect(screen.queryByText('This Week')).not.toBeInTheDocument();
+  });
+
+  // /code-review: postseason labels ("Conference Championships", "CFP Quarterfinals", etc.) are
+  // far longer than "This Week"/"Week 12" — the width this column was tuned around on a 390px
+  // viewport (frizat-e3l dropped the "Joined" column specifically to fit this one without
+  // horizontal scroll). Rather than guess a safe character budget, the header caps and ellipsizes
+  // any label via CSS (with the full text always available via a native title tooltip) so it can
+  // never force scroll back, regardless of how long a future week/slate label turns out to be.
+  it('caps and ellipsizes a long postseason week label in the header instead of letting it force horizontal scroll', async () => {
+    mockedGetNflCurrentWeek.mockResolvedValue({
+      weekId: 21, season: CURRENT_SEASON, isPostSeason: true, weekLabel: 'Conference Championships', scoringFormat: 'Standard', spreadLockDatetime: '',
+    });
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    const header = screen.getByText('Conference Championships');
+    expect(header).toHaveStyle({ textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
+    expect(header).toHaveAttribute('title', 'Conference Championships');
+  });
+
   // frizat-05h: getNflCurrentWeek() never legitimately resolves to "nothing" for NFL — it either
   // returns a real week or throws (nflAdapter.ts's own standing comment). A throw here is a real
   // control-table/network failure, not off-season — this test previously (wrongly) asserted the
