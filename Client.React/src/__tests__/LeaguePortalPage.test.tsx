@@ -3,16 +3,22 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import LeaguePortalPage from '../pages/LeaguePortalPage';
+import { createNflAdapter } from '../services/nflAdapter';
+import { createCfbAdapter } from '../services/cfbAdapter';
 import type { LeagueInfoDto, LeagueJuiceMappingDto, LeagueCostDto, UserSummaryDto } from '../types/admin';
 import type { LeagueUserMappingDto } from '../types/league';
 import type { UserInfo } from '../types/auth';
 
 // OwnerCostSummary (rendered inside LeaguePortalPage) uses react-query.
+// frizat-8ni: a real adapter, not a standalone useMissingPicks(isCfb) branch — mirrors App.tsx's
+// own LeaguePortalRoute wiring (isCfb ? cfbAdapter : nflAdapter). A fresh instance per render call
+// so the adapter's own memoized current-week/slate resolution never leaks between tests.
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const adapter = sportContext.isCfb ? createCfbAdapter() : createNflAdapter();
   return render(
     <QueryClientProvider client={client}>
-      <LeaguePortalPage />
+      <LeaguePortalPage adapter={adapter} />
     </QueryClientProvider>,
   );
 }

@@ -42,6 +42,7 @@ import { extractApiErrorMessage } from '../utils/apiError';
 import { useShareLink } from '../utils/useShareLink';
 import { useNumericField } from '../utils/useNumericField';
 import { useMissingPicks } from '../utils/useMissingPicks';
+import type { SportAdapter } from '../services/sportAdapter';
 import {
   getLeagueUserMappings,
   getLeagueJuice,
@@ -87,7 +88,7 @@ function UserOptions({ users }: { users: UserSummaryDto[] }) {
   );
 }
 
-export default function LeaguePortalPage() {
+export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter }) {
   const { ownedLeagues, leaguesLoaded, reloadLeagues, currentLeague } = useSession();
   const { isCfb } = useSportContext();
   const { user } = useAuth();
@@ -113,7 +114,7 @@ export default function LeaguePortalPage() {
 
   // Commissioner "who's missing picks" indicator (frizat-6sc) — current week/slate only, and
   // only fetched while the Members tab (where it renders) is actually the active tab.
-  const { picksByUser, requiredPicks: missingPicksRequired } = useMissingPicks(selectedLeague?.id ?? null, isCfb, tab === 0);
+  const { picksByUser, requiredPicks: missingPicksRequired } = useMissingPicks(adapter, selectedLeague?.id ?? null, tab === 0);
 
   // Members
   const [members, setMembers] = useState<LeagueUserMappingDto[]>([]);
