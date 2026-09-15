@@ -649,6 +649,48 @@ describe('LeaguePortalPage (frizat-e3l: mobile sizing)', () => {
   });
 });
 
+describe('LeaguePortalPage (frizat-ndz: Members tab button grouping)', () => {
+  // frizat-ndz: "Missing Only"/"Show All Members" toggling changes that button's own label
+  // length, which used to shift where Invite Player/Generate Invite Link/Add User wrapped to in
+  // the same flex row — reported as the whole row feeling unstable on a 390px iOS viewport. Fix
+  // moves the filter toggle to its own row directly above the table, separate from the
+  // member-management action buttons, which now form a stable group unaffected by the toggle.
+  // jsdom has no real layout, so this asserts DOM grouping (shared Stack container), not pixel
+  // position — the meaningful, testable claim is "these three share a row and the toggle doesn't."
+  it('groups Invite Player, Generate Invite Link, and Add User together, separate from the Missing Only filter', async () => {
+    authState.user = ADMIN_USER; // Add User only renders for admins
+    sessionState.ownedLeagues = [];
+    sessionState.currentLeague = null;
+    mockedGetAllLeagues.mockResolvedValue([makeLeague()]);
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    const inviteButton = screen.getByRole('button', { name: 'Invite Player' });
+    const generateLinkButton = screen.getByRole('button', { name: /generate invite link/i });
+    const addUserButton = screen.getByRole('button', { name: /add user/i });
+    const missingOnlyButton = screen.getByRole('button', { name: /missing only/i });
+
+    const actionsRow = inviteButton.closest('.MuiStack-root');
+    expect(generateLinkButton.closest('.MuiStack-root')).toBe(actionsRow);
+    expect(addUserButton.closest('.MuiStack-root')).toBe(actionsRow);
+    expect(missingOnlyButton.closest('.MuiStack-root')).not.toBe(actionsRow);
+  });
+
+  it('keeps the Invite Player/Generate Invite Link row stable (unaffected by the Missing Only toggle) even for a non-admin owner without Add User', async () => {
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    const inviteButton = screen.getByRole('button', { name: 'Invite Player' });
+    const generateLinkButton = screen.getByRole('button', { name: /generate invite link/i });
+    const actionsRowBefore = inviteButton.closest('.MuiStack-root');
+
+    await userEvent.click(screen.getByRole('button', { name: /missing only/i }));
+
+    expect(screen.getByRole('button', { name: 'Invite Player' }).closest('.MuiStack-root')).toBe(actionsRowBefore);
+    expect(generateLinkButton.closest('.MuiStack-root')).toBe(actionsRowBefore);
+  });
+});
+
 describe('LeaguePortalPage (no leagues yet)', () => {
   it('shows an empty state with a Create League call to action instead of a dead end', async () => {
     sessionState.ownedLeagues = [];
@@ -922,6 +964,23 @@ describe('LeaguePortalPage — invite link and sent invitations', () => {
 
     expect(await screen.findByText(/link expired/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /copy link/i })).not.toBeInTheDocument();
+  });
+
+  // frizat-ndz: a link expired 1 second ago is still worth surfacing (the owner may not have
+  // noticed yet) — the case above already covers that. Once it's been sitting expired for over a
+  // day, showing it forever adds nothing (the owner isn't coming back to look) and just clutters
+  // the page — stop rendering it at all, same as if no link had ever been generated.
+  it('stops showing an expired invite link entirely once it has been expired for more than a day', async () => {
+    mockedGetCurrentInviteLink.mockResolvedValue(makeInviteLink({
+      expiresAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+    }));
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    expect(screen.queryByText(/link expired/i)).not.toBeInTheDocument();
+    // The button still reads "Regenerate Link" (accurate — inviteLink still exists server-side,
+    // regenerating replaces it), even though the expired link's own display block is now hidden.
+    expect(screen.getByRole('button', { name: /regenerate link/i })).toBeInTheDocument();
   });
 
   it('shows the Sent Invitations table when there are pending invitations', async () => {
