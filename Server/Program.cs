@@ -358,6 +358,12 @@ builder.Services.AddQuartz(q => {
     // over the course of a multi-day session with these crons left unguarded. None of these jobs
     // have any reason to run against a demo dataset that's supposed to be fully and only owned by
     // the seeder — skip all of them (both sports, symmetrically) when seeding demo data.
+    //
+    // /simplify: this guard's scope is broader than the ESPN-corruption story above describes —
+    // LeagueJuiceSchedulerJob (real email) and UnconfirmedAccountCleanupJob (real account
+    // deletion) are here too, for the same underlying reason stated more generally: nothing that
+    // acts on real user data/identity, or sends a real external side effect, belongs running
+    // against an ephemeral demo/replay stack — not just the ESPN-specific jobs below.
     if (!seedsDemoData)
     {
         // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons. Slate-seeding
@@ -463,6 +469,12 @@ builder.Services.AddQuartz(q => {
             .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
         );
         q.ScheduleCstCronJob<LeagueJuiceSchedulerJob>("League Juice Scheduler Daily", "Daily catch-up pass for Juice reminder/lock triggers", "0 0 6 * * ?");
+
+        // frizat-o23 follow-up: unlike everything else in this guard, this job touches no live
+        // ESPN/sport data at all — it's here purely so it never runs against the demo/replay
+        // stack (DemoDataSeeder's seeded users are always EmailConfirmed=true anyway, so it
+        // would be a no-op there, but there's no reason to run it against an ephemeral stack).
+        q.ScheduleCstCronJob<UnconfirmedAccountCleanupJob>("Unconfirmed Account Cleanup", "Deletes accounts that never confirmed their email within 24h", "0 0 * * * ?");
     }
 });
 
