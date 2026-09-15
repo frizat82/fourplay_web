@@ -8,6 +8,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 - Fixed: the authenticated "Make Picks" button and the "Pick Against the Spread" how-it-works icon on the home page showed a tennis racket instead of a football
 - Added: league commissioners now see a "This Week" column on the Members tab showing which members have completed their picks for the current week/slate and which are still missing some, so you know who to chase down
+- Fixed: the Scores page's matrix view was much too large on mobile — team badges, logos, and text are now sized to fit more of the grid on a phone screen instead of needing constant horizontal scrolling
 
 ## 2026-09-14
 
