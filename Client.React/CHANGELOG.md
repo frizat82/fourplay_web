@@ -12,6 +12,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Added: a "Missing Only" filter on the Members tab's roster, so commissioners can jump straight to who still needs to pick; the table itself is also sized to fit better on a phone screen
 - Fixed: usernames can no longer be set to an email address, at registration or when changing your username later
 - Added: accounts that never confirm their email are now automatically removed after 24 hours, so an abandoned or mistyped registration doesn't permanently tie up someone else's real email address
+- Fixed: the Members tab's "This Week" column could show "No Active Week" when checking picks actually failed, not just when there was genuinely nothing to pick — a real failure now shows a distinct "Unavailable" status with a Retry option
 
 ## 2026-09-14
 

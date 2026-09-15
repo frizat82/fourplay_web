@@ -35,6 +35,7 @@ import LinkOffIcon from '@mui/icons-material/LinkOff';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import PageHeader from '../components/PageHeader';
 import OwnerCostSummary from '../components/OwnerCostSummary';
+import { InlineQueryErrorAlert } from '../components/QueryErrorAlert';
 import { useSession } from '../services/session';
 import { useSportContext } from '../services/sport';
 import { useAuth } from '../services/auth';
@@ -116,7 +117,8 @@ export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter })
 
   // Commissioner "who's missing picks" indicator (frizat-6sc) — current week/slate only, and
   // only fetched while the Members tab (where it renders) is actually the active tab.
-  const { picksByUser, requiredPicks: missingPicksRequired } = useMissingPicks(adapter, selectedLeague?.id ?? null, tab === 0);
+  const { picksByUser, requiredPicks: missingPicksRequired, isError: missingPicksError, refetch: refetchMissingPicks } =
+    useMissingPicks(adapter, selectedLeague?.id ?? null, tab === 0);
 
   // Members
   const [members, setMembers] = useState<LeagueUserMappingDto[]>([]);
@@ -520,6 +522,8 @@ export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter })
               isAdmin={admin}
               picksByUser={picksByUser}
               requiredPicks={missingPicksRequired}
+              missingPicksError={missingPicksError}
+              onRetryMissingPicks={refetchMissingPicks}
               onRemove={setRemoveTarget}
               onInvite={() => setInviteOpen(true)}
               onAddUser={openAddUser}
@@ -729,7 +733,11 @@ export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter })
   );
 }
 
-type MissingPicksState = 'no-active-week' | 'missing' | 'all-picked';
+// frizat-05h: 'error' is a distinct state from 'no-active-week' — a genuine fetch failure (e.g.
+// NFL's control table being down) is never something computeMissingPicksState itself produces
+// (it only ever sees a successfully-resolved requiredPicks/null); MembersTab overrides every
+// row to 'error' when the underlying query actually failed, so the two can't be confused.
+type MissingPicksState = 'no-active-week' | 'missing' | 'all-picked' | 'error';
 
 /**
  * frizat-6sc/frizat-e3l: single source of truth for a member's current-week pick-completion
@@ -748,8 +756,13 @@ function computeMissingPicksState(picksMade: number, requiredPicks: number | nul
  * "no-active-week" (no current week/slate to resolve, e.g. off-season) shows a neutral "No
  * Active Week" state rather than hiding the whole column, so the feature stays discoverable
  * year-round instead of only appearing once a commissioner already knows to check mid-season.
+ * "error" (frizat-05h) is visibly distinct (red, "Unavailable") from that neutral state — a
+ * commissioner must never read a real fetch failure as "nothing to pick right now."
  */
 function MissingPicksChip({ member, state, picksMade, requiredPicks }: { member: LeagueUserMappingDto; state: MissingPicksState; picksMade: number; requiredPicks: number | null }) {
+  if (state === 'error') {
+    return <Chip size="small" data-testid={`missing-picks-${member.id}`} label="Unavailable" color="error" variant="outlined" />;
+  }
   if (state === 'no-active-week') {
     return <Chip size="small" data-testid={`missing-picks-${member.id}`} label="No Active Week" variant="outlined" />;
   }
@@ -773,6 +786,8 @@ interface MembersTabProps {
   isAdmin: boolean;
   picksByUser: Map<string, number>;
   requiredPicks: number | null;
+  missingPicksError: boolean;
+  onRetryMissingPicks: () => void;
   onRemove: (m: LeagueUserMappingDto) => void;
   onInvite: () => void;
   onAddUser: () => void;
@@ -795,7 +810,7 @@ interface MembersTabProps {
 // reason as that component — tests assert the concrete value via a mocked window.matchMedia.
 const MEMBERS_MOBILE_FONT_SIZE = '0.75rem';
 
-function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, picksByUser, requiredPicks, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
+function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, picksByUser, requiredPicks, missingPicksError, onRetryMissingPicks, onRemove, onInvite, onAddUser, inviteLink, generatingLink, revokingLink, onGenerateInviteLink, onRevokeInviteLink, invitations, membershipInvites, cancelingMembershipInviteId, onCancelMembershipInvite }: MembersTabProps) {
   const count = costDto?.memberCount ?? members.length;
   // Server-computed — the formula differs by sport (and, per policy, could change again), so this
   // must not be re-derived client-side. See LeagueController.ComputeLeagueCost.
@@ -818,11 +833,18 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, pic
   const membersWithState = useMemo(
     () => members.map((m) => {
       const picksMade = picksByUser.get(m.userId) ?? 0;
-      return { member: m, picksMade, state: computeMissingPicksState(picksMade, requiredPicks) };
+      // frizat-05h: a genuine fetch failure overrides every row to 'error' — stale picksByUser/
+      // requiredPicks from before the failure must not be displayed as if still current.
+      const state = missingPicksError ? 'error' : computeMissingPicksState(picksMade, requiredPicks);
+      return { member: m, picksMade, state };
     }),
-    [members, picksByUser, requiredPicks]
+    [members, picksByUser, requiredPicks, missingPicksError]
   );
-  const visibleMembers = showMissingOnly
+  // frizat-05h /code-review finding: filtering to "missing" during a genuine fetch error would
+  // always come back empty — rendering the exact same confident-looking "no members are missing"
+  // empty state this bead exists to stop a commissioner from misreading as "nothing to pick right
+  // now." Missing-status is genuinely unknown during an error, so the filter doesn't apply at all.
+  const visibleMembers = showMissingOnly && !missingPicksError
     ? membersWithState.filter((x) => x.state === 'missing')
     : membersWithState;
 
@@ -930,6 +952,15 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, pic
             )}
             <Typography variant="caption" color={linkExpired ? 'warning.main' : 'text.secondary'}>{expiresLabel}</Typography>
           </Stack>
+        </Box>
+      )}
+
+      {/* frizat-05h: scoped to just the "This Week" column's own data, not a full QueryErrorAlert
+          page replacement — the rest of the Members tab (roster, invite actions) still works
+          fine even when this one fetch fails, so it shouldn't disappear along with it. */}
+      {missingPicksError && (
+        <Box sx={{ mb: 2 }}>
+          <InlineQueryErrorAlert entityName="this week's picks" onRetry={onRetryMissingPicks} />
         </Box>
       )}
 
