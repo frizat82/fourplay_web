@@ -4,6 +4,11 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-15
+
+- Fixed: the authenticated "Make Picks" button and the "Pick Against the Spread" how-it-works icon on the home page showed a tennis racket instead of a football
+- Added: league commissioners now see a "This Week" column on the Members tab showing which members have completed their picks for the current week/slate and which are still missing some, so you know who to chase down
+
 ## 2026-09-14
 
 - Added: picks on the Picks page now save and unselect instantly, one tap at a time — no more Submit/Clear buttons. You can change your mind on any pick right up until its game kicks off
