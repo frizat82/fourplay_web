@@ -314,4 +314,47 @@ describe('cfbAdapter', () => {
       expect(adapter.weekSelectorConfig.regularWeekOptions).toBeUndefined();
     });
   });
+
+  // frizat-8ni: backs the commissioner missing-picks view (frizat-6sc) via the adapter, reusing
+  // the same memoized getCurrentSlate() resolver loadCurrentGames/loadCurrentScores already use.
+  describe('getMissingPicks', () => {
+    it('resolves picksByUser and requiredPicks for the current slate', async () => {
+      vi.mocked(getCfbAllPicks).mockResolvedValue([
+        { id: 1, userId: 'alice', userName: 'Alice', leagueId: 1, cfbSlateId: 10, team: 'MICH', pickType: 'Spread', season: 2026 },
+        { id: 2, userId: 'alice', userName: 'Alice', leagueId: 1, cfbSlateId: 10, team: 'PSU', pickType: 'Spread', season: 2026 },
+        { id: 3, userId: 'bob', userName: 'Bob', leagueId: 1, cfbSlateId: 10, team: 'MICH', pickType: 'Spread', season: 2026 },
+      ]);
+
+      const result = await adapter.getMissingPicks(1);
+
+      expect(result.requiredPicks).toBe(4); // slate.slateNumber=8, regular season
+      expect(result.picksByUser.get('alice')).toBe(2);
+      expect(result.picksByUser.get('bob')).toBe(1);
+      expect(getCfbAllPicks).toHaveBeenCalledWith(1, slate.id);
+    });
+
+    // Off-season / no current slate is a real state (e.g. between seasons) — must not be treated
+    // as "everyone is missing their picks."
+    it('returns requiredPicks: null and an empty map when there is no current slate', async () => {
+      // Fresh adapter — see the identical note on the loadCurrentGames postseason test above.
+      const freshAdapter = createCfbAdapter();
+      vi.mocked(getCfbCurrentSlate).mockResolvedValue(null);
+
+      const result = await freshAdapter.getMissingPicks(1);
+
+      expect(result.requiredPicks).toBeNull();
+      expect(result.picksByUser.size).toBe(0);
+      expect(getCfbAllPicks).not.toHaveBeenCalled();
+    });
+
+    it('reuses the adapter\'s memoized current-slate resolution — does not re-fetch it', async () => {
+      vi.mocked(getCfbAllPicks).mockResolvedValue([]);
+
+      await adapter.currentSeasonYear(); // resolves and caches getCurrentSlate()
+      vi.mocked(getCfbCurrentSlate).mockClear();
+      await adapter.getMissingPicks(1);
+
+      expect(getCfbCurrentSlate).not.toHaveBeenCalled();
+    });
+  });
 });
