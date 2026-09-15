@@ -83,4 +83,30 @@ describe('useMissingPicks', () => {
 
     expect(getMissingPicks).not.toHaveBeenCalled();
   });
+
+  // frizat-05h: a genuine adapter failure (e.g. NFL's control-table lookup throwing) must be
+  // surfaced as isError, not silently collapsed into requiredPicks:null like a legitimate
+  // off-season resolution — callers need to tell the two apart.
+  it('surfaces isError when adapter.getMissingPicks rejects', async () => {
+    const getMissingPicks = vi.fn().mockRejectedValue(new Error('control table unavailable'));
+    const adapter = makeAdapter(getMissingPicks);
+
+    const { result } = renderWithClient(() => useMissingPicks(adapter, 1));
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.requiredPicks).toBeNull();
+  });
+
+  it('refetch() re-invokes adapter.getMissingPicks', async () => {
+    const getMissingPicks = vi.fn().mockResolvedValue({ picksByUser: new Map(), requiredPicks: 4 });
+    const adapter = makeAdapter(getMissingPicks);
+
+    const { result } = renderWithClient(() => useMissingPicks(adapter, 1));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    getMissingPicks.mockClear();
+
+    result.current.refetch();
+
+    await waitFor(() => expect(getMissingPicks).toHaveBeenCalledWith(1));
+  });
 });
