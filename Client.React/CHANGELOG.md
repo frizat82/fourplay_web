@@ -13,6 +13,9 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: usernames can no longer be set to an email address, at registration or when changing your username later
 - Added: accounts that never confirm their email are now automatically removed after 24 hours, so an abandoned or mistyped registration doesn't permanently tie up someone else's real email address
 - Fixed: the Members tab's "This Week" column could show "No Active Week" when checking picks actually failed, not just when there was genuinely nothing to pick — a real failure now shows a distinct "Unavailable" status with a Retry option
+- Fixed: the Members tab's action buttons could shift position when toggling "Missing Only" on a phone screen
+- Fixed: an expired league invite link no longer displays "Link expired" indefinitely — it's hidden a day after expiring
+- Fixed: the "new version available" banner could render under the Dynamic Island on notched iPhones, making Refresh unreachable
 
 ## 2026-09-14
 
