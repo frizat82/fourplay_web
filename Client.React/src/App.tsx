@@ -35,6 +35,11 @@ function LeaderboardRoute() {
   return <LeaderboardPage adapter={isCfb ? cfbAdapter : nflAdapter} />;
 }
 
+function LeaguePortalRoute() {
+  const { isCfb } = useSportContext();
+  return <LeaguePortalPage adapter={isCfb ? cfbAdapter : nflAdapter} />;
+}
+
 import JoinLeaguePage from './pages/JoinLeaguePage';
 import LeaguePickerPage from './pages/LeaguePickerPage';
 import PicksPage from './pages/PicksPage';
@@ -160,7 +165,7 @@ export default function App() {
         <Route path="/account/manage/changepassword" caseSensitive={false} element={<ChangePasswordPage />} />
         <Route path="/account/manage/changeusername" caseSensitive={false} element={<ChangeUsernamePage />} />
         <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
-        <Route path="/league/manage" element={<LeaguePortalPage />} />
+        <Route path="/league/manage" element={<LeaguePortalRoute />} />
       </Route>
       <Route path="/account" element={<Navigate to="/account/login" replace />} />
       <Route path="*" element={<NotFoundPage />} />
