@@ -333,6 +333,16 @@ describe('cfbAdapter', () => {
       expect(getCfbAllPicks).toHaveBeenCalledWith(1, slate.id);
     });
 
+    // frizat-4bv: the Members tab's "This Week" column header shows this instead of a generic
+    // static label — reuses getCurrentSlate()'s own label rather than re-deriving one.
+    it('includes the resolved current slate\'s human-readable label', async () => {
+      vi.mocked(getCfbAllPicks).mockResolvedValue([]);
+
+      const result = await adapter.getMissingPicks(1);
+
+      expect(result.weekLabel).toBe('Week 8'); // slate.label
+    });
+
     // Off-season / no current slate is a real state (e.g. between seasons) — must not be treated
     // as "everyone is missing their picks."
     it('returns requiredPicks: null and an empty map when there is no current slate', async () => {
@@ -344,6 +354,7 @@ describe('cfbAdapter', () => {
 
       expect(result.requiredPicks).toBeNull();
       expect(result.picksByUser.size).toBe(0);
+      expect(result.weekLabel).toBeNull();
       expect(getCfbAllPicks).not.toHaveBeenCalled();
     });
 

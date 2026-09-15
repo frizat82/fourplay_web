@@ -37,6 +37,7 @@ export function useMissingPicks(adapter: SportAdapter, leagueId: number | null, 
   return {
     picksByUser: data?.picksByUser ?? new Map(),
     requiredPicks: data?.requiredPicks ?? null,
+    weekLabel: data?.weekLabel ?? null,
     isLoading,
     isError,
     refetch: () => void refetch(),
