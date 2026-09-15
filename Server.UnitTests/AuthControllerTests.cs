@@ -654,6 +654,32 @@ public class AuthControllerTests
         Assert.Contains("already taken", badRequest.Value!.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
+    // frizat-o23: Username and Email are two distinct identifiers (Username is shown everywhere
+    // in the UI — rosters, picks, leaderboard; Email is private) — nothing previously stopped a
+    // rename to an email-shaped value. Checked before CheckPasswordAsync, same reasoning as the
+    // null-CurrentPassword guard above: reject cheaply before touching Identity's password check.
+    [Fact]
+    public async Task ChangeUsername_EmailShapedNewUsername_ReturnsBadRequest_NeverCallsCheckPassword()
+    {
+        const string userId = "user-99";
+        var user = BuildUser(id: userId);
+        var userManager = BuildUserManager();
+        userManager.FindByIdAsync(userId).Returns(user);
+
+        var controller = BuildController(userManager: userManager, principal: BuildPrincipal(userId));
+
+        var result = await controller.ChangeUsername(new ChangeUsername
+        {
+            CurrentPassword = "Correct!1",
+            NewUsername = "someone@example.com",
+        });
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("email address", badRequest.Value!.ToString(), StringComparison.OrdinalIgnoreCase);
+        await userManager.DidNotReceiveWithAnyArgs().CheckPasswordAsync(default!, default!);
+        await userManager.DidNotReceiveWithAnyArgs().SetUserNameAsync(default!, default!);
+    }
+
     // /code-review: leading/trailing whitespace passes IsNullOrWhiteSpace but produces a
     // confusing stored username the user must retype exactly to log in with.
     [Fact]
@@ -991,6 +1017,27 @@ public class AuthControllerTests
         Assert.Contains("User already exists", dto.Errors.First());
     }
 
+    // frizat-o23: checked before ValidateAsync/FindByEmailAsync so a bad Username fails cheaply
+    // and doesn't burn a real invite-link lookup or DB round-trip first.
+    [Fact]
+    public async Task CreateUser_WithInviteLinkToken_EmailShapedUsername_ReturnsBadRequest()
+    {
+        var linkService = Substitute.For<ILeagueInviteLinkService>();
+        var controller = BuildController(leagueInviteLinkService: linkService);
+
+        var result = await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "brand-new@test.com", Email = "brand-new@test.com", Password = "Pass1!", Code = "",
+            InviteLinkToken = "valid-token",
+        });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var dto = Assert.IsType<CreateUserResponse>(bad.Value);
+        Assert.False(dto.IsSuccess);
+        Assert.Contains(dto.Errors, e => e.Contains("email address", StringComparison.OrdinalIgnoreCase));
+        await linkService.DidNotReceive().ValidateAsync(Arg.Any<string>());
+    }
+
     [Fact]
     public async Task CreateUser_WithInviteLinkToken_ValidLink_CreatesUser_AndJoinsLeague()
     {
@@ -1053,6 +1100,26 @@ public class AuthControllerTests
             InviteLinkToken = "valid-token",
             ConfirmationUrl = "https://dev.ivleague.xyz/account/confirmemail",
         });
+    }
+
+    // frizat-o23: checked before ValidateInvitationAsync for the same reason as the invite-link
+    // path above — fail cheaply, don't burn an invitation-code lookup first.
+    [Fact]
+    public async Task CreateUser_WithCode_EmailShapedUsername_ReturnsBadRequest()
+    {
+        var invSvc = Substitute.For<IInvitationService>();
+        var controller = BuildController(invitationService: invSvc);
+
+        var result = await controller.CreateUser(new CreateUserRequest
+        {
+            Username = "invited@test.com", Email = "invited@test.com", Password = "Pass1!", Code = "good-code",
+        });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var dto = Assert.IsType<CreateUserResponse>(bad.Value);
+        Assert.False(dto.IsSuccess);
+        Assert.Contains(dto.Errors, e => e.Contains("email address", StringComparison.OrdinalIgnoreCase));
+        await invSvc.DidNotReceive().ValidateInvitationAsync(Arg.Any<string>());
     }
 
     [Fact]
