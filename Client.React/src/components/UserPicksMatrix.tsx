@@ -7,6 +7,7 @@ import {
   TableRow,
   Typography,
   useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import type { NflPickDto, SpreadCalculationResponse } from '../types/picks';
 import { stickyColumnSx } from '../utils/tableStyles';
@@ -21,8 +22,29 @@ interface UserPicksMatrixProps {
   requiredPicks: number;
 }
 
+// frizat-2aa: badges fixed at 76x60 + a 32px logo + default MUI table padding worked fine on a
+// laptop but ate the entire 390px iOS viewport per column — with the app's 4-pick regular-season
+// weeks, only 2-3 of 4 "Pick" columns fit before the required horizontal scroll started, and only
+// ~4 rows of a 5+ member league fit vertically. Roughly half-size on mobile, unchanged on
+// desktop — noSsr per this repo's useMediaQuery convention (CLAUDE.md), though this is a pure
+// client SPA so SSR doesn't actually apply; kept for consistency with the rest of the codebase.
+//
+// One config object (not per-property ternaries scattered through the JSX) so every mobile-
+// varying value lives in one place. Kept as a JS isMobile lookup, not MUI sx breakpoint objects
+// (WeekYearSelector.tsx's usual pure-CSS pattern) — this component's tests assert exact pixel
+// dimensions via a mocked window.matchMedia, which doesn't reliably drive real CSS @media rules
+// in jsdom, so a pure-CSS version would lose the ability to verify the fix.
+const MATRIX_SIZE = {
+  mobile: { badgeHeight: 50, badgeWidth: 44, borderRadius: 1.5, logoSize: 22, teamFontLong: 12, teamFontShort: 15, pickLabelFont: 8, cellPadding: { px: 0.5, py: 0.5 }, usernameFont: 13 },
+  desktop: { badgeHeight: 76, badgeWidth: 60, borderRadius: 2, logoSize: 32, teamFontLong: 16, teamFontShort: 22, pickLabelFont: 11, cellPadding: undefined, usernameFont: undefined },
+};
+
 export default function UserPicksMatrix({ sport, users, picks, spreads, requiredPicks }: UserPicksMatrixProps) {
-  const isDark = useTheme().palette.mode === 'dark';
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true });
+  const size = isMobile ? MATRIX_SIZE.mobile : MATRIX_SIZE.desktop;
+  const badgeShellSx = { height: size.badgeHeight, width: size.badgeWidth, borderRadius: size.borderRadius };
   // Read once per render, not once per cell — VITE_TEAM_ART_MODE is a build-time constant that
   // can't change mid-render, and this table renders one cell per (user × requiredPicks).
   const isLogosMode = getTeamArtMode() === 'logos';
@@ -50,9 +72,7 @@ export default function UserPicksMatrix({ sport, users, picks, spreads, required
       <Paper
         key={`${pick.team}-${pick.pick}`}
         sx={{
-          height: 76,
-          width: 60,
-          borderRadius: 2,
+          ...badgeShellSx,
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',
@@ -69,9 +89,9 @@ export default function UserPicksMatrix({ sport, users, picks, spreads, required
             applies to the icon-sized synthetic badge — a real logo at 32px plus its own label
             stays readable, so 'logos' mode gets both instead of text-only. */}
         {isLogosMode ? (
-          <TeamLogo abbr={pick.team} sport={sport} size={32} showLabel />
+          <TeamLogo abbr={pick.team} sport={sport} size={size.logoSize} showLabel />
         ) : (
-          <Typography sx={{ fontSize: pick.team.length > 3 ? 16 : 22, fontWeight: 800, letterSpacing: '0.02em' }}>
+          <Typography sx={{ fontSize: pick.team.length > 3 ? size.teamFontLong : size.teamFontShort, fontWeight: 800, letterSpacing: '0.02em' }}>
             {pick.team}
           </Typography>
         )}
@@ -81,7 +101,7 @@ export default function UserPicksMatrix({ sport, users, picks, spreads, required
             same neutral ink as the team name above it, in every case, with only weight/size
             marking it as secondary information (which team > which bet type). */}
         {pick.pick !== 'Spread' && (
-          <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.03em' }}>
+          <Typography sx={{ fontSize: size.pickLabelFont, fontWeight: 700, letterSpacing: '0.03em' }}>
             {pick.pick.toUpperCase()}
           </Typography>
         )}
@@ -94,9 +114,9 @@ export default function UserPicksMatrix({ sport, users, picks, spreads, required
       <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell sx={stickyColumnSx}>User</TableCell>
+            <TableCell sx={{ ...stickyColumnSx, ...size.cellPadding }}>User</TableCell>
             {Array.from({ length: requiredPicks }).map((_, idx) => (
-              <TableCell key={idx}>Pick {idx + 1}</TableCell>
+              <TableCell key={idx} sx={size.cellPadding}>Pick {idx + 1}</TableCell>
             ))}
           </TableRow>
         </TableHead>
@@ -109,14 +129,14 @@ export default function UserPicksMatrix({ sport, users, picks, spreads, required
             const userPicks = picks.filter((p) => p.userName === user);
             return (
               <TableRow key={user}>
-                <TableCell sx={stickyColumnSx}>
-                  <Typography fontWeight={600}>{user}</Typography>
+                <TableCell sx={{ ...stickyColumnSx, ...size.cellPadding }}>
+                  <Typography fontWeight={600} fontSize={size.usernameFont}>{user}</Typography>
                 </TableCell>
                 {Array.from({ length: requiredPicks }).map((_, idx) => {
                   const pick = userPicks[idx];
                   return (
-                    <TableCell key={idx} align="center">
-                      {pick ? renderBadge(pick) : <Paper sx={{ height: 76, width: 60, borderRadius: 2 }} />}
+                    <TableCell key={idx} align="center" sx={size.cellPadding}>
+                      {pick ? renderBadge(pick) : <Paper sx={badgeShellSx} />}
                     </TableCell>
                   );
                 })}

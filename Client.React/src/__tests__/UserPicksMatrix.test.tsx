@@ -210,3 +210,42 @@ describe('UserPicksMatrix — Over/Under is an alternate pick type, not an addit
     expect(screen.getAllByRole('columnheader')).toHaveLength(5); // User + Pick 1-4
   });
 });
+
+describe('UserPicksMatrix — mobile sizing (frizat-2aa)', () => {
+  // frizat-2aa: fixed 76x60 badges + a 32px logo + default table padding worked on a laptop but
+  // ate the whole 390px iOS viewport per column — only 2-3 of a real 4-pick week's columns fit
+  // before horizontal scroll kicked in. Badges (and the logo/font sizes inside them) now shrink
+  // on a mobile viewport via useMediaQuery, unchanged on desktop.
+  const originalMatchMedia = window.matchMedia;
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+  });
+
+  function mockViewport(matches: boolean) {
+    window.matchMedia = ((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+  }
+
+  it('renders a smaller badge on a mobile viewport than on desktop', () => {
+    mockViewport(true);
+    const { getByText } = renderMatrix('light');
+    const badge = getByText('KC').parentElement;
+    expect(badge).toHaveStyle({ width: '44px', height: '50px' });
+  });
+
+  it('keeps the larger desktop badge size when not on a mobile viewport', () => {
+    mockViewport(false);
+    const { getByText } = renderMatrix('light');
+    const badge = getByText('KC').parentElement;
+    expect(badge).toHaveStyle({ width: '60px', height: '76px' });
+  });
+});
