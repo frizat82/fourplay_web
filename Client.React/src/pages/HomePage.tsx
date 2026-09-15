@@ -1,7 +1,7 @@
 import { Box, Button, Chip, Container, Dialog, DialogContent, DialogTitle, Grid, IconButton, Paper, Stack, Typography } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
-import SportsTennisIcon from '@mui/icons-material/SportsTennis';
+import SportsFootballIcon from '@mui/icons-material/SportsFootball';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import LoginIcon from '@mui/icons-material/Login';
@@ -115,7 +115,7 @@ export default function HomePage({ adapter }: HomePageProps) {
                     size="large"
                     color="secondary"
                     className="hero-primary-btn"
-                    startIcon={isAuthed ? <SportsTennisIcon /> : <LoginIcon />}
+                    startIcon={isAuthed ? <SportsFootballIcon /> : <LoginIcon />}
                     component={RouterLink}
                     to={isAuthed ? '/picks' : '/account/login'}
                   >
@@ -224,7 +224,7 @@ export default function HomePage({ adapter }: HomePageProps) {
                 <Grid size={{ xs: 12, md: 4 }}>
                   <Stack alignItems="center" textAlign="center" spacing={2}>
                     <Box sx={{ p: 2, borderRadius: '50%', bgcolor: 'secondary.main', display: 'inline-flex' }}>
-                      <SportsTennisIcon sx={{ fontSize: 36, color: 'secondary.contrastText' }} />
+                      <SportsFootballIcon sx={{ fontSize: 36, color: 'secondary.contrastText' }} />
                     </Box>
                     <Typography variant="h6" fontWeight={700}>2. Pick Against the Spread</Typography>
                     <Typography color="text.secondary">
