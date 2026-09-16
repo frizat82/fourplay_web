@@ -318,9 +318,13 @@ export function createCfbAdapter(): SportAdapter {
 
     async getMissingPicks(leagueId) {
       const active = await getCurrentSlate();
-      if (!active) return { picksByUser: new Map(), requiredPicks: null };
+      if (!active) return { picksByUser: new Map(), requiredPicks: null, weekLabel: null };
       const picks = await getCfbAllPicks(leagueId, active.id);
-      return { picksByUser: countPicksByUser(picks), requiredPicks: getCfbRequiredPicks(active.slateNumber) };
+      return {
+        picksByUser: countPicksByUser(picks),
+        requiredPicks: getCfbRequiredPicks(active.slateNumber),
+        weekLabel: active.label,
+      };
     },
   };
 }

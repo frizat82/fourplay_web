@@ -303,6 +303,16 @@ describe('nflAdapter', () => {
       expect(getLeaguePicks).toHaveBeenCalledWith(1, 2023, 8);
     });
 
+    // frizat-4bv: the Members tab's "This Week" column header shows this instead of a generic
+    // static label — reuses getCurrentWeek()'s own weekLabel rather than re-deriving one.
+    it('includes the resolved current week\'s human-readable label', async () => {
+      vi.mocked(getLeaguePicks).mockResolvedValue([]);
+
+      const result = await adapter.getMissingPicks(1);
+
+      expect(result.weekLabel).toBe('Week 8'); // DEFAULT_CURRENT_WEEK.weekLabel
+    });
+
     // Same memoized getCurrentWeek() instance loadCurrentGames/loadCurrentScores use — must not
     // re-resolve "what's current" from scratch as a second, competing fetch (frizat-8ni).
     it('reuses the adapter\'s memoized current-week resolution — does not re-fetch it', async () => {
