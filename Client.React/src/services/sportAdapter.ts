@@ -138,6 +138,11 @@ export interface MissingPicksResult {
    *  to resolve (e.g. off-season) — callers should show no indicator at all in that case, not
    *  treat every member as missing. */
   requiredPicks: number | null;
+  /** Human-readable label for the resolved current week/slate (e.g. "Week 12"), or null when
+   *  there's no current week/slate to resolve (e.g. off-season) — mirrors requiredPicks' own
+   *  null case exactly, since both come from the same resolution. frizat-4bv: lets a caller show
+   *  the real current week instead of a generic static label like "This Week". */
+  weekLabel: string | null;
 }
 
 export interface WeekState {
