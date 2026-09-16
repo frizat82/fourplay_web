@@ -66,14 +66,14 @@ reads poorly somewhere:
   ```
   See `GameCard.tsx`'s `lockedFillSx` for the live implementation.
 
-## Page background gradient (`global.css` `body`) — three bugs, one subsystem
+## Page background gradient (`global.css` `body`) — four bugs, one subsystem
 
 The site background — two decorative radial highlights plus a `linear-gradient(180deg, var(--bg-1), var(--bg-2))`
-— has caused the "background looks inconsistent while scrolling" report **three separate times**
-(2026-09-02, 09-03, 09-04), each a genuinely different bug in the same area. Read this before
-touching `global.css`'s `body` rule, `theme.ts`'s `MuiPaper`/`MuiCard` overrides, or the
-`--bg-1`/`--bg-2`/`background.paper` color trio, so the next report doesn't require re-deriving
-all three from scratch:
+— has caused the "background looks inconsistent" report **four separate times**
+(2026-09-02, 09-03, 09-04, 09-15), each a genuinely different bug in the same area. Read this before
+touching `global.css`'s `body` rule, `theme.ts`'s `MuiPaper`/`MuiCard` overrides or `palette.background`,
+or the `--bg-1`/`--bg-2`/`background.paper` color trio, so the next report doesn't require re-deriving
+all four from scratch:
 
 1. **Dark-mode elevation overlay** (theme.ts `MuiPaper` styleOverrides). MUI bakes a translucent
    white gradient onto elevated (non-`outlined`) dark-mode `Paper`/`Card` as a stand-in for a drop
@@ -99,11 +99,34 @@ all three from scratch:
    there's never a gap, seam-free by construction since it matches the gradient's own end color)
    plus `background-image` holding the gradients with `background-repeat: no-repeat` and
    `background-size: 100% 100vh`, so they render exactly once at the top as originally intended.
+4. **MUI `CssBaseline`-vs-`global.css` collision** (2026-09-15, frizat-2ey). `main.tsx` renders
+   `<CssBaseline/>`, which unconditionally sets `body`'s `background-color` from
+   `theme.ts`'s `palette.background.default` — a THIRD color system, independent of both `--bg-2`
+   and `background.paper`, that nothing had ever pinned to `--bg-2`. `background.default` had
+   drifted to `#f9fafb`/`#0f1729` while `--bg-2` was `#f1f4f8`/`#121a2f` — CssBaseline silently
+   overrode `global.css`'s own `body { background-color: var(--bg-2) }` rule for that one
+   property only (leaving `background-image` — the gradient itself — untouched, which is why the
+   gradient still looked right at the very top of the page but the flat fill below it didn't
+   match). Visible in light mode (`#f9fafb` vs `#f1f4f8` is a perceptible near-white-vs-gray-blue
+   gap) but not dark (`#0f1729` vs `#121a2f` is too small an absolute delta among very dark tones
+   to see) — that asymmetry is why this bug always reads as "light is broken, dark is fine" even
+   though both modes are technically mismatched. Fixed by hardcoding `background.default` in
+   `theme.ts` to the literal same hex as `--bg-2` for both modes, with a comment cross-referencing
+   `global.css` (the two systems still can't reference each other directly — same constraint as
+   bug 2 — so the only guard against re-drift is the comment plus the e2e test below). **This is
+   the bug to suspect first** if a background report says "the gradient/top looks right, it's the
+   flat area below it that's wrong" and bug 3's fix (background-color base fill) is already in
+   place — bug 3 broke the *tiling*, this one breaks the *color* of that same base fill.
 
 **Before shipping any future fix in this area**: render (screenshot or pixel-sample) a page long
 enough to scroll past one full viewport, in both themes — a short page or a single-viewport
-screenshot cannot catch any of these three. `python3`/`PIL` pixel-sampling a vertical strip outside
-any card, looking for a sudden channel jump, is the fastest way to confirm a seam is really gone.
+screenshot cannot catch bugs 1–3. `python3`/`PIL` pixel-sampling a vertical strip outside any
+card, looking for a sudden channel jump, is the fastest way to confirm a seam is really gone.
+For bug 4's class specifically (a flat-fill color mismatch, not a tiling/seam issue), the
+`e2e/pageBackground.spec.ts` Playwright test asserts `getComputedStyle(document.body).backgroundColor`
+resolves to the same value as `--bg-2` in both themes — run it (or add to it) before touching
+`theme.ts`'s `palette.background` or `global.css`'s `--bg-2`, so a future edit that re-diverges
+the two fails CI instead of shipping.
 
 ## Layout: numeric columns need explicit centering
 
