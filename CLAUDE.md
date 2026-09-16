@@ -222,6 +222,7 @@ The login endpoint is rate-limited to 5 requests/minute per IP (`Program.cs`). E
 - MUI Select `toHaveValue` doesn't work in Vitest/JSDOM — check visible text content instead
 - All data tables need `<Box sx={{ overflowX: 'auto' }}>` wrapper for mobile scroll
 - **Run `/style-guide` before touching any color, button variant, or status indicator (dot, chip, badge).** Color semantics, MUI disabled-state gotchas, and the recurring light/dark contrast bug live there — don't re-derive or re-litigate them per component.
+- **The page background has broken 4 separate times (2026-09-02, 09-03, 09-04, 09-15) from 4 different root causes in the same subsystem** (`global.css`'s `body` rule, `theme.ts`'s `MuiPaper` override, and — as of the 4th incident — `theme.ts`'s `palette.background.default` vs. `global.css`'s `--bg-2`, which MUI's `<CssBaseline/>` silently uses to set `body`'s `background-color`). Full incident-by-incident detail is in `/style-guide`'s "Page background gradient" section — read it before touching any of those three files. `e2e/pageBackground.spec.ts` guards specifically against the 4th (a flat-fill color mismatch between `--bg-2` and `background.default`) — extend it, don't just re-fix by hand, if this recurs a 5th time.
 
 ### Chrome DevTools MCP
 `mcp__plugin_chrome-devtools-mcp_chrome-devtools__*` tools. Browser emulates iPhone (390×844) by default. Use `list_network_requests` to diagnose API failures before reading code.

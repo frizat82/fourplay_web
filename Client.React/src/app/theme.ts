@@ -58,7 +58,13 @@ export function createAppTheme(mode: 'light' | 'dark') {
       light: '#f87171',
     },
     background: {
-      default: isDark ? '#0f1729' : '#f9fafb',
+      // Must exactly match global.css's --bg-2 (the page background gradient's own bottom
+      // stop) — MUI's <CssBaseline/> uses this value to set body's background-color, silently
+      // overriding global.css's own body{background-color:var(--bg-2)} rule for that one
+      // property if the two ever drift apart (frizat-2ey; see /style-guide's "Page background
+      // gradient" section, bug 4). The two systems can't reference each other directly, so keep
+      // these two literal hex values in sync by hand.
+      default: isDark ? '#121a2f' : '#f1f4f8',
       paper: isDark ? '#1a2440' : '#ffffff',
     },
     divider: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15, 23, 42, 0.1)',
