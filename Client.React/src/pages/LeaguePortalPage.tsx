@@ -966,10 +966,14 @@ function MembersTab({ leagueName, members, loading, costDto, isAdmin: admin, pic
       )}
 
       {/* frizat-ndz: member-count + the Missing Only filter live directly above the table they
-          affect, in their own row separate from the invite/add-user actions above — reported as
-          confusing when mixed together, and this row's own label-length change (on toggle) no
-          longer has any other buttons next to it to shift around. */}
-      <Stack direction="row" spacing={2} useFlexGap alignItems="center" sx={{ mb: 2 }} flexWrap="wrap">
+          affect, separate from the invite/add-user actions above. frizat-3on: the two used to
+          still share one ROW here — on a narrow viewport the Chip and the button (whose label
+          grows to "Show All Members" when toggled) no longer both fit on one line, so the wrap
+          point itself shifted between the two states, reading as "the button moves." Stack's
+          default (column) direction already puts each direct child on its own line — no wrap
+          point exists to shift, on any viewport width — so this only needed dropping the old
+          direction="row" flexWrap="wrap", not wrapping each child in an extra Box. */}
+      <Stack spacing={1} sx={{ mb: 2 }}>
         <Chip label={`${count} member${count !== 1 ? 's' : ''} · $${cost}/season`} color="primary" variant="outlined" />
         {/* /style-guide: view/filter toggles are neutral (variant="outlined" color="info", no
             icon), matching ScoresPage.tsx's "Show As Matrix"/"Show Only My Picks" — not a brand
