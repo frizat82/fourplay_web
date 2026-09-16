@@ -17,6 +17,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: an expired league invite link no longer displays "Link expired" indefinitely — it's hidden a day after expiring
 - Fixed: the "new version available" banner could render under the Dynamic Island on notched iPhones, making Refresh unreachable
 - Added: the Members tab's pick-status column now shows the actual current week or slate (e.g. "Week 12") instead of the generic "This Week" label
+- Fixed: pages could show a visible white seam below the first screenful in light mode, where the page background stopped matching its own intended flat fill color
+- Fixed: the Members tab's "Missing Only"/"Show All Members" button could still shift position next to the member count chip on a phone screen when its label changed — it now always renders on its own line
 
 ## 2026-09-14
 

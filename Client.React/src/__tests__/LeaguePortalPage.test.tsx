@@ -733,6 +733,34 @@ describe('LeaguePortalPage (frizat-ndz: Members tab button grouping)', () => {
     expect(screen.getByRole('button', { name: 'Invite Player' }).closest('.MuiStack-root')).toBe(actionsRowBefore);
     expect(generateLinkButton.closest('.MuiStack-root')).toBe(actionsRowBefore);
   });
+
+  // frizat-3on: the member-count Chip and the Missing Only/Show All Members button used to share
+  // one flex row above the table — on a narrow (iOS ~390px) viewport the pair no longer fit on one
+  // line once the button's label grew to "Show All Members", so the wrap point (and therefore the
+  // button's visible position) shifted between the two toggle states. Fix: the button gets its own
+  // line, never sharing a row with the Chip, so its label length can never move anything else.
+  it('puts the Missing Only filter button on its own line, separate from the member-count chip', async () => {
+    renderPage();
+    await screen.findByText('frizat@example.com');
+
+    // getByText resolves to the Chip's inner label span (MuiChip-label), not its root element —
+    // .closest('.MuiChip-root') is required to reach the actual Chip element. Scoped to the
+    // Members-tab chip specifically (text match) — the page header above also renders a cost
+    // Chip via OwnerCostSummary, which a bare '.MuiChip-root' query would find first in document
+    // order and falsely pass against, since it's unrelated to this row.
+    const memberCountChip = screen.getByText(/members? · \$/i).closest('.MuiChip-root')!;
+    const missingOnlyButton = screen.getByRole('button', { name: /missing only/i });
+    const sharedContainer = missingOnlyButton.parentElement!;
+
+    expect(memberCountChip.parentElement).toBe(sharedContainer);
+    // jsdom has no real layout, so "own line" can't be checked via bounding boxes — but MUI Stack
+    // renders flex-direction as plain CSS (not layout-dependent), which jsdom's getComputedStyle
+    // *can* resolve. A column direction means each direct child already renders on its own line
+    // by construction, with no wrap point that a label-length change could ever shift — the
+    // property this test exists to guard, unlike the old `direction="row" flexWrap="wrap"` Stack
+    // this replaced (frizat-3on).
+    expect(getComputedStyle(sharedContainer).flexDirection).toBe('column');
+  });
 });
 
 describe('LeaguePortalPage (no leagues yet)', () => {
