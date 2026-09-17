@@ -135,15 +135,21 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     // don't double-load here, let handleWeekChange handle it.
   }, []);
 
-  // Pick query helpers
-  const pickCountForTeam = (gameId: string, team: string, pickType: 'Spread' | 'Over' | 'Under') =>
-    (data?.allPicks ?? []).filter(p => p.gameId === gameId && p.team === team && p.pickType === pickType).length;
+  // Pick query helpers — matched on team abbreviation + pickType only, never gameId. A team plays
+  // at most one game per week/slate, so team+pickType is already a complete, unambiguous key.
+  // gameId (ESPN's opaque numeric id for NFL, a derived home-team lookup for CFB) is a fragile
+  // extra join that can silently mismatch even when the pick's own team is completely correct
+  // (frizat-z3a: a user's own pick wasn't getting its blue "picked" badge on the Scores page,
+  // for both sports) — we treat our own team abbreviation as the source of truth, not any id
+  // ESPN happens to hand back.
+  const pickCountForTeam = (team: string, pickType: 'Spread' | 'Over' | 'Under') =>
+    (data?.allPicks ?? []).filter(p => p.team === team && p.pickType === pickType).length;
 
-  const didUserPick = (gameId: string, team: string, pickType: 'Spread' | 'Over' | 'Under' = 'Spread') =>
-    (data?.userPicks ?? []).some(p => p.gameId === gameId && p.team === team && p.pickType === pickType);
+  const didUserPick = (team: string, pickType: 'Spread' | 'Over' | 'Under' = 'Spread') =>
+    (data?.userPicks ?? []).some(p => p.team === team && p.pickType === pickType);
 
-  const showDialog = (game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under' = 'Spread') => {
-    const names = (data?.allPicks ?? []).filter(p => p.gameId === game.id && p.team === team && p.pickType === pickType).map(p => p.userName).sort();
+  const showDialog = (team: string, pickType: 'Spread' | 'Over' | 'Under' = 'Spread') => {
+    const names = (data?.allPicks ?? []).filter(p => p.team === team && p.pickType === pickType).map(p => p.userName).sort();
     if (!names.length) return;
     setDialogState({
       open: true,
@@ -205,8 +211,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
 
   const games = showOnlyMyPicks
     ? sortedGames.filter(g =>
-        didUserPick(g.id, g.homeTeam) || didUserPick(g.id, g.awayTeam) ||
-        didUserPick(g.id, g.homeTeam, 'Over') || didUserPick(g.id, g.homeTeam, 'Under'))
+        didUserPick(g.homeTeam) || didUserPick(g.awayTeam) ||
+        didUserPick(g.homeTeam, 'Over') || didUserPick(g.homeTeam, 'Under'))
     : sortedGames;
 
   const isPostSeason = data.isPostSeason;
@@ -327,11 +333,11 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
                         <Badge
                           data-testid={`badge-${game.awayTeam}-spread`}
-                          data-tone={didUserPick(game.id, game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
-                          color={didUserPick(game.id, game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
+                          data-tone={didUserPick(game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
+                          color={didUserPick(game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
                           overlap="circular"
-                          badgeContent={pickCountForTeam(game.id, game.awayTeam, 'Spread')}
-                          invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.awayTeam, 'Spread') === 0}
+                          badgeContent={pickCountForTeam(game.awayTeam, 'Spread')}
+                          invisible={(!isFinal && !isLive) || pickCountForTeam(game.awayTeam, 'Spread') === 0}
                         >
                           {/* frizat: /code-review caught that gating `disabled` on pickCount === 0 (in
                               addition to not-decided-yet) flattens this icon's color to MUI's disabled
@@ -343,7 +349,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                           <IconButton
                             color={(isFinal || isLive) ? (ac === true ? 'success' : ac === false ? 'error' : 'inherit') : 'inherit'}
                             disabled={!isFinal && !isLive}
-                            onClick={() => showDialog(game, game.awayTeam, 'Spread')}
+                            onClick={() => showDialog(game.awayTeam, 'Spread')}
                             size="small"
                           >
                             <PersonIcon />
@@ -359,16 +365,16 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>
                         <Badge
                           data-testid={`badge-${game.homeTeam}-spread`}
-                          data-tone={didUserPick(game.id, game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
-                          color={didUserPick(game.id, game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
+                          data-tone={didUserPick(game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
+                          color={didUserPick(game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
                           overlap="circular"
-                          badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Spread')}
-                          invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Spread') === 0}
+                          badgeContent={pickCountForTeam(game.homeTeam, 'Spread')}
+                          invisible={(!isFinal && !isLive) || pickCountForTeam(game.homeTeam, 'Spread') === 0}
                         >
                           <IconButton
                             color={(isFinal || isLive) ? (hc === true ? 'success' : hc === false ? 'error' : 'inherit') : 'inherit'}
                             disabled={!isFinal && !isLive}
-                            onClick={() => showDialog(game, game.homeTeam, 'Spread')}
+                            onClick={() => showDialog(game.homeTeam, 'Spread')}
                             size="small"
                           >
                             <PersonIcon />
@@ -379,13 +385,13 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                       {/* Postseason O/U row */}
                       {isPostSeason && game.overThreshold != null && game.underThreshold != null && (
                         <Stack data-testid="over-under-controls" direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2.5, px: 1, gap: 1 }}>
-                          <Badge data-testid={`badge-${game.homeTeam}-over`} color={didUserPick(game.id, game.homeTeam, 'Over') ? 'info' : badgeColor(game, game.homeTeam, 'Over')} overlap="circular"
-                            badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Over')}
-                            invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Over') === 0}>
+                          <Badge data-testid={`badge-${game.homeTeam}-over`} color={didUserPick(game.homeTeam, 'Over') ? 'info' : badgeColor(game, game.homeTeam, 'Over')} overlap="circular"
+                            badgeContent={pickCountForTeam(game.homeTeam, 'Over')}
+                            invisible={(!isFinal && !isLive) || pickCountForTeam(game.homeTeam, 'Over') === 0}>
                             <IconButton size="small"
                               color={(isFinal || isLive) ? (ov ? 'success' : ov === false ? 'error' : 'inherit') : 'inherit'}
                               disabled={!isFinal && !isLive}
-                              onClick={() => showDialog(game, game.homeTeam, 'Over')}>
+                              onClick={() => showDialog(game.homeTeam, 'Over')}>
                               <PersonIcon />
                             </IconButton>
                           </Badge>
@@ -399,13 +405,13 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                               both rather than a single shared value. */}
                           <Typography variant="subtitle1" sx={{ minWidth: 56, textAlign: 'center' }}>{game.overThreshold}/{game.underThreshold}</Typography>
                           <ArrowCircleDownIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
-                          <Badge data-testid={`badge-${game.homeTeam}-under`} color={didUserPick(game.id, game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
-                            badgeContent={pickCountForTeam(game.id, game.homeTeam, 'Under')}
-                            invisible={(!isFinal && !isLive) || pickCountForTeam(game.id, game.homeTeam, 'Under') === 0}>
+                          <Badge data-testid={`badge-${game.homeTeam}-under`} color={didUserPick(game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
+                            badgeContent={pickCountForTeam(game.homeTeam, 'Under')}
+                            invisible={(!isFinal && !isLive) || pickCountForTeam(game.homeTeam, 'Under') === 0}>
                             <IconButton size="small"
                               color={(isFinal || isLive) ? (uv ? 'success' : uv === false ? 'error' : 'inherit') : 'inherit'}
                               disabled={!isFinal && !isLive}
-                              onClick={() => showDialog(game, game.homeTeam, 'Under')}>
+                              onClick={() => showDialog(game.homeTeam, 'Under')}>
                               <PersonIcon />
                             </IconButton>
                           </Badge>

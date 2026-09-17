@@ -210,8 +210,12 @@ public class PicksTests
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, historicalSeason, historicalWeek).Returns([]);
         repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
-        // No spreads seeded for (historicalSeason, historicalWeek) — nothing to reject against.
-        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(DateTimeOffset.UtcNow.AddHours(-2))); // unrelated week/season, must never be consulted
+        // BUF's own spread, scoped to (historicalSeason, historicalWeek), not yet kicked off —
+        // needed now that a pick's team must have a real matching spread row to be accepted.
+        repo.GetNflSpreadsAsync(historicalSeason, historicalWeek).Returns(
+            [new NflSpreads { Season = historicalSeason, NflWeek = historicalWeek, HomeTeam = "BUF", AwayTeam = "MIA", GameTime = DateTimeOffset.UtcNow.AddHours(2) }]);
+        // An UNRELATED week/season having an already-kicked-off BUF game must never be consulted.
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(DateTimeOffset.UtcNow.AddHours(-2)));
 
         var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
         var picks = new[] { new NflPickDto {
@@ -227,9 +231,11 @@ public class PicksTests
     }
 
     [Fact]
-    public async Task AddPicks_WhenNoSpreadsExistForTheWeek_AllowsPicks()
+    public async Task AddPicks_WhenNoSpreadsExistForTheWeek_ReturnsBadRequest()
     {
-        // Spreads not released yet for this week — nothing to reject against.
+        // frizat-z3a follow-up: the Picks page never shows a game before its spread has posted,
+        // so a pick for a week with literally no spreads at all can only be bad/forged input —
+        // must be rejected, not silently accepted (was fail-open before this fix).
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
@@ -242,7 +248,32 @@ public class PicksTests
 
         var result = await controller.AddPicks(picks, BuildCurrentWeekService());
 
-        Assert.IsType<OkObjectResult>(result.Result);
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("no spread", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await repo.DidNotReceive().TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task AddPicks_WhenPickedTeamHasNoMatchingSpreadRow_ReturnsBadRequest()
+    {
+        // Real spreads exist for this week (BUF vs MIA), just not for the picked team — same
+        // rejection as the all-empty case above, just with other legitimate games present.
+        var futureKickoff = DateTimeOffset.UtcNow.AddHours(2);
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff)); // only BUF/MIA
+
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
+        var picks = new[] { MakePick("GHOST") };
+
+        var result = await controller.AddPicks(picks, BuildCurrentWeekService());
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("no spread", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await repo.DidNotReceive().TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     // frizat-u66: defense in depth backing the frontend gate — a league that has excluded this
@@ -312,6 +343,7 @@ public class PicksTests
         // After the fix the controller will use jwtUserId; set up mock for that userId
         repo.GetUserNflPicksAsync(jwtUserId, LeagueId, Season, Week).Returns([]);
         repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(DateTimeOffset.UtcNow.AddHours(2)));
 
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns((EspnScores?)null);
@@ -361,6 +393,7 @@ public class PicksTests
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
         repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
 
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns(BuildScores(futureKickoff));
@@ -413,6 +446,7 @@ public class PicksTests
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([existingPick]);
         repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(DateTimeOffset.UtcNow.AddHours(2)));
 
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns((EspnScores?)null);
@@ -480,6 +514,7 @@ public class PicksTests
         repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
         repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
         repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(DateTimeOffset.UtcNow.AddHours(2)));
 
         var espn = Substitute.For<IEspnCacheService>();
         espn.GetScoresAsync().Returns((EspnScores?)null);
