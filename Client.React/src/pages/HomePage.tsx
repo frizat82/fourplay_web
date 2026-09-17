@@ -135,6 +135,28 @@ export default function HomePage({ adapter }: HomePageProps) {
                   </Button>
                 </Stack>
               </Box>
+              {/* frizat-7c4: on desktop the hero image column used to stack all 4 of hero
+                  image/PicksIsland/DashboardStandings/OwnerCostSummary while this column only had
+                  the greeting + buttons above — the taller image column then dictated the whole
+                  page's height, adding scroll the shorter column had room to spare. Moving
+                  Picks/Standings here balances both columns to ~2 items each. Rendered as a
+                  sibling of hero-text-inner (not nested inside it), so these keep the same full
+                  column width they had in the image column, rather than being capped to
+                  hero-text-inner's 420px max-width meant for the greeting copy. `width: '100%'`
+                  is required, not decorative: .hero-text-section is a flex column with
+                  align-items: flex-start (home.css), so any child without an explicit width
+                  shrink-wraps to its own content instead of filling the column — hero-text-inner
+                  already works around this the same way. Without it, PicksIsland/
+                  DashboardStandings render squeezed to their own content width instead of
+                  matching the hero image's width one column over. Mobile is unaffected either
+                  way, since Grid already collapses to one column there regardless of which
+                  column an item is assigned to. */}
+              {isAuthed && adapter && (
+                <Stack spacing={2} sx={{ mt: 2, width: '100%' }}>
+                  <PicksIsland adapter={adapter} />
+                  <DashboardStandings adapter={adapter} />
+                </Stack>
+              )}
             </Grid>
             <Grid size={{ xs: 12, md: 6 }} className="hero-image-section">
               <Stack spacing={2}>
@@ -156,8 +178,6 @@ export default function HomePage({ adapter }: HomePageProps) {
                 <Paper className="hero-image" elevation={8}>
                   <img src="/Images/hero-action.jpg" alt="IV League" className="hero-image-img" />
                 </Paper>
-                {isAuthed && adapter && <PicksIsland adapter={adapter} />}
-                {isAuthed && adapter && <DashboardStandings adapter={adapter} />}
                 {isAuthed && <OwnerCostSummary />}
               </Stack>
             </Grid>
