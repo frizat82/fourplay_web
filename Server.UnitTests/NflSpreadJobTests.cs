@@ -23,6 +23,7 @@ public class NflSpreadJobTests
     private readonly INflCurrentWeekService _nflCurrentWeekService;
     private readonly IJobExecutionContext _context;
     private readonly TimeProvider _timeProvider;
+    private readonly IJobObserverService _observer;
 
     // Fixed, controlled "now" — not tied to the real wall clock, so lock-time boundary tests are
     // deterministic regardless of when the suite actually runs.
@@ -47,9 +48,13 @@ public class NflSpreadJobTests
         _nflCurrentWeekService = Substitute.For<INflCurrentWeekService>();
         _context = Substitute.For<IJobExecutionContext>();
         _timeProvider = new FakeTimeProvider(FakeNow);
+        _observer = Substitute.For<IJobObserverService>();
 
         _nflCurrentWeekService.GetCurrentWeekAsync().Returns(DefaultWeek);
         _context.MergedJobDataMap.Returns(new JobDataMap());
+        var jobDetail = Substitute.For<IJobDetail>();
+        jobDetail.Key.Returns(new JobKey("NflSpreadJob-test"));
+        _context.JobDetail.Returns(jobDetail);
 
         // NflSpreadJob now resolves the current week's full control-table row (date window) to
         // fetch by, mirroring CfbSpreadJob — matches DefaultWeek (Season=2024, WeekId=5); tests
@@ -68,7 +73,7 @@ public class NflSpreadJobTests
         WeekEndDatetime = new DateTime(season, 11, 10, 23, 59, 59, DateTimeKind.Utc),
     };
 
-    private NflSpreadJob BuildJob() => new(_oddsService, _fetcher, _repo, _nflCurrentWeekService, _timeProvider);
+    private NflSpreadJob BuildJob() => new(_oddsService, _fetcher, _repo, _nflCurrentWeekService, _timeProvider, _observer);
 
     // -----------------------------------------------------------------------
     // Helper builders
@@ -168,12 +173,12 @@ public class NflSpreadJobTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task Execute_WhenGetWeekScoresReturnsNull_ReturnsImmediately_NoSpreadsAdded()
+    public async Task Execute_WhenGetWeekScoresReturnsNull_ThrowsAndSavesNoSpreads()
     {
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns((EspnScores?)null);
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
         await _oddsService.DidNotReceive()
@@ -185,13 +190,16 @@ public class NflSpreadJobTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task Execute_WhenAllGamesAreAlreadyFinal_NoSpreadsAdded()
+    public async Task Execute_WhenAllGamesAreAlreadyFinal_ThrowsAndSavesNoSpreads()
     {
-        // Scoreboard with a Final game — not Scheduled, so job skips it
+        // frizat-4gn: a scoreboard with only Final games (nothing Scheduled) past lock time is
+        // no longer a quiet no-op — the schedule exists specifically so real games' odds should
+        // be gettable by lock time, so ending up with zero spreads now surfaces as a failure
+        // (via the same job-failure/Discord alert pipeline every other job already relies on).
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(statusName: TypeName.StatusFinal));
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
@@ -313,28 +321,31 @@ public class NflSpreadJobTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task Execute_WhenHomeSpreadIsFk_GameIsSkipped_NoSpreadsAdded()
+    public async Task Execute_WhenHomeSpreadIsFk_GameIsSkippedAndThrowsSinceNoSpreadsSaved()
     {
-        // "FK" cannot be parsed by double.TryParse → the game is skipped via `continue`
+        // "FK" cannot be parsed by double.TryParse → the game is skipped via `continue`. The only
+        // game this run had ends up unsaved, so the run as a whole now throws (frizat-4gn) —
+        // still worth a distinct test from a totally-failed fetch, since this path exercises the
+        // per-game skip logic, not the fetch layer.
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem(homeSpread: "FK", awaySpread: "+7"));
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     [Fact]
-    public async Task Execute_WhenAwaySpreadIsFk_GameIsSkipped_NoSpreadsAdded()
+    public async Task Execute_WhenAwaySpreadIsFk_GameIsSkippedAndThrowsSinceNoSpreadsSaved()
     {
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .Returns(BuildOddsItem(homeSpread: "-7", awaySpread: "FK"));
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
@@ -369,7 +380,7 @@ public class NflSpreadJobTests
     }
 
     [Fact]
-    public async Task Execute_WhenDraftKingsNullAndFallbackEmpty_GameIsSkipped()
+    public async Task Execute_WhenDraftKingsNullAndFallbackEmpty_GameIsSkippedAndThrows()
     {
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
@@ -379,13 +390,13 @@ public class NflSpreadJobTests
         _oddsService.GetEventsWithOddsAsync(401547605)
                     .Returns(new EspnCoreOddsApiResponse { Items = new List<EspnCoreOddsItem>() });
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
 
     [Fact]
-    public async Task Execute_WhenDraftKingsNullAndFallbackNull_GameIsSkipped()
+    public async Task Execute_WhenDraftKingsNullAndFallbackNull_GameIsSkippedAndThrows()
     {
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
@@ -395,7 +406,7 @@ public class NflSpreadJobTests
         _oddsService.GetEventsWithOddsAsync(401547605)
                     .Returns((EspnCoreOddsApiResponse?)null);
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
     }
@@ -405,16 +416,21 @@ public class NflSpreadJobTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task Execute_WhenOddsApiThrows_ExceptionCaught_JobDoesNotRethrow()
+    public async Task Execute_WhenOddsApiThrowsForTheOnlyGame_PerGameExceptionCaughtButRunStillThrows()
     {
+        // The per-game try/catch still swallows the individual odds-fetch exception (it's not
+        // what propagates) — but with only one game in this run and its odds fetch failing, the
+        // run ends up with zero spreads, which now throws its own (different) exception, per
+        // frizat-4gn.
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard());
         _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings)
                     .ThrowsAsync(new HttpRequestException("Odds API down"));
 
-        // The job has a try/catch per game, so it must not rethrow
         var exception = await Record.ExceptionAsync(() => BuildJob().Execute(_context));
-        Assert.Null(exception);
+
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.DoesNotContain("Odds API down", exception!.Message);
     }
 
     [Fact]
@@ -494,30 +510,21 @@ public class NflSpreadJobTests
     }
 
     // -----------------------------------------------------------------------
-    // Bye week detection (Super Bowl off-week — zero scheduled competitions)
+    // Zero scheduled competitions — frizat-4gn: individual teams have byes, but the league as a
+    // whole never has zero scheduled games in an in-scope week, so this is no longer treated as
+    // a legitimate "bye week" no-op — it now throws like any other zero-spreads-past-lock-time run.
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task Execute_WhenZeroCompetitions_ByeWeekDetected_NoSpreadsAdded()
+    public async Task Execute_WhenZeroCompetitions_ThrowsAndSavesNoSpreads()
     {
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(emptyEvents: true));
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<List<NflSpreads>>());
         await _oddsService.DidNotReceive().GetEventsWithOddsAsync(Arg.Any<int>(), Arg.Any<int>());
-    }
-
-    [Fact]
-    public async Task Execute_WhenZeroCompetitions_JobCompletesWithoutException()
-    {
-        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
-                .Returns(BuildScoreboard(emptyEvents: true));
-
-        var exception = await Record.ExceptionAsync(() => BuildJob().Execute(_context));
-
-        Assert.Null(exception);
     }
 
     [Fact]

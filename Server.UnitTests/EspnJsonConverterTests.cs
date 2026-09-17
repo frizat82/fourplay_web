@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Shared.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
@@ -100,7 +101,7 @@ public class EspnJsonConverterTests
         {
             BaseAddress = new Uri("http://site.api.espn.com"),
         };
-        var service = new CfbApiService(httpClient);
+        var service = new CfbApiService(httpClient, NullLogger<CfbApiService>.Instance);
 
         var scores = await service.GetScoresByDateRangeAsync(new DateOnly(2025, 10, 25), new DateOnly(2025, 11, 1));
 
@@ -231,7 +232,7 @@ public class EspnJsonConverterTests
             }
             """;
         var httpClient = new HttpClient(new StubHttpMessageHandler(payload)) { BaseAddress = new Uri("http://site.api.espn.com") };
-        var service = new CfbApiService(httpClient);
+        var service = new CfbApiService(httpClient, NullLogger<CfbApiService>.Instance);
 
         var scores = await service.GetScoresByDateRangeAsync(new DateOnly(2025, 9, 1), new DateOnly(2025, 9, 7));
 
