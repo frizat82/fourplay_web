@@ -125,9 +125,10 @@ const renderWithClient = (ui: React.ReactElement) => {
 };
 
 const renderPage = async () => {
-  renderWithClient(<PicksPage adapter={createNflAdapter()} />);
+  const result = renderWithClient(<PicksPage adapter={createNflAdapter()} />);
   await screen.findByText(/^Picks$/i);
   await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+  return result;
 };
 
 describe('PicksPage', () => {
@@ -146,6 +147,7 @@ describe('PicksPage', () => {
     mockedGetAllJerseys.mockReset();
     mockedGetNextSpreadJob.mockReset();
     mockLeagueJuiceEmpty(mockedGetLeagueJuice);
+    sessionState.availableLeagues = [];
   });
 
   it('shows no league message when no league selected', async () => {
@@ -261,6 +263,25 @@ describe('PicksPage', () => {
 
     await screen.findByRole('button', { name: /picked/i });
     expect(mockedAddPicks).toHaveBeenCalledTimes(1);
+  });
+
+  // frizat-a60: ScoresPage's matrix view reads a separate ['scores', ...] query — a pick made
+  // here only ever updated PicksPage's own ['picks', ...] cache entry, so the user's own pick
+  // (which the matrix shows immediately, unlike other users' pre-kickoff) stayed invisible there
+  // until something else happened to refetch it.
+  it('invalidates the Scores page cache for this league/user after a successful pick', async () => {
+    await setupDefaults();
+    mockedAddPicks.mockResolvedValue(1);
+    const { queryClient } = await renderPage();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
+    await userEvent.click(pickButton);
+    await screen.findByRole('button', { name: /picked/i });
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: expect.arrayContaining(['scores']) }),
+    );
   });
 
   it('pick button toggles to picked and back, calling removeMyPick on unselect', async () => {
@@ -566,6 +587,21 @@ describe('PicksPage', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument());
     expect(document.querySelectorAll('.MuiSkeleton-root').length).toBe(0);
+  });
+
+  // frizat-a60: PicksIsland was designed as a shared "quick view across all your leagues"
+  // widget for both the home page and this page, but only ever rendered on the home page.
+  it('shows PicksIsland on the current week, but not while browsing a historical week', async () => {
+    await setupDefaults();
+    sessionState.availableLeagues = [
+      { id: 1, leagueId: 1, userId: '123', leagueName: 'Test League', leagueType: 0, dateCreated: '' },
+    ] as never;
+
+    await renderPage();
+    await screen.findByTestId('picks-island');
+
+    await userEvent.click(screen.getByRole('button', { name: /previous/i }));
+    await waitFor(() => expect(screen.queryByTestId('picks-island')).toBeNull());
   });
 
   // frizat: regression caught by /code-review on the isPlaceholderData fix above — see the
