@@ -147,6 +147,7 @@ describe('PicksPage', () => {
     mockedGetAllJerseys.mockReset();
     mockedGetNextSpreadJob.mockReset();
     mockLeagueJuiceEmpty(mockedGetLeagueJuice);
+    sessionState.availableLeagues = [];
   });
 
   it('shows no league message when no league selected', async () => {
@@ -586,6 +587,21 @@ describe('PicksPage', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument());
     expect(document.querySelectorAll('.MuiSkeleton-root').length).toBe(0);
+  });
+
+  // frizat-a60: PicksIsland was designed as a shared "quick view across all your leagues"
+  // widget for both the home page and this page, but only ever rendered on the home page.
+  it('shows PicksIsland on the current week, but not while browsing a historical week', async () => {
+    await setupDefaults();
+    sessionState.availableLeagues = [
+      { id: 1, leagueId: 1, userId: '123', leagueName: 'Test League', leagueType: 0, dateCreated: '' },
+    ] as never;
+
+    await renderPage();
+    await screen.findByTestId('picks-island');
+
+    await userEvent.click(screen.getByRole('button', { name: /previous/i }));
+    await waitFor(() => expect(screen.queryByTestId('picks-island')).toBeNull());
   });
 
   // frizat: regression caught by /code-review on the isPlaceholderData fix above — see the
