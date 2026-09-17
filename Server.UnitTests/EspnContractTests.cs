@@ -43,7 +43,8 @@ public class EspnContractTests
             new LoggerFactory().CreateLogger<EspnApiService>());
 
     private static CfbApiService BuildCfbApiService() =>
-        new(BuildEspnHttpClient("http://site.api.espn.com"));
+        new(BuildEspnHttpClient("http://site.api.espn.com"),
+            new LoggerFactory().CreateLogger<CfbApiService>());
 
     private static EspnCoreOddsService BuildOddsService() =>
         new(BuildEspnHttpClient("https://sports.core.api.espn.com"));

@@ -23,6 +23,7 @@ public class CfbSpreadJobTests
     private readonly ICfbCurrentSlateService _currentSlateService;
     private readonly IJobExecutionContext _context;
     private readonly TimeProvider _timeProvider;
+    private readonly IJobObserverService _observer;
 
     // Fixed, controlled "now" — not tied to the real wall clock, so lock-time boundary tests are
     // deterministic regardless of when the suite actually runs.
@@ -42,11 +43,15 @@ public class CfbSpreadJobTests
         _currentSlateService = Substitute.For<ICfbCurrentSlateService>();
         _context = Substitute.For<IJobExecutionContext>();
         _timeProvider = new FakeTimeProvider(FakeNow);
+        _observer = Substitute.For<IJobObserverService>();
 
         _context.MergedJobDataMap.Returns(new JobDataMap());
+        var jobDetail = Substitute.For<IJobDetail>();
+        jobDetail.Key.Returns(new JobKey("CfbSpreadJob-test"));
+        _context.JobDetail.Returns(jobDetail);
     }
 
-    private CfbSpreadJob BuildJob() => new(_fetcher, _oddsService, _repo, _currentSlateService, _timeProvider);
+    private CfbSpreadJob BuildJob() => new(_fetcher, _oddsService, _repo, _currentSlateService, _timeProvider, _observer);
 
     private static CfbSlates BuildSlate(int slateId = 1) => new()
     {
@@ -119,12 +124,17 @@ public class CfbSpreadJobTests
     }
 
     [Fact]
-    public async Task Execute_WhenFetcherReturnsNull_SavesNoSpreads()
+    public async Task Execute_WhenFetcherReturnsNull_ThrowsAndSavesNoSpreads()
     {
+        // frizat-4gn: a totally failed ESPN fetch past lock time is a genuine anomaly, not a
+        // quiet no-op — this is the exact silent failure that shipped a real week with zero CFB
+        // spreads and no alert (the fetcher itself now retries range-then-day-by-day before ever
+        // returning null, so reaching this means both mechanisms failed). Throwing lets the
+        // existing JobFailureAlertListener/Discord alert pipeline actually fire.
         SetCurrentSlate(BuildSlate());
         _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns((EspnScores?)null);
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<IEnumerable<CfbSpreads>>());
     }
@@ -166,25 +176,25 @@ public class CfbSpreadJobTests
     }
 
     [Fact]
-    public async Task Execute_WhenOddsUnavailable_SkipsGame()
+    public async Task Execute_WhenOddsUnavailable_SkipsGameAndThrowsSinceNoSpreadsSaved()
     {
         SetCurrentSlate(BuildSlate());
         _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>(), 100).Returns((EspnCoreOddsItem?)null);
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>()).Returns((EspnCoreOddsApiResponse?)null);
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<IEnumerable<CfbSpreads>>());
     }
 
     [Fact]
-    public async Task Execute_SkipsGame_WhenNotScheduled()
+    public async Task Execute_SkipsGame_WhenNotScheduled_AndThrowsSinceNoSpreadsSaved()
     {
         SetCurrentSlate(BuildSlate());
         _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<IEnumerable<CfbSpreads>>());
     }
@@ -282,14 +292,18 @@ public class CfbSpreadJobTests
     }
 
     [Fact]
-    public async Task Execute_PersistsRanking_EvenWhenOddsUnavailable()
+    public async Task Execute_PersistsRanking_EvenWhenOddsUnavailableAndRunThrows()
     {
+        // frizat-4gn: rankings are a genuinely separate concern from spreads — a run that ends up
+        // with zero spreads (and now throws for that) must still have persisted whatever rankings
+        // it DID get, rather than losing that partial success just because the overall run is
+        // also flagged as needing attention.
         SetCurrentSlate(BuildSlate());
         _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 3, awayRank: 99));
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>(), 100).Returns((EspnCoreOddsItem?)null);
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>()).Returns((EspnCoreOddsApiResponse?)null);
 
-        await BuildJob().Execute(_context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
         await _repo.Received(1).AddRankingsAsync(Arg.Is<IEnumerable<CfbRanking>>(r => r.Count() == 1));
     }
