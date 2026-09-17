@@ -15,6 +15,7 @@ import SpreadRelease from '../components/SpreadRelease';
 import ExcludedWeekBanner from '../components/ExcludedWeekBanner';
 import GameCard, { type PickState } from '../components/sports/GameCard';
 import GameCardGridSkeleton from '../components/GameCardSkeleton';
+import PicksIsland from '../components/PicksIsland';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import type { SportAdapter, GameView, LoadedWeek, PickType, WeekState } from '../services/sportAdapter';
@@ -244,6 +245,12 @@ export default function PicksPage({ adapter }: PicksPageProps) {
           </Box>
         )}
       </Box>
+
+      {/* frizat: PicksIsland was designed as a shared "quick view across all your leagues"
+          widget for both the home page and this page — it only ever reflects the CURRENT week's
+          picks (same as the home page), so it's only shown while browsing the current week, not
+          a historical one, where it would show the wrong week's data next to the right one. */}
+      {isCurrentWeek && <Box sx={{ mb: 3 }}><PicksIsland adapter={adapter} /></Box>}
 
       {oddsNotReady ? (
         <SpreadRelease sport={adapter.sport} />
