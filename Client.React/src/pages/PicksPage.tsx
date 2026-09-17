@@ -15,6 +15,7 @@ import SpreadRelease from '../components/SpreadRelease';
 import ExcludedWeekBanner from '../components/ExcludedWeekBanner';
 import GameCard, { type PickState } from '../components/sports/GameCard';
 import GameCardGridSkeleton from '../components/GameCardSkeleton';
+import PicksIsland from '../components/PicksIsland';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import type { SportAdapter, GameView, LoadedWeek, PickType, WeekState } from '../services/sportAdapter';
@@ -151,6 +152,13 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       old ? { ...old, userPicks: mutatePicks(old.userPicks) } : old);
     try {
       await action();
+      // frizat-a60: ScoresPage's matrix view reads a separate ['scores', ...] query — this
+      // mutation only ever updates PicksPage's own ['picks', ...] cache entry above, so without
+      // this, a pick made here stayed invisible on the Scores matrix (which shows the current
+      // user's own pick immediately, unlike other users' — see revealPicksForStartedGames) until
+      // something else happened to refetch it. Partial key match invalidates every weekState for
+      // this league/user, not just the current one.
+      void queryClient.invalidateQueries({ queryKey: [adapter.sport, 'scores', currentLeague, user!.userId] });
     } catch (err) {
       queryClient.setQueryData(queryKey, previous);
       toast.push(extractApiErrorMessage(err, fallbackMessage), 'error');
@@ -237,6 +245,12 @@ export default function PicksPage({ adapter }: PicksPageProps) {
           </Box>
         )}
       </Box>
+
+      {/* frizat: PicksIsland was designed as a shared "quick view across all your leagues"
+          widget for both the home page and this page — it only ever reflects the CURRENT week's
+          picks (same as the home page), so it's only shown while browsing the current week, not
+          a historical one, where it would show the wrong week's data next to the right one. */}
+      {isCurrentWeek && <Box sx={{ mb: 3 }}><PicksIsland adapter={adapter} /></Box>}
 
       {oddsNotReady ? (
         <SpreadRelease sport={adapter.sport} />
