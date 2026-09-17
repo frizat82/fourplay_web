@@ -1,5 +1,7 @@
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services;
+using FourPlayWebApp.Shared.Models.Data;
+using FourPlayWebApp.Shared.Models.Enum;
 using Xunit;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -50,5 +52,23 @@ public class CfbLeaderboardServiceTests
     {
         var result = CfbLeaderboardService.JuiceForSlate(18, Juice());
         Assert.Equal(6, result);
+    }
+
+    // frizat-xtn: a pick with no matching spread row (bad data, a spread deleted/renamed after
+    // the pick was made, or an ESPN cache gap at pick time) must be a LOSS, not a silent WIN — the
+    // pick was never actually evaluated against anything. Matches NFL's LeaderboardService, which
+    // has no fail-open guard and relies on the shared SpreadCalculator.DidUserWinSpread's own
+    // `if (spread is null) return false`.
+    [Fact]
+    public void DidPickWin_NoMatchingSpreadRow_ReturnsFalse()
+    {
+        var pick = new CfbPicks { Team = "GHOST", PickType = PickType.Spread };
+        var scores = new List<CfbScores> { new() { HomeTeam = "GHOST", AwayTeam = "OPP", HomeTeamScore = 30, AwayTeamScore = 10 } };
+        var spreads = new List<CfbSpreads>(); // no matching row for GHOST at all
+        var spreadCalculator = new SpreadCalculator(spreads, juice: 0);
+
+        var result = CfbLeaderboardService.DidPickWin(pick, spreads, scores, spreadCalculator);
+
+        Assert.False(result);
     }
 }

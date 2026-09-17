@@ -10,6 +10,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Fixed: CFB (and, less visibly, NFL) spreads could silently fail to load for a whole week with no error shown anywhere — ESPN changed how their scoreboard data can be requested; league commissioners will now get an alert if a scheduled spread pull ever comes up empty again
 - Fixed: right after making a pick, your own pick could still be missing from the Scores page's matrix view until something else happened to refresh it
 - Added: the Picks page now also shows your quick "Your Picks" summary across all your leagues, same as the home page
+- Fixed: Colorado's team icon was missing on CFB Picks/Scores cards — it's keyed under ESPN's real wire abbreviation now
+- Fixed: a CFB pick could be scored a win even with no matching spread on record, instead of a loss, unlike NFL's equivalent logic
 
 
 ## 2026-09-15

@@ -52,7 +52,7 @@ const TEAMS: Record<string, TeamColors> = {
   BYU:  { primary: '#002e5d', secondary: '#ffffff', text: '#ffffff' }, // BYU
   CAL:  { primary: '#003262', secondary: '#fdb515', text: '#ffffff' }, // California
   CLEM: { primary: '#f56600', secondary: '#522d80', text: '#ffffff' }, // Clemson
-  COLO: { primary: '#cfb87c', secondary: '#000000', text: '#000000' }, // Colorado
+  BUFF: { primary: '#cfb87c', secondary: '#000000', text: '#000000' }, // Colorado — ESPN's real wire abbreviation is BUFF (Buffaloes), not COLO; asset filenames/keys must match it exactly since TeamLogo/TeamHelmet build their src path directly from the live abbr prop
   DUKE: { primary: '#003087', secondary: '#000000', text: '#ffffff' }, // Duke
   FSU:  { primary: '#782f40', secondary: '#ceb888', text: '#ffffff' }, // Florida State
   FLA:  { primary: '#0021a5', secondary: '#fa4616', text: '#ffffff' }, // Florida
