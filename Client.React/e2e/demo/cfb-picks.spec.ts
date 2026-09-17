@@ -26,8 +26,10 @@ test.describe('CFB picks — demo backend', () => {
   });
 
   test('defaults to CFP Championship (latest past slate)', async ({ page }) => {
-    // The active slate is the CFP Championship (SlateNumber 19, latest by end date)
-    await expect(page.getByText('CFP Championship')).toBeVisible({ timeout: 5_000 });
+    // The active slate is the CFP Championship (SlateNumber 19, latest by end date). Scoped to
+    // the week/year selector specifically — PicksIsland (frizat-a60) now also shows this same
+    // label as its own week caption, so a bare page-wide getByText matches both.
+    await expect(page.getByTestId('week-year-selector-container').getByText('CFP Championship')).toBeVisible({ timeout: 5_000 });
   });
 
   test('Alice sees her CFP Championship pick (IU)', async ({ page }) => {

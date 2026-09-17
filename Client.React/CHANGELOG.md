@@ -8,6 +8,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 - Fixed: on desktop, the home page's Picks and Standings summaries now sit under the "Welcome Back" greeting instead of stacked on the right with the hero image and Costs, balancing the two columns so there's less scrolling to see everything
 - Fixed: CFB (and, less visibly, NFL) spreads could silently fail to load for a whole week with no error shown anywhere — ESPN changed how their scoreboard data can be requested; league commissioners will now get an alert if a scheduled spread pull ever comes up empty again
+- Fixed: right after making a pick, your own pick could still be missing from the Scores page's matrix view until something else happened to refresh it
+- Added: the Picks page now also shows your quick "Your Picks" summary across all your leagues, same as the home page
 
 
 ## 2026-09-15
