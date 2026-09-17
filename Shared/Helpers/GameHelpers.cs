@@ -223,6 +223,15 @@ public static class GameHelpers {
         IEnumerable<T> spreads, DateTimeOffset now,
         Func<T, DateTimeOffset> gameTime, Func<T, string> homeTeam, Func<T, string> awayTeam) =>
         spreads.Where(s => gameTime(s) <= now).SelectMany(s => new[] { homeTeam(s), awayTeam(s) }).ToHashSet();
+
+    // frizat: shared by LeagueController.AddPicks and CfbPicksController.AddPicks — a pick is only
+    // ever accepted for a team that has an actual spread row in the current week/slate. The Picks
+    // page never shows a game before its spread has been posted, so a submission for a team with
+    // no matching spread at all can only mean bad/forged input, not a legitimate race — reject it,
+    // don't fail open the way the ineligibility/kickoff guards deliberately do for absence-of-data.
+    public static HashSet<string> TeamsWithSpread<T>(
+        IEnumerable<T> spreads, Func<T, string> homeTeam, Func<T, string> awayTeam) =>
+        spreads.SelectMany(s => new[] { homeTeam(s), awayTeam(s) }).ToHashSet();
     public static bool IsGameOver(Competition competition) => competition.Status.Type.Name == TypeName.StatusFinal;
     public static long GetTeamScore(Competitor competitor) => competitor.Score;
     public static string GetTeamAbbr(Competitor competitor) => competitor.Team.Abbreviation;
