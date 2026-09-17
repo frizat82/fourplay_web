@@ -5,6 +5,9 @@ import { vi } from 'vitest';
 import { useSportContext } from '../services/sport';
 import HomePage from '../pages/HomePage';
 import type { UserInfo } from '../types/auth';
+import type { SportAdapter } from '../services/sportAdapter';
+import type { LeagueInfoDto } from '../types/admin';
+import type { LeagueUserMappingDto } from '../types/league';
 
 vi.mock('../services/sport', () => ({
   useSportContext: vi.fn(() => ({ sport: 'NFL', isCfb: false, isNfl: true })),
@@ -16,22 +19,40 @@ vi.mock('../services/sport', () => ({
 const authState = { user: null as UserInfo | null };
 vi.mock('../services/auth', () => ({ useAuth: () => authState }));
 
-// OwnerCostSummary (rendered whenever isAuthed) reads useSession — no owned leagues by default
-// so it stays a no-op (returns null) for tests that don't care about it.
-vi.mock('../services/session', () => ({
-  useSession: () => ({ ownedLeagues: [] }),
-}));
+// OwnerCostSummary/PicksIsland/DashboardStandings (rendered whenever isAuthed) all read
+// useSession — empty/not-loaded by default so they stay no-ops for tests that don't care about
+// them; the frizat-7c4 describe block below opts specific tests into real leagues.
+const sessionState = {
+  ownedLeagues: [] as LeagueInfoDto[],
+  availableLeagues: [] as LeagueUserMappingDto[],
+  leaguesLoaded: false,
+};
+vi.mock('../services/session', () => ({ useSession: () => sessionState }));
+
+vi.mock('../api/league', () => ({ getLeagueJuice: vi.fn(), getLeagueCost: vi.fn() }));
+vi.mock('../api/leaderboard', () => ({ getLeaderboard: vi.fn() }));
+import { getLeagueJuice, getLeagueCost } from '../api/league';
+import { getLeaderboard } from '../api/leaderboard';
+const mockedGetLeagueJuice = vi.mocked(getLeagueJuice);
+const mockedGetLeagueCost = vi.mocked(getLeagueCost);
+const mockedGetLeaderboard = vi.mocked(getLeaderboard);
 
 beforeEach(() => {
   authState.user = null;
+  sessionState.ownedLeagues = [];
+  sessionState.availableLeagues = [];
+  sessionState.leaguesLoaded = false;
+  mockedGetLeagueJuice.mockReset();
+  mockedGetLeagueCost.mockReset();
+  mockedGetLeaderboard.mockReset();
 });
 
-function renderPage() {
+function renderPage(adapter?: SportAdapter) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <HomePage />
+        <HomePage adapter={adapter} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -86,5 +107,59 @@ describe('HomePage — promo video', () => {
     renderPage();
     const video = document.querySelector('video');
     expect(video).toHaveAttribute('controls');
+  });
+});
+
+describe('HomePage — desktop widget placement (frizat-7c4)', () => {
+  // frizat-7c4: on desktop, the hero image column used to stack the hero image, PicksIsland,
+  // DashboardStandings, AND OwnerCostSummary (4 items) while the text column only had the
+  // greeting + buttons (1 "item") — the taller column dictated overall page height, adding
+  // scroll that the shorter column had unused space for. Moving Picks/Standings under the
+  // greeting balances both columns to ~2 items each. Mobile is unaffected either way, since
+  // Grid already collapses to one column there regardless of which column an item is in.
+  const league: LeagueUserMappingDto = {
+    id: 1, leagueId: 1, userId: 'user-1', leagueName: 'Test League', leagueType: 0, dateCreated: '',
+  };
+  const ownedLeague: LeagueInfoDto = {
+    id: 1, leagueName: 'Test League', leagueType: 'Nfl', ownerUserId: 'user-1', dateCreated: '2026-01-01T00:00:00Z',
+  };
+  // Matches the makeAdapter(...) factory convention already established in PicksIsland.test.tsx
+  // and DashboardStandings.test.tsx, rather than a one-off differently-shaped inline const.
+  function makeAdapter(): SportAdapter {
+    return {
+      sport: 'nfl',
+      weekSelectorConfig: {},
+      currentSeasonYear: async () => 2025,
+      loadCurrentGames: vi.fn().mockResolvedValue(null),
+    } as unknown as SportAdapter;
+  }
+
+  beforeEach(() => {
+    authState.user = { userId: 'user-1', name: 'Alice', claims: [] };
+    sessionState.leaguesLoaded = true;
+    sessionState.availableLeagues = [league];
+    sessionState.ownedLeagues = [ownedLeague];
+    mockedGetLeagueJuice.mockResolvedValue([]);
+    mockedGetLeagueCost.mockResolvedValue({ memberCount: 1, cost: 50 });
+    mockedGetLeaderboard.mockResolvedValue([]);
+  });
+
+  it('renders Picks and Standings inside the greeting column, and Costs inside the hero image column', async () => {
+    renderPage(makeAdapter());
+
+    const picksIsland = await screen.findByTestId('picks-island');
+    const dashboardStandings = await screen.findByTestId('dashboard-standings');
+    const ownerCostSummary = await screen.findByTestId('owner-cost-summary');
+
+    const textSection = document.querySelector('.hero-text-section');
+    const imageSection = document.querySelector('.hero-image-section');
+
+    expect(textSection).toContainElement(picksIsland);
+    expect(textSection).toContainElement(dashboardStandings);
+    expect(imageSection).toContainElement(ownerCostSummary);
+
+    expect(imageSection).not.toContainElement(picksIsland);
+    expect(imageSection).not.toContainElement(dashboardStandings);
+    expect(textSection).not.toContainElement(ownerCostSummary);
   });
 });
