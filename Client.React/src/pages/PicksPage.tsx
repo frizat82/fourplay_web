@@ -151,6 +151,13 @@ export default function PicksPage({ adapter }: PicksPageProps) {
       old ? { ...old, userPicks: mutatePicks(old.userPicks) } : old);
     try {
       await action();
+      // frizat-a60: ScoresPage's matrix view reads a separate ['scores', ...] query — this
+      // mutation only ever updates PicksPage's own ['picks', ...] cache entry above, so without
+      // this, a pick made here stayed invisible on the Scores matrix (which shows the current
+      // user's own pick immediately, unlike other users' — see revealPicksForStartedGames) until
+      // something else happened to refetch it. Partial key match invalidates every weekState for
+      // this league/user, not just the current one.
+      void queryClient.invalidateQueries({ queryKey: [adapter.sport, 'scores', currentLeague, user!.userId] });
     } catch (err) {
       queryClient.setQueryData(queryKey, previous);
       toast.push(extractApiErrorMessage(err, fallbackMessage), 'error');

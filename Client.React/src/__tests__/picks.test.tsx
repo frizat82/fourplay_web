@@ -125,9 +125,10 @@ const renderWithClient = (ui: React.ReactElement) => {
 };
 
 const renderPage = async () => {
-  renderWithClient(<PicksPage adapter={createNflAdapter()} />);
+  const result = renderWithClient(<PicksPage adapter={createNflAdapter()} />);
   await screen.findByText(/^Picks$/i);
   await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+  return result;
 };
 
 describe('PicksPage', () => {
@@ -261,6 +262,25 @@ describe('PicksPage', () => {
 
     await screen.findByRole('button', { name: /picked/i });
     expect(mockedAddPicks).toHaveBeenCalledTimes(1);
+  });
+
+  // frizat-a60: ScoresPage's matrix view reads a separate ['scores', ...] query — a pick made
+  // here only ever updated PicksPage's own ['picks', ...] cache entry, so the user's own pick
+  // (which the matrix shows immediately, unlike other users' pre-kickoff) stayed invisible there
+  // until something else happened to refetch it.
+  it('invalidates the Scores page cache for this league/user after a successful pick', async () => {
+    await setupDefaults();
+    mockedAddPicks.mockResolvedValue(1);
+    const { queryClient } = await renderPage();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const pickButton = screen.getAllByRole('button', { name: /^Pick /i })[0];
+    await userEvent.click(pickButton);
+    await screen.findByRole('button', { name: /picked/i });
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: expect.arrayContaining(['scores']) }),
+    );
   });
 
   it('pick button toggles to picked and back, calling removeMyPick on unselect', async () => {
