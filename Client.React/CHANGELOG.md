@@ -12,6 +12,9 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Added: the Picks page now also shows your quick "Your Picks" summary across all your leagues, same as the home page
 - Fixed: Colorado's team icon was missing on CFB Picks/Scores cards — it's keyed under ESPN's real wire abbreviation now
 - Fixed: a CFB pick could be scored a win even with no matching spread on record, instead of a loss, unlike NFL's equivalent logic
+- Fixed: the Scores page's own-pick badge (the blue highlight showing which team you picked) could fail to show on both NFL and CFB, even though the matrix view and your own Picks page already showed it correctly
+- Fixed: submitting a pick for a team with no spread posted was silently accepted instead of rejected (NFL and CFB)
+- Added: CFB game cards now show a weather icon/temperature, matching NFL
 
 
 ## 2026-09-15

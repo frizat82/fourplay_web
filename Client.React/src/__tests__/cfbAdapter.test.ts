@@ -212,6 +212,62 @@ describe('cfbAdapter', () => {
       expect(result.maxWeek).toBe(13);
     });
 
+    // frizat-qhk: cfbAdapter.ts never read event.weather at all, so CFB games never showed a
+    // weather icon/temp even though GameCard (sport-agnostic) already renders GameView.weather
+    // for NFL. ESPN's Event/Weather wire shape is shared by NFL and CFB scoreboard responses.
+    it('maps event.weather onto GameView.weather (frizat-qhk)', async () => {
+      const espnGameWithWeather: EspnScores = {
+        ...espnFinalGame,
+        events: [{
+          ...espnFinalGame.events![0],
+          weather: { displayValue: 'Partly Cloudy', temperature: 68, highTemperature: 72, conditionId: '3' },
+        }],
+      };
+      vi.mocked(getCfbSlates).mockResolvedValue([slate]);
+      vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(espnGameWithWeather);
+      vi.mocked(getCfbUserPicks).mockResolvedValue([]);
+
+      const result = await adapter.loadCurrentGames(1, 'user1');
+
+      expect(result.games[0].weather).toEqual({
+        displayValue: 'Partly Cloudy',
+        conditionId: '3',
+        temperatureF: 68,
+      });
+    });
+
+    it('leaves GameView.weather undefined when ESPN has no event.weather and no DB weather', async () => {
+      vi.mocked(getCfbSlates).mockResolvedValue([slate]);
+      vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue(espnFinalGame); // weather: null
+      vi.mocked(getCfbUserPicks).mockResolvedValue([]);
+
+      const result = await adapter.loadCurrentGames(1, 'user1');
+
+      expect(result.games[0].weather).toBeUndefined();
+    });
+
+    it('falls back to DB-persisted weather when ESPN has no live event for the game', async () => {
+      vi.mocked(getCfbSlates).mockResolvedValue([slate]);
+      vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
+      vi.mocked(getCfbScoresForSlate).mockResolvedValue({ leagues: [], season: { year: 2026, type: 2 }, week: { number: 8 }, events: [] });
+      vi.mocked(getCfbScores).mockResolvedValue([{
+        id: 1, cfbSlateId: 10, homeTeam: 'MICH', awayTeam: 'PSU',
+        homeTeamScore: 27, awayTeamScore: 13, gameStatus: 'StatusFinal', gameTime: '2026-10-24T20:00:00Z',
+        weatherDisplayValue: 'Clear', weatherConditionId: '1', weatherTemperatureF: 55,
+      }]);
+      vi.mocked(getCfbUserPicks).mockResolvedValue([]);
+
+      const result = await adapter.loadCurrentGames(1, 'user1');
+
+      expect(result.games[0].weather).toEqual({
+        displayValue: 'Clear',
+        conditionId: '1',
+        temperatureF: 55,
+      });
+    });
+
     it('game shows scheduled when ESPN has no matching event', async () => {
       vi.mocked(getCfbSlates).mockResolvedValue([slate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
