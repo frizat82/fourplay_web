@@ -26,7 +26,7 @@ public class PeriodicRefreshCacheTests
         await using var cache = new PeriodicRefreshCache<string>(
             fetch: () => Task.FromResult<string?>("value-1"),
             fingerprint: v => v,
-            interval: TimeSpan.FromMinutes(5),
+            intervalSelector: _ => TimeSpan.FromMinutes(5),
             initialDelay: TimeSpan.FromMilliseconds(50));
         cache.Changed += () => Interlocked.Increment(ref fireCount);
 
@@ -43,7 +43,7 @@ public class PeriodicRefreshCacheTests
         await using var cache = new PeriodicRefreshCache<string>(
             fetch: () => Task.FromResult<string?>("same-value"),
             fingerprint: v => v,
-            interval: TimeSpan.FromMinutes(5),
+            intervalSelector: _ => TimeSpan.FromMinutes(5),
             initialDelay: TimeSpan.FromMilliseconds(50));
         cache.Changed += () => Interlocked.Increment(ref fireCount);
 
@@ -59,7 +59,7 @@ public class PeriodicRefreshCacheTests
         await using var cache = new PeriodicRefreshCache<string>(
             fetch: () => Task.FromResult<string?>(null),
             fingerprint: v => v,
-            interval: TimeSpan.FromMinutes(5),
+            intervalSelector: _ => TimeSpan.FromMinutes(5),
             initialDelay: TimeSpan.FromMilliseconds(50));
         cache.Changed += () => Interlocked.Increment(ref fireCount);
 
@@ -86,7 +86,7 @@ public class PeriodicRefreshCacheTests
                 throw new InvalidOperationException("simulated fetch failure");
             },
             fingerprint: v => v,
-            interval: TimeSpan.FromMinutes(5),
+            intervalSelector: _ => TimeSpan.FromMinutes(5),
             initialDelay: TimeSpan.FromMilliseconds(50));
 
         var completed = await Task.WhenAny(fetchRan.Task, Task.Delay(TimeSpan.FromSeconds(5)));
@@ -102,11 +102,81 @@ public class PeriodicRefreshCacheTests
         await using var cache = new PeriodicRefreshCache<string>(
             fetch: () => Task.FromResult<string?>("captured-real-value"),
             fingerprint: v => v,
-            interval: TimeSpan.FromMinutes(5),
+            intervalSelector: _ => TimeSpan.FromMinutes(5),
             initialDelay: TimeSpan.FromMilliseconds(50));
 
         await WaitForChangedAsync(cache);
 
         Assert.Equal("captured-real-value", cache.Current);
+    }
+
+    // frizat-ucv: intervalSelector is consulted fresh after every refresh, using the value that
+    // refresh just produced — not a fixed interval computed once at construction.
+    [Fact]
+    public async Task RefreshLoop_UsesIntervalSelector_FastValue_RefreshesRepeatedly()
+    {
+        int callCount = 0;
+        await using var cache = new PeriodicRefreshCache<string>(
+            fetch: () => {
+                var n = Interlocked.Increment(ref callCount);
+                return Task.FromResult<string?>($"value-{n}"); // distinct each call -> Changed fires every time
+            },
+            fingerprint: v => v,
+            intervalSelector: _ => TimeSpan.FromMilliseconds(20),
+            initialDelay: TimeSpan.FromMilliseconds(20));
+
+        var tcs = new TaskCompletionSource();
+        int seenChanges = 0;
+        cache.Changed += () => { if (Interlocked.Increment(ref seenChanges) >= 4) tcs.TrySetResult(); };
+        var completed = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+
+        Assert.True(completed == tcs.Task, $"Expected at least 4 refreshes with a fast interval selector; saw {callCount}.");
+    }
+
+    [Fact]
+    public async Task RefreshLoop_UsesIntervalSelector_SlowValue_DoesNotRefreshAgainWithinShortWindow()
+    {
+        int callCount = 0;
+        await using var cache = new PeriodicRefreshCache<string>(
+            fetch: () => { Interlocked.Increment(ref callCount); return Task.FromResult<string?>("same-value"); },
+            fingerprint: v => v,
+            intervalSelector: _ => TimeSpan.FromSeconds(30),
+            initialDelay: TimeSpan.FromMilliseconds(20));
+
+        // Long enough to be well past the initial fetch, nowhere near the 30s selected interval.
+        await Task.Delay(500);
+
+        Assert.Equal(1, callCount);
+    }
+
+    [Fact]
+    public async Task RefreshLoop_IntervalSelector_ReceivesTheJustFetchedCurrentValue()
+    {
+        var seenByselector = new List<string?>();
+        int callCount = 0;
+        await using var cache = new PeriodicRefreshCache<string>(
+            fetch: () => {
+                var n = Interlocked.Increment(ref callCount);
+                return Task.FromResult<string?>($"value-{n}");
+            },
+            fingerprint: v => v,
+            intervalSelector: current => {
+                lock (seenByselector) seenByselector.Add(current);
+                return TimeSpan.FromMilliseconds(20);
+            },
+            initialDelay: TimeSpan.FromMilliseconds(20));
+
+        var tcs = new TaskCompletionSource();
+        cache.Changed += () => { lock (seenByselector) if (seenByselector.Count >= 3) tcs.TrySetResult(); };
+        await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+
+        lock (seenByselector)
+        {
+            // The selector is only ever consulted AFTER a refresh (to decide the wait before the
+            // next one), so it must see that refresh's own freshly-set Current — never null (the
+            // constructor's initial fetch already ran) and never a stale prior value.
+            Assert.DoesNotContain(null, seenByselector);
+            Assert.Contains("value-1", seenByselector);
+        }
     }
 }

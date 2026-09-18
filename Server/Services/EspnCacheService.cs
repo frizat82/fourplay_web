@@ -42,7 +42,11 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
                 return matchingConfig is null ? null : await _fetcher.FetchForWeekAsync(matchingConfig);
             },
             fingerprint: EspnScoresFingerprint.Compute,
-            interval: TimeSpan.FromMinutes(5),
+            intervalSelector: current => AdaptivePollInterval.Compute(
+                current,
+                EspnPollCadence.KickoffTimes,
+                EspnPollCadence.LiveGameDuration, EspnPollCadence.FastPollInterval, EspnPollCadence.SlowPollInterval,
+                DateTimeOffset.UtcNow),
             initialDelay: initialDelay);
     }
 

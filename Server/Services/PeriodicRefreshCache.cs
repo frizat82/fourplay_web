@@ -3,18 +3,26 @@ using Serilog;
 namespace FourPlayWebApp.Server.Services;
 
 /// <summary>
-/// Generic periodic-refresh cache: polls a fetch delegate on an interval, exposes the latest
-/// value, and raises Changed exactly when a refresh produces a different fingerprint than the
-/// last one. Shared by NFL (EspnCacheService) and CFB (CfbCacheService, frizat-703.6) so both
-/// sports use identical caching/change-detection machinery — only the fetch delegate differs per
-/// sport; both currently pass the same EspnScoresFingerprint.Compute (frizat-703.6 unification).
+/// Generic periodic-refresh cache: polls a fetch delegate, exposes the latest value, and raises
+/// Changed exactly when a refresh produces a different fingerprint than the last one. Shared by
+/// NFL (EspnCacheService) and CFB (CfbCacheService, frizat-703.6) so both sports use identical
+/// caching/change-detection machinery — only the fetch delegate differs per sport; both currently
+/// pass the same EspnScoresFingerprint.Compute (frizat-703.6 unification).
+///
+/// The wait between refreshes is computed fresh after each one via intervalSelector(Current) —
+/// not a fixed TimeSpan — so a caller can poll faster while something time-sensitive is happening
+/// (frizat-ucv: e.g. EspnCacheService polling ESPN faster during a live game) and slower otherwise,
+/// without this generic engine knowing anything about what "faster" means for its T. A caller that
+/// wants the old fixed-interval behavior just passes a selector that ignores its input and always
+/// returns the same TimeSpan. PeriodicTimer can't have its period changed after construction, so
+/// this uses a plain Task.Delay loop instead.
 /// </summary>
 public sealed class PeriodicRefreshCache<T> : IAsyncDisposable where T : class
 {
     private readonly Func<Task<T?>> _fetch;
     private readonly Func<T, string> _fingerprint;
+    private readonly Func<T?, TimeSpan> _intervalSelector;
     private readonly TimeSpan _initialDelay;
-    private readonly PeriodicTimer _timer;
     private readonly CancellationTokenSource _cts = new();
     private string? _lastFingerprint;
 
@@ -24,13 +32,13 @@ public sealed class PeriodicRefreshCache<T> : IAsyncDisposable where T : class
     public PeriodicRefreshCache(
         Func<Task<T?>> fetch,
         Func<T, string> fingerprint,
-        TimeSpan interval,
+        Func<T?, TimeSpan> intervalSelector,
         TimeSpan? initialDelay = null)
     {
         _fetch = fetch;
         _fingerprint = fingerprint;
+        _intervalSelector = intervalSelector;
         _initialDelay = initialDelay ?? TimeSpan.Zero;
-        _timer = new PeriodicTimer(interval);
         _ = RefreshLoopAsync();
     }
 
@@ -39,12 +47,15 @@ public sealed class PeriodicRefreshCache<T> : IAsyncDisposable where T : class
         await RefreshAsync();
         try
         {
-            while (await _timer.WaitForNextTickAsync(_cts.Token))
+            while (!_cts.IsCancellationRequested)
+            {
+                await Task.Delay(_intervalSelector(Current), _cts.Token);
                 await RefreshAsync();
+            }
         }
         catch (OperationCanceledException)
         {
-            // Timer cancelled — expected on dispose.
+            // Cancelled — expected on dispose.
         }
     }
 
@@ -76,6 +87,5 @@ public sealed class PeriodicRefreshCache<T> : IAsyncDisposable where T : class
     {
         await _cts.CancelAsync();
         _cts.Dispose();
-        _timer.Dispose();
     }
 }

@@ -337,7 +337,14 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                           color={didUserPick(game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
                           overlap="circular"
                           badgeContent={pickCountForTeam(game.awayTeam, 'Spread')}
-                          invisible={(!isFinal && !isLive) || pickCountForTeam(game.awayTeam, 'Spread') === 0}
+                          // frizat-z3a live regression: this used to also require isFinal/isLive,
+                          // which hid a user's OWN pick badge for every scheduled game — the whole
+                          // reason the info tone above exists is to confirm your pick pre-kickoff.
+                          // Safe without that gate: data.allPicks is already filtered upstream
+                          // (revealPicksForStartedGames) to exclude every OTHER user's pick for a
+                          // not-started team, so pickCountForTeam here can only be >0 pre-kickoff
+                          // via your own pick — nothing else to leak early.
+                          invisible={pickCountForTeam(game.awayTeam, 'Spread') === 0}
                         >
                           {/* frizat: /code-review caught that gating `disabled` on pickCount === 0 (in
                               addition to not-decided-yet) flattens this icon's color to MUI's disabled
@@ -369,7 +376,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                           color={didUserPick(game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
                           overlap="circular"
                           badgeContent={pickCountForTeam(game.homeTeam, 'Spread')}
-                          invisible={(!isFinal && !isLive) || pickCountForTeam(game.homeTeam, 'Spread') === 0}
+                          invisible={pickCountForTeam(game.homeTeam, 'Spread') === 0}
                         >
                           <IconButton
                             color={(isFinal || isLive) ? (hc === true ? 'success' : hc === false ? 'error' : 'inherit') : 'inherit'}
@@ -387,7 +394,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <Stack data-testid="over-under-controls" direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2.5, px: 1, gap: 1 }}>
                           <Badge data-testid={`badge-${game.homeTeam}-over`} color={didUserPick(game.homeTeam, 'Over') ? 'info' : badgeColor(game, game.homeTeam, 'Over')} overlap="circular"
                             badgeContent={pickCountForTeam(game.homeTeam, 'Over')}
-                            invisible={(!isFinal && !isLive) || pickCountForTeam(game.homeTeam, 'Over') === 0}>
+                            invisible={pickCountForTeam(game.homeTeam, 'Over') === 0}>
                             <IconButton size="small"
                               color={(isFinal || isLive) ? (ov ? 'success' : ov === false ? 'error' : 'inherit') : 'inherit'}
                               disabled={!isFinal && !isLive}
@@ -407,7 +414,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                           <ArrowCircleDownIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
                           <Badge data-testid={`badge-${game.homeTeam}-under`} color={didUserPick(game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
                             badgeContent={pickCountForTeam(game.homeTeam, 'Under')}
-                            invisible={(!isFinal && !isLive) || pickCountForTeam(game.homeTeam, 'Under') === 0}>
+                            invisible={pickCountForTeam(game.homeTeam, 'Under') === 0}>
                             <IconButton size="small"
                               color={(isFinal || isLive) ? (uv ? 'success' : uv === false ? 'error' : 'inherit') : 'inherit'}
                               disabled={!isFinal && !isLive}
