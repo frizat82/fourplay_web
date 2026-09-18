@@ -59,7 +59,11 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                 return slate is null ? null : await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true);
             },
             fingerprint: EspnScoresFingerprint.Compute,
-            interval: TimeSpan.FromMinutes(5),
+            intervalSelector: current => AdaptivePollInterval.Compute(
+                current,
+                EspnPollCadence.KickoffTimes,
+                EspnPollCadence.LiveGameDuration, EspnPollCadence.FastPollInterval, EspnPollCadence.SlowPollInterval,
+                DateTimeOffset.UtcNow),
             initialDelay: initialDelay);
     }
 
