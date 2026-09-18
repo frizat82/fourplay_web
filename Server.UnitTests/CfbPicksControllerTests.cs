@@ -229,9 +229,11 @@ public class CfbPicksControllerTests
     }
 
     [Fact]
-    public async Task AddPicks_WhenNoMatchingSpread_AllowsPick()
+    public async Task AddPicks_WhenNoMatchingSpread_ReturnsBadRequest()
     {
-        // Fail open — same rule as NFL when ESPN cache is unavailable/has no match for the team.
+        // frizat-z3a follow-up: the Picks page never shows a game before its spread has posted,
+        // so a pick for a team with no matching CfbSpreads row at all can only be bad/forged
+        // input — must be rejected, not silently accepted (was fail-open before this fix).
         _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate());
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([]);
         _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
@@ -244,7 +246,9 @@ public class CfbPicksControllerTests
 
         var result = await BuildController().AddPicks(request, BuildCurrentSlateService());
 
-        Assert.IsType<OkObjectResult>(result);
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Contains("no spread", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+        await _repo.DidNotReceive().TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
     }
 
     // ── AddPicks — league StartWeek guard (frizat-u66) ───────────────────────

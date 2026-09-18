@@ -495,10 +495,16 @@ public class LeagueController(
         // guard (frizat-3nv). Never trusts live ESPN data as a decision input, and can't fail
         // open the way the previous ESPN-cache-based version did (a DB read can't be "unavailable").
         var startedTeams = GameHelpers.StartedTeams(spreads, DateTimeOffset.UtcNow, s => s.GameTime, s => s.HomeTeam, s => s.AwayTeam);
+        // Guard: reject a pick for any team with no spread row at all this week — the Picks page
+        // never shows a game before its spread posts, so this can only be bad/forged input, never
+        // a legitimate race (frizat-z3a follow-up; mirrors CfbPicksController's identical guard).
+        var teamsWithSpread = GameHelpers.TeamsWithSpread(spreads, s => s.HomeTeam, s => s.AwayTeam);
         foreach (var pick in picksList)
         {
             if (startedTeams.Contains(pick.Team))
                 return BadRequest($"Pick rejected: {pick.Team}'s game has already kicked off.");
+            if (!teamsWithSpread.Contains(pick.Team))
+                return BadRequest($"Pick rejected: no spread found for {pick.Team}.");
         }
 
         var existingKeys = existingPicks
