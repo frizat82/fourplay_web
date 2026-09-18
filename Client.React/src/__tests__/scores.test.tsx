@@ -336,6 +336,22 @@ describe('ScoresPage', () => {
     expect(getByTestId('badge-BUF-spread')).toHaveAttribute('data-tone', 'info');
   });
 
+  // frizat-z3a live regression: reported in prod on a scheduled (not yet started) CFB game — the
+  // user's own pick had the correct 'info' data-tone (proving the team-matching fix worked) but
+  // the badge was still invisible, because `invisible` unconditionally hid the whole badge until
+  // isFinal/isLive, with no carve-out for "it's my own pick". data.allPicks/userPicks is already
+  // filtered by revealPicksForStartedGames to exclude every OTHER user's pre-kickoff pick for a
+  // not-yet-started team, so pickCountForTeam alone (no isFinal/isLive gate) can never leak
+  // anyone else's pick early — the gate was pure redundant caution that broke the real feature.
+  it('shows the info badge for the current user\'s own pick even before the game has started', async () => {
+    const picks = [createPick({ team: 'BUF' })];
+    await setupDefaults({ picks, gameStarted: false });
+    const { getByTestId } = await renderPage();
+    const badge = getByTestId('badge-BUF-spread');
+    expect(badge).toHaveAttribute('data-tone', 'info');
+    expect(badge.querySelector('.MuiBadge-badge')).not.toHaveClass('MuiBadge-invisible');
+  });
+
   it('spread badge is success when other user pick covers (BUF -7, wins 24-10)', async () => {
     const picks = [createPick({ team: 'BUF', userName: 'OtherUser', userId: '456' })];
     await setupDefaults({ picks, gameStarted: true });
