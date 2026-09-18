@@ -149,14 +149,21 @@ public class CfbLeaderboardService(
         return result;
     }
 
-    private static bool DidPickWin(CfbPicks pick, List<CfbSpreads> spreads, List<CfbScores> scores, ISpreadCalculator spreadCalculator) {
-        var spread = spreads.FirstOrDefault(s => s.HomeTeam == pick.Team || s.AwayTeam == pick.Team);
-        if (spread is null) return true;
-
+    internal static bool DidPickWin(CfbPicks pick, List<CfbSpreads> spreads, List<CfbScores> scores, ISpreadCalculator spreadCalculator) {
         var score = scores.FirstOrDefault(s => s.HomeTeam == pick.Team || s.AwayTeam == pick.Team);
         if (score is null) return true; // game not yet scored
 
-        var isHome = spread.HomeTeam == pick.Team;
+        // frizat-xtn: no longer pre-checks `spreads` for a matching row and fails open (true) if
+        // none exists — that silently WON a pick that was never actually evaluated against
+        // anything (a data-integrity edge case: a spread deleted/renamed after the pick was made,
+        // or an ESPN cache gap at pick time). NFL's IsPickAWinner has no equivalent pre-check; it
+        // relies entirely on the shared SpreadCalculator.DidUserWinSpread, which already fails
+        // CLOSED (`if (spread is null) return false`) — so removing this pre-check, rather than
+        // adding an equivalent guard, is what actually reconciles the two sports to one shared
+        // behavior, per CLAUDE.md's sibling-sharing rule. isHome is now read from `score` (always
+        // non-null here) instead of the no-longer-looked-up `spread`, so this needs no fallback
+        // for a missing spread row at all — DidUserWinPick below already handles that safely.
+        var isHome = score.HomeTeam == pick.Team;
         var teamScore = isHome ? score.HomeTeamScore : score.AwayTeamScore;
         var otherScore = isHome ? score.AwayTeamScore : score.HomeTeamScore;
 

@@ -27,9 +27,12 @@ import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
 
-// Pick key: "gameId|team|pickType" — stable across NFL and CFB
-function pickKey(gameId: string, team: string, pickType: string) {
-  return `${gameId}|${team}|${pickType}`;
+// Pick key: "team|pickType" — never gameId. A team plays at most one game per week/slate, so
+// team+pickType is already a complete, unambiguous key; gameId (ESPN's own id for NFL, a derived
+// lookup for CFB) is a fragile extra join we never rely on for identity (frizat-z3a: the same
+// pattern this page's sibling ScoresPage.tsx had to drop gameId from for the identical reason).
+function pickKey(team: string, pickType: string) {
+  return `${team}|${pickType}`;
 }
 
 function gameIsLocked(game: GameView): boolean {
@@ -99,7 +102,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   // bucket anymore: a background refetch (poll/SSE) simply replaces this with server truth,
   // which is also what corrects an optimistic update if it ever drifts.
   const existingPicks = useMemo(
-    () => new Set((data?.userPicks ?? []).map(p => pickKey(p.gameId, p.team, p.pickType))),
+    () => new Set((data?.userPicks ?? []).map(p => pickKey(p.team, p.pickType))),
     [data],
   );
 
@@ -125,7 +128,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   // is exactly what an unlocked pick needs. Every pick reflected here IS persisted server-side
   // the moment its own request resolves; there is no unsubmitted state anymore.
   const pickStateFor = (gameId: string, team: string, pickType = 'Spread'): PickState => {
-    const key = pickKey(gameId, team, pickType);
+    const key = pickKey(team, pickType);
     if (!existingPicks.has(key)) return 'none';
     const game = gameById.get(gameId);
     return game && gameIsLocked(game) ? 'submitted' : 'pending';
@@ -169,7 +172,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
 
   const selectPick = (gameId: string, team: string, pickType: PickType = 'Spread') => {
     if (picksAtCap || !currentLeague || !user) return;
-    const key = pickKey(gameId, team, pickType);
+    const key = pickKey(team, pickType);
     void applyPickChange(
       key,
       picks => [...picks, { gameId, team, pickType, userId: user.userId, userName: user.name ?? '' }],
@@ -180,10 +183,10 @@ export default function PicksPage({ adapter }: PicksPageProps) {
 
   const unselectPick = (gameId: string, team: string, pickType: PickType = 'Spread') => {
     if (!currentLeague) return;
-    const key = pickKey(gameId, team, pickType);
+    const key = pickKey(team, pickType);
     void applyPickChange(
       key,
-      picks => picks.filter(p => !(p.gameId === gameId && p.team === team && p.pickType === pickType)),
+      picks => picks.filter(p => !(p.team === team && p.pickType === pickType)),
       () => adapter.removePick(currentLeague, { season, week, isPostSeason }, { gameId, team, pickType }),
       'Error removing pick',
     );

@@ -56,13 +56,20 @@ function buildGamesFromEspn(
   // game per slate (the scope every caller of this function already loads spreads/scores at), so
   // homeTeam alone is an unambiguous join key. Matches CfbSpreads/CfbScores' own natural key.
   const espnMap = new Map<string, import('../types/espn').Competition>();
+  // event.weather is a per-Event field (not per-Competition) — same shape ESPN returns for NFL
+  // (see nflAdapter.ts's competitionToGameView), keyed here the same way as espnMap so it can be
+  // looked up per game below.
+  const weatherMap = new Map<string, import('../types/espn').EspnWeather>();
   for (const event of espnData?.events ?? []) {
     for (const comp of event.competitions) {
       // isHomeAway handles both string ('home') and numeric (1) forms — our backend re-serializes
       // the ESPN homeAway enum as a number (see toGameStatus's status.type.name comment above for
       // the same pattern), so a bare `=== 'home'` string comparison never matches.
       const home = comp.competitors.find(c => isHomeAway(c.homeAway, 'home'));
-      if (home) espnMap.set(home.team.abbreviation, comp);
+      if (home) {
+        espnMap.set(home.team.abbreviation, comp);
+        if (event.weather) weatherMap.set(home.team.abbreviation, event.weather);
+      }
     }
   }
   const dbMap = new Map(dbScores.map(s => [s.homeTeam, s]));
@@ -116,6 +123,23 @@ function buildGamesFromEspn(
       spreadPostedAt: sp.dateCreated,
       homeRank: sp.homeTeamRank,
       awayRank: sp.awayTeamRank,
+      // ESPN's live scoreboard is the primary source (same as NFL's event.weather mapping in
+      // nflAdapter.ts). Falls back to the DB's persisted weather columns — CfbScoresJob captures
+      // Event.Weather onto CfbScores at FINAL, same as it does for score/status — for historical
+      // slates where ESPN no longer has a live event to read weather from.
+      weather: weatherMap.has(sp.homeTeam)
+        ? {
+            displayValue: weatherMap.get(sp.homeTeam)!.displayValue,
+            conditionId: weatherMap.get(sp.homeTeam)!.conditionId,
+            temperatureF: weatherMap.get(sp.homeTeam)!.temperature,
+          }
+        : db?.weatherDisplayValue
+          ? {
+              displayValue: db.weatherDisplayValue,
+              conditionId: db.weatherConditionId ?? undefined,
+              temperatureF: db.weatherTemperatureF ?? undefined,
+            }
+          : undefined,
       // situation and period/displayClock are two independently-nullable concerns (frizat-66c) —
       // situation is honestly null (never fabricated) whenever ESPN's live feed omits it (e.g.
       // halftime, no active down); period/displayClock are the status-line clock, populated
@@ -128,10 +152,11 @@ function buildGamesFromEspn(
 }
 
 // frizat: CfbPicks.Team is whichever side the user picked — it can be the home OR away team, but
-// GameView.id is always the game's home team (see buildGamesFromEspn). A pick on the away side
-// still needs its PickView.gameId to resolve to the game's home team so it matches GameView.id
-// (pickCountForTeam/didUserPick in ScoresPage.tsx key off exact gameId equality) — this map
-// resolves either side back to that game's homeTeam, built once per slate's spread list.
+// GameView.id is always the game's home team (see buildGamesFromEspn). PickView.gameId is no
+// longer used for pick-matching (frizat-z3a: ScoresPage.tsx/PicksPage.tsx/revealPicksForStarted
+// Games all match by team+pickType now, never gameId) but the field still exists on the PickView
+// type, so it must still resolve to something meaningful rather than a garbage/away-team value —
+// this map resolves either side back to that game's homeTeam, built once per slate's spread list.
 function buildTeamToHomeTeamMap(spreads: CfbSpreadDto[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const sp of spreads) {
