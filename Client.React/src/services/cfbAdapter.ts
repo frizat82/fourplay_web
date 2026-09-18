@@ -152,10 +152,11 @@ function buildGamesFromEspn(
 }
 
 // frizat: CfbPicks.Team is whichever side the user picked — it can be the home OR away team, but
-// GameView.id is always the game's home team (see buildGamesFromEspn). A pick on the away side
-// still needs its PickView.gameId to resolve to the game's home team so it matches GameView.id
-// (pickCountForTeam/didUserPick in ScoresPage.tsx key off exact gameId equality) — this map
-// resolves either side back to that game's homeTeam, built once per slate's spread list.
+// GameView.id is always the game's home team (see buildGamesFromEspn). PickView.gameId is no
+// longer used for pick-matching (frizat-z3a: ScoresPage.tsx/PicksPage.tsx/revealPicksForStarted
+// Games all match by team+pickType now, never gameId) but the field still exists on the PickView
+// type, so it must still resolve to something meaningful rather than a garbage/away-team value —
+// this map resolves either side back to that game's homeTeam, built once per slate's spread list.
 function buildTeamToHomeTeamMap(spreads: CfbSpreadDto[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const sp of spreads) {
