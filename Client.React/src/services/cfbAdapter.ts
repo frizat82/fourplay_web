@@ -56,13 +56,20 @@ function buildGamesFromEspn(
   // game per slate (the scope every caller of this function already loads spreads/scores at), so
   // homeTeam alone is an unambiguous join key. Matches CfbSpreads/CfbScores' own natural key.
   const espnMap = new Map<string, import('../types/espn').Competition>();
+  // event.weather is a per-Event field (not per-Competition) — same shape ESPN returns for NFL
+  // (see nflAdapter.ts's competitionToGameView), keyed here the same way as espnMap so it can be
+  // looked up per game below.
+  const weatherMap = new Map<string, import('../types/espn').EspnWeather>();
   for (const event of espnData?.events ?? []) {
     for (const comp of event.competitions) {
       // isHomeAway handles both string ('home') and numeric (1) forms — our backend re-serializes
       // the ESPN homeAway enum as a number (see toGameStatus's status.type.name comment above for
       // the same pattern), so a bare `=== 'home'` string comparison never matches.
       const home = comp.competitors.find(c => isHomeAway(c.homeAway, 'home'));
-      if (home) espnMap.set(home.team.abbreviation, comp);
+      if (home) {
+        espnMap.set(home.team.abbreviation, comp);
+        if (event.weather) weatherMap.set(home.team.abbreviation, event.weather);
+      }
     }
   }
   const dbMap = new Map(dbScores.map(s => [s.homeTeam, s]));
@@ -116,6 +123,23 @@ function buildGamesFromEspn(
       spreadPostedAt: sp.dateCreated,
       homeRank: sp.homeTeamRank,
       awayRank: sp.awayTeamRank,
+      // ESPN's live scoreboard is the primary source (same as NFL's event.weather mapping in
+      // nflAdapter.ts). Falls back to the DB's persisted weather columns — CfbScoresJob captures
+      // Event.Weather onto CfbScores at FINAL, same as it does for score/status — for historical
+      // slates where ESPN no longer has a live event to read weather from.
+      weather: weatherMap.has(sp.homeTeam)
+        ? {
+            displayValue: weatherMap.get(sp.homeTeam)!.displayValue,
+            conditionId: weatherMap.get(sp.homeTeam)!.conditionId,
+            temperatureF: weatherMap.get(sp.homeTeam)!.temperature,
+          }
+        : db?.weatherDisplayValue
+          ? {
+              displayValue: db.weatherDisplayValue,
+              conditionId: db.weatherConditionId ?? undefined,
+              temperatureF: db.weatherTemperatureF ?? undefined,
+            }
+          : undefined,
       // situation and period/displayClock are two independently-nullable concerns (frizat-66c) —
       // situation is honestly null (never fabricated) whenever ESPN's live feed omits it (e.g.
       // halftime, no active down); period/displayClock are the status-line clock, populated

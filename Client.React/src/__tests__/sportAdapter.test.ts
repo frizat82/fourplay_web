@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { revealPicksForStartedGames, sortGamesByTimeThenRank } from '../services/sportAdapter';
 import type { GameView, PickView } from '../services/sportAdapter';
 
-function makeGame(id: string, status: GameView['gameStatus']): GameView {
+function makeGame(id: string, status: GameView['gameStatus'], homeTeam = 'HME', awayTeam = 'AWY'): GameView {
   return {
     id,
-    homeTeam: 'HME',
-    awayTeam: 'AWY',
+    homeTeam,
+    awayTeam,
     homeSpread: null,
     awaySpread: null,
     overThreshold: null,
@@ -18,8 +18,11 @@ function makeGame(id: string, status: GameView['gameStatus']): GameView {
   };
 }
 
-function makePick(gameId: string, userId: string): PickView {
-  return { gameId, team: 'HME', pickType: 'Spread', userId, userName: userId };
+// gameId is kept on PickView for other consumers (e.g. optimistic UI updates) but
+// revealPicksForStartedGames matches by team, not gameId (frizat-z3a) — so a test picking a team
+// that isn't this game's homeTeam is meaningless; default matches makeGame's own default.
+function makePick(gameId: string, userId: string, team = 'HME'): PickView {
+  return { gameId, team, pickType: 'Spread', userId, userName: userId };
 }
 
 const ME = 'user-me';
@@ -74,18 +77,20 @@ describe('revealPicksForStartedGames', () => {
   });
 
   it('handles mixed week — hides other picks for scheduled, reveals for started', () => {
-    const games = [makeGame('g1', 'scheduled'), makeGame('g2', 'in_progress')];
+    // Distinct teams per game — matching is by team abbreviation (frizat-z3a), and in reality
+    // two different games in the same week never share a team.
+    const games = [makeGame('g1', 'scheduled', 'SCH', 'SCH2'), makeGame('g2', 'in_progress', 'LIV', 'LIV2')];
     const picks = [
-      makePick('g1', OTHER), // scheduled — hidden
-      makePick('g2', OTHER), // in_progress — visible
-      makePick('g1', ME),    // own pick — always visible
+      makePick('g1', OTHER, 'SCH'), // scheduled — hidden
+      makePick('g2', OTHER, 'LIV'), // in_progress — visible
+      makePick('g1', ME, 'SCH'),    // own pick — always visible
     ];
 
     const result = revealPicksForStartedGames(picks, games, ME);
 
     expect(result).toHaveLength(2);
-    expect(result.some(p => p.userId === OTHER && p.gameId === 'g2')).toBe(true);
-    expect(result.some(p => p.userId === OTHER && p.gameId === 'g1')).toBe(false);
+    expect(result.some(p => p.userId === OTHER && p.team === 'LIV')).toBe(true);
+    expect(result.some(p => p.userId === OTHER && p.team === 'SCH')).toBe(false);
   });
 
   it('treats null gameStatus as not started — hides other picks', () => {
@@ -117,6 +122,18 @@ describe('revealPicksForStartedGames', () => {
     const result = revealPicksForStartedGames(picks, [futureGame], ME);
     expect(result).toHaveLength(1);
     expect(result[0].userId).toBe(ME);
+  });
+
+  it('frizat-z3a: reveals a started pick even when its gameId does not match any real game.id', () => {
+    // A pick's gameId is a derived, potentially-stale value (see nflAdapter.ts/cfbAdapter.ts) —
+    // matching must go through the pick's own team abbreviation, never gameId, so a wrong/foreign
+    // gameId on the pick can never hide (or wrongly reveal) it.
+    const games = [makeGame('g1', 'in_progress', 'LIV', 'LIV2')];
+    const picks = [makePick('some-other-gameid', OTHER, 'LIV')];
+
+    const result = revealPicksForStartedGames(picks, games, ME);
+
+    expect(result).toHaveLength(1);
   });
 });
 
