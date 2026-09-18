@@ -41,7 +41,11 @@ function competitionToGameView(
   const underThresholdVal = spreadCache[homeAbbr]?.under ?? null;
   const status = toGameStatus(competition);
   return {
-    id: competition.id,
+    // frizat-z3a: never ESPN's own competition.id — a team plays at most one game per week, so
+    // the team-abbreviation pair is already a complete, stable key, matching CfbAdapter's
+    // GameView.id (homeTeam) and the backend's own natural-key migration off EspnEventId. ESPN's
+    // numeric id is an implementation detail of one specific data source, not our identity.
+    id: `${homeAbbr}vs${awayAbbr}`,
     homeTeam: homeAbbr,
     awayTeam: awayAbbr,
     homeSpread: homeSpreadVal,

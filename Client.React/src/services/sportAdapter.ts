@@ -35,7 +35,11 @@ export function memoizeOnce<T>(fetch: () => Promise<T>): () => Promise<T> {
  */
 export function revealPicksForStartedGames(allPicks: PickView[], games: GameView[], userId: string): PickView[] {
   const now = new Date();
-  const startedIds = new Set(
+  // Matched by team abbreviation, never gameId (frizat-z3a: the same fragile-id-join pattern
+  // PicksPage.tsx/ScoresPage.tsx had to drop) — a team plays at most one game per week/slate, so
+  // its home/away abbreviations are already a complete, unambiguous "has this pick's game
+  // started" key.
+  const startedTeams = new Set(
     games
       .filter(g => {
         // ESPN confirmed the game is underway or finished
@@ -44,9 +48,9 @@ export function revealPicksForStartedGames(allPicks: PickView[], games: GameView
         if (g.gameStatus === 'scheduled' && g.gameTime != null && new Date(g.gameTime) <= now) return true;
         return false;
       })
-      .map(g => g.id)
+      .flatMap(g => [g.homeTeam, g.awayTeam])
   );
-  return allPicks.filter(p => p.userId === userId || startedIds.has(p.gameId));
+  return allPicks.filter(p => p.userId === userId || startedTeams.has(p.team));
 }
 
 /**

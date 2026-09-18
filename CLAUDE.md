@@ -106,6 +106,9 @@ When fixing a bug: grep existing tests for old wrong values before shipping. Whe
 
 ## Bead Standards
 
+### Bundle Small Beads, Ship Large Ones Solo
+The mandatory pre-PR gate below (full test suite + `/simplify` + `/code-review`) costs roughly the same whether it's reviewing one fix or five — so when several open bug beads are small and independent (a missing icon mapping, a stale test assertion, a matching-key bug, a guard-clause fix), gather them into one branch/worktree and pay that cost once, not once per bead. Reserve a solo worktree→PR cycle for a bead that's genuinely large, complex, or deserves focused review on its own (a real feature, a significant architectural change). Don't let an unrelated bead that turns out to need real investigation (e.g. a flaky e2e test with no known root cause) block a batch that's otherwise ready — split it out instead.
+
 ### Creating a Bead
 Every bead MUST include: `--title`, `--type` (bug|feature|task|chore), `--priority` (P0–P4), `--description`, `--design`, `--acceptance` (Unit Tests red first / Functional Gates / Success Definition), `--external-ref` (GitHub issue), `--deps`.
 
