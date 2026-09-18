@@ -44,6 +44,17 @@ test('CFB replay — pick, live SSE update, settle against real captured ESPN va
 
     // ── Advance to halftime (real: IND 13, ATL 14, end of Q2) — first load reflects it directly ──
     expect((await admin.post('/api/replay/advance')).ok()).toBe(true);
+
+    // frizat-7uk: registered before goto — the SSE connection opens as soon as the halftime data
+    // loads (hasActiveGames flips true, see ScoresPage.tsx's sseEnabled), which can happen before
+    // this line would otherwise run if registered after the visibility assertions below. Waiting
+    // for the browser to have actually issued this request (not just for hasActiveGames-driven UI
+    // state) is what closes the race: ReplayCacheService.Advance() fires ScoresChanged
+    // synchronously and once — a subscription registered even slightly after that fire is not
+    // queued, and nflAdapter/cfbAdapter's pollIntervalMs fallback is 5 minutes, far past this
+    // spec's assertion timeouts — so a missed push was never going to arrive in time.
+    const sseConnected = page.waitForRequest(req => req.url().includes('/api/cfb/live-stream'), { timeout: 15_000 });
+
     await page.goto('/scores');
     await expect(indCard.getByRole('heading', { name: '13', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(indCard.getByRole('heading', { name: '14', exact: true })).toBeVisible();
@@ -51,6 +62,9 @@ test('CFB replay — pick, live SSE update, settle against real captured ESPN va
     // ── Advance to in-progress (real: IND 13, ATL 17) WITHOUT reloading — halftime already made
     // hasActiveGames=true, so the SSE connection is open; this proves the push path updates the
     // page on its own, not a fresh navigation re-fetching current state. ──
+    // frizat-7uk: don't fire the next advance until the SSE connection has actually been
+    // requested by the browser — see comment above.
+    await sseConnected;
     expect((await admin.post('/api/replay/advance')).ok()).toBe(true);
     await expect(indCard.getByRole('heading', { name: '17', exact: true })).toBeVisible({ timeout: 15_000 });
 

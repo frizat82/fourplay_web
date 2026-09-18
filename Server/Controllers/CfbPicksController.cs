@@ -233,17 +233,22 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         var startedTeams = GameHelpers.StartedTeams(spreadsTask.Result, DateTimeOffset.UtcNow, s => s.GameTime, s => s.HomeTeam, s => s.AwayTeam);
 
         // Guard: reject picks for a team we KNOW is excluded from the league (MAC Tue/Wed,
-        // unranked, etc. — frizat-9m0). Distinct from "no matching spread at all", which stays
-        // fail-open below (e.g. an ESPN cache gap) — this only rejects positive knowledge of
-        // ineligibility, not absence of data.
+        // unranked, etc. — frizat-9m0). This only rejects positive knowledge of ineligibility.
         var ineligibleTeams = spreadsTask.Result.WhereLeagueIneligible()
             .SelectMany(s => new[] { s.HomeTeam, s.AwayTeam }).ToHashSet();
+
+        // Guard: reject a pick for any team with no spread row at all this slate — the Picks page
+        // never shows a game before its spread posts, so this can only be bad/forged input, never
+        // a legitimate race (frizat-z3a follow-up; mirrors LeagueController's identical NFL guard).
+        var teamsWithSpread = GameHelpers.TeamsWithSpread(spreadsTask.Result, s => s.HomeTeam, s => s.AwayTeam);
 
         foreach (var pick in request.Picks) {
             if (startedTeams.Contains(pick.Team))
                 return BadRequest($"Pick rejected: {pick.Team}'s game has already kicked off.");
             if (ineligibleTeams.Contains(pick.Team))
                 return BadRequest($"Pick rejected: {pick.Team}'s game is not part of this league's slate.");
+            if (!teamsWithSpread.Contains(pick.Team))
+                return BadRequest($"Pick rejected: no spread found for {pick.Team}.");
         }
 
         var existingPicks = existingPicksTask.Result.ToList();
