@@ -7,6 +7,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 ## 2026-09-18
 
 - Changed: live game scores now refresh every 30 seconds while a game is in progress, instead of a flat 5 minutes all day — the same shared backend poll still serves every viewer at once, just faster during the window it actually matters
+- Fixed: the Scores page's own-pick badge still wasn't showing for a game that hasn't kicked off yet, on both NFL and CFB — the badge was hidden until the game went live or final, with no exception for your own pick
 
 ## 2026-09-17
 
