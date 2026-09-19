@@ -67,6 +67,33 @@ public class EspnDateRangeFetcherTests {
         Assert.Equal(["1", "3"], result!.Events!.Select(e => e.Id));
     }
 
+    // frizat: live incident 2026-09-19 (CFB Scores Sat Noon) — a single day's fetch timing out
+    // (TaskCanceledException from HttpClient.Timeout) propagated out of the whole range fetch,
+    // which propagated out of the whole CfbScoresJob run, losing every OTHER slate's
+    // already-fetched scores in that same run, not just the failing day's. A thrown exception
+    // from one day must not abort the days around it — same tolerance the null-return case
+    // above already had, just extended to cover a real failure, not just an empty result.
+    [Fact]
+    public async Task FetchRangeAsync_OneDayThrows_StillReturnsTheSucceedingDaysEvents() {
+        var result = await EspnDateRangeFetcher.FetchRangeAsync(
+            new DateOnly(2026, 9, 15), new DateOnly(2026, 9, 17),
+            date => date == new DateOnly(2026, 9, 16)
+                ? throw new TaskCanceledException("simulated ESPN timeout")
+                : Task.FromResult<EspnScores?>(MakeScores(MakeEvent(date.Day.ToString()))));
+
+        Assert.NotNull(result);
+        Assert.Equal(["15", "17"], result!.Events!.Select(e => e.Id));
+    }
+
+    [Fact]
+    public async Task FetchRangeAsync_EveryDayThrows_ReturnsNull() {
+        var result = await EspnDateRangeFetcher.FetchRangeAsync(
+            new DateOnly(2026, 9, 15), new DateOnly(2026, 9, 17),
+            _ => throw new TaskCanceledException("simulated ESPN timeout"));
+
+        Assert.Null(result);
+    }
+
     [Fact]
     public async Task FetchRangeAsync_SingleDayRange_MakesExactlyOneCall() {
         var callCount = 0;
