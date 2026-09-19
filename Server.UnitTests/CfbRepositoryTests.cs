@@ -29,25 +29,81 @@ public class CfbRepositoryTests
         Assert.Equal(-3.5, saved.HomeTeamSpread);
     }
 
+    // frizat: live incident 2026-09-19 — a manual re-fire of the CFB spread job silently
+    // overwrote already-locked spread lines (including games with real picks on them) with new
+    // ESPN odds, because this test previously asserted exactly that as the CORRECT behavior. This
+    // was always wrong, matching NFL's own already-correct guard (LeagueRepositoryTests'
+    // UpsertAsync_RefreshesGameTime_EvenWhenSpreadIsAlreadyLockedIn, frizat-tf1): a locked line
+    // shouldn't move after users have already picked against it. No duplicate row on a re-fire is
+    // still correct and still covered here — just not by overwriting the line itself.
     [Fact]
-    public async Task UpsertAsync_ExistingGame_UpdatesInPlace_NoDuplicateRow()
+    public async Task UpsertAsync_ExistingGame_NoDuplicateRow_ButSpreadStaysLockedOnceReal()
     {
-        var factory = new DbContextFactoryStub(nameof(UpsertAsync_ExistingGame_UpdatesInPlace_NoDuplicateRow));
+        var factory = new DbContextFactoryStub(nameof(UpsertAsync_ExistingGame_NoDuplicateRow_ButSpreadStaysLockedOnceReal));
         var repo = new CfbRepository(factory);
 
         await repo.UpsertAsync([
             new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -3.5, AwayTeamSpread = 3.5 },
         ]);
 
-        // Re-fire with the same (CfbSlateId, HomeTeam) (e.g. a catch-up run re-processing an
-        // already-saved week)
+        // Re-fire with the same (CfbSlateId, HomeTeam) (e.g. a catch-up run, or a manual re-run
+        // after an unrelated job crash) bringing a DIFFERENT line — ESPN odds can genuinely move
+        // between the original post and a later re-fire.
         await repo.UpsertAsync([
             new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -4.0, AwayTeamSpread = 4.0 },
         ]);
 
         var all = await factory.CreateDbContext().CfbSpreads.Where(s => s.CfbSlateId == 1 && s.HomeTeam == "A").ToListAsync();
-        Assert.Single(all);
-        Assert.Equal(-4.0, all[0].HomeTeamSpread);
+        Assert.Single(all); // no duplicate row
+        Assert.Equal(-3.5, all[0].HomeTeamSpread); // but the original locked line is unchanged
+        Assert.Equal(3.5, all[0].AwayTeamSpread);
+    }
+
+    // frizat: the freeze must only apply once a REAL line exists — a placeholder/zero row (e.g.
+    // seeded before odds are posted) must still accept the first real value that arrives.
+    [Fact]
+    public async Task UpsertAsync_ExistingGameWithZeroSpread_StillAcceptsTheFirstRealValue()
+    {
+        var factory = new DbContextFactoryStub(nameof(UpsertAsync_ExistingGameWithZeroSpread_StillAcceptsTheFirstRealValue));
+        var repo = new CfbRepository(factory);
+
+        await repo.UpsertAsync([
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = 0, AwayTeamSpread = 0 },
+        ]);
+
+        await repo.UpsertAsync([
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -3.5, AwayTeamSpread = 3.5 },
+        ]);
+
+        var saved = await factory.CreateDbContext().CfbSpreads.SingleAsync(s => s.CfbSlateId == 1 && s.HomeTeam == "A");
+        Assert.Equal(-3.5, saved.HomeTeamSpread);
+    }
+
+    // frizat-tf1's NFL mirror: GameTime must keep refreshing regardless of the spread freeze — a
+    // late schedule change can push a game's real kickoff later than whatever was true when the
+    // spread first posted, and GameHelpers.AllGamesStarted's "has every game for this slate
+    // started" check depends on CfbSpreads.GameTime staying accurate.
+    [Fact]
+    public async Task UpsertAsync_RefreshesGameTime_EvenWhenSpreadIsAlreadyLockedIn()
+    {
+        var factory = new DbContextFactoryStub(nameof(UpsertAsync_RefreshesGameTime_EvenWhenSpreadIsAlreadyLockedIn));
+        var originalKickoff = new DateTimeOffset(2026, 9, 19, 17, 0, 0, TimeSpan.Zero);
+        var seedDb = factory.CreateDbContext();
+        seedDb.CfbSpreads.Add(new CfbSpreads {
+            CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B",
+            HomeTeamSpread = -3.5, AwayTeamSpread = 3.5, GameTime = originalKickoff,
+        });
+        await seedDb.SaveChangesAsync();
+
+        var repo = new CfbRepository(factory);
+        var rescheduledKickoff = originalKickoff.AddHours(3);
+        await repo.UpsertAsync([
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B", HomeTeamSpread = -7, AwayTeamSpread = 7, GameTime = rescheduledKickoff },
+        ]);
+
+        var saved = await factory.CreateDbContext().CfbSpreads.SingleAsync(s => s.CfbSlateId == 1 && s.HomeTeam == "A");
+        Assert.Equal(-3.5, saved.HomeTeamSpread); // spread itself stays locked
+        Assert.Equal(rescheduledKickoff, saved.GameTime); // but GameTime still refreshes
     }
 
     [Fact]
