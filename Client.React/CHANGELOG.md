@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-19
+
+- Fixed: a weather-delayed CFB/NFL game showed its original scheduled kickoff time instead of its live score — ESPN's "delayed" status wasn't recognized and was treated the same as "not started yet"
+
 ## 2026-09-18
 
 - Changed: live game scores now refresh every 30 seconds while a game is in progress, instead of a flat 5 minutes all day — the same shared backend poll still serves every viewer at once, just faster during the window it actually matters

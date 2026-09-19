@@ -403,7 +403,11 @@ internal class DescriptionConverter : JsonConverter<Description>
             "In Progress" => Description.InProgress,
             "Scheduled" => Description.Scheduled,
             "End of Period" => Description.EndOfPeriod,
-            // ESPN's real wire vocabulary also includes values we don't model (Postponed, Delayed,
+            // frizat: live incident 2026-09-19 — "Delayed" (weather delay) means the game has
+            // already started and has a real live score, unlike Postponed/Canceled below (which
+            // genuinely aren't live). Falling back to Scheduled hid the live score entirely.
+            "Delayed" => Description.InProgress,
+            // ESPN's real wire vocabulary also includes values we don't model (Postponed,
             // Canceled, etc.) for weather/scheduling edge cases. System.Text.Json aborts the ENTIRE
             // deserialization on any single converter throwing, so one game with an unrecognized
             // description would previously break every other game in the same week's payload
@@ -436,10 +440,17 @@ internal class TypeNameConverter : JsonConverter<TypeName>
             "STATUS_IN_PROGRESS" => TypeName.StatusInProgress,
             "STATUS_SCHEDULED" => TypeName.StatusScheduled,
             "STATUS_END_PERIOD" => TypeName.StatusEndPeriod,
+            // frizat: live incident 2026-09-19 — a weather-delayed CFB game (STATUS_DELAYED) had a
+            // real live score but fell back to Scheduled, hiding the score and blocking pick
+            // reveal for a game that had already kicked off. STATUS_RAIN_DELAY is the same class
+            // of "started, temporarily paused" delay. Postponed/Canceled/Forfeit below genuinely
+            // aren't live right now, so they intentionally keep falling back to Scheduled.
+            "STATUS_DELAYED" => TypeName.StatusInProgress,
+            "STATUS_RAIN_DELAY" => TypeName.StatusInProgress,
             // Same rationale as DescriptionConverter above: ESPN's real wire vocabulary includes
-            // status names we don't model (STATUS_POSTPONED, STATUS_DELAYED, STATUS_CANCELED,
-            // STATUS_RAIN_DELAY, STATUS_FORFEIT, etc.). Falling back to Scheduled instead of
-            // throwing keeps one unusual game from breaking deserialization of the whole week.
+            // status names we don't model (STATUS_POSTPONED, STATUS_CANCELED, STATUS_FORFEIT,
+            // etc.). Falling back to Scheduled instead of throwing keeps one unusual game from
+            // breaking deserialization of the whole week.
             _ => TypeName.StatusScheduled
         };
 
