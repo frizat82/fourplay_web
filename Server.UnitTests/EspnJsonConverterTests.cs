@@ -125,9 +125,7 @@ public class EspnJsonConverterTests
     // wrongly locking picks) or a false Live/other state.
     [Theory]
     [InlineData("STATUS_POSTPONED")]
-    [InlineData("STATUS_DELAYED")]
     [InlineData("STATUS_CANCELED")]
-    [InlineData("STATUS_RAIN_DELAY")]
     [InlineData("STATUS_FORFEIT")]
     [InlineData("STATUS_SOME_FUTURE_ESPN_VALUE_WE_DONT_KNOW_ABOUT_YET")]
     public void TypeNameConverter_FallsBackToScheduled_ForUnrecognizedWireValues(string wireValue)
@@ -141,7 +139,6 @@ public class EspnJsonConverterTests
 
     [Theory]
     [InlineData("Postponed")]
-    [InlineData("Delayed")]
     [InlineData("Canceled")]
     [InlineData("Some future ESPN description we don't know about yet")]
     public void DescriptionConverter_FallsBackToScheduled_ForUnrecognizedWireValues(string wireValue)
@@ -151,6 +148,36 @@ public class EspnJsonConverterTests
         var statusType = System.Text.Json.JsonSerializer.Deserialize<StatusType>(json, EspnApiServiceJsonConverter.Settings);
 
         Assert.Equal(Description.Scheduled, statusType!.Description);
+    }
+
+    // Live incident 2026-09-19: a weather-delayed CFB game (ALA @ FSU) reported real wire values
+    // STATUS_DELAYED / "Delayed" — with an actual live score (ALA 13 - FSU 21) already on the
+    // board. Unlike STATUS_POSTPONED/STATUS_CANCELED (the game isn't proceeding as scheduled, no
+    // live score exists yet), a delay means the game HAS started and IS live, just paused —
+    // falling back to Scheduled hid the live score and blocked pick-reveal for a game that had
+    // already kicked off. STATUS_RAIN_DELAY is the same class of in-progress-but-paused delay, so
+    // it maps the same way. Postponed/Canceled/Forfeit intentionally keep falling back to
+    // Scheduled above — those genuinely aren't "live right now."
+    [Theory]
+    [InlineData("STATUS_DELAYED")]
+    [InlineData("STATUS_RAIN_DELAY")]
+    public void TypeNameConverter_MapsDelayStatuses_ToInProgress(string wireValue)
+    {
+        var json = $$"""{"id":"1","name":"{{wireValue}}","state":"in","completed":false,"description":"Delayed","detail":"","shortDetail":""}""";
+
+        var statusType = System.Text.Json.JsonSerializer.Deserialize<StatusType>(json, EspnApiServiceJsonConverter.Settings);
+
+        Assert.Equal(TypeName.StatusInProgress, statusType!.Name);
+    }
+
+    [Fact]
+    public void DescriptionConverter_MapsDelayed_ToInProgress()
+    {
+        const string json = """{"id":"1","name":"STATUS_DELAYED","state":"in","completed":false,"description":"Delayed","detail":"","shortDetail":""}""";
+
+        var statusType = System.Text.Json.JsonSerializer.Deserialize<StatusType>(json, EspnApiServiceJsonConverter.Settings);
+
+        Assert.Equal(Description.InProgress, statusType!.Description);
     }
 
     // TypeName's first member (StatusFinal) is ordinal 0 — which is also C#'s default value for a
