@@ -1,5 +1,6 @@
 using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
+using Serilog;
 
 namespace FourPlayWebApp.Server.Services;
 
@@ -17,7 +18,18 @@ internal static class EspnDateRangeFetcher {
         var seenEventIds = new HashSet<string>();
 
         for (var date = startDate; date <= endDate; date = date.AddDays(1)) {
-            var dayResult = await fetchSingleDayAsync(date);
+            EspnScores? dayResult;
+            try {
+                dayResult = await fetchSingleDayAsync(date);
+            } catch (Exception ex) {
+                // frizat: live incident 2026-09-19 — a single day's fetch timing out (ESPN slow,
+                // network blip) used to propagate out of the whole range fetch, which propagated
+                // out of the whole scores job, losing every OTHER already-fetched slate/week's
+                // scores in that same run, not just this one day's. One bad day must not cost the
+                // days around it — same tolerance a null/empty day already had below.
+                Log.Warning(ex, "EspnDateRangeFetcher: failed to fetch {Date}, skipping this day", date);
+                continue;
+            }
             if (dayResult?.Events is null) continue;
 
             // A late-kickoff game can land in two adjacent single-day ESPN buckets depending on
