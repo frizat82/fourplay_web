@@ -23,6 +23,7 @@ public class NflScoresJob(
     IEspnCacheService espnCacheService) : IJob {
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("Grabbing NFL scores at {Time}", DateTime.UtcNow);
+        var allWeeksFailed = false;
 
         // Seed NflWeeks from NflSeasonWeekConfig (our control table) instead of ESPN calendar —
         // every season on record, not just the currently active one; a cheap DB-only sync, no
@@ -55,8 +56,26 @@ public class NflScoresJob(
             // under — otherwise UpsertNflScoresAsync's (Season, NflWeek, HomeTeam) key doesn't
             // catch this at all, since NflWeek genuinely differs between the two matches.
             var seenGames = new HashSet<(int Season, string HomeTeam, string AwayTeam, DateTimeOffset GameTime)>();
+            // frizat: live incident 2026-09-19 (CFB Scores Sat Noon — same structural bug, fixed
+            // here on the NFL sibling before it caused an identical incident on an NFL game day) —
+            // one week's fetch throwing (an ESPN timeout) used to abort this whole loop, losing
+            // every OTHER week's already-collected scores below since UpsertNflScoresAsync is only
+            // reached after the loop completes. One bad week must not cost the weeks around it —
+            // but a genuinely dead ESPN (every single week fails) must still surface as a real job
+            // failure, since that's exactly what the existing Quartz job-failure alerting exists
+            // to catch. Tracking attempted/failed lets this distinguish "one bad week among many
+            // good ones" (the common, non-alertable case — zero NEW final games most runs is
+            // normal) from "ESPN is completely unreachable this run" (alertable).
+            var failedWeeks = 0;
             foreach (var config in configs) {
-                var scoreboard = await fetcher.FetchForWeekAsync(config);
+                EspnScores? scoreboard;
+                try {
+                    scoreboard = await fetcher.FetchForWeekAsync(config);
+                } catch (Exception ex) {
+                    failedWeeks++;
+                    Log.Warning(ex, "NflScoresJob: failed to fetch week {Season}/{WeekId}, skipping this week", config.Season, config.WeekId);
+                    continue;
+                }
                 if (scoreboard?.Events is null) continue;
 
                 var results = scoreboard.Events.SelectMany(x => x.Competitions,
@@ -68,6 +87,8 @@ public class NflScoresJob(
                     }
                 }
             }
+
+            allWeeksFailed = configs.Count > 0 && failedWeeks == configs.Count;
 
             if (scoreList.Count != 0) {
                 Log.Information("Load NFL Scores at {Time}", DateTime.UtcNow);
@@ -88,5 +109,12 @@ public class NflScoresJob(
         }
 
         Log.Information("Grabbed NFL scores at {Time}", DateTime.UtcNow);
+
+        // Surfaced after the control-table sync above (an unrelated, ESPN-independent side effect
+        // that must still happen) — a genuinely dead ESPN this run is a real infrastructure
+        // problem worth the existing Quartz job-failure alert, distinct from the ordinary "zero
+        // NEW final games this run" case (most runs, most weeks) which is not an error.
+        if (allWeeksFailed)
+            throw new InvalidOperationException("NflScoresJob: every week's ESPN fetch failed this run — see prior warnings for individual errors.");
     }
 }

@@ -43,6 +43,7 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
         // resolution instead of each triggering its own GetCurrentSlateAsync() DB round trip.
         var currentSlate = await currentSlateService.GetCurrentSlateAsync();
 
+        var failedSlates = 0;
         foreach (var slate in slates) {
             // This job's whole purpose is discovering fresh finals — including one missed before
             // the slate's window "ended" (frizat: exactly what happened to the 2026 Week 1
@@ -51,7 +52,19 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
             // used to need to bypass now lives one layer up in CfbCacheService, which this job
             // never calls except to invalidate below, mirroring NflScoresJob calling
             // INflLiveScoreFetcher directly.
-            var scoreboard = await fetcher.FetchForSlateAsync(slate, isCurrentSlate: slate.Id == currentSlate?.Id);
+            // frizat: live incident 2026-09-19 (CFB Scores Sat Noon) — one slate's fetch throwing
+            // (an ESPN timeout, propagated up through EspnDateRangeFetcher when every day in its
+            // fallback window also failed) used to abort this whole loop, losing every OTHER
+            // slate's already-collected scores below since UpsertCfbScoresAsync is only reached
+            // after the loop completes. One bad slate must not cost the slates around it.
+            EspnScores? scoreboard;
+            try {
+                scoreboard = await fetcher.FetchForSlateAsync(slate, isCurrentSlate: slate.Id == currentSlate?.Id);
+            } catch (Exception ex) {
+                failedSlates++;
+                Log.Warning(ex, "CfbScoresJob: failed to fetch slate {SlateId}, skipping this slate", slate.Id);
+                continue;
+            }
             if (scoreboard?.Events is null) continue;
             AppendScores(scores, slate, scoreboard.Events);
         }
@@ -67,6 +80,13 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
             }
         }
         Log.Information("CfbScoresJob: complete at {Time}", DateTime.UtcNow);
+
+        // A genuinely dead ESPN this run (every slate fails) is a real infrastructure problem
+        // worth the existing Quartz job-failure alert, distinct from the ordinary "zero NEW final
+        // games this run" case (most runs, most slates) which is not an error. Mirrors
+        // NflScoresJob's identical distinction.
+        if (failedSlates == slates.Count)
+            throw new InvalidOperationException("CfbScoresJob: every slate's ESPN fetch failed this run — see prior warnings for individual errors.");
     }
 
     private static void AppendScores(List<CfbScores> scores, FourPlayWebApp.Server.Models.Data.CfbSlates slate, IEnumerable<FourPlayWebApp.Shared.Models.Event> events) {
