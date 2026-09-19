@@ -269,4 +269,71 @@ public class EspnJsonConverterTests
         var utepComp = scores.Events.Single(e => e.Competitions[0].Competitors.Any(c => c.Team.Abbreviation == "UTEP")).Competitions[0];
         Assert.Equal(TypeName.StatusInProgress, utepComp.Status.Type.Name); // the other game parses normally, unaffected
     }
+
+    // Live incident 2026-09-19, at the level it actually manifested: a full scoreboard payload
+    // with a weather-delayed game (ALA @ FSU, STATUS_DELAYED) that already had a real live score
+    // on the board. Proves the score isn't just correctly classified in isolation (see the
+    // converter-level tests above) but actually surfaces through the full CfbApiService payload
+    // parse, alongside an unrelated game, mirroring the STATUS_POSTPONED case above.
+    [Fact]
+    public async Task CfbApiService_GetScoresByDateRangeAsync_DelayedGameWithLiveScore_ParsesAsInProgress()
+    {
+        const string payload = """
+            {
+              "events": [
+                {
+                  "id": "1",
+                  "date": "2026-09-19T00:00Z",
+                  "competitions": [
+                    {
+                      "id": "1",
+                      "date": "2026-09-19T00:00Z",
+                      "status": {
+                        "clock": 0, "displayClock": "0:00", "period": 2,
+                        "type": { "id": "17", "name": "STATUS_DELAYED", "state": "in", "completed": false, "description": "Delayed", "detail": "Delayed", "shortDetail": "Delayed" }
+                      },
+                      "competitors": [
+                        { "id": "1", "homeAway": "home", "team": { "abbreviation": "FSU" }, "score": "21", "records": [] },
+                        { "id": "2", "homeAway": "away", "team": { "abbreviation": "ALA" }, "score": "13", "records": [] }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "2",
+                  "date": "2026-09-19T00:00Z",
+                  "competitions": [
+                    {
+                      "id": "2",
+                      "date": "2026-09-19T00:00Z",
+                      "status": {
+                        "clock": 0, "displayClock": "0:00", "period": 2,
+                        "type": { "id": "2", "name": "STATUS_IN_PROGRESS", "state": "in", "completed": false, "description": "In Progress", "detail": "In Progress", "shortDetail": "In Progress" }
+                      },
+                      "competitors": [
+                        { "id": "3", "homeAway": "home", "team": { "abbreviation": "OU" }, "score": "14", "records": [] },
+                        { "id": "4", "homeAway": "away", "team": { "abbreviation": "UTEP" }, "score": "7", "records": [] }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+        var httpClient = new HttpClient(new StubHttpMessageHandler(payload)) { BaseAddress = new Uri("http://site.api.espn.com") };
+        var service = new CfbApiService(httpClient, NullLogger<CfbApiService>.Instance);
+
+        var scores = await service.GetScoresByDateRangeAsync(new DateOnly(2026, 9, 15), new DateOnly(2026, 9, 21));
+
+        Assert.Equal(2, scores!.Events!.Length);
+        var delayedComp = scores.Events.Single(e => e.Competitions[0].Competitors.Any(c => c.Team.Abbreviation == "FSU")).Competitions[0];
+        Assert.Equal(TypeName.StatusInProgress, delayedComp.Status.Type.Name);
+        Assert.Equal(Description.InProgress, delayedComp.Status.Type.Description);
+        var fsu = delayedComp.Competitors.Single(c => c.Team.Abbreviation == "FSU");
+        var ala = delayedComp.Competitors.Single(c => c.Team.Abbreviation == "ALA");
+        Assert.Equal(21, fsu.Score);
+        Assert.Equal(13, ala.Score);
+        var utepComp = scores.Events.Single(e => e.Competitions[0].Competitors.Any(c => c.Team.Abbreviation == "UTEP")).Competitions[0];
+        Assert.Equal(TypeName.StatusInProgress, utepComp.Status.Type.Name); // the other game parses normally, unaffected
+    }
 }
