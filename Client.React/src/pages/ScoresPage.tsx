@@ -48,8 +48,14 @@ function teamWins(game: GameView, team: string, pickType: PickType): boolean | n
   return pickType === 'Over' ? (game.overWins ?? null) : (game.underWins ?? null);
 }
 
-function badgeColor(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): 'success' | 'error' | 'info' | 'default' {
-  if (!isDecided(game)) return 'info';
+// frizat: 'info' (blue) means exactly one thing — "this is my own pick" (see didUserPick's own
+// unconditional 'info' below) — it must never appear here, since this function only ever colors
+// OTHER users' now-revealed picks. Returning 'info' for "not decided yet" used to make a
+// leaguemate's revealed-but-undecided pick indistinguishable from the viewer's own the moment a
+// game's kickoff passed (even before ESPN's own status catches up — revealPicksForStartedGames
+// already reveals on kickoff time, independent of status).
+function badgeColor(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): 'success' | 'error' | 'default' {
+  if (!isDecided(game)) return 'default';
   const wins = teamWins(game, team, pickType);
   if (wins == null) return 'default';
   return wins ? 'success' : 'error';
