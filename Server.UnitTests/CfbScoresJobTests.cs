@@ -130,6 +130,42 @@ public class CfbScoresJobTests
         await _fetcher.Received(1).FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
     }
 
+    // frizat: live incident 2026-09-19 (CFB Scores Sat Noon) — one slate's fetch throwing
+    // (ESPN timeout) propagated out of the whole Execute loop, losing every OTHER slate's
+    // already-fetched scores in that same run, not just the failing slate's. A single bad slate
+    // must not cost the slates around it.
+    [Fact]
+    public async Task Execute_OneSlateFetchThrows_StillUpsertsTheOtherSlatesScores()
+    {
+        var slate1 = BuildSlate();
+        var slate2 = BuildSlate();
+        slate2.Id = 2;
+
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([slate1, slate2]);
+        _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == 1), Arg.Any<bool>())
+            .Returns<EspnScores?>(_ => throw new TaskCanceledException("simulated ESPN timeout"));
+        _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == 2), Arg.Any<bool>())
+            .Returns(BuildScoreboard(status: TypeName.StatusFinal));
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).UpsertCfbScoresAsync(
+            Arg.Is<IEnumerable<CfbScores>>(s => s.Any(x => x.CfbSlateId == 2)));
+    }
+
+    // A genuinely dead ESPN (every slate fails) must still surface as a real job failure —
+    // that's exactly what the existing Quartz job-failure alert exists to catch. Distinct from
+    // "zero NEW final games this run," which is the ordinary case most runs and must not throw.
+    [Fact]
+    public async Task Execute_EverySlateFetchThrows_StillThrows()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>())
+            .Returns<EspnScores?>(_ => throw new TaskCanceledException("simulated ESPN timeout"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+    }
+
     // The viewer-facing settled cache can already hold a stale reconstruction for a slate that
     // "ended" before this run discovered new/updated finals for it — mirrors NflScoresJob's
     // identical invalidation of EspnCacheService.

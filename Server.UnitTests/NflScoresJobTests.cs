@@ -132,6 +132,27 @@ public class NflScoresJobTests
         await _fetcher.DidNotReceive().FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.Season == _year - 1));
     }
 
+    // frizat: live incident 2026-09-19 (CFB Scores Sat Noon — same structural bug confirmed here
+    // on the NFL sibling before it caused an identical incident on an NFL game day) — one week's
+    // fetch throwing (ESPN timeout) used to abort this whole loop, losing every OTHER week's
+    // already-collected scores below since UpsertNflScoresAsync is only reached after the loop
+    // completes. One bad week must not cost the weeks around it.
+    [Fact]
+    public async Task Execute_OneWeekFetchThrows_StillUpsertsTheOtherWeeksScores()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> {
+            BuildConfig(1, _year), BuildConfig(2, _year),
+        });
+        _fetcher.FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 1))
+            .ThrowsAsync(new TaskCanceledException("simulated ESPN timeout"));
+        _fetcher.FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 2))
+            .Returns(BuildWeekScores(_year, isFinal: true));
+
+        await BuildJob().Execute(_context);
+
+        await _repo.Received(1).UpsertNflScoresAsync(Arg.Is<List<NflScores>>(list => list.Any(s => s.NflWeek == 2)));
+    }
+
     [Fact]
     public async Task Execute_WhenWeekHasCompletedGames_CallsUpsertNflScores()
     {
@@ -252,16 +273,24 @@ public class NflScoresJobTests
     }
 
     // -----------------------------------------------------------------------
-    // ESPN fetch exception — job propagates it
+    // ESPN fetch exception handling
     // -----------------------------------------------------------------------
 
+    // frizat: live incident 2026-09-19 — this test used to assert that ANY single fetch
+    // exception propagates and aborts the whole job, which is exactly what cost every other
+    // week's already-fetched scores in the real incident. The default test setup has only one
+    // config row, so "the one fetch throws" and "every fetch this run failed" are the same
+    // event here — this still throws (preserving the Quartz job-failure alert for a genuinely
+    // dead ESPN), just as an aggregate exception now rather than the original HttpRequestException
+    // re-thrown directly. See Execute_OneWeekFetchThrows_StillUpsertsTheOtherWeeksScores below for
+    // the multi-week case this incident actually broke.
     [Fact]
-    public async Task Execute_WhenFetchThrows_Rethrows()
+    public async Task Execute_WhenEveryWeekFetchThrows_StillThrows()
     {
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .ThrowsAsync(new HttpRequestException("ESPN down"));
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => BuildJob().Execute(_context));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
     }
 
     // -----------------------------------------------------------------------
