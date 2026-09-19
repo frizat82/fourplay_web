@@ -68,9 +68,21 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
             db.CfbSpreads.Where(s => slateIds.Contains(s.CfbSlateId)),
             (existing, spread) => {
                 existing.AwayTeam         = spread.AwayTeam;
-                existing.HomeTeamSpread   = spread.HomeTeamSpread;
-                existing.AwayTeamSpread   = spread.AwayTeamSpread;
-                existing.OverUnder        = spread.OverUnder;
+                // frizat: live incident 2026-09-19 — a manual re-fire of the CFB spread job
+                // silently overwrote already-locked spread lines (including games with real picks
+                // on them) with new ESPN odds, since this used to run unconditionally. The odds
+                // themselves freeze once real (non-zero) values are captured — a locked line
+                // shouldn't move after users have already picked against it. Matches
+                // LeagueRepository.UpsertAsync's identical NFL guard (frizat-tf1) exactly.
+                if (existing.HomeTeamSpread == 0 && existing.AwayTeamSpread == 0 &&
+                    (spread.HomeTeamSpread != 0 || spread.AwayTeamSpread != 0)) {
+                    existing.HomeTeamSpread = spread.HomeTeamSpread;
+                    existing.AwayTeamSpread = spread.AwayTeamSpread;
+                    existing.OverUnder      = spread.OverUnder;
+                }
+                // GameTime keeps refreshing regardless — a late schedule change can push a game's
+                // real kickoff later than whatever was true when the spread first posted, and
+                // GameHelpers.AllGamesStarted depends on this staying accurate.
                 existing.GameTime         = spread.GameTime;
                 existing.IsLeagueEligible = spread.IsLeagueEligible;
                 // DateCreated intentionally NOT overwritten — preserves when the line was first posted.
