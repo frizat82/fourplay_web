@@ -393,6 +393,30 @@ describe('ScoresPage', () => {
     expect(getByTestId('badge-MIA-spread')).toHaveAttribute('data-tone', 'info');
   });
 
+  // frizat: reported live — the info (blue) tone is supposed to mean exactly one thing, "this is
+  // my own pick". Exact repro from the live report: ESPN's status cache is stale and still says
+  // 'scheduled' even though kickoff has already passed — revealPicksForStartedGames already
+  // reveals other users' picks for this case (its own second condition: status scheduled but
+  // gameTime <= now), but badgeColor's `isDecided` check is purely status-based, so it still says
+  // "not decided" and fell through to the 'info' branch — showing a LEAGUEMATE's now-revealed
+  // pick as blue, indistinguishable from the viewer's own.
+  it('another user\'s pick revealed via a stale "scheduled" status past kickoff is never info/blue', async () => {
+    const pastKickoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const staleScheduledComp = createCompetition({
+      homeTeam: 'BUF', awayTeam: 'MIA', gameStarted: false, date: pastKickoff,
+    });
+    const scores = createScores({ week: 2, postSeason: false, events: [
+      { id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: pastKickoff, competitions: [staleScheduledComp] },
+    ]});
+    const picks = [createPick({ team: 'BUF', userName: 'OtherUser', userId: '456' })];
+    await setupDefaults({ picks, gameStarted: true }); // gameStarted here only seeds hasOdds/picks plumbing
+    mockedGetWeekScores.mockResolvedValue(scores); // override setupDefaults's own default with the stale-status fixture
+
+    const { getByTestId } = await renderPage();
+
+    expect(getByTestId('badge-BUF-spread')).not.toHaveAttribute('data-tone', 'info');
+  });
+
   it('show only my picks hides games the user did not pick', async () => {
     // User picked BUF (home, game 1) but not DAL/NYG (game 2)
     const picks = [createPick({ team: 'BUF', userId: '123' })];

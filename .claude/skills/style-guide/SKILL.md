@@ -22,6 +22,29 @@ read this first.
 | `secondary` | brand accent (orange) | CTAs, hero buttons, nav highlight |
 | `primary` | structural navy (light) / blue (dark) | app bar, default text emphasis |
 
+## Scores page pick badges: blue (`info`) means "my pick," full stop
+
+On `ScoresPage.tsx`, the blue/`info` badge is reserved **exclusively** for the viewer's own
+pick — never any other league member's pick, under any game state. `didUserPick()` sets this
+unconditionally for the viewer's own team/pick, which is correct and shouldn't change. The bug
+(2026-09-19, fixed in PR #409): `badgeColor()` — the *fallback* used for other users' picks —
+returned `'info'` (blue) whenever `!isDecided(game)`, i.e. "game not decided yet, we don't know
+if this pick won or lost." That's a reasonable-sounding default in isolation, but
+`revealPicksForStartedGames` (`sportAdapter.ts`) reveals other users' picks once a game's real
+kickoff time has passed, even before ESPN's live status has caught up — so there's a real window
+where another user's pick is visible but the game still isn't "decided" by status, and it
+rendered in the same blue meant only for your own pick. A user correctly called this out: "blue
+circle is for only my picks - so I should never see 5 [when I only have 4]."
+
+**Fix pattern — narrow the type, don't just patch the condition.** `badgeColor()`'s return type
+was changed from `'success' | 'error' | 'info' | 'default'` to `'success' | 'error' | 'default'`
+— dropping `'info'` entirely. This makes "only `didUserPick()` can ever produce blue" a
+compile-time invariant instead of a runtime condition someone could reintroduce by tweaking a
+branch. Prefer this shape of fix — shrink the return type / union so the wrong value is
+unrepresentable — over adding another `if` that special-cases the specific trigger you just
+found; the next trigger condition you haven't thought of yet will slip past a condition-only fix
+but not a type-only one.
+
 **`warning` (amber) is explicitly not used for pick-state buttons.** It was tried for the
 "available to pick" state and reported unreadable in both light and dark mode as a small
 filled button — `info` (blue) replaced it. Don't reintroduce amber there.
