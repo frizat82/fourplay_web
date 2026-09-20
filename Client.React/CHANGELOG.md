@@ -7,6 +7,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 ## 2026-09-19
 
 - Fixed: on the Scores page, another league member's pick could show the same blue badge reserved for your own pick, once that game's kickoff time passed but before ESPN's status had caught up — blue now only ever means "this is my own pick"
+- Fixed: a weather-delayed CFB/NFL game showed its original scheduled kickoff time instead of its live score — ESPN's "delayed" status wasn't recognized and was treated the same as "not started yet"
 
 ## 2026-09-18
 
