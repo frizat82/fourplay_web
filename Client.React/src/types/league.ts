@@ -66,6 +66,12 @@ export interface CfbPickDto {
   season: number;
 }
 
+/** Submitted pick count for one member — a count only, never which team. Mirrors the server's MemberPickCountDto. */
+export interface MemberPickCountDto {
+  userId: string;
+  pickCount: number;
+}
+
 export interface NflWeekDto {
   id: number;
   nflWeek: number;

@@ -537,4 +537,26 @@ public class LeagueRepositoryTests
         Assert.True(await repo.LeagueExistsAsync("office league", 2026));
         Assert.False(await repo.LeagueExistsAsync("office league", 2025));
     }
+
+    // frizat-xbq: the commissioner count reads ONLY user ids (never a team), scoped to one league,
+    // season and week, one entry per submitted pick.
+    [Fact]
+    public async Task GetNflPickUserIdsAsync_ReturnsOneUserIdPerPick_ScopedToLeagueSeasonAndWeek()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetNflPickUserIdsAsync_ReturnsOneUserIdPerPick_ScopedToLeagueSeasonAndWeek));
+        var repo = new LeagueRepository(factory);
+        var db = factory.CreateDbContext();
+        db.NflPicks.AddRange(
+            new NflPicks { UserId = "u1", LeagueId = 1, Season = 2026, NflWeek = 2, Team = "BUF" },
+            new NflPicks { UserId = "u1", LeagueId = 1, Season = 2026, NflWeek = 2, Team = "NYG" },
+            new NflPicks { UserId = "u2", LeagueId = 1, Season = 2026, NflWeek = 2, Team = "KC" },
+            new NflPicks { UserId = "u3", LeagueId = 2, Season = 2026, NflWeek = 2, Team = "DAL" },  // other league
+            new NflPicks { UserId = "u4", LeagueId = 1, Season = 2026, NflWeek = 3, Team = "MIA" },  // other week
+            new NflPicks { UserId = "u5", LeagueId = 1, Season = 2025, NflWeek = 2, Team = "SF" });  // other season
+        await db.SaveChangesAsync();
+
+        var ids = await repo.GetNflPickUserIdsAsync(1, 2026, 2);
+
+        Assert.Equal(["u1", "u1", "u2"], ids.Order());
+    }
 }

@@ -173,6 +173,22 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         return Ok(allPicks);
     }
 
+    // frizat-xbq: the CFB twin of LeagueController.GetPickCounts — counts, never which team (see
+    // MemberPickCountDto). Owner or site admin only; same 404/403 shape as LoadOwnedLeagueAsync.
+    [HttpGet("picks/{leagueId}/{cfbSlateId}/counts")]
+    [ProducesResponseType(typeof(List<MemberPickCountDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPickCounts(int leagueId, int cfbSlateId) {
+        LeagueInfo league;
+        try {
+            league = await leagueRepo.GetLeagueInfoAsync(leagueId);
+        } catch (InvalidOperationException) {
+            return NotFound();
+        }
+        if (!User.IsInRole(AppRoles.Administrator) && league.OwnerUserId != CurrentUserId)
+            return Forbid();
+        return Ok(PickCountHelpers.CountByUser(await repo.GetCfbPickUserIdsAsync(leagueId, cfbSlateId)));
+    }
+
     [HttpGet("picks/{leagueId}/{cfbSlateId}/user")]
     public async Task<IActionResult> GetUserPicks(int leagueId, int cfbSlateId) {
         var picks = await repo.GetUserPicksAsync(leagueId, cfbSlateId, CurrentUserId);

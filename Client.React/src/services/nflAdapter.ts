@@ -1,5 +1,5 @@
 import { loadScoresWithRetry, getWeekScores, getLiveGames } from '../api/espn';
-import { getUserPicks, doOddsExist, spreadBatch, addPicks, removeMyPick, getLeaguePicks, getNflCurrentWeek } from '../api/league';
+import { getUserPicks, doOddsExist, spreadBatch, addPicks, removeMyPick, getLeaguePicks, getLeaguePickCounts, getNflCurrentWeek } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import type { Competition, Event } from '../types/espn';
 import type { NflPickDto, SpreadResponse } from '../types/picks';
@@ -14,7 +14,7 @@ import {
   computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins,
 } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, PickView, PickType } from './sportAdapter';
-import { revealPicksForStartedGames, memoizeOnce, countPicksByUser } from './sportAdapter';
+import { revealPicksForStartedGames, memoizeOnce, pickCountsToMap } from './sportAdapter';
 
 // Cap navigation at the real current week, not a hardcoded season length — once the season
 // moves into the postseason the full regular season (18) is legitimately browsable/complete;
@@ -264,9 +264,10 @@ export function createNflAdapter(): SportAdapter {
 
     async getMissingPicks(leagueId) {
       const current = await getCurrentWeek();
-      const picks = await getLeaguePicks(leagueId, current.season, current.weekId);
+      // frizat-xbq: submitted counts, not getLeaguePicks (which hides unstarted games' picks).
+      const counts = await getLeaguePickCounts(leagueId, current.season, current.weekId);
       return {
-        picksByUser: countPicksByUser(picks),
+        picksByUser: pickCountsToMap(counts),
         requiredPicks: getNflRequiredPicks(current.weekId),
         weekLabel: current.weekLabel,
       };

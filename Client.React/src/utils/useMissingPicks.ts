@@ -14,8 +14,6 @@ export interface MissingPicksResult extends AdapterMissingPicksResult {
   refetch: () => void;
 }
 
-export { countPicksByUser } from '../services/sportAdapter';
-
 /**
  * Per-member pick completion for the CURRENT week/slate — backs a commissioner's "who's missing
  * picks" view (frizat-6sc) on the Members tab. Delegates the sport-specific "current week/slate ->

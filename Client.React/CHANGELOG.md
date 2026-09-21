@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-21
+
+- Fixed: the commissioner's Members tab counted only the picks you're allowed to see, so a member's pick on a game that hadn't kicked off yet (e.g. Monday night) was left out and someone with all 4 picks in could read as "Missing (3/4)" — it now counts every pick a member has submitted, without revealing which teams
+
 ## 2026-09-19
 
 - Fixed: on the Scores page, another league member's pick could show the same blue badge reserved for your own pick, once that game's kickoff time passed but before ESPN's status had caught up — blue now only ever means "this is my own pick"
