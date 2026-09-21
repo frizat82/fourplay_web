@@ -1,11 +1,11 @@
-import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, deleteCfbPicks, removeMyCfbPick } from '../api/cfb';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, getCfbPickCounts, addCfbPicks, deleteCfbPicks, removeMyCfbPick } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins, getCfbRequiredPicks, isGameLive } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, PickType, WeekState } from './sportAdapter';
-import { revealPicksForStartedGames, memoizeOnce, countPicksByUser } from './sportAdapter';
+import { revealPicksForStartedGames, memoizeOnce, pickCountsToMap } from './sportAdapter';
 
 /** Map CFB backend status strings to canonical GameStatusValue */
 
@@ -344,9 +344,10 @@ export function createCfbAdapter(): SportAdapter {
     async getMissingPicks(leagueId) {
       const active = await getCurrentSlate();
       if (!active) return { picksByUser: new Map(), requiredPicks: null, weekLabel: null };
-      const picks = await getCfbAllPicks(leagueId, active.id);
+      // frizat-xbq: submitted counts, not getCfbAllPicks (which hides unstarted games' picks).
+      const counts = await getCfbPickCounts(leagueId, active.id);
       return {
-        picksByUser: countPicksByUser(picks),
+        picksByUser: pickCountsToMap(counts),
         requiredPicks: getCfbRequiredPicks(active.slateNumber),
         weekLabel: active.label,
       };

@@ -6,6 +6,7 @@ import type { EspnScores } from '../../src/types/espn';
 import { createCompetition } from '../../src/test/fixtures';
 import { TEST_USER } from './routes';
 import { FAKE_JWT } from './auth';
+import { pickCountsFromPicks } from './pickCounts';
 
 const mockInviteLink = () => ({
   token: 'mocktokenabcdef1234567890abcdef12',
@@ -192,6 +193,11 @@ export async function setupCfbRoutes(page: Page, options: SetupCfbRoutesOptions 
     // /api/cfb/picks/<league>/<slate> DELETE handler below, which is the admin-only bulk one.
     if (url.match(/\/api\/cfb\/picks\/mine$/) && method === 'DELETE') {
       void route.fulfill({ status: 204 });
+      return;
+    }
+    // frizat-xbq: submitted pick counts (CFB twin of NFL's pick-counts route) — derived from leaguePicks.
+    if (url.match(/\/api\/cfb\/picks\/\d+\/\d+\/counts$/) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pickCountsFromPicks(leaguePicks)) });
       return;
     }
     if (url.match(/\/api\/cfb\/picks\/\d+\/\d+\/user$/) && method === 'GET') {

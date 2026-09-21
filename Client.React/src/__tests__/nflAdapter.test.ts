@@ -16,11 +16,12 @@ vi.mock('../api/league', () => ({
   removeMyPick: vi.fn(),
   getNflCurrentWeek: vi.fn(),
   getLeaguePicks: vi.fn(),
+  getLeaguePickCounts: vi.fn(),
 }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 
 import { loadScoresWithRetry, getWeekScores, getLiveGames } from '../api/espn';
-import { getUserPicks, doOddsExist, spreadBatch, getNflCurrentWeek, getLeaguePicks } from '../api/league';
+import { getUserPicks, doOddsExist, spreadBatch, getNflCurrentWeek, getLeaguePicks, getLeaguePickCounts } from '../api/league';
 import { createSpreadResponse } from '../test/fixtures';
 
 function makeScores(homeTeam: string, awayTeam: string, homeScore = 24, awayScore = 17) {
@@ -49,6 +50,7 @@ describe('nflAdapter', () => {
     vi.mocked(getNflCurrentWeek).mockResolvedValue(DEFAULT_CURRENT_WEEK);
     vi.mocked(getLiveGames).mockResolvedValue([]);
     vi.mocked(getLeaguePicks).mockResolvedValue([]);
+    vi.mocked(getLeaguePickCounts).mockResolvedValue([]);
     vi.mocked(getUserPicks).mockResolvedValue([]);
     vi.mocked(doOddsExist).mockResolvedValue(false);
     vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
@@ -287,12 +289,13 @@ describe('nflAdapter', () => {
 
   // frizat-8ni: backs the commissioner missing-picks view (frizat-6sc) via the adapter, reusing
   // the same memoized getCurrentWeek() resolver loadCurrentGames/loadCurrentScores already use.
+  //
+  // frizat-xbq: submitted counts come from the count endpoint, not the visible-picks one.
   describe('getMissingPicks', () => {
-    it('resolves picksByUser and requiredPicks for the current week', async () => {
-      vi.mocked(getLeaguePicks).mockResolvedValue([
-        { id: 1, leagueId: 1, userId: 'alice', userName: 'Alice', team: 'KC', pick: 'Spread', nflWeek: 8, season: 2023, dateCreated: '' },
-        { id: 2, leagueId: 1, userId: 'alice', userName: 'Alice', team: 'BUF', pick: 'Spread', nflWeek: 8, season: 2023, dateCreated: '' },
-        { id: 3, leagueId: 1, userId: 'bob', userName: 'Bob', team: 'KC', pick: 'Spread', nflWeek: 8, season: 2023, dateCreated: '' },
+    it('resolves picksByUser and requiredPicks for the current week from the submitted-count endpoint, never the visible-picks one', async () => {
+      vi.mocked(getLeaguePickCounts).mockResolvedValue([
+        { userId: 'alice', pickCount: 2 },
+        { userId: 'bob', pickCount: 1 },
       ]);
 
       const result = await adapter.getMissingPicks(1);
@@ -300,14 +303,16 @@ describe('nflAdapter', () => {
       expect(result.requiredPicks).toBe(4); // DEFAULT_CURRENT_WEEK.weekId=8, regular season
       expect(result.picksByUser.get('alice')).toBe(2);
       expect(result.picksByUser.get('bob')).toBe(1);
-      expect(getLeaguePicks).toHaveBeenCalledWith(1, 2023, 8);
+      expect(getLeaguePickCounts).toHaveBeenCalledWith(1, 2023, 8);
+      // The regression (frizat-xbq): that endpoint hides other users' picks on games that haven't
+      // kicked off, so a member's 4th pick on tonight's game was invisible to the commissioner.
+      expect(getLeaguePicks).not.toHaveBeenCalled();
     });
+
 
     // frizat-4bv: the Members tab's "This Week" column header shows this instead of a generic
     // static label — reuses getCurrentWeek()'s own weekLabel rather than re-deriving one.
     it('includes the resolved current week\'s human-readable label', async () => {
-      vi.mocked(getLeaguePicks).mockResolvedValue([]);
-
       const result = await adapter.getMissingPicks(1);
 
       expect(result.weekLabel).toBe('Week 8'); // DEFAULT_CURRENT_WEEK.weekLabel
@@ -316,8 +321,6 @@ describe('nflAdapter', () => {
     // Same memoized getCurrentWeek() instance loadCurrentGames/loadCurrentScores use — must not
     // re-resolve "what's current" from scratch as a second, competing fetch (frizat-8ni).
     it('reuses the adapter\'s memoized current-week resolution — does not re-fetch it', async () => {
-      vi.mocked(getLeaguePicks).mockResolvedValue([]);
-
       await adapter.currentSeasonYear(); // resolves and caches getCurrentWeek()
       vi.mocked(getNflCurrentWeek).mockClear();
       await adapter.getMissingPicks(1);

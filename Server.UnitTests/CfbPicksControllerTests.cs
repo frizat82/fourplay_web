@@ -784,4 +784,57 @@ public class CfbPicksControllerTests
         await _repo.DidNotReceive().TryRemovePickAsync(
             Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<PickType>());
     }
+
+    // ── frizat-xbq: submitted pick counts for the commissioner's Members tab ──────────────────
+    // The NFL twin lives in PickCountsEndpointTests. GetAllPicks hides other users' picks until
+    // kickoff, so a non-admin owner undercounted; this endpoint returns counts only, never a team.
+
+    private void StubLeagueOwnedBy(string ownerId) =>
+        _leagueRepo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, LeagueName = "L", OwnerUserId = ownerId });
+
+    [Fact]
+    public async Task GetPickCounts_Owner_SeesSubmittedCounts_WithoutLoadingAnyPickRows()
+    {
+        StubLeagueOwnedBy("owner-1");
+        _repo.GetCfbPickUserIdsAsync(1, 7).Returns(["m1", "m1", "m1", "m1", "m2"]);
+
+        var result = await BuildController("owner-1").GetPickCounts(1, 7);
+
+        var counts = Assert.IsType<OkObjectResult>(result).Value as List<MemberPickCountDto>;
+        Assert.Equal(4, counts!.Single(c => c.UserId == "m1").PickCount);
+        Assert.Equal(1, counts.Single(c => c.UserId == "m2").PickCount);
+        await _repo.DidNotReceive().GetAllPicksForSlateAsync(Arg.Any<int>(), Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task GetPickCounts_SiteAdmin_SeesCounts_EvenWhenNotTheOwner()
+    {
+        StubLeagueOwnedBy("owner-1");
+        _repo.GetCfbPickUserIdsAsync(1, 7).Returns(["m1"]);
+
+        var result = await BuildController("admin-1", isAdmin: true).GetPickCounts(1, 7);
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task GetPickCounts_OrdinaryLeagueMember_IsForbidden()
+    {
+        StubLeagueOwnedBy("owner-1");
+
+        var result = await BuildController("member-1").GetPickCounts(1, 7);
+
+        Assert.IsType<ForbidResult>(result);
+        await _repo.DidNotReceive().GetCfbPickUserIdsAsync(Arg.Any<int>(), Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task GetPickCounts_UnknownLeague_Is404NotA500()
+    {
+        _leagueRepo.GetLeagueInfoAsync(999).Returns<LeagueInfo>(_ => throw new InvalidOperationException("Sequence contains no elements"));
+
+        var result = await BuildController("owner-1").GetPickCounts(999, 7);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
 }

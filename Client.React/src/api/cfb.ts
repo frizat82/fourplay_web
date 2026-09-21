@@ -1,4 +1,4 @@
-import type { CfbPickDto, CfbScoreDto, CfbSlateDto, CfbSpreadDto, SpreadLockWeekDto } from '../types/league';
+import type { CfbPickDto, CfbScoreDto, CfbSlateDto, CfbSpreadDto, MemberPickCountDto, SpreadLockWeekDto } from '../types/league';
 
 const BASE = '/api/cfb';
 
@@ -41,6 +41,15 @@ export async function getCfbUserPicks(leagueId: number, cfbSlateId: number): Pro
 export async function getCfbAllPicks(leagueId: number, cfbSlateId: number): Promise<CfbPickDto[]> {
   const res = await fetch(`${BASE}/picks/${leagueId}/${cfbSlateId}`);
   if (!res.ok) return [];
+  return res.json();
+}
+
+// frizat-xbq: CFB twin of getLeaguePickCounts (owner/admin only). Unlike getCfbAllPicks this THROWS
+// on failure: an empty list would read as "every member has 0 picks" and send a commissioner
+// chasing people who already picked.
+export async function getCfbPickCounts(leagueId: number, cfbSlateId: number): Promise<MemberPickCountDto[]> {
+  const res = await fetch(`${BASE}/picks/${leagueId}/${cfbSlateId}/counts`);
+  if (!res.ok) throw new Error(`Failed to load pick counts (${res.status})`);
   return res.json();
 }
 
