@@ -395,6 +395,17 @@ public class LeagueController(
         return Ok(allPicks);
     }
 
+    // frizat-xbq: SUBMITTED pick counts per member for the commissioner's "who do I need to chase"
+    // view. GetLeaguePicks can't serve it (it hides other users' picks until kickoff), and this must
+    // never expose WHICH team — see MemberPickCountDto. Owner or site admin only.
+    [HttpGet("{leagueId:int}/pick-counts/{season:int}/{week:int}")]
+    [ProducesResponseType(typeof(List<MemberPickCountDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<MemberPickCountDto>>> GetPickCounts(int leagueId, int season, int week) {
+        var (_, error) = await LoadOwnedLeagueAsync(leagueId);
+        if (error != null) return error;
+        return Ok(PickCountHelpers.CountByUser(await repo.GetNflPickUserIdsAsync(leagueId, season, week)));
+    }
+
     [HttpGet("{leagueId:int}/picks/{season:int}/{week:int}/user/{userId}")]
     [ProducesResponseType(typeof(List<NflPickDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<NflPickDto>>> GetUserPicks(string userId, int leagueId, int season, int week) {
