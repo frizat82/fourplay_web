@@ -1,5 +1,6 @@
 import { isGameDecided } from '../utils/gameHelpers';
 import type { PickType } from '../types/picks';
+import type { MemberPickCountDto } from '../types/league';
 
 export type { PickType };
 
@@ -127,12 +128,9 @@ export interface PickView {
   userName: string;
 }
 
-/** Counts picks per userId — pure, sport-agnostic. Shared by nflAdapter's and cfbAdapter's own
- *  getMissingPicks (frizat-8ni) so the per-user tally logic exists exactly once. */
-export function countPicksByUser(picks: { userId: string }[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const p of picks) counts.set(p.userId, (counts.get(p.userId) ?? 0) + 1);
-  return counts;
+/** Keys the server's submitted-pick counts by userId; a member with no entry has made 0 picks. */
+export function pickCountsToMap(counts: MemberPickCountDto[]): Map<string, number> {
+  return new Map(counts.map(c => [c.userId, c.pickCount]));
 }
 
 export interface MissingPicksResult {

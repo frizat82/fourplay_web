@@ -63,12 +63,14 @@ vi.mock('../api/league', () => ({
   cancelMembershipInvite: vi.fn(),
   getNflCurrentWeek: vi.fn(),
   getLeaguePicks: vi.fn(),
+  getLeaguePickCounts: vi.fn(),
 }));
 vi.mock('../api/cfb', () => ({
   getCfbCurrentSlate: vi.fn(),
   getCfbAllPicks: vi.fn(),
+  getCfbPickCounts: vi.fn(),
 }));
-import { getCfbCurrentSlate, getCfbAllPicks } from '../api/cfb';
+import { getCfbCurrentSlate, getCfbAllPicks, getCfbPickCounts } from '../api/cfb';
 import {
   getLeagueUserMappings,
   getLeagueJuice,
@@ -87,6 +89,7 @@ import {
   inviteToLeague,
   getNflCurrentWeek,
   getLeaguePicks,
+  getLeaguePickCounts,
   type LeagueInviteLinkDto,
   type InvitationDto,
   type MembershipInviteStatusDto,
@@ -109,8 +112,10 @@ const mockedAddLeagueUserMapping = vi.mocked(addLeagueUserMapping);
 const mockedDeleteLeague = vi.mocked(deleteLeague);
 const mockedGetNflCurrentWeek = vi.mocked(getNflCurrentWeek);
 const mockedGetLeaguePicks = vi.mocked(getLeaguePicks);
+const mockedGetLeaguePickCounts = vi.mocked(getLeaguePickCounts);
 const mockedGetCfbCurrentSlate = vi.mocked(getCfbCurrentSlate);
 const mockedGetCfbAllPicks = vi.mocked(getCfbAllPicks);
+const mockedGetCfbPickCounts = vi.mocked(getCfbPickCounts);
 
 const CURRENT_SEASON = new Date().getFullYear();
 
@@ -174,11 +179,13 @@ beforeEach(() => {
   mockedGetNflCurrentWeek.mockResolvedValue({
     weekId: 2, season: CURRENT_SEASON, isPostSeason: false, weekLabel: 'Week 2', scoringFormat: 'Standard', spreadLockDatetime: '',
   });
-  mockedGetLeaguePicks.mockResolvedValue([1, 2, 3, 4].map(n => ({
-    id: n, leagueId: 1, userId: makeMember().userId, userName: 'frizat', team: 'KC', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '',
-  })));
+  // frizat-xbq: counts come from the submitted-count endpoint. The visible-picks endpoints are
+  // seeded EMPTY on purpose (that's what hides a member's pick on a game that hasn't kicked off) —
+  // any test still passing proves the chip never depends on them.
+  mockedGetLeaguePickCounts.mockResolvedValue([{ userId: makeMember().userId, pickCount: 4 }]);
+  mockedGetLeaguePicks.mockResolvedValue([]);
   mockedGetCfbCurrentSlate.mockResolvedValue(null);
-  mockedGetCfbAllPicks.mockResolvedValue([]);
+  mockedGetCfbPickCounts.mockResolvedValue([]);
   mockedGetJuice.mockResolvedValue([makeJuice(CURRENT_SEASON - 1)]);
   mockedUpdateJuice.mockResolvedValue(undefined);
   mockedGetAllLeagues.mockResolvedValue([]);
@@ -424,13 +431,9 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
       { ...makeMember(), id: 2, userId: 'user-two', userName: 'bob', email: 'bob@example.com' },
     ]);
     // frizat's default beforeEach picks (4 of 4) stay untouched; bob has only submitted 2.
-    mockedGetLeaguePicks.mockResolvedValue([
-      { id: 1, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'KC', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
-      { id: 2, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'DAL', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
-      { id: 3, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'MIA', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
-      { id: 4, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'BUF', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
-      { id: 5, leagueId: 1, userId: 'user-two', userName: 'bob', team: 'SEA', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
-      { id: 6, leagueId: 1, userId: 'user-two', userName: 'bob', team: 'NYG', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+    mockedGetLeaguePickCounts.mockResolvedValue([
+      { userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', pickCount: 4 },
+      { userId: 'user-two', pickCount: 2 },
     ]);
 
     renderPage();
@@ -457,7 +460,7 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     mockedGetCfbCurrentSlate.mockResolvedValue({
       id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '',
     });
-    mockedGetCfbAllPicks.mockResolvedValue([]);
+    mockedGetCfbPickCounts.mockResolvedValue([]);
 
     renderPage();
     await screen.findByText('frizat@example.com');
@@ -536,13 +539,32 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     mockedGetCfbCurrentSlate.mockResolvedValue({
       id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '',
     });
-    mockedGetCfbAllPicks.mockResolvedValue([]);
+    mockedGetCfbPickCounts.mockResolvedValue([]);
 
     renderPage();
     await screen.findByText('frizat@example.com');
 
     await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('Missing (0/4)'));
     expect(mockedGetNflCurrentWeek).not.toHaveBeenCalled();
+    expect(mockedGetCfbAllPicks).not.toHaveBeenCalled(); // counts, not the visible-picks endpoint
+  });
+
+  // frizat-xbq (Dhoward's real case): a member's 4th pick was on tonight's game — submitted, but the
+  // visible-picks endpoint hides other users' picks until kickoff, so a non-admin commissioner saw
+  // 3/4. The chip must count SUBMITTED picks (count endpoint), never the visible ones.
+  it('counts a member\'s submitted picks even when the visible-picks endpoint would hide them', async () => {
+    mockedGetMappings.mockResolvedValue([
+      makeMember(),
+      { ...makeMember(), id: 2, userId: 'user-two', userName: 'dhoward', email: 'dhoward@example.com' },
+    ]);
+    mockedGetLeaguePickCounts.mockResolvedValue([{ userId: 'user-two', pickCount: 4 }]);
+    mockedGetLeaguePicks.mockResolvedValue([]); // what a non-admin owner is actually allowed to see
+
+    renderPage();
+    await screen.findByText('dhoward@example.com');
+
+    await waitFor(() => expect(screen.getByTestId('missing-picks-2')).toHaveTextContent('All Picked'));
+    expect(mockedGetLeaguePicks).not.toHaveBeenCalled();
   });
 
   // /simplify efficiency finding: the missing-picks fetch only matters while the Members tab
@@ -551,14 +573,14 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
   it('does not fetch missing-picks data while the Settings tab is active, only once back on Members', async () => {
     renderPage();
     await screen.findByText('frizat@example.com');
-    mockedGetLeaguePicks.mockClear();
+    mockedGetLeaguePickCounts.mockClear();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Settings' }));
     await waitFor(() => expect(screen.getByLabelText(/Tease Pts \(Regular Season\)/i)).toBeInTheDocument());
-    expect(mockedGetLeaguePicks).not.toHaveBeenCalled();
+    expect(mockedGetLeaguePickCounts).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Members' }));
-    await waitFor(() => expect(mockedGetLeaguePicks).toHaveBeenCalled());
+    await waitFor(() => expect(mockedGetLeaguePickCounts).toHaveBeenCalled());
   });
 });
 
@@ -569,13 +591,9 @@ describe('LeaguePortalPage (frizat-e3l: Missing Only filter)', () => {
       { ...makeMember(), id: 2, userId: 'user-two', userName: 'bob', email: 'bob@example.com' },
     ]);
     // frizat's default beforeEach picks (4 of 4) stay untouched; bob has only submitted 2.
-    mockedGetLeaguePicks.mockResolvedValue([
-      { id: 1, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'KC', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
-      { id: 2, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'DAL', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
-      { id: 3, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'MIA', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
-      { id: 4, leagueId: 1, userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', userName: 'frizat', team: 'BUF', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
-      { id: 5, leagueId: 1, userId: 'user-two', userName: 'bob', team: 'SEA', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
-      { id: 6, leagueId: 1, userId: 'user-two', userName: 'bob', team: 'NYG', pick: 'Spread', nflWeek: 2, season: CURRENT_SEASON, dateCreated: '' },
+    mockedGetLeaguePickCounts.mockResolvedValue([
+      { userId: '562e8450-7f22-4ab2-9cfa-5ded8c1091af', pickCount: 4 },
+      { userId: 'user-two', pickCount: 2 },
     ]);
   }
 

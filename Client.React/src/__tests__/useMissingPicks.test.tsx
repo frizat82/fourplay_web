@@ -1,7 +1,8 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
-import { countPicksByUser, useMissingPicks } from '../utils/useMissingPicks';
+import { useMissingPicks } from '../utils/useMissingPicks';
+import { pickCountsToMap } from '../services/sportAdapter';
 import type { SportAdapter } from '../services/sportAdapter';
 
 function renderWithClient<T>(hook: () => T) {
@@ -16,22 +17,24 @@ function makeAdapter(getMissingPicks: SportAdapter['getMissingPicks']): SportAda
   return { sport: 'nfl', getMissingPicks } as SportAdapter;
 }
 
-describe('countPicksByUser', () => {
-  it('counts multiple picks per user (e.g. one spread pick per game) without double-counting users', () => {
-    const counts = countPicksByUser([
-      { userId: 'alice' }, { userId: 'alice' }, { userId: 'alice' }, { userId: 'alice' },
-      { userId: 'bob' }, { userId: 'bob' },
+// frizat-xbq: the server now returns submitted pick counts per member (never the picks
+// themselves — the commissioner is also a player), so the client only maps them.
+describe('pickCountsToMap', () => {
+  it('keys each member\'s submitted count by userId', () => {
+    const counts = pickCountsToMap([
+      { userId: 'alice', pickCount: 4 },
+      { userId: 'bob', pickCount: 2 },
     ]);
     expect(counts.get('alice')).toBe(4);
     expect(counts.get('bob')).toBe(2);
   });
 
-  it('returns an empty map for no picks', () => {
-    expect(countPicksByUser([]).size).toBe(0);
+  it('returns an empty map for no counts', () => {
+    expect(pickCountsToMap([]).size).toBe(0);
   });
 
-  it('does not include a user who made zero picks (caller must default missing entries to 0)', () => {
-    const counts = countPicksByUser([{ userId: 'alice' }]);
+  it('does not include a member with no picks (caller must default missing entries to 0)', () => {
+    const counts = pickCountsToMap([{ userId: 'alice', pickCount: 1 }]);
     expect(counts.has('carol')).toBe(false);
   });
 });

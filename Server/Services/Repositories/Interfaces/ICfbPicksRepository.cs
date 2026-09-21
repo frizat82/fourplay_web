@@ -7,6 +7,8 @@ namespace FourPlayWebApp.Server.Services.Repositories.Interfaces;
 public interface ICfbPicksRepository {
     Task<IEnumerable<CfbPicks>> GetUserPicksAsync(int leagueId, int cfbSlateId, string userId);
     Task<IEnumerable<CfbPickDto>> GetAllPicksForSlateAsync(int leagueId, int cfbSlateId);
+    /// <summary>One user id per SUBMITTED pick — selects nothing else (no team), so pick secrecy holds by construction (frizat-xbq).</summary>
+    Task<List<string>> GetCfbPickUserIdsAsync(int leagueId, int cfbSlateId);
     Task AddPicksAsync(IEnumerable<CfbPicks> picks);
     Task DeletePicksAsync(int leagueId, int cfbSlateId, string userId);
 

@@ -15,6 +15,14 @@ public class CfbPicksRepository(IDbContextFactory<ApplicationDbContext> dbFactor
             .ToListAsync();
     }
 
+    public async Task<List<string>> GetCfbPickUserIdsAsync(int leagueId, int cfbSlateId) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.CfbPicks
+            .Where(p => p.LeagueId == leagueId && p.CfbSlateId == cfbSlateId)
+            .Select(p => p.UserId)
+            .ToListAsync();
+    }
+
     public async Task<IEnumerable<CfbPickDto>> GetAllPicksForSlateAsync(int leagueId, int cfbSlateId) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbPicks
