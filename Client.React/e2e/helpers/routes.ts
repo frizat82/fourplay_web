@@ -4,6 +4,7 @@ import type { NflPickDto } from '../../src/types/picks';
 import type { LeagueUserMappingDto } from '../../src/types/league';
 import type { LeaderboardDto } from '../../src/types/leaderboard';
 import { createCurrentWeek, createScores, createSpreadResponse } from '../../src/test/fixtures';
+import { pickCountsFromPicks } from './pickCounts';
 
 const mockInviteLink = () => ({
   token: 'mocktokenabcdef1234567890abcdef12',
@@ -179,6 +180,13 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
     // ── User-specific picks: GET /api/league/<id>/picks/<s>/<w>/user/<uid> ──
     if (url.includes('/api/league/') && url.includes('/picks/') && url.includes('/user/') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(userPicks) });
+      return;
+    }
+
+    // ── Submitted pick counts: GET /api/league/<id>/pick-counts/<season>/<week> (frizat-xbq) ──
+    // Counts, not picks — derived from leaguePicks. See MemberPickCountDto.
+    if (url.match(/\/api\/league\/\d+\/pick-counts\/\d+\/\d+$/) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(pickCountsFromPicks(leaguePicks)) });
       return;
     }
 

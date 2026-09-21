@@ -6,7 +6,7 @@ import type {
   BatchSpreadResponse,
   NflPickDto,
 } from '../types/picks';
-import type { LeagueUserMappingDto, NflWeekDto, NflCurrentWeekDto, SpreadLockWeekDto } from '../types/league';
+import type { LeagueUserMappingDto, MemberPickCountDto, NflWeekDto, NflCurrentWeekDto, SpreadLockWeekDto } from '../types/league';
 import type {
   LeagueInfoDto,
   LeagueJuiceMappingDto,
@@ -92,6 +92,13 @@ export async function doOddsExist(leagueId: number, season: number, week: number
 
 export async function getLeaguePicks(leagueId: number, season: number, week: number) {
   const { data } = await http.get<NflPickDto[]>(`/api/league/${leagueId}/picks/${season}/${week}`);
+  return data;
+}
+
+// frizat-xbq: submitted pick COUNTS per member (owner/admin only; 403 otherwise). Counts, not
+// picks — see MemberPickCountDto on the server for why getLeaguePicks can't be used.
+export async function getLeaguePickCounts(leagueId: number, season: number, week: number) {
+  const { data } = await http.get<MemberPickCountDto[]>(`/api/league/${leagueId}/pick-counts/${season}/${week}`);
   return data;
 }
 

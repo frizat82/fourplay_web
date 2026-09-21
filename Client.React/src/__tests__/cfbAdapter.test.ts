@@ -10,6 +10,7 @@ vi.mock('../api/cfb', () => ({
   getCfbScores: vi.fn(),
   getCfbUserPicks: vi.fn(),
   getCfbAllPicks: vi.fn(),
+  getCfbPickCounts: vi.fn(),
   addCfbPicks: vi.fn(),
   deleteCfbPicks: vi.fn(),
   removeMyCfbPick: vi.fn(),
@@ -20,7 +21,7 @@ vi.mock('../api/espn', () => ({
   getCfbLiveGames: vi.fn(),
 }));
 
-import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, addCfbPicks, removeMyCfbPick } from '../api/cfb';
+import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, getCfbPickCounts, addCfbPicks, removeMyCfbPick } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 
 const slate: CfbSlateDto = {
@@ -373,12 +374,16 @@ describe('cfbAdapter', () => {
 
   // frizat-8ni: backs the commissioner missing-picks view (frizat-6sc) via the adapter, reusing
   // the same memoized getCurrentSlate() resolver loadCurrentGames/loadCurrentScores already use.
+  // frizat-xbq: submitted counts come from the count endpoint, not the visible-picks one.
   describe('getMissingPicks', () => {
-    it('resolves picksByUser and requiredPicks for the current slate', async () => {
-      vi.mocked(getCfbAllPicks).mockResolvedValue([
-        { id: 1, userId: 'alice', userName: 'Alice', leagueId: 1, cfbSlateId: 10, team: 'MICH', pickType: 'Spread', season: 2026 },
-        { id: 2, userId: 'alice', userName: 'Alice', leagueId: 1, cfbSlateId: 10, team: 'PSU', pickType: 'Spread', season: 2026 },
-        { id: 3, userId: 'bob', userName: 'Bob', leagueId: 1, cfbSlateId: 10, team: 'MICH', pickType: 'Spread', season: 2026 },
+    beforeEach(() => {
+      vi.mocked(getCfbPickCounts).mockResolvedValue([]);
+    });
+
+    it('resolves picksByUser and requiredPicks for the current slate from the submitted-count endpoint, never the visible-picks one', async () => {
+      vi.mocked(getCfbPickCounts).mockResolvedValue([
+        { userId: 'alice', pickCount: 2 },
+        { userId: 'bob', pickCount: 1 },
       ]);
 
       const result = await adapter.getMissingPicks(1);
@@ -386,14 +391,24 @@ describe('cfbAdapter', () => {
       expect(result.requiredPicks).toBe(4); // slate.slateNumber=8, regular season
       expect(result.picksByUser.get('alice')).toBe(2);
       expect(result.picksByUser.get('bob')).toBe(1);
-      expect(getCfbAllPicks).toHaveBeenCalledWith(1, slate.id);
+      expect(getCfbPickCounts).toHaveBeenCalledWith(1, slate.id);
+      // The regression (frizat-xbq): that endpoint hides other users' picks on games that haven't
+      // kicked off, so a member's 4th pick on tonight's game was invisible to the commissioner.
+      expect(getCfbAllPicks).not.toHaveBeenCalled();
+    });
+
+    it('never reads the visible-picks endpoint, which hides other users\' picks on unstarted games', async () => {
+      vi.mocked(getCfbPickCounts).mockResolvedValue([{ userId: 'dhoward', pickCount: 4 }]);
+
+      const result = await adapter.getMissingPicks(1);
+
+      expect(result.picksByUser.get('dhoward')).toBe(4);
+      expect(getCfbAllPicks).not.toHaveBeenCalled();
     });
 
     // frizat-4bv: the Members tab's "This Week" column header shows this instead of a generic
     // static label — reuses getCurrentSlate()'s own label rather than re-deriving one.
     it('includes the resolved current slate\'s human-readable label', async () => {
-      vi.mocked(getCfbAllPicks).mockResolvedValue([]);
-
       const result = await adapter.getMissingPicks(1);
 
       expect(result.weekLabel).toBe('Week 8'); // slate.label
@@ -411,12 +426,10 @@ describe('cfbAdapter', () => {
       expect(result.requiredPicks).toBeNull();
       expect(result.picksByUser.size).toBe(0);
       expect(result.weekLabel).toBeNull();
-      expect(getCfbAllPicks).not.toHaveBeenCalled();
+      expect(getCfbPickCounts).not.toHaveBeenCalled();
     });
 
     it('reuses the adapter\'s memoized current-slate resolution — does not re-fetch it', async () => {
-      vi.mocked(getCfbAllPicks).mockResolvedValue([]);
-
       await adapter.currentSeasonYear(); // resolves and caches getCurrentSlate()
       vi.mocked(getCfbCurrentSlate).mockClear();
       await adapter.getMissingPicks(1);
