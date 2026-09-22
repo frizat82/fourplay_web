@@ -27,7 +27,7 @@ export default function PicksIsland({ adapter }: PicksIslandProps) {
   if (!leaguesLoaded || !user?.userId || availableLeagues.length === 0) return null;
 
   return (
-    <Paper data-testid="picks-island" elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+    <Paper data-testid="picks-island" elevation={3} sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2 }}>
       <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>Your Picks</Typography>
       <Stack spacing={2} divider={<Box sx={{ borderBottom: '1px solid', borderColor: 'divider' }} />}>
         {availableLeagues.map(league => (
@@ -124,14 +124,31 @@ function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePic
           No picks yet — {data.requiredPicks} needed
         </Typography>
       ) : (
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.75 }}>
-          {data.userPicks.map(pick => (
-            <PickChip key={pickLabel(pick.team, pick.pickType)} pick={pick} game={gameById.get(pick.gameId)} />
-          ))}
+        <>
+          {/* Fixed column count (= requiredPicks, never more than 4 per pick-rules) instead of a
+              wrapping flex row — a wrapping row of variable-width Chips broke onto two lines on a
+              mobile viewport once labels + icons + gaps exceeded the available width. Equal-width
+              grid columns guarantee every pick fits across in one row on any screen size; the
+              "N more needed" count moves to its own line below since its text is far longer than a
+              team code and would force a column wide enough to cramp the others. */}
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${data.requiredPicks}, 1fr)`,
+              gap: 0.75,
+              mt: 0.75,
+            }}
+          >
+            {data.userPicks.map(pick => (
+              <PickChip key={pickLabel(pick.team, pick.pickType)} pick={pick} game={gameById.get(pick.gameId)} />
+            ))}
+          </Box>
           {remaining > 0 && (
-            <Chip label={`${remaining} more needed`} size="small" variant="outlined" />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+              {remaining} more needed
+            </Typography>
           )}
-        </Stack>
+        </>
       )}
     </Box>
   );
@@ -146,12 +163,20 @@ interface PickChipProps {
 // plain default chip otherwise — a lock icon distinguishes "kicked off, not decided yet" (can't
 // be unselected anymore) from "still editable," without reaching for warning/amber, which the
 // style guide explicitly rules out for pick-state indicators.
+// width: '100%' fills its grid column exactly (rather than sizing to content, which is what let
+// chips overflow a wrapping row); the label overflow guard truncates gracefully on the rare
+// label that's still too wide for its column instead of ever breaking the one-row layout.
+const chipSx = {
+  width: '100%',
+  '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+} as const;
+
 function PickChip({ pick, game }: PickChipProps) {
   const label = pickLabel(pick.team, pick.pickType);
   const result = pickResult(game, pick);
   const locked = game ? isGameLocked(game) : false;
 
-  if (result === true) return <Chip label={label} size="small" color="success" icon={<CheckIcon />} />;
-  if (result === false) return <Chip label={label} size="small" color="error" icon={<CloseIcon />} />;
-  return <Chip label={label} size="small" icon={locked ? <LockIcon /> : undefined} />;
+  if (result === true) return <Chip label={label} size="small" color="success" icon={<CheckIcon />} sx={chipSx} />;
+  if (result === false) return <Chip label={label} size="small" color="error" icon={<CloseIcon />} sx={chipSx} />;
+  return <Chip label={label} size="small" icon={locked ? <LockIcon /> : undefined} sx={chipSx} />;
 }
