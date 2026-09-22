@@ -4,6 +4,11 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-22
+
+- Added: the "Your Picks" summary now shows a check or X on each pick once its game is decided (live or final), and a lock icon once a still-undecided pick's game has kicked off
+- Fixed: live scores' real-time connection could go silently stale with no visible sign — the connection looked fine but wasn't receiving anything, only recovering once the slow background refresh caught up. It now notices the silence and reconnects itself within seconds
+
 ## 2026-09-21
 
 - Fixed: the commissioner's Members tab counted only the picks you're allowed to see, so a member's pick on a game that hadn't kicked off yet (e.g. Monday night) was left out and someone with all 4 picks in could read as "Missing (3/4)" — it now counts every pick a member has submitted, without revealing which teams
