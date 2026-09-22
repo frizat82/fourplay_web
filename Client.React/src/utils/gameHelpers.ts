@@ -1,7 +1,7 @@
 import type { Competition, Competitor, EspnScores, Event, TypeName, HomeAway, EspnRecordType } from '../types/espn';
 import { toLocalDisplay } from './time';
 import type { PickType } from '../types/picks';
-import type { GameStatusValue } from '../services/sportAdapter';
+import type { GameStatusValue, GameView } from '../services/sportAdapter';
 import type { GameSituation } from '../types/liveGame';
 
 /** True only once a game has finished — the canonical GameView.gameStatus check. */
@@ -17,6 +17,17 @@ export function isGameLive(status: GameStatusValue): boolean {
 /** True once a game has started or finished — i.e. no longer just "scheduled". */
 export function isGameDecided(status: GameStatusValue): boolean {
   return isGameFinal(status) || isGameLive(status);
+}
+
+/**
+ * True once a pick for this game can no longer be changed. Prefers the live ESPN status
+ * (isGameDecided), but falls back to the game's own scheduled kickoff time already having
+ * passed — covers the gap right after kickoff where ESPN's status hasn't caught up yet.
+ * Shared by PicksPage (blocks selecting/unselecting) and PicksIsland (shows a locked pick).
+ */
+export function isGameLocked(game: GameView): boolean {
+  if (isGameDecided(game.gameStatus)) return true;
+  return new Date(game.gameTime) <= new Date();
 }
 
 /**

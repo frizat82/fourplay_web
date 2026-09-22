@@ -1,10 +1,14 @@
+import { useMemo } from 'react';
 import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
+import LockIcon from '@mui/icons-material/Lock';
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
-import { isWeekExcludedFromSeason } from '../utils/gameHelpers';
-import type { SportAdapter } from '../services/sportAdapter';
+import { isGameLocked, isWeekExcludedFromSeason } from '../utils/gameHelpers';
+import type { SportAdapter, GameView, PickView } from '../services/sportAdapter';
 
 interface PicksIslandProps {
   adapter: SportAdapter;
@@ -55,6 +59,18 @@ function pickLabel(team: string, pickType: string): string {
   return team;
 }
 
+// Win/loss for a pick, straight off the adapter's already-computed GameView fields (homeCovers/
+// awayCovers/overWins/underWins — see gameHelpers.ts's computeHomeCovers/computeAwayCovers/
+// computeOverWins/computeUnderWins) — never recomputed here. null = not decided yet (or the pick's
+// game wasn't found, which shouldn't happen since pick.gameId is resolved from this same response's
+// games array at load time — see nflAdapter.ts's nflPickToPickView / cfbAdapter.ts's equivalent).
+function pickResult(game: GameView | undefined, pick: PickView): boolean | null {
+  if (!game) return null;
+  if (pick.pickType === 'Over') return game.overWins ?? null;
+  if (pick.pickType === 'Under') return game.underWins ?? null;
+  return (pick.team === game.homeTeam ? game.homeCovers : game.awayCovers) ?? null;
+}
+
 function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePicksSummaryProps) {
   // Same query key PicksPage uses for its own live current-week query (currentLeague, userId,
   // weekState: null) — sharing the cache, not just the shape, so the two never show conflicting
@@ -64,6 +80,7 @@ function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePic
     queryFn: () => adapter.loadCurrentGames(leagueId, userId),
   });
   const startWeek = useLeagueStartWeek(leagueId, data?.season ?? new Date().getFullYear());
+  const gameById = useMemo(() => new Map((data?.games ?? []).map(g => [g.id, g])), [data?.games]);
 
   if (!data) {
     return (
@@ -94,8 +111,7 @@ function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePic
     );
   }
 
-  const pickedTeams = data.userPicks.map(p => pickLabel(p.team, p.pickType));
-  const remaining = data.requiredPicks - pickedTeams.length;
+  const remaining = data.requiredPicks - data.userPicks.length;
 
   return (
     <Box>
@@ -103,14 +119,14 @@ function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePic
         <Typography variant="body1" fontWeight={500}>{leagueName}</Typography>
         <Typography variant="caption" color="text.secondary">{weekLabel}</Typography>
       </Stack>
-      {pickedTeams.length === 0 ? (
+      {data.userPicks.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           No picks yet — {data.requiredPicks} needed
         </Typography>
       ) : (
         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.75 }}>
-          {pickedTeams.map(label => (
-            <Chip key={label} label={label} size="small" color="secondary" />
+          {data.userPicks.map(pick => (
+            <PickChip key={pickLabel(pick.team, pick.pickType)} pick={pick} game={gameById.get(pick.gameId)} />
           ))}
           {remaining > 0 && (
             <Chip label={`${remaining} more needed`} size="small" variant="outlined" />
@@ -119,4 +135,23 @@ function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePic
       )}
     </Box>
   );
+}
+
+interface PickChipProps {
+  pick: PickView;
+  game: GameView | undefined;
+}
+
+// Color/icon follow the style guide's pick-state semantics: success = won, error = lost, and a
+// plain default chip otherwise — a lock icon distinguishes "kicked off, not decided yet" (can't
+// be unselected anymore) from "still editable," without reaching for warning/amber, which the
+// style guide explicitly rules out for pick-state indicators.
+function PickChip({ pick, game }: PickChipProps) {
+  const label = pickLabel(pick.team, pick.pickType);
+  const result = pickResult(game, pick);
+  const locked = game ? isGameLocked(game) : false;
+
+  if (result === true) return <Chip label={label} size="small" color="success" icon={<CheckIcon />} />;
+  if (result === false) return <Chip label={label} size="small" color="error" icon={<CloseIcon />} />;
+  return <Chip label={label} size="small" icon={locked ? <LockIcon /> : undefined} />;
 }
