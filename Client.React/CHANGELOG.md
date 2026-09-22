@@ -7,6 +7,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 ## 2026-09-22
 
 - Added: the "Your Picks" summary now shows a check or X on each pick once its game is decided (live or final), and a lock icon once a still-undecided pick's game has kicked off
+- Fixed: live scores' real-time connection could go silently stale with no visible sign — the connection looked fine but wasn't receiving anything, only recovering once the slow background refresh caught up. It now notices the silence and reconnects itself within seconds
 
 ## 2026-09-21
 
