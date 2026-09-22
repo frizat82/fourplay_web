@@ -57,7 +57,11 @@ public class SseHelperTests {
             heartbeatInterval: TimeSpan.FromMinutes(5));
 
         onChanged?.Invoke();
-        await Task.Delay(20);
+        // Reading the channel, writing, and flushing all happen on a background continuation, not
+        // synchronously inside Invoke() — 20ms was cutting it close enough that a loaded CI runner
+        // could cancel before that continuation ran, losing the write entirely (CI-observed
+        // flake: body came back empty). Same generous margin as the heartbeat test above.
+        await Task.Delay(150);
         cts.Cancel();
         await streamTask;
 
