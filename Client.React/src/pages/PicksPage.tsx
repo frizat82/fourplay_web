@@ -18,10 +18,10 @@ import GameCardGridSkeleton from '../components/GameCardSkeleton';
 import PicksIsland from '../components/PicksIsland';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import type { SportAdapter, GameView, LoadedWeek, PickType, WeekState } from '../services/sportAdapter';
+import type { SportAdapter, LoadedWeek, PickType, WeekState } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useToast } from '../services/toast';
-import { isGameDecided, isWeekExcludedFromSeason } from '../utils/gameHelpers';
+import { isGameLocked, isWeekExcludedFromSeason } from '../utils/gameHelpers';
 import { extractApiErrorMessage } from '../utils/apiError';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
@@ -33,11 +33,6 @@ import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
 // pattern this page's sibling ScoresPage.tsx had to drop gameId from for the identical reason).
 function pickKey(team: string, pickType: string) {
   return `${team}|${pickType}`;
-}
-
-function gameIsLocked(game: GameView): boolean {
-  if (isGameDecided(game.gameStatus)) return true;
-  return new Date(game.gameTime) <= new Date();
 }
 
 interface PicksPageProps {
@@ -131,7 +126,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
     const key = pickKey(team, pickType);
     if (!existingPicks.has(key)) return 'none';
     const game = gameById.get(gameId);
-    return game && gameIsLocked(game) ? 'submitted' : 'pending';
+    return game && isGameLocked(game) ? 'submitted' : 'pending';
   };
 
   const remainingPicks = requiredPicks - existingPicks.size;
@@ -219,7 +214,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const oddsNotReady = !hasOdds;
   const isWeekExcluded = isWeekExcludedFromSeason(week, startWeek);
 
-  const hasUnlockedGames = games.some(g => !gameIsLocked(g));
+  const hasUnlockedGames = games.some(g => !isGameLocked(g));
   const isPostSeasonSlate = isPostSeason;
 
   return (
@@ -277,7 +272,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
             const awayPickState = pickStateFor(game.id, game.awayTeam);
             const overPickState = pickStateFor(game.id, game.homeTeam, 'Over');
             const underPickState = pickStateFor(game.id, game.homeTeam, 'Under');
-            const locked = gameIsLocked(game);
+            const locked = isGameLocked(game);
             // A game can be individually unlocked (hasn't kicked off yet) while the league-wide
             // pick cap is already full — e.g. Monday Night Football sitting there Sunday night
             // once all 4 picks are locked in from earlier games. `locked` alone only reflects this
