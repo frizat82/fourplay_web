@@ -1,9 +1,10 @@
 import { Box, CircularProgress } from '@mui/material';
 
 /**
- * Suspense fallback while a lazily-loaded route's code downloads (App.tsx). A visible spinner, not
- * `null`: a blank fallback shows the user an empty page and, because it contains no progressbar,
- * lets e2e helpers' "wait for the spinner to clear" pass before the page has rendered at all.
+ * Suspense fallback while a lazily-loaded route's code downloads on a cold load (App.tsx). A
+ * visible spinner, not `null`, so the user never sees an empty page. Client-side navigation never
+ * shows it: React Router navigates in a transition, which keeps the previous page on screen until
+ * the chunk arrives — e2e specs that click through to a lazy page must wait for that page itself.
  */
 export default function RouteFallback() {
   return (

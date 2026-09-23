@@ -8,7 +8,7 @@ import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import { isGameLocked, isWeekExcludedFromSeason } from '../utils/gameHelpers';
-import type { SportAdapter, GameView, PickView } from '../services/sportAdapter';
+import { picksQueryKey, type SportAdapter, type GameView, type PickView } from '../services/sportAdapter';
 
 interface PicksIslandProps {
   adapter: SportAdapter;
@@ -72,11 +72,10 @@ function pickResult(game: GameView | undefined, pick: PickView): boolean | null 
 }
 
 function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePicksSummaryProps) {
-  // Same query key PicksPage uses for its own live current-week query (currentLeague, userId,
-  // weekState: null) — sharing the cache, not just the shape, so the two never show conflicting
-  // in-flight state for the same league.
+  // Same cache entry as PicksPage's live current-week query (weekState: null), so the two never
+  // show conflicting in-flight state for the same league.
   const { data } = useQuery({
-    queryKey: [adapter.sport, 'picks', leagueId, userId, null],
+    queryKey: picksQueryKey(adapter.sport, leagueId, userId, null),
     queryFn: () => adapter.loadCurrentGames(leagueId, userId),
     // Read-mostly consumer: on PicksPage the island mounts only after the page's own live query
     // (same key) has resolved, and a staleTime of 0 made it refetch that just-loaded week — the

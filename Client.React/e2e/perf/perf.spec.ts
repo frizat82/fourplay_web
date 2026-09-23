@@ -2,7 +2,8 @@ import { test, expect, type Page } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setupRoutes } from '../helpers/routes';
-import { FAKE_JWT } from '../helpers/auth';
+import { injectAuthCookie } from '../helpers/auth';
+import { createPick } from '../../src/test/fixtures';
 
 // Cold-load performance baseline, modeled on claude.dev's "measure first" approach: prefer
 // deterministic numbers (bytes, request counts, request-chain depth, layout shift) over
@@ -31,21 +32,23 @@ interface RouteMetrics {
 
 interface ApiTiming { url: string; start: number; end: number }
 
+const isLocal = (url: URL) => url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+
 const ROUTES: { name: string; path: string; ready: (page: Page) => Promise<void> }[] = [
   {
     name: 'dashboard',
     path: '/dashboard',
-    ready: page => expect(page.getByTestId('picks-island').getByText('BUF')).toBeVisible({ timeout: 15000 }),
+    ready: page => expect(page.getByTestId('picks-island').getByText('BUF')).toBeVisible(),
   },
   {
     name: 'picks',
     path: '/picks',
-    ready: page => expect(page.getByRole('button', { name: /^Pick \w/ }).first()).toBeVisible({ timeout: 15000 }),
+    ready: page => expect(page.getByRole('button', { name: /^Pick \w/ }).first()).toBeVisible(),
   },
   {
     name: 'scores',
     path: '/scores',
-    ready: page => expect(page.getByText('BUF').first()).toBeVisible({ timeout: 15000 }),
+    ready: page => expect(page.getByText('BUF').first()).toBeVisible(),
   },
 ];
 
@@ -77,9 +80,7 @@ function chainDepth(timings: ApiTiming[]): number {
 
 async function measure(page: Page, path: string, ready: (page: Page) => Promise<void>): Promise<RouteMetrics> {
   await setupRoutes(page, {
-    userPicks: [
-      { id: 1, leagueId: 1, userId: 'test-user-id-001', userName: 'TestUser', team: 'BUF', pick: 'Spread', season: 2024, nflWeek: 2, dateCreated: new Date().toISOString() },
-    ],
+    userPicks: [createPick({ team: 'BUF', userId: 'test-user-id-001' })],
   });
   // Registered after setupRoutes so it runs first, then falls through to the mock.
   await page.route('**/api/**', async route => {
@@ -87,11 +88,9 @@ async function measure(page: Page, path: string, ready: (page: Page) => Promise<
     await route.fallback();
   });
   // Third-party origins are counted, then aborted — keeps the run hermetic and deterministic.
-  await page.route(url => !['localhost', '127.0.0.1'].includes(url.hostname), route => route.abort());
+  await page.route(url => !isLocal(url), route => route.abort());
 
-  await page.context().addCookies([
-    { name: 'AuthToken', value: FAKE_JWT, domain: 'localhost', path: '/', httpOnly: false, secure: false, sameSite: 'Lax' },
-  ]);
+  await injectAuthCookie(page);
   await page.addInitScript(CLS_INIT_SCRIPT);
 
   let jsBytes = 0;
@@ -103,7 +102,7 @@ async function measure(page: Page, path: string, ready: (page: Page) => Promise<
 
   page.on('request', req => {
     const url = new URL(req.url());
-    if (!['localhost', '127.0.0.1'].includes(url.hostname)) thirdPartyRequests++;
+    if (!isLocal(url)) thirdPartyRequests++;
     if (url.pathname.startsWith('/api/') && !url.pathname.includes('live-stream')) pending.set(req.url() + '#' + req.method(), Date.now() - t0);
   });
   page.on('requestfinished', async req => {
@@ -125,6 +124,10 @@ async function measure(page: Page, path: string, ready: (page: Page) => Promise<
   await page.goto(path);
   await ready(page);
   const timeToReadyMs = Date.now() - t0;
+  // Bytes needed to reach "ready" — snapshotted now so idle preloads afterwards (App.tsx warms the
+  // Leaderboard chunk) don't count as cold-load weight.
+  const readyJsBytes = jsBytes;
+  const readyCssBytes = cssBytes;
   const readyPerfTime = await page.evaluate(() => performance.now());
 
   // Let late renders (background queries, banners) settle so shifts after "ready" are caught.
@@ -141,8 +144,8 @@ async function measure(page: Page, path: string, ready: (page: Page) => Promise<
   }
 
   return {
-    jsBytes,
-    cssBytes,
+    jsBytes: readyJsBytes,
+    cssBytes: readyCssBytes,
     thirdPartyRequests,
     apiRequests: api.length,
     apiChainDepth: chainDepth(api),
@@ -164,21 +167,25 @@ for (const route of ROUTES) {
 
     if (process.env.PERF_UPDATE_BASELINE) return;
 
-    const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Record<string, RouteMetrics>;
+    const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Record<string, Omit<RouteMetrics, 'timeToReadyMs'>>;
     const b = baseline[route.name];
     expect(b, `no baseline for ${route.name} — run with PERF_UPDATE_BASELINE=1`).toBeDefined();
     // Deterministic metrics gate; timeToReadyMs is reported only (wall clock is noisy).
     expect(m.jsBytes, 'JS bytes grew >5% over baseline').toBeLessThanOrEqual(Math.ceil(b.jsBytes * 1.05));
+    expect(m.cssBytes, 'CSS bytes grew >5% over baseline').toBeLessThanOrEqual(Math.ceil(b.cssBytes * 1.05));
     expect(m.thirdPartyRequests, 'new third-party requests').toBeLessThanOrEqual(b.thirdPartyRequests);
     expect(m.apiChainDepth, 'API request chain got deeper').toBeLessThanOrEqual(b.apiChainDepth);
     expect(m.apiRequests, 'more API requests on cold load').toBeLessThanOrEqual(b.apiRequests);
     expect(m.cls, 'CLS regressed').toBeLessThanOrEqual(b.cls + 0.01);
+    expect(m.shiftsAfterReady, 'new layout shifts after the page looked ready').toBeLessThanOrEqual(b.shiftsAfterReady);
   });
 }
 
 test.afterAll(() => {
   if (process.env.PERF_UPDATE_BASELINE && Object.keys(results).length === ROUTES.length) {
-    writeFileSync(BASELINE_PATH, JSON.stringify(results, null, 2) + '\n');
+    // timeToReadyMs is wall clock — logged per run, never persisted, so baseline updates don't churn.
+    const persisted = Object.fromEntries(Object.entries(results).map(([k, { timeToReadyMs: _, ...rest }]) => [k, rest]));
+    writeFileSync(BASELINE_PATH, JSON.stringify(persisted, null, 2) + '\n');
     console.log(`[perf] baseline written to ${BASELINE_PATH}`);
   }
 });

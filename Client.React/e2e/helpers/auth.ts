@@ -23,16 +23,10 @@ export interface MockAuthOptions extends SetupRoutesOptions {
  * believes a user is authenticated. After calling this, navigate to any
  * protected page — the mocked /api/auth/me will hydrate the auth context.
  */
-export async function mockAuth(page: Page, options: MockAuthOptions = {}): Promise<void> {
-  const { navigateTo, ...routeOptions } = options;
-
-  // Set up all route intercepts first
-  await setupRoutes(page, routeOptions);
-
-  // Inject a fake AuthToken cookie. The app checks this cookie to decide
-  // whether to call /api/auth/me at startup. The mocked route handles the rest.
-  await page.goto('/');
-
+// Fake AuthToken cookie. The app checks this cookie to decide whether to call /api/auth/me at
+// startup; the mocked route handles the rest. Separate from mockAuth so callers that must not
+// pre-navigate (the cold-load perf harness) can set it directly.
+export async function injectAuthCookie(page: Page): Promise<void> {
   await page.context().addCookies([
     {
       name: 'AuthToken',
@@ -45,6 +39,17 @@ export async function mockAuth(page: Page, options: MockAuthOptions = {}): Promi
       sameSite: 'Lax',
     },
   ]);
+}
+
+export async function mockAuth(page: Page, options: MockAuthOptions = {}): Promise<void> {
+  const { navigateTo, ...routeOptions } = options;
+
+  // Set up all route intercepts first
+  await setupRoutes(page, routeOptions);
+
+  await page.goto('/');
+
+  await injectAuthCookie(page);
 
   if (navigateTo) {
     await page.goto(navigateTo);

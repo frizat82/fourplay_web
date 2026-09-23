@@ -153,6 +153,14 @@ export interface WeekState {
   isPostSeason: boolean;
 }
 
+/**
+ * React Query key for a league's picks-page data. weekState null = the live current week, which
+ * PicksPage and PicksIsland share as one cache entry — build it here, never by hand, so the two
+ * can't drift apart and silently double-fetch.
+ */
+export const picksQueryKey = (sport: SportAdapter['sport'], leagueId: number | null, userId: string | undefined, weekState: WeekState | null) =>
+  [sport, 'picks', leagueId, userId, weekState] as const;
+
 export interface LoadedWeek extends WeekState {
   games: GameView[];
   userPicks: PickView[];
