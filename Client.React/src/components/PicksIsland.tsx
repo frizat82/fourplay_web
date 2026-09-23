@@ -78,6 +78,11 @@ function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePic
   const { data } = useQuery({
     queryKey: [adapter.sport, 'picks', leagueId, userId, null],
     queryFn: () => adapter.loadCurrentGames(leagueId, userId),
+    // Read-mostly consumer: on PicksPage the island mounts only after the page's own live query
+    // (same key) has resolved, and a staleTime of 0 made it refetch that just-loaded week — the
+    // whole current-week request chain ran twice on every Picks cold load. PicksPage's poll/SSE/
+    // focus refetches keep the entry live; on the home page this still loads on first visit.
+    staleTime: 30_000,
   });
   const startWeek = useLeagueStartWeek(leagueId, data?.season ?? new Date().getFullYear());
   const gameById = useMemo(() => new Map((data?.games ?? []).map(g => [g.id, g])), [data?.games]);

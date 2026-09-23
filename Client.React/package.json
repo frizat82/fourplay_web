@@ -14,6 +14,7 @@
     "test:e2e": "playwright test --project=chromium",
     "test:e2e:demo": "playwright test --project=demo-nfl --project=demo-cfb",
     "test:e2e:replay": "playwright test --project=demo-replay-nfl --project=demo-replay-cfb",
+    "test:perf": "vite build && PERF=1 playwright test --project=perf",
     "test:e2e:ui": "playwright test --ui",
     "prepare": "husky"
   },

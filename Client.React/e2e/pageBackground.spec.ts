@@ -19,11 +19,10 @@ test.describe('Page background color (frizat-2ey regression guard)', () => {
       );
       await mockAuth(page, { authUser: TEST_USER, navigateTo: '/league/manage' });
       await waitForSpinner(page);
-
       // The probe div must be attached to document.body — an unattached element does not
       // inherit CSS custom properties (getComputedStyle on it returns '' for backgroundColor),
       // so this can't be simplified to a detached element without silently breaking the check.
-      const { bodyBg, expectedBg } = await page.evaluate(() => {
+      const readColors = () => page.evaluate(() => {
         const bg2Raw = getComputedStyle(document.documentElement).getPropertyValue('--bg-2').trim();
         const probe = document.createElement('div');
         probe.style.backgroundColor = bg2Raw;
@@ -32,7 +31,13 @@ test.describe('Page background color (frizat-2ey regression guard)', () => {
         probe.remove();
         return { bodyBg: getComputedStyle(document.body).backgroundColor, expectedBg };
       });
-      expect(bodyBg).toBe(expectedBg);
+      // Polled rather than read once: global.css gives body a 0.3s background-color transition,
+      // so a fast page load can be read mid-fade (e.g. rgba(22, 30, 51, 0.68)). A real mismatch
+      // never settles and still fails; this only waits out the fade.
+      await expect.poll(async () => {
+        const { bodyBg, expectedBg } = await readColors();
+        return bodyBg === expectedBg ? 'match' : `body ${bodyBg} vs --bg-2 ${expectedBg}`;
+      }, { timeout: 3000 }).toBe('match');
     });
   }
 });

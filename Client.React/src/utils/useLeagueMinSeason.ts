@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
-import { getLeagueJuice } from '../api/league';
+import { useLeagueJuice } from './useLeagueJuice';
 
 /**
  * The earliest season a league actually has data for, per the shared source of truth
@@ -15,11 +14,7 @@ import { getLeagueJuice } from '../api/league';
  * instead of each page independently re-fetching the same rarely-changing data.
  */
 export function useLeagueMinSeason(leagueId: number | null, fallbackMinSeason: number): number {
-  const { data } = useQuery({
-    queryKey: ['leagueJuice', leagueId],
-    queryFn: () => getLeagueJuice(leagueId!),
-    enabled: leagueId != null,
-  });
+  const { data } = useLeagueJuice(leagueId);
 
   if (!data || data.length === 0) return fallbackMinSeason;
   return Math.min(...data.map((m) => m.season));

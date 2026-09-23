@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-23
+
+- Improved: faster first load on phones — the app downloads about a quarter less code up front (admin, account, league-management and leaderboard screens now load on demand), drops two unused third-party scripts/fonts, and the Picks page no longer loads its whole week of data twice
+
 ## 2026-09-22
 
 - Added: the "Your Picks" summary now shows a check or X on each pick once its game is decided (live or final), and a lock icon once a still-undecided pick's game has kicked off
