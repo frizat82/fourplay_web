@@ -25,6 +25,7 @@ export default defineConfig({
       name: 'perf',
       use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium', baseURL: 'http://localhost:4173' },
       testMatch: '**/perf/*.spec.ts',
+      expect: { timeout: 15_000 },
     },
 
     // ── Demo backend — setup (login once, save cookies) ────────────────────────

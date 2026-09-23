@@ -6,20 +6,24 @@ import HomePage from './pages/HomePage';
 import PicksPage from './pages/PicksPage';
 import ScoresPage from './pages/ScoresPage';
 import LogoutPage from './pages/LogoutPage';
+// Static, not lazy: HomePage already imports RulesContent from this module, so it's in the
+// entry chunk either way.
+import RulesPage from './pages/RulesPage';
 import { RequireAdmin, RequireAuth, useAuth } from './services/auth';
 import { useSportContext } from './services/sport';
 import { createNflAdapter } from './services/nflAdapter';
 import { createCfbAdapter } from './services/cfbAdapter';
 import type { SportAdapter } from './services/sportAdapter';
 
-// Route-level code splitting. Home, Picks and Scores (the pages people cold-load most, on phones)
+// Route-level code splitting. Home, Picks, Scores and Rules (the pages people cold-load most, on phones)
 // stay in the entry chunk; everything else — account/auth forms (which pull in zod and
-// react-hook-form), admin tools, league management, rules, and Leaderboard (html-to-image
-// sharing) — loads on first visit. A stale chunk after a deploy is handled by
+// react-hook-form), admin tools, league management, and Leaderboard (html-to-image sharing) —
+// loads on first visit. Leaderboard is a main nav tab, so App preloads its chunk once idle. A stale chunk after a deploy is handled by
 // installChunkReloadGuard (main.tsx).
 const JoinLeaguePage = lazy(() => import('./pages/JoinLeaguePage'));
 const LeaguePickerPage = lazy(() => import('./pages/LeaguePickerPage'));
-const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage'));
+const loadLeaderboardPage = () => import('./pages/LeaderboardPage');
+const LeaderboardPage = lazy(loadLeaderboardPage);
 const LoginPage = lazy(() => import('./pages/account/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/account/RegisterPage'));
 const RegisterConfirmationPage = lazy(() => import('./pages/account/RegisterConfirmationPage'));
@@ -42,7 +46,6 @@ const AdminInvitationsPage = lazy(() => import('./pages/admin/InvitationsPage'))
 const AdminLeagueCostsPage = lazy(() => import('./pages/admin/LeagueCostsPage'));
 const AdminChangelogPage = lazy(() => import('./pages/admin/ChangelogPage'));
 const AuthPage = lazy(() => import('./pages/AuthPage'));
-const RulesPage = lazy(() => import('./pages/RulesPage'));
 const LeaguePortalPage = lazy(() => import('./pages/LeaguePortalPage'));
 
 const nflAdapter = createNflAdapter();
@@ -65,6 +68,12 @@ function AdapterRoute({ page: Page }: { page: ComponentType<{ adapter: SportAdap
 }
 
 export default function App() {
+  // Warm the Leaderboard chunk after first paint so tapping its nav tab doesn't wait on a fetch.
+  useEffect(() => {
+    const id = setTimeout(() => void loadLeaderboardPage().catch(() => {}), 3000);
+    return () => clearTimeout(id);
+  }, []);
+
   return (
     // Pages outside AppLayout (account forms, join, 404). Pages inside it suspend at AppLayout's
     // own boundary around <Outlet/>, so the nav stays up while a route chunk loads.
