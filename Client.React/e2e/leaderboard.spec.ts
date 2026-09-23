@@ -41,6 +41,10 @@ async function gotoLeaderboard(page: Page, leaderboard: LeaderboardDto[]) {
   // Client-side nav preserves React state (no page reload, currentLeague stays set)
   await page.getByRole('link', { name: 'Leaderboard' }).click();
   await page.waitForURL('**/leaderboard', { timeout: 5000 });
+  // LeaderboardPage is a lazy route chunk, and React Router navigates inside startTransition —
+  // so the URL flips first while the previous page (Picks, with its own "2024 Season" selector)
+  // stays on screen until the chunk loads. Wait for the Leaderboard page itself, not just the URL.
+  await expect(page.getByRole('heading', { name: 'Leaderboard' })).toBeVisible({ timeout: 10000 });
   // Wait for leaderboard loading spinner to clear before returning
   await waitForSpinner(page);
 }

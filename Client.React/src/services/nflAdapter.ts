@@ -181,6 +181,10 @@ export function createNflAdapter(): SportAdapter {
       return current.season;
     },
 
+    prefetchCurrentWeek() {
+      getCurrentWeek().catch(() => {});
+    },
+
     // ─── Picks ──────────────────────────────────────────────────────────────
 
     async loadCurrentGames(leagueId, userId) {

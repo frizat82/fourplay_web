@@ -62,6 +62,7 @@ const mockAdapter: SportAdapter = {
   clearPicks: vi.fn(),
   getMissingPicks: vi.fn(),
   currentSeasonYear: vi.fn().mockResolvedValue(2023),
+  prefetchCurrentWeek: vi.fn(),
   pollIntervalMs: 0,
   weekSelectorConfig: { maxRegularSeasonWeek: 18, minSeason: 2020 },
 };

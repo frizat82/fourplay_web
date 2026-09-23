@@ -328,4 +328,26 @@ describe('nflAdapter', () => {
       expect(getNflCurrentWeek).not.toHaveBeenCalled();
     });
   });
+
+  // Fired as soon as an adapter-driven route mounts, so the current-week request runs alongside
+  // the session's league fetch instead of waiting for it (one fewer round trip on cold load).
+  describe('prefetchCurrentWeek', () => {
+    it('starts the current-week fetch, and loadCurrentGames reuses it', async () => {
+      adapter.prefetchCurrentWeek();
+      expect(getNflCurrentWeek).toHaveBeenCalledTimes(1);
+
+      await adapter.loadCurrentGames(1, 'user-1');
+      expect(getNflCurrentWeek).toHaveBeenCalledTimes(1);
+    });
+
+    it('swallows a failed prefetch and lets the real load retry and surface the error', async () => {
+      vi.mocked(getNflCurrentWeek).mockRejectedValueOnce(new Error('control table unavailable'));
+      adapter.prefetchCurrentWeek();
+      await Promise.resolve();
+
+      await expect(adapter.loadCurrentGames(1, 'user-1')).resolves.toBeDefined();
+      expect(getNflCurrentWeek).toHaveBeenCalledTimes(2);
+    });
+  });
 });
+

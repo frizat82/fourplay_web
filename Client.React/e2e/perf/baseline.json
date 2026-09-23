@@ -1,0 +1,32 @@
+{
+  "dashboard": {
+    "jsBytes": 693189,
+    "cssBytes": 33949,
+    "thirdPartyRequests": 1,
+    "apiRequests": 12,
+    "apiChainDepth": 4,
+    "cls": 0,
+    "shiftsAfterReady": 0,
+    "timeToReadyMs": 1068
+  },
+  "picks": {
+    "jsBytes": 693189,
+    "cssBytes": 33949,
+    "thirdPartyRequests": 1,
+    "apiRequests": 10,
+    "apiChainDepth": 4,
+    "cls": 0,
+    "shiftsAfterReady": 0,
+    "timeToReadyMs": 1047
+  },
+  "scores": {
+    "jsBytes": 693189,
+    "cssBytes": 33949,
+    "thirdPartyRequests": 1,
+    "apiRequests": 11,
+    "apiChainDepth": 4,
+    "cls": 0,
+    "shiftsAfterReady": 0,
+    "timeToReadyMs": 1045
+  }
+}

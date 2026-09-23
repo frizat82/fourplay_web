@@ -6,6 +6,7 @@ vi.mock('../api/league', () => ({ getLeagueJuice: vi.fn() }));
 
 import { getLeagueJuice } from '../api/league';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
+import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import type { LeagueJuiceMappingDto } from '../types/admin';
 
 const mockedGetLeagueJuice = vi.mocked(getLeagueJuice);
@@ -82,5 +83,21 @@ describe('useLeagueMinSeason', () => {
 
     rerender({ leagueId: 2 });
     await waitFor(() => expect(result.current).toBe(2025));
+  });
+
+  // Picks mounts useLeagueMinSeason with the page, then useLeagueStartWeek again inside
+  // PicksIsland only after the page's own data lands. With React Query's default staleTime of 0
+  // that later mount refetched the same rarely-changing juice mappings on every cold load.
+  it('shares one fetch with useLeagueStartWeek even when the second hook mounts after the first resolves', async () => {
+    mockedGetLeagueJuice.mockResolvedValue([makeJuiceMapping(2022)]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+
+    const first = renderHook(() => useLeagueMinSeason(1, 2020), { wrapper });
+    await waitFor(() => expect(first.result.current).toBe(2022));
+
+    const second = renderHook(() => useLeagueStartWeek(1, 2022), { wrapper });
+    expect(second.result.current).toBe(1);
+    expect(mockedGetLeagueJuice).toHaveBeenCalledTimes(1);
   });
 });

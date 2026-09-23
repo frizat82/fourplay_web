@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Button,
@@ -43,6 +44,7 @@ import { useToast } from '../services/toast';
 import { isAdmin } from '../utils/auth';
 import { extractApiErrorMessage } from '../utils/apiError';
 import { useShareLink } from '../utils/useShareLink';
+import { leagueJuiceQueryKey } from '../utils/useLeagueJuice';
 import { useNumericField } from '../utils/useNumericField';
 import { useMissingPicks } from '../utils/useMissingPicks';
 import type { SportAdapter } from '../services/sportAdapter';
@@ -104,6 +106,7 @@ export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter })
   const { user } = useAuth();
   const admin = isAdmin(user);
   const toast = useToast();
+  const queryClient = useQueryClient();
   // The wire-format LeagueType for whichever sport's subdomain we're currently on — shared by
   // the platform-wide league filter below and Create League's locked Sport field.
   const currentLeagueType = isCfb ? 'Cfb' : 'Nfl';
@@ -235,6 +238,9 @@ export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter })
   const loadJuice = useCallback(async (leagueId: number) => {
     const mappings = await getLeagueJuice(leagueId);
     setJuiceMappings(mappings);
+    // Keep useLeagueJuice's long-lived cache entry in step with every load here (including the
+    // reload after a save/roll-forward), so Picks/Scores never show a stale StartWeek.
+    queryClient.setQueryData(leagueJuiceQueryKey(leagueId), mappings);
     const mapping = mappings.find((m) => m.season === selectedSeason);
     if (mapping) {
       setJuiceForm({
@@ -247,7 +253,7 @@ export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter })
     } else {
       setJuiceForm({ juice: 0, juiceDivisional: 0, juiceConference: 0, weeklyCost: 0, startWeek: 1 });
     }
-  }, [selectedSeason]);
+  }, [selectedSeason, queryClient]);
 
   useEffect(() => {
     if (!selectedLeague) return;
