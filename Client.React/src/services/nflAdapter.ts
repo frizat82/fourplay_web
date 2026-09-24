@@ -1,5 +1,5 @@
 import { getScores, getWeekScores, getLiveGames } from '../api/espn';
-import { getUserPicks, doOddsExist, spreadBatch, addPicks, removeMyPick, getLeaguePicks, getLeaguePickCounts, getNflCurrentWeek } from '../api/league';
+import { getUserPicks, spreadBatch, addPicks, removeMyPick, getLeaguePicks, getLeaguePickCounts, getNflCurrentWeek } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import type { Competition, EspnScores, Event } from '../types/espn';
 import type { LiveGame } from '../types/liveGame';
@@ -92,13 +92,24 @@ function nflPickToPickView(pick: NflPickDto, games: GameView[]): PickView | null
   };
 }
 
-// Every team's spreads for the week in one request that doesn't need the scoreboard's team list
-// (an empty request = all teams), so it goes out alongside getWeekScores instead of after it.
-// A failure — a 404 before odds post, most often — is just "no spreads"; hasOdds (doOddsExist)
-// is still what decides whether a week has odds.
-async function fetchWeekSpreads(leagueId: number, season: number, nflWeek: number): Promise<Record<string, SpreadResponse>> {
-  const resp = await orFallback(() => spreadBatch(leagueId, season, nflWeek, { requests: [] }), null);
-  return resp?.responses ?? {};
+// The week's odds in one request: an empty team list = every team with odds, so it goes out
+// alongside getWeekScores instead of waiting on it for the team list. It also answers "have odds
+// posted?" — the endpoint 404s until they have — so no separate /odds/exists round trip is needed.
+// Any other failure is real and propagates (surfaced by the query's error state).
+async function fetchWeekOdds(leagueId: number, season: number, nflWeek: number): Promise<WeekOdds> {
+  try {
+    const resp = await spreadBatch(leagueId, season, nflWeek, { requests: [] });
+    return { hasOdds: true, spreads: resp.responses ?? {} };
+  } catch (err) {
+    if (isNotFound(err)) return { hasOdds: false, spreads: {} };
+    throw err;
+  }
+}
+
+interface WeekOdds { hasOdds: boolean; spreads: Record<string, SpreadResponse> }
+
+function isNotFound(err: unknown): boolean {
+  return (err as { response?: { status?: number } } | null)?.response?.status === 404;
 }
 
 async function buildSpreadCache(
@@ -106,8 +117,7 @@ async function buildSpreadCache(
   leagueId: number,
   season: number,
   nflWeek: number,
-  hasOdds: boolean,
-  prefetched: Record<string, SpreadResponse>,
+  { hasOdds, spreads: prefetched }: WeekOdds,
 ): Promise<Record<string, SpreadResponse>> {
   if (!hasOdds) return {};
   if (Object.keys(prefetched).length > 0) return prefetched;
@@ -212,27 +222,28 @@ export function createNflAdapter(): SportAdapter {
     async loadCurrentGames(leagueId, userId) {
       const current = await getCurrentWeek();
       const { season, weekId: nflWeek, isPostSeason: postSeason } = current;
-      const [data, picksResult, hasOdds, spreads] = await Promise.all([
+      const [data, picksResult, odds] = await Promise.all([
         getWeekScores(season, nflWeek),
         getUserPicks(userId, leagueId, season, nflWeek),
-        doOddsExist(leagueId, season, nflWeek),
-        fetchWeekSpreads(leagueId, season, nflWeek),
+        fetchWeekOdds(leagueId, season, nflWeek),
       ]);
-      const sc = await buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, hasOdds, spreads);
+      const { hasOdds } = odds;
+      const sc = await buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, odds);
       const games: GameView[] = (data?.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const userPicks = picksResult.map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       return { season, week: nflWeek, isPostSeason: postSeason, games, userPicks, hasOdds, requiredPicks: getNflRequiredPicks(nflWeek), maxWeek: maxWeekFor(postSeason, nflWeek), maxSeason: season };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
-      const [data, picksResult, hasOdds, spreads] = await Promise.all([
-        loadPastWeekScores(season, week, isPostSeason),
-        getUserPicks(userId, leagueId, season, week),
-        doOddsExist(leagueId, season, week),
-        fetchWeekSpreads(leagueId, season, week),
-      ]);
-      if (!data?.events?.length) return null;
-      const sc = await buildSpreadCache(data.events, leagueId, season, week, hasOdds, spreads);
+      // Picks and odds go out alongside the scoreboard, but an empty week still resolves to null
+      // regardless of how those extra requests fare (awaited only once there's a week to show).
+      const picksPromise = getUserPicks(userId, leagueId, season, week);
+      const oddsPromise = fetchWeekOdds(leagueId, season, week);
+      const data = await loadPastWeekScores(season, week, isPostSeason);
+      if (!data?.events?.length) { void Promise.allSettled([picksPromise, oddsPromise]); return null; }
+      const [picksResult, odds] = await Promise.all([picksPromise, oddsPromise]);
+      const { hasOdds } = odds;
+      const sc = await buildSpreadCache(data.events, leagueId, season, week, odds);
       const games: GameView[] = data.events.flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const userPicks = picksResult.map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       return { season, week, isPostSeason, games, userPicks, hasOdds, requiredPicks: getNflRequiredPicks(week), maxWeek: maxWeekFor(isPostSeason, week), maxSeason: season };
@@ -255,14 +266,14 @@ export function createNflAdapter(): SportAdapter {
     async loadCurrentScores(leagueId, userId) {
       const current = await getCurrentWeek();
       const { season, weekId: nflWeek, isPostSeason: postSeason } = current;
-      const [data, hasOdds, allPicksDtos, spreads, liveGames] = await Promise.all([
+      const [data, allPicksDtos, odds, liveGames] = await Promise.all([
         getWeekScores(season, nflWeek),
-        doOddsExist(leagueId, season, nflWeek),
         getLeaguePicks(leagueId, season, nflWeek),
-        fetchWeekSpreads(leagueId, season, nflWeek),
+        fetchWeekOdds(leagueId, season, nflWeek),
         orFallback(getLiveGames, []),
       ]);
-      const sc = await buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, hasOdds, spreads);
+      const { hasOdds } = odds;
+      const sc = await buildSpreadCache(data?.events ?? [], leagueId, season, nflWeek, odds);
       const liveGameMap = buildLiveGameMap(data?.events ?? [], liveGames);
       const games = (data?.events ?? []).flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc, liveGameMap)));
       // Use typed helpers on raw competitions — not string comparison on already-mapped GameView
@@ -275,14 +286,14 @@ export function createNflAdapter(): SportAdapter {
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
-      const [data, hasOdds, allPicksDtos, spreads] = await Promise.all([
-        loadPastWeekScores(season, week, isPostSeason),
-        doOddsExist(leagueId, season, week),
-        getLeaguePicks(leagueId, season, week),
-        fetchWeekSpreads(leagueId, season, week),
-      ]);
-      if (!data?.events?.length) return null;
-      const sc = await buildSpreadCache(data.events, leagueId, season, week, hasOdds, spreads);
+      // Same shape as loadHistoricalGames: parallel, but an empty week is still just null.
+      const picksPromise = getLeaguePicks(leagueId, season, week);
+      const oddsPromise = fetchWeekOdds(leagueId, season, week);
+      const data = await loadPastWeekScores(season, week, isPostSeason);
+      if (!data?.events?.length) { void Promise.allSettled([picksPromise, oddsPromise]); return null; }
+      const [allPicksDtos, odds] = await Promise.all([picksPromise, oddsPromise]);
+      const { hasOdds } = odds;
+      const sc = await buildSpreadCache(data.events, leagueId, season, week, odds);
       const games = data.events.flatMap(ev => ev.competitions.map(c => competitionToGameView(c, ev, sc)));
       const allPicks = (allPicksDtos ?? []).map(p => nflPickToPickView(p, games)).filter((p): p is PickView => p !== null);
       const userPicks = allPicks.filter(p => p.userId === userId);

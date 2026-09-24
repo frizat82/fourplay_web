@@ -85,11 +85,6 @@ export async function addLeagueJuiceMapping(mapping: LeagueJuiceMappingDto) {
   await http.post('/api/league/league-juice-mapping', mapping);
 }
 
-export async function doOddsExist(leagueId: number, season: number, week: number) {
-  const { data } = await http.get<boolean>(`/api/league/${leagueId}/odds/${season}/${week}/exists`);
-  return data;
-}
-
 export async function getLeaguePicks(leagueId: number, season: number, week: number) {
   const { data } = await http.get<NflPickDto[]>(`/api/league/${leagueId}/picks/${season}/${week}`);
   return data;

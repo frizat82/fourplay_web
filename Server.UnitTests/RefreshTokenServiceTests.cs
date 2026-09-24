@@ -2,6 +2,7 @@ using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
@@ -57,6 +58,50 @@ public class RefreshTokenServiceTests
 
         var remaining = factory.CreateDbContext().RefreshTokens.Select(t => t.Token).ToList();
         Assert.Equal(new[] { "live", "other-users-dead", issued.Token }.Order(), remaining.Order());
+    }
+
+    // Two overlapping issues for one user (phone + laptop refreshing together) load the same dead
+    // rows; whichever prunes second deletes 0 rows and EF throws DbUpdateConcurrencyException. That
+    // must never fail the sign-in. The interceptor below reproduces the race deterministically: just
+    // before the prune commits, a "concurrent" context deletes the same rows.
+    [Fact]
+    public async Task IssueTokenAsync_StillIssues_WhenAConcurrentIssueAlreadyPrunedTheSameDeadTokens()
+    {
+        var dbName = "RefreshTokenRace_" + Guid.NewGuid();
+        var interceptor = new DeleteDeadTokensFirstInterceptor(dbName);
+        var factory = new FreshContextFactory(dbName, interceptor);
+        await using (var seed = factory.CreateDbContext()) {
+            seed.RefreshTokens.Add(new RefreshToken { UserId = "user-1", Token = "dead", Created = DateTimeOffset.UtcNow.AddDays(-20), Expires = DateTimeOffset.UtcNow.AddDays(-6) });
+            await seed.SaveChangesAsync();
+        }
+
+        var issued = await new RefreshTokenService(factory).IssueTokenAsync(BuildUser("user-1"), TimeSpan.FromDays(14));
+
+        Assert.True(interceptor.Fired);
+        await using var check = factory.CreateDbContext();
+        Assert.Equal([issued.Token], check.RefreshTokens.Select(t => t.Token).ToList());
+    }
+
+    private sealed class FreshContextFactory(string dbName, params IInterceptor[] interceptors) : IDbContextFactory<ApplicationDbContext> {
+        public ApplicationDbContext CreateDbContext() => new ApplicationDbContext(
+            new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(dbName).AddInterceptors(interceptors).Options);
+    }
+
+    private sealed class DeleteDeadTokensFirstInterceptor(string dbName) : SaveChangesInterceptor {
+        public bool Fired { get; private set; }
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
+            InterceptionResult<int> result, CancellationToken ct = default) {
+            var deleting = eventData.Context!.ChangeTracker.Entries<RefreshToken>().Where(e => e.State == EntityState.Deleted).ToList();
+            if (!Fired && deleting.Count > 0) {
+                Fired = true;
+                await using var concurrent = new ApplicationDbContext(
+                    new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(dbName).Options);
+                var ids = deleting.Select(e => e.Entity.Id).ToList();
+                concurrent.RefreshTokens.RemoveRange(concurrent.RefreshTokens.Where(t => ids.Contains(t.Id)).ToList());
+                await concurrent.SaveChangesAsync(ct);
+            }
+            return result;
+        }
     }
 
     [Fact]

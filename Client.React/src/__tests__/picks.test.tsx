@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import PicksPage from '../pages/PicksPage';
 import { createNflAdapter } from '../services/nflAdapter';
-import { createCompetition, createCurrentWeek, createPick, createScores, createSpreadResponse, mockLeagueJuiceEmpty } from '../test/fixtures';
+import { createCompetition, createCurrentWeek, createPick, createScores, createSpreadResponse, mockLeagueJuiceEmpty, notFoundError } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -35,7 +35,6 @@ vi.mock('../api/espn', () => ({ getScores: vi.fn(), getWeekScores: vi.fn(), getL
 vi.mock('../api/league', () => ({
   addPicks: vi.fn(),
   removeMyPick: vi.fn(),
-  doOddsExist: vi.fn(),
   getUserPicks: vi.fn(),
   spreadBatch: vi.fn(),
   getNflCurrentWeek: vi.fn(),
@@ -45,13 +44,12 @@ vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
 
 import { getScores, getWeekScores } from '../api/espn';
-import { addPicks, removeMyPick, doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
+import { addPicks, removeMyPick, getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
 
 const mockedGetScores = vi.mocked(getScores);
 const mockedGetWeekScores = vi.mocked(getWeekScores);
-const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetUserPicks = vi.mocked(getUserPicks);
 const mockedSpreadBatch = vi.mocked(spreadBatch);
 const mockedAddPicks = vi.mocked(addPicks);
@@ -99,7 +97,6 @@ const setupDefaults = async (options?: {
   mockedGetScores.mockResolvedValue(scores);
   mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, postSeason));
   mockedGetWeekScores.mockResolvedValue(scores);
-  mockedDoOddsExist.mockResolvedValue(options?.oddsExist ?? true);
   mockedGetUserPicks.mockResolvedValue(options?.existingPicks ?? []);
   mockedGetAllJerseys.mockResolvedValue({});
   mockedGetNextSpreadJob.mockResolvedValue(null);
@@ -112,6 +109,8 @@ const setupDefaults = async (options?: {
       NYG: createSpreadResponse('NYG', 3.5, 44, 44),
     },
   });
+  // No odds posted = the spreads endpoint 404s (nflAdapter derives hasOdds from it).
+  if (options?.oddsExist === false) mockedSpreadBatch.mockRejectedValue(notFoundError());
 };
 
 const renderWithClient = (ui: React.ReactElement) => {
@@ -137,7 +136,6 @@ describe('PicksPage', () => {
     mockedGetScores.mockReset();
     mockedGetWeekScores.mockReset();
     mockedGetNflCurrentWeek.mockReset();
-    mockedDoOddsExist.mockReset();
     mockedGetUserPicks.mockReset();
     mockedSpreadBatch.mockReset();
     mockedAddPicks.mockReset();
@@ -493,7 +491,6 @@ describe('PicksPage', () => {
     mockedGetScores.mockResolvedValue(scores);
     mockedGetWeekScores.mockResolvedValue(scores);
     mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, false));
-    mockedDoOddsExist.mockResolvedValue(true);
     mockedGetUserPicks.mockResolvedValue([
       createPick({ team: 'BUF' }), createPick({ team: 'MIA' }),
       createPick({ team: 'DAL' }), createPick({ team: 'NYG' }),

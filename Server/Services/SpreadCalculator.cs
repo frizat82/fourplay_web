@@ -50,7 +50,7 @@ public class SpreadCalculator : ISpreadCalculator {
     }
 
     public DateTimeOffset? GetDateCreated(string teamAbbr) =>
-        byTeam.TryGetValue(teamAbbr, out var t) ? t.Row.DateCreated : null;
+        teamAbbr is not null && byTeam.TryGetValue(teamAbbr, out var t) ? t.Row.DateCreated : null;
 
     private bool DidUserWinSpread(string team, int pickTeamScore, int otherTeamScore) {
         var spread = GetSpread(team);
@@ -80,8 +80,8 @@ public class SpreadCalculator : ISpreadCalculator {
     }
 
     private double? GetSpreadFromAbbreviation(string teamAbbr) =>
-        byTeam.TryGetValue(teamAbbr, out var t) ? (t.IsHome ? t.Row.HomeTeamSpread : t.Row.AwayTeamSpread) : null;
+        teamAbbr is not null && byTeam.TryGetValue(teamAbbr, out var t) ? (t.IsHome ? t.Row.HomeTeamSpread : t.Row.AwayTeamSpread) : null;
 
     public double? GetOverUnderFromAbbreviation(string teamAbbr) =>
-        byTeam.TryGetValue(teamAbbr, out var t) ? t.Row.OverUnder : null;
+        teamAbbr is not null && byTeam.TryGetValue(teamAbbr, out var t) ? t.Row.OverUnder : null;
 }

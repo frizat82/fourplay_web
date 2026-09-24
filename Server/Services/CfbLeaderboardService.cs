@@ -58,21 +58,20 @@ public class CfbLeaderboardService(
             // different MissingPicks/MissingGameResults verdict for the identical slate.
             var now = timeProvider.GetUtcNow();
 
-            // Every query here is per slate or per season, never per member: a slate's spreads and
-            // scores are identical for everyone, and all members' picks come from one season-wide
-            // query (a 20-member league at slate 18 was 1,080 sequential round trips before).
-            // frizat-o3x: slates before the league's StartWeek are never fetched at all.
+            // Every query here is per season, never per member or per slate — three queries total,
+            // the same shape as the NFL leaderboard (a 20-member league at slate 18 used to be 1,080
+            // sequential round trips). Each repository call has its own DbContext, so they run together.
             var picksTask = cfbPicksRepository.GetLeaguePicksForSeasonAsync(leagueId, season);
-            var slateData = new Dictionary<int, (List<CfbSpreads> Spreads, List<CfbScores> Scores)>();
-            foreach (var slate in slates) {
-                if (GameHelpers.IsWeekExcludedFromSeason(slate.SlateNumber, juiceMapping.StartWeek)) continue;
-                // Own DbContext per repository call, so the pair can run concurrently.
-                var spreadsTask = cfbRepository.GetSpreadsForSlateAsync(slate.Id);
-                var scoresTask = cfbRepository.GetScoresForSlateAsync(slate.Id);
-                // GetSpreadsForSlateAsync returns the full FBS slate, not just league-eligible games
-                // (frizat-9m0) — scoring/MissingPicks must only ever consider eligible ones.
-                slateData[slate.Id] = ((await spreadsTask).WhereLeagueEligible().ToList(), (await scoresTask).ToList());
-            }
+            var spreadsTask = cfbRepository.GetSpreadsForSeasonAsync(season);
+            var scoresTask = cfbRepository.GetScoresForSeasonAsync(season);
+            // GetSpreadsFor* return the full FBS slate, not just league-eligible games (frizat-9m0) —
+            // scoring/MissingPicks must only ever consider eligible ones.
+            var spreadsBySlate = (await spreadsTask).WhereLeagueEligible().ToLookup(s => s.CfbSlateId);
+            var scoresBySlate = (await scoresTask).ToLookup(s => s.CfbSlateId);
+            // frizat-o3x: slates before the league's StartWeek aren't evaluated at all.
+            var slateData = slates
+                .Where(slate => !GameHelpers.IsWeekExcludedFromSeason(slate.SlateNumber, juiceMapping.StartWeek))
+                .ToDictionary(slate => slate.Id, slate => (Spreads: spreadsBySlate[slate.Id].ToList(), Scores: scoresBySlate[slate.Id].ToList()));
 
             var picksBySlateUser = (await picksTask).ToLookup(p => (p.CfbSlateId, p.UserId));
 
@@ -107,7 +106,7 @@ public class CfbLeaderboardService(
 
     // Everything sport-specific (which spreads/scores/picks, which tease) is resolved by the caller;
     // how the slate resolves is WeekOutcome — the same rules the NFL leaderboard uses.
-    private static LeaderboardWeekResults EvaluateSlate(int slateNumber, List<CfbSpreads> spreads, List<CfbScores> scores,
+    private LeaderboardWeekResults EvaluateSlate(int slateNumber, List<CfbSpreads> spreads, List<CfbScores> scores,
         List<CfbPicks> picks, double juice, DateTimeOffset now) => new() {
         Week = slateNumber,
         WeekResult = WeekOutcome.Evaluate(
@@ -115,7 +114,8 @@ public class CfbLeaderboardService(
             scores,
             new SpreadCalculator(spreads, juice),
             GameHelpers.GetCfbRequiredPicks(slateNumber),
-            GameHelpers.AllGamesStarted(spreads.Select(s => s.GameTime), now)),
+            GameHelpers.AllGamesStarted(spreads.Select(s => s.GameTime), now),
+            (pick, ex) => logger.LogError(ex, "Error scoring CFB pick {@Pick} slate {Slate}", pick, slateNumber)),
     };
 
     private static List<LeaderboardModel> CalculateTotals(List<LeaderboardModel> leaderboard,

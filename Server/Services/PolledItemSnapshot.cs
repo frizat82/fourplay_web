@@ -10,15 +10,18 @@ namespace FourPlayWebApp.Server.Services;
 /// (prod p50 ~300-550ms, p95 up to 5s) — on every Picks/Scores/Dashboard load, and from every
 /// connected client at once on each SSE push — while the poller already held exactly that data.
 /// Key and result are stored as one immutable entry, so a reader never pairs one poll's key with
-/// another poll's data.
+/// another poll's data. An entry older than maxAge is ignored — if the poller stops refreshing
+/// (ESPN failing mid-game, the loop dying), requests fall back to their own live fetch instead of
+/// being served the last poll's scores indefinitely.
 /// </summary>
-public sealed class PolledItemSnapshot {
-    private sealed record Entry(string Key, EspnScores Scores);
+public sealed class PolledItemSnapshot(TimeSpan maxAge, TimeProvider? timeProvider = null) {
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+    private sealed record Entry(string Key, EspnScores Scores, DateTimeOffset At);
     private volatile Entry? _latest;
 
     /// <summary>Records a poll's result for <paramref name="key"/> (a null result clears it) and returns the result.</summary>
     public EspnScores? Record(string key, EspnScores? scores) {
-        _latest = scores is null ? null : new Entry(key, scores);
+        _latest = scores is null ? null : new Entry(key, scores, _time.GetUtcNow());
         return scores;
     }
 
@@ -30,7 +33,7 @@ public sealed class PolledItemSnapshot {
 
     public bool TryGet(string key, out EspnScores? scores) {
         var latest = _latest;
-        scores = latest is not null && latest.Key == key ? latest.Scores : null;
+        scores = latest is not null && latest.Key == key && _time.GetUtcNow() - latest.At <= maxAge ? latest.Scores : null;
         return scores is not null;
     }
 }

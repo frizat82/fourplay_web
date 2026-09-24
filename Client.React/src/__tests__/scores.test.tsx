@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import ScoresPage from '../pages/ScoresPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCfbAdapter } from '../services/cfbAdapter';
-import { createCurrentWeek, createPick, createScores, createSpreadResponse, createCompetition, mockLeagueJuiceEmpty } from '../test/fixtures';
+import { createCurrentWeek, createPick, createScores, createSpreadResponse, createCompetition, mockLeagueJuiceEmpty, notFoundError } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -37,7 +37,7 @@ vi.mock('../api/espn', () => ({
   getCfbScoresForSlate: vi.fn(), getCfbLiveGames: vi.fn(),
 }));
 vi.mock('../api/league', () => ({
-  doOddsExist: vi.fn(), getLeaguePicks: vi.fn(), spreadBatch: vi.fn(),
+  getLeaguePicks: vi.fn(), spreadBatch: vi.fn(),
   addPicks: vi.fn(), getUserPicks: vi.fn(), getNflCurrentWeek: vi.fn(),
   getLeagueJuice: vi.fn(),
 }));
@@ -51,12 +51,11 @@ const toastPush = vi.fn();
 vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 
 import { getLiveGames, getWeekScores, getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
-import { doOddsExist, getLeaguePicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
+import { getLeaguePicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbAllPicks } from '../api/cfb';
 
 const mockedGetLiveGames = vi.mocked(getLiveGames);
 const mockedGetWeekScores = vi.mocked(getWeekScores);
-const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetLeaguePicks = vi.mocked(getLeaguePicks);
 const mockedGetNflCurrentWeek = vi.mocked(getNflCurrentWeek);
 const mockedGetLeagueJuice = vi.mocked(getLeagueJuice);
@@ -99,9 +98,10 @@ const setupDefaults = async (options?: {
   mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, postSeason));
   mockedGetWeekScores.mockResolvedValue(makeScores(week, postSeason, gameStarted));
   mockedGetLiveGames.mockResolvedValue([]);
-  mockedDoOddsExist.mockResolvedValue(options?.oddsExist ?? true);
   mockedGetLeaguePicks.mockResolvedValue(options?.picks ?? []);
   mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
+  // No odds posted = the spreads endpoint 404s (nflAdapter derives hasOdds from it).
+  if (options?.oddsExist === false) mockedSpreadBatch.mockRejectedValue(notFoundError());
   mockLeagueJuiceEmpty(mockedGetLeagueJuice);
 };
 
@@ -481,7 +481,6 @@ describe('ScoresPage', () => {
         events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
       }));
       mockedGetLiveGames.mockResolvedValue([]);
-      mockedDoOddsExist.mockResolvedValue(true);
       mockedGetLeaguePicks.mockResolvedValue([]);
       mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
       await renderPage();
@@ -520,7 +519,6 @@ describe('ScoresPage', () => {
             events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
           }));
       mockedGetLiveGames.mockResolvedValue([]);
-      mockedDoOddsExist.mockResolvedValue(true);
       mockedGetLeaguePicks.mockResolvedValue([]);
       mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
       await renderPage();
@@ -581,7 +579,6 @@ describe('ScoresPage', () => {
         events: [{ id: '1', season: { year: 2024, type: 2 }, week: { number: 2 }, date: new Date().toISOString(), competitions: [liveComp] }],
       }));
       mockedGetLiveGames.mockResolvedValue([]);
-      mockedDoOddsExist.mockResolvedValue(true);
       mockedGetLeaguePicks.mockResolvedValue([]);
       mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
       await renderPage();
@@ -757,7 +754,6 @@ describe('ScoresPage', () => {
           isRedZone, downDistanceText: '1st & 10 at BUF 12',
         },
       }]);
-      mockedDoOddsExist.mockResolvedValue(true);
       mockedGetLeaguePicks.mockResolvedValue([]);
       mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
       await renderPage();

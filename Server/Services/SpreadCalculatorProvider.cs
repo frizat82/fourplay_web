@@ -26,9 +26,10 @@ public class SpreadCalculatorProvider(ILeagueRepository repository, IMemoryCache
             return [];
         });
 
-        // Per (league, season): the mapping is season-specific. LeagueController evicts this key
-        // whenever a commissioner saves or rolls forward that season's settings.
+        // Per (league, season): the mapping is season-specific. LeagueRepository's juice writers evict
+        // it on any change (and Track expires a read that was in flight when that happened).
         var juiceMapping = await cache.GetOrCreateAsync(LeagueCacheKeys.Juice(leagueId, season), async entry => {
+            LeagueCacheKeys.Track(entry, leagueId, season);
             var result = await repository.GetLeagueJuiceMappingAsync(leagueId, season);
             if (result != null) {
                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
