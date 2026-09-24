@@ -35,7 +35,7 @@ public class LeagueController(
     ILeagueRepository repo,
     ILogger<LeagueController> logger,
     UserManager<ApplicationUser> userManager,
-    ISpreadCalculatorBuilder spreadCalculatorBuilder,
+    ISpreadCalculatorProvider spreadCalculatorProvider,
     IEspnCacheService espnCacheService,
     IInvitationService invitationService,
     ILeagueInviteLinkService leagueInviteLinkService,
@@ -581,11 +581,7 @@ public class LeagueController(
     [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/exists")]
     [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
     public async Task<ActionResult<bool>> DoOddsExist(int leagueId, int season, int week) {
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
+        var calculator = await spreadCalculatorProvider.GetForNflWeekAsync(leagueId, season, week);
 
         return Ok(calculator.DoOddsExist());
     }
@@ -599,26 +595,25 @@ public class LeagueController(
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId, leagueId))
             return Forbid();
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
+        var calculator = await spreadCalculatorProvider.GetForNflWeekAsync(leagueId, season, week);
 
         if (!calculator.DoOddsExist())
             return NotFound("No odds available");
 
+        // No teams requested = every team with odds this week, so the client can fetch spreads in
+        // parallel with the ESPN scoreboard instead of waiting on it for the team list.
+        var teams = request.Requests.Count == 0
+            ? calculator.GetTeams()
+            : request.Requests.Select(r => r.Team).ToList();
         var response = new BatchSpreadResponse();
-        foreach (var calc in request.Requests) {
-                var key = $"{calc.Team}";
-
-                response.Responses[key] = new SpreadResponse {
-                    Team = calc.Team,
-                    Spread = calculator.GetSpread(calc.Team),
-                    Over = calculator.GetOverUnder(calc.Team, PickType.Over),
-                    Under = calculator.GetOverUnder(calc.Team, PickType.Under),
-                    DateCreated = calculator.GetDateCreated(calc.Team),
-                };
+        foreach (var team in teams) {
+            response.Responses[team] = new SpreadResponse {
+                Team = team,
+                Spread = calculator.GetSpread(team),
+                Over = calculator.GetOverUnder(team, PickType.Over),
+                Under = calculator.GetOverUnder(team, PickType.Under),
+                DateCreated = calculator.GetDateCreated(team),
+            };
         }
 
         return Ok(response);
@@ -633,11 +628,7 @@ public class LeagueController(
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId, leagueId))
             return Forbid();
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
+        var calculator = await spreadCalculatorProvider.GetForNflWeekAsync(leagueId, season, week);
 
         if (!calculator.DoOddsExist())
             return NotFound("No odds available");

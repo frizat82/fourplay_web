@@ -41,7 +41,7 @@ public class LeagueOwnershipTests
             Substitute.For<ILeagueRepository>(),
             NullLogger<LeagueController>.Instance,
             userManager,
-            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<ISpreadCalculatorProvider>(),
             Substitute.For<IEspnCacheService>(),
             Substitute.For<IInvitationService>(),
             Substitute.For<ILeagueInviteLinkService>(),
@@ -99,7 +99,7 @@ public class LeagueOwnershipTests
             repo,
             NullLogger<LeagueController>.Instance,
             userManager,
-            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<ISpreadCalculatorProvider>(),
             Substitute.For<IEspnCacheService>(),
             Substitute.For<IInvitationService>(),
             Substitute.For<ILeagueInviteLinkService>(),
@@ -133,7 +133,7 @@ public class LeagueOwnershipTests
             repo,
             NullLogger<LeagueController>.Instance,
             userManager,
-            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<ISpreadCalculatorProvider>(),
             Substitute.For<IEspnCacheService>(),
             Substitute.For<IInvitationService>(),
             Substitute.For<ILeagueInviteLinkService>(),
@@ -165,7 +165,7 @@ public class LeagueOwnershipTests
             repo,
             NullLogger<LeagueController>.Instance,
             userManager,
-            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<ISpreadCalculatorProvider>(),
             Substitute.For<IEspnCacheService>(),
             invSvc,
             Substitute.For<ILeagueInviteLinkService>(),
@@ -1126,7 +1126,7 @@ public class LeagueOwnershipTests
             repo,
             NullLogger<LeagueController>.Instance,
             userManager,
-            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<ISpreadCalculatorProvider>(),
             Substitute.For<IEspnCacheService>(),
             invSvc,
             Substitute.For<ILeagueInviteLinkService>(),
@@ -1159,7 +1159,7 @@ public class LeagueOwnershipTests
             repo,
             NullLogger<LeagueController>.Instance,
             userManager,
-            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<ISpreadCalculatorProvider>(),
             Substitute.For<IEspnCacheService>(),
             invSvc,
             Substitute.For<ILeagueInviteLinkService>(),
@@ -1574,13 +1574,10 @@ public class LeagueOwnershipTests
     {
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(AttackerId, isAdmin: true));
         repo.UserExistsInLeagueAsync(AttackerId, 1).Returns(false);
-        var calcBuilder = Substitute.For<ISpreadCalculatorBuilder>();
+        var calcProvider = Substitute.For<ISpreadCalculatorProvider>();
         var calc = Substitute.For<FourPlayWebApp.Server.Services.Interfaces.ISpreadCalculator>();
         calc.DoOddsExist().Returns(false);
-        calcBuilder.WithLeagueId(Arg.Any<int>()).Returns(calcBuilder);
-        calcBuilder.WithWeek(Arg.Any<int>()).Returns(calcBuilder);
-        calcBuilder.WithSeason(Arg.Any<int>()).Returns(calcBuilder);
-        calcBuilder.BuildAsync().Returns(calc);
+        calcProvider.GetForNflWeekAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(calc);
 
         // Admin bypass — result is NotFound (no odds), not Forbid
         var result = await ctrl.GetSpreadBatch(1, 2025, 1,

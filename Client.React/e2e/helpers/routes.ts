@@ -142,12 +142,6 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
-    // ── Odds exists ──────────────────────────────────────────────────────────
-    if (url.includes('/api/league/') && url.includes('/odds/') && url.endsWith('/exists') && method === 'GET') {
-      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
-      return;
-    }
-
     // ── POST /api/league/*/odds/*/*/calculate-batch — scores page ───────────
     if (url.includes('/api/league/') && url.includes('/odds/') && url.includes('/calculate-batch') && method === 'POST') {
       void route.fulfill({

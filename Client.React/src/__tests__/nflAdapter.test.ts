@@ -4,13 +4,12 @@ import { createCompetition, createScores } from '../test/fixtures';
 import type { GameView, SportAdapter } from '../services/sportAdapter';
 
 vi.mock('../api/espn', () => ({
-  loadScoresWithRetry: vi.fn(),
+  getScores: vi.fn(),
   getWeekScores: vi.fn(),
   getLiveGames: vi.fn(),
 }));
 vi.mock('../api/league', () => ({
   getUserPicks: vi.fn(),
-  doOddsExist: vi.fn(),
   spreadBatch: vi.fn(),
   addPicks: vi.fn(),
   removeMyPick: vi.fn(),
@@ -20,9 +19,10 @@ vi.mock('../api/league', () => ({
 }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 
-import { loadScoresWithRetry, getWeekScores, getLiveGames } from '../api/espn';
-import { getUserPicks, doOddsExist, spreadBatch, getNflCurrentWeek, getLeaguePicks, getLeaguePickCounts } from '../api/league';
+import { getScores, getWeekScores, getLiveGames } from '../api/espn';
+import { getUserPicks, spreadBatch, getNflCurrentWeek, getLeaguePicks, getLeaguePickCounts } from '../api/league';
 import { createSpreadResponse } from '../test/fixtures';
+import { buildAxiosError } from './testUtils/axiosError';
 
 function makeScores(homeTeam: string, awayTeam: string, homeScore = 24, awayScore = 17) {
   const comp = createCompetition({ homeTeam, awayTeam, homeScore, awayScore });
@@ -32,7 +32,7 @@ function makeScores(homeTeam: string, awayTeam: string, homeScore = 24, awayScor
 // The control table (NflSeasonWeekConfigs, via SeasonWindowResolver/NflCurrentWeekService, exposed
 // as getNflCurrentWeek) is the SOLE source of truth for which week is "current" — it must be
 // resolved and then queried BY WEEK (getWeekScores), never inferred from ESPN's own implicit
-// "current" scoreboard (loadScoresWithRetry/getScores), which reflects whatever ESPN itself
+// "current" scoreboard (getScores), which reflects whatever ESPN itself
 // considers current (e.g. the most recently completed game during any gap in play) regardless of
 // the league's actual spread-release schedule.
 const DEFAULT_CURRENT_WEEK = {
@@ -52,15 +52,15 @@ describe('nflAdapter', () => {
     vi.mocked(getLeaguePicks).mockResolvedValue([]);
     vi.mocked(getLeaguePickCounts).mockResolvedValue([]);
     vi.mocked(getUserPicks).mockResolvedValue([]);
-    vi.mocked(doOddsExist).mockResolvedValue(false);
-    vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
+    // Default: no odds posted — the spreads endpoint 404s (nflAdapter derives hasOdds from it).
+    vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
     adapter = createNflAdapter();
   });
 
   describe('loadCurrentGames', () => {
     it('maps ESPN competitions to GameView[]', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(doOddsExist).mockResolvedValue(true);
+      vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
       vi.mocked(spreadBatch).mockResolvedValue({ responses: {
         KC: createSpreadResponse('KC', -3),
         BUF: createSpreadResponse('BUF', 3),
@@ -81,7 +81,7 @@ describe('nflAdapter', () => {
     // mapped its equivalent field, nflAdapter silently dropped it.
     it('maps spreadCache dateCreated to spreadPostedAt', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(doOddsExist).mockResolvedValue(true);
+      vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
       vi.mocked(spreadBatch).mockResolvedValue({ responses: {
         KC: { ...createSpreadResponse('KC', -3), dateCreated: '2026-01-02T12:00:00Z' },
         BUF: { ...createSpreadResponse('BUF', 3), dateCreated: '2026-01-02T12:00:00Z' },
@@ -94,7 +94,7 @@ describe('nflAdapter', () => {
 
     it('sets hasOdds=true when odds exist', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(doOddsExist).mockResolvedValue(true);
+      vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
 
       const result = await adapter.loadCurrentGames(1, 'user1');
       expect(result.hasOdds).toBe(true);
@@ -102,7 +102,7 @@ describe('nflAdapter', () => {
 
     it('sets hasOdds=false when no odds', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(doOddsExist).mockResolvedValue(false);
+      vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
 
       const result = await adapter.loadCurrentGames(1, 'user1');
       expect(result.hasOdds).toBe(false);
@@ -112,7 +112,7 @@ describe('nflAdapter', () => {
       const scores = makeScores('KC', 'BUF');
       const gameId = scores.events![0].competitions[0].id;
       vi.mocked(getWeekScores).mockResolvedValue(scores);
-      vi.mocked(doOddsExist).mockResolvedValue(true);
+      vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
       vi.mocked(getUserPicks).mockResolvedValue([{
         id: 1, leagueId: 1, userId: 'user1', userName: 'Alice',
         team: 'KC', pick: 'Spread' as const, nflWeek: 8, season: 2023, dateCreated: '',
@@ -129,19 +129,19 @@ describe('nflAdapter', () => {
     // current (e.g. the last-completed game during any gap in play, such as the summer offseason)
     // which can disagree with the control table entirely. loadCurrentGames must ask ESPN for the
     // control table's specific week (getWeekScores), never touching ESPN's own scoreboard guess
-    // (loadScoresWithRetry) — even when that guess is real, populated data.
+    // (getScores) — even when that guess is real, populated data.
     it('uses the control-table-resolved week via getWeekScores, ignoring ESPN\'s own "current" scoreboard guess', async () => {
       // ESPN's own scoreboard guess: a stale, unrelated week (e.g. last season's Super Bowl)
-      vi.mocked(loadScoresWithRetry).mockResolvedValue(
+      vi.mocked(getScores).mockResolvedValue(
         createScores({ week: 22, seasonYear: 2022, postSeason: true })
       );
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(doOddsExist).mockResolvedValue(true);
+      vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
 
       const result = await adapter.loadCurrentGames(1, 'user1');
 
       expect(getWeekScores).toHaveBeenCalledWith(2023, 8);
-      expect(loadScoresWithRetry).not.toHaveBeenCalled();
+      expect(getScores).not.toHaveBeenCalled();
       expect(result.season).toBe(2023);
       expect(result.week).toBe(8);
       expect(result.isPostSeason).toBe(false);
@@ -157,7 +157,7 @@ describe('nflAdapter', () => {
 
       await expect(adapter.loadCurrentGames(1, 'user1')).rejects.toThrow('control table unavailable');
       expect(getWeekScores).not.toHaveBeenCalled();
-      expect(loadScoresWithRetry).not.toHaveBeenCalled();
+      expect(getScores).not.toHaveBeenCalled();
     });
 
     it('returns the resolved week with empty games when getWeekScores has no data', async () => {
@@ -173,16 +173,16 @@ describe('nflAdapter', () => {
 
   describe('loadCurrentScores', () => {
     it('uses the control-table-resolved week via getWeekScores, ignoring ESPN\'s own scoreboard guess', async () => {
-      vi.mocked(loadScoresWithRetry).mockResolvedValue(
+      vi.mocked(getScores).mockResolvedValue(
         createScores({ week: 22, seasonYear: 2022, postSeason: true })
       );
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(doOddsExist).mockResolvedValue(true);
+      vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
 
       const result = await adapter.loadCurrentScores(1, 'user1');
 
       expect(getWeekScores).toHaveBeenCalledWith(2023, 8);
-      expect(loadScoresWithRetry).not.toHaveBeenCalled();
+      expect(getScores).not.toHaveBeenCalled();
       expect(result.season).toBe(2023);
       expect(result.week).toBe(8);
       expect(result.hasOdds).toBe(true);
@@ -190,7 +190,7 @@ describe('nflAdapter', () => {
 
     it('reflects hasOdds=false for the resolved week when no odds have posted yet', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(doOddsExist).mockResolvedValue(false);
+      vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
 
       const result = await adapter.loadCurrentScores(1, 'user1');
       expect(result.hasOdds).toBe(false);
@@ -201,7 +201,7 @@ describe('nflAdapter', () => {
 
       await expect(adapter.loadCurrentScores(1, 'user1')).rejects.toThrow('control table unavailable');
       expect(getWeekScores).not.toHaveBeenCalled();
-      expect(loadScoresWithRetry).not.toHaveBeenCalled();
+      expect(getScores).not.toHaveBeenCalled();
     });
   });
 
@@ -220,7 +220,7 @@ describe('nflAdapter', () => {
     // LiveGame's own top-level period/displayClock, not anything nested inside situation.
     it('does not fabricate a placeholder situation when ESPN gives period/clock but no full situation detail — but still surfaces period/displayClock for the status line', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(doOddsExist).mockResolvedValue(false);
+      vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
       vi.mocked(getLiveGames).mockResolvedValue([{
         homeTeam: 'KC', awayTeam: 'BUF', homeScore: 24, awayScore: 17,
         isCompleted: false, kickoffUtc: new Date().toISOString(),
@@ -236,7 +236,7 @@ describe('nflAdapter', () => {
 
     it('surfaces a real situation object unmodified, alongside period/displayClock as separate fields', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(doOddsExist).mockResolvedValue(false);
+      vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
       vi.mocked(getLiveGames).mockResolvedValue([{
         homeTeam: 'KC', awayTeam: 'BUF', homeScore: 24, awayScore: 17,
         isCompleted: false, kickoffUtc: new Date().toISOString(),
@@ -276,14 +276,14 @@ describe('nflAdapter', () => {
       const year = await adapter.currentSeasonYear();
 
       expect(year).toBe(2026);
-      expect(loadScoresWithRetry).not.toHaveBeenCalled();
+      expect(getScores).not.toHaveBeenCalled();
     });
 
     it('currentSeasonYear propagates a control-table failure rather than defaulting to the calendar year', async () => {
       vi.mocked(getNflCurrentWeek).mockRejectedValue(new Error('control table unavailable'));
 
       await expect(adapter.currentSeasonYear()).rejects.toThrow('control table unavailable');
-      expect(loadScoresWithRetry).not.toHaveBeenCalled();
+      expect(getScores).not.toHaveBeenCalled();
     });
   });
 
@@ -349,5 +349,108 @@ describe('nflAdapter', () => {
       expect(getNflCurrentWeek).toHaveBeenCalledTimes(2);
     });
   });
-});
 
+  // Request-chain depth: nothing the NFL pages need depends on the ESPN scoreboard's response
+  // except the final merge, so every request goes out together (matching cfbAdapter's shape) —
+  // spreads used to wait on the scoreboard just for its team list, and live games / past weeks
+  // waited on requests they never used.
+  describe('parallel loading', () => {
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>(r => { resolve = r; });
+      return { promise, resolve };
+    }
+
+    it('loadCurrentGames requests every team\'s spreads alongside the scoreboard, not after it', async () => {
+      const scores = deferred<ReturnType<typeof makeScores>>();
+      vi.mocked(getWeekScores).mockReturnValue(scores.promise);
+      vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
+      vi.mocked(spreadBatch).mockResolvedValue({ responses: { KC: createSpreadResponse('KC', -3), BUF: createSpreadResponse('BUF', 3) } });
+
+      const pending = adapter.loadCurrentGames(1, 'user1');
+      await vi.waitFor(() => expect(spreadBatch).toHaveBeenCalledWith(1, 2023, 8, { requests: [] }));
+      scores.resolve(makeScores('KC', 'BUF'));
+      const result = await pending;
+
+      expect(result.games[0].homeSpread).toBe(-3);
+      expect(spreadBatch).toHaveBeenCalledTimes(1);
+    });
+
+    // Deploy skew: a backend that predates the all-teams request answers it with nothing — fall
+    // back to asking for the scoreboard's teams rather than show a week with odds but no spreads.
+    it('falls back to the scoreboard\'s team list when the all-teams request comes back empty', async () => {
+      vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
+      vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
+      vi.mocked(spreadBatch)
+        .mockResolvedValueOnce({ responses: {} })
+        .mockResolvedValueOnce({ responses: { KC: createSpreadResponse('KC', -3), BUF: createSpreadResponse('BUF', 3) } });
+
+      const result = await adapter.loadCurrentGames(1, 'user1');
+
+      expect(spreadBatch).toHaveBeenLastCalledWith(1, 2023, 8, { requests: [{ team: 'KC' }, { team: 'BUF' }] });
+      expect(result.games[0].homeSpread).toBe(-3);
+    });
+
+    // The spreads request doubles as the "have odds posted?" check (there is no /odds/exists call):
+    // its 404 means no odds yet; any other failure is a real error, not a silent "no odds".
+    it('treats a 404 from the spreads request as no odds, and any other failure as an error', async () => {
+      vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
+      vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
+
+      const result = await adapter.loadCurrentGames(1, 'user1');
+      expect(result.hasOdds).toBe(false);
+      expect(result.games).toHaveLength(1);
+
+      vi.mocked(spreadBatch).mockRejectedValue(new Error('Network Error'));
+      await expect(adapter.loadCurrentGames(1, 'user1')).rejects.toThrow('Network Error');
+    });
+
+    it('loadCurrentScores requests live games alongside the scoreboard, not after it', async () => {
+      const scores = deferred<ReturnType<typeof makeScores>>();
+      vi.mocked(getWeekScores).mockReturnValue(scores.promise);
+
+      const pending = adapter.loadCurrentScores(1, 'user1');
+      await vi.waitFor(() => expect(getLiveGames).toHaveBeenCalled());
+      scores.resolve(makeScores('KC', 'BUF'));
+      await pending;
+    });
+
+    it('loadHistoricalScores fetches the requested week without waiting on the current scoreboard', async () => {
+      const current = deferred<ReturnType<typeof makeScores>>();
+      vi.mocked(getScores).mockReturnValue(current.promise);
+      vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
+
+      const pending = adapter.loadHistoricalScores(1, 'user1', { season: 2023, week: 5, isPostSeason: false });
+      await vi.waitFor(() => expect(getWeekScores).toHaveBeenCalledWith(2023, 5));
+      expect(getLeaguePicks).toHaveBeenCalledWith(1, 2023, 5);
+      current.resolve(makeScores('SF', 'DAL')); // a different (current) week — not the one asked for
+      await pending;
+    });
+
+    it('loadHistoricalGames fetches the requested week without waiting on the current scoreboard', async () => {
+      const current = deferred<ReturnType<typeof makeScores>>();
+      vi.mocked(getScores).mockReturnValue(current.promise);
+      vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
+
+      const pending = adapter.loadHistoricalGames(1, 'user1', { season: 2023, week: 5, isPostSeason: false });
+      await vi.waitFor(() => expect(getWeekScores).toHaveBeenCalledWith(2023, 5));
+      expect(getUserPicks).toHaveBeenCalledWith('user1', 1, 2023, 5);
+      current.resolve(makeScores('SF', 'DAL')); // a different (current) week — not the one asked for
+      await pending;
+    });
+
+    // An empty week (no scoreboard events) still resolves to null even though the week's picks /
+    // odds / spreads are now requested alongside it — their failure mustn't turn "nothing here"
+    // into an error page.
+    it('past-week loaders still return null for an empty week when the parallel requests fail', async () => {
+      vi.mocked(getScores).mockResolvedValue(makeScores('SF', 'DAL'));
+      vi.mocked(getWeekScores).mockResolvedValue(null);
+      vi.mocked(getUserPicks).mockRejectedValue(new Error('403'));
+      vi.mocked(getLeaguePicks).mockRejectedValue(new Error('403'));
+      vi.mocked(spreadBatch).mockRejectedValue(new Error('500'));
+
+      await expect(adapter.loadHistoricalGames(1, 'user1', { season: 2023, week: 5, isPostSeason: false })).resolves.toBeNull();
+      await expect(adapter.loadHistoricalScores(1, 'user1', { season: 2023, week: 5, isPostSeason: false })).resolves.toBeNull();
+    });
+  });
+});

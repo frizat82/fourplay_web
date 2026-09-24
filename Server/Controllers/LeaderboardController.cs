@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Auth;
+using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
@@ -24,7 +25,8 @@ public class LeaderboardController(
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (!User.IsInRole(AppRoles.Administrator) && !await leagueRepository.UserExistsInLeagueAsync(callerId, leagueId))
             return Forbid();
-        var scoreboard = await memoryCache.GetOrCreateAsync($"{leagueId}-{seasonYear}", async entry => {
+        var scoreboard = await memoryCache.GetOrCreateAsync(LeagueCacheKeys.Leaderboard(leagueId, seasonYear), async entry => {
+            LeagueCacheKeys.Track(memoryCache, entry, leagueId, seasonYear);
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
             var leagueInfo = await leagueRepository.GetLeagueInfoAsync(leagueId);
             return leagueInfo.LeagueType == LeagueType.Cfb

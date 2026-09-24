@@ -53,124 +53,29 @@ public class CfbLeaderboardService(
             if (juiceMapping is null || leagueUsers.Count == 0 || slates.Count == 0)
                 return leaderboard;
 
-            // Captured once for the whole run rather than re-queried per user/slate — otherwise the
-            // wall clock ticking past a kickoff boundary mid-run could give different users a
-            // different MissingPicks/MissingGameResults verdict for the identical slate.
-            var now = timeProvider.GetUtcNow();
+            // Every query here is per season, never per member or per slate — three queries total,
+            // the same shape as the NFL leaderboard (a 20-member league at slate 18 used to be 1,080
+            // sequential round trips). Each repository call has its own DbContext, so they run together.
+            var picksTask = cfbPicksRepository.GetLeaguePicksForSeasonAsync(leagueId, season);
+            var spreadsTask = cfbRepository.GetLeagueEligibleSpreadsForSeasonAsync(season);
+            var scoresTask = cfbRepository.GetScoresForSeasonAsync(season);
+            // Scoring/MissingPicks only ever consider league-eligible games (frizat-9m0).
+            var spreadsBySlate = (await spreadsTask).ToLookup(s => s.CfbSlateId);
+            var scoresBySlate = (await scoresTask).ToLookup(s => s.CfbSlateId);
+            var picksBySlateUser = (await picksTask).ToLookup(p => (p.CfbSlateId, p.UserId), p => new PickRow(p.Team, p.PickType));
+            var slateIdByNumber = slates.ToDictionary(s => s.SlateNumber, s => s.Id);
 
-            foreach (var user in leagueUsers) {
-                var userModel = new LeaderboardModel {
-                    User = user.User,
-                    WeekResults = new LeaderboardWeekResults[slates.Count],
-                };
+            var periods = slates
+                .Select(slate => new LeaderboardPeriod(slate.SlateNumber, spreadsBySlate[slate.Id].ToList<IOddsRow>(), scoresBySlate[slate.Id].ToList<IScoreRow>()))
+                .ToList();
 
-                for (int i = 0; i < slates.Count; i++) {
-                    var slate = slates[i];
-
-                    // frizat-o3x: a slate before the league's configured StartWeek needs no
-                    // spread/score/pick fetch at all — checked here, before any DB call, not
-                    // inside EvaluateSlate, so an excluded slate costs zero round trips per user
-                    // instead of three wasted ones.
-                    if (GameHelpers.IsWeekExcludedFromSeason(slate.SlateNumber, juiceMapping.StartWeek)) {
-                        userModel.WeekResults[i] = new LeaderboardWeekResults { Week = slate.SlateNumber, WeekResult = WeekResult.Excluded };
-                        continue;
-                    }
-
-                    // GetSpreadsForSlateAsync now returns the full FBS slate, not just league-eligible
-                    // games (frizat-9m0) — scoring/MissingPicks must only ever consider eligible ones.
-                    var spreads = (await cfbRepository.GetSpreadsForSlateAsync(slate.Id)).WhereLeagueEligible().ToList();
-                    var scores = (await cfbRepository.GetScoresForSlateAsync(slate.Id)).ToList();
-                    var picks = (await cfbPicksRepository.GetUserPicksAsync(leagueId, slate.Id, user.UserId)).ToList();
-                    var juice = JuiceForSlate(slate.SlateNumber, juiceMapping);
-
-                    userModel.WeekResults[i] = EvaluateSlate(slate.SlateNumber, spreads, scores, picks, juice, now);
-                }
-
-                leaderboard.Add(userModel);
-            }
-
-            leaderboard = CalculateTotals(leaderboard, juiceMapping, slates.Count);
+            leaderboard = LeaderboardEngine.Build(LeagueType.Cfb, leagueUsers, periods,
+                (userId, slateNumber) => picksBySlateUser[(slateIdByNumber[slateNumber], userId)], juiceMapping, timeProvider.GetUtcNow(),
+                (pick, slateNumber, ex) => logger.LogError(ex, "Error scoring CFB pick {@Pick} slate {Slate}", pick, slateNumber));
         } catch (Exception ex) {
             logger.LogError(ex, "Error building CFB leaderboard for league {LeagueId}", leagueId);
         }
 
         return leaderboard;
     }
-
-    // internal so CfbLeaderboardServiceTests can verify the per-slate tease amounts directly.
-    internal static double JuiceForSlate(int slateNumber, LeagueJuiceMapping juice) => slateNumber switch {
-        <= 14 => juice.Juice,
-        <= 16 => juice.JuiceDivisional,  // quarterfinals (slates 15–16)
-        _ => juice.JuiceConference,       // slate 17 Semifinals + slate 18 Championship
-    };
-
-    private LeaderboardWeekResults EvaluateSlate(int slateNumber, List<CfbSpreads> spreads, List<CfbScores> scores,
-        List<CfbPicks> picks, double juice, DateTimeOffset now) {
-        var result = new LeaderboardWeekResults { Week = slateNumber };
-
-        // A user can submit or change a pick for any individual game right up until that game's own
-        // kickoff (CfbPicksController.StartedTeams uses the identical GameTime <= now check) — so an
-        // incomplete pick set is only a genuine, terminal loss once every eligible game in this slate
-        // has already started. Until then it's no different from "not decided yet", so it reuses the
-        // exact MissingGameResults state (frizat-tf1: a real user was shown as losing a week before
-        // any of that week's games had even kicked off).
-        var allGamesStarted = GameHelpers.AllGamesStarted(spreads.Select(s => s.GameTime), now);
-        var incompletePicksResult = allGamesStarted ? WeekResult.MissingPicks : WeekResult.MissingGameResults;
-
-        if (picks.Count == 0 && spreads.Count > 0) {
-            result.WeekResult = incompletePicksResult;
-            return result;
-        }
-
-        // One calculator per slate (mirrors LeaderboardService.IsPickAWinner's per-week pattern)
-        // rather than rebuilding it per pick — the full spreads list is the odds source every
-        // pick's team lookup resolves against, same shape CfbPicksController.GetSpreads already
-        // constructs from.
-        var spreadCalculator = new SpreadCalculator(spreads, juice);
-        var allWon = picks.All(pick => {
-            try {
-                return DidPickWin(pick, spreads, scores, spreadCalculator);
-            } catch (Exception ex) {
-                logger.LogError(ex, "Error evaluating CFB pick {@Pick}", pick);
-                return false;
-            }
-        });
-
-        if (!allWon) {
-            result.WeekResult = WeekResult.Lost;
-        } else if (picks.Count < GameHelpers.GetCfbRequiredPicks(slateNumber)) {
-            result.WeekResult = incompletePicksResult;
-        } else if (picks.Any(pick => !scores.Any(s => s.HomeTeam == pick.Team || s.AwayTeam == pick.Team))) {
-            result.WeekResult = WeekResult.MissingGameResults;
-        } else {
-            result.WeekResult = WeekResult.Won;
-        }
-
-        return result;
-    }
-
-    internal static bool DidPickWin(CfbPicks pick, List<CfbSpreads> spreads, List<CfbScores> scores, ISpreadCalculator spreadCalculator) {
-        var score = scores.FirstOrDefault(s => s.HomeTeam == pick.Team || s.AwayTeam == pick.Team);
-        if (score is null) return true; // game not yet scored
-
-        // frizat-xtn: no longer pre-checks `spreads` for a matching row and fails open (true) if
-        // none exists — that silently WON a pick that was never actually evaluated against
-        // anything (a data-integrity edge case: a spread deleted/renamed after the pick was made,
-        // or an ESPN cache gap at pick time). NFL's IsPickAWinner has no equivalent pre-check; it
-        // relies entirely on the shared SpreadCalculator.DidUserWinSpread, which already fails
-        // CLOSED (`if (spread is null) return false`) — so removing this pre-check, rather than
-        // adding an equivalent guard, is what actually reconciles the two sports to one shared
-        // behavior, per CLAUDE.md's sibling-sharing rule. isHome is now read from `score` (always
-        // non-null here) instead of the no-longer-looked-up `spread`, so this needs no fallback
-        // for a missing spread row at all — DidUserWinPick below already handles that safely.
-        var isHome = score.HomeTeam == pick.Team;
-        var teamScore = isHome ? score.HomeTeamScore : score.AwayTeamScore;
-        var otherScore = isHome ? score.AwayTeamScore : score.HomeTeamScore;
-
-        return spreadCalculator.DidUserWinPick(pick.Team, teamScore, otherScore, pick.PickType);
-    }
-
-    private static List<LeaderboardModel> CalculateTotals(List<LeaderboardModel> leaderboard,
-        LeagueJuiceMapping juiceMapping, int slateCount) =>
-        LeaderboardSettlementHelper.SettleWeeks(leaderboard, juiceMapping.WeeklyCost, slateCount, juiceMapping.StartWeek);
 }

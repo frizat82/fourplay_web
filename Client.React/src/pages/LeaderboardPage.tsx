@@ -73,7 +73,11 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (!leaguesLoaded || !currentLeague) { setLoading(false); return; }
+    // Leagues still loading is still loading — only a session that has resolved to no league at
+    // all ends the skeleton here (it then redirects to /leaguepicker below). Treating "not loaded
+    // yet" as done flashed "No leaderboard data yet" between two skeletons on every cold load.
+    if (!leaguesLoaded) return;
+    if (!currentLeague) { setLoading(false); return; }
     hasLoadedOnce.current = false;
     void adapter.currentSeasonYear().then((seasonYear) => {
       if (!seasonYear) { setLoading(false); return; }

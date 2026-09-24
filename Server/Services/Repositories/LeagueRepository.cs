@@ -5,11 +5,14 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Linq.Expressions;
 
 namespace FourPlayWebApp.Server.Services.Repositories;
 
-public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextFactory) : ILeagueRepository {
+// cache (optional so tests that don't care can omit it): lets the juice writers below evict what was
+// derived from the old settings — see LeagueCacheKeys.
+public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextFactory, IMemoryCache? cache = null) : ILeagueRepository {
     // League and User related methods
     public async Task<List<LeagueUserMapping>> GetLeagueUserMappingsAsync(int leagueId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
@@ -243,6 +246,14 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             .ToListAsync();
     }
 
+    public async Task<List<NflPicks>> GetLeagueNflPicksForSeasonAsync(int leagueId, int season) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.NflPicks
+            .AsNoTracking()
+            .Where(pick => pick.LeagueId == leagueId && pick.Season == season)
+            .ToListAsync();
+    }
+
     public async Task<List<NflPicks>> GetUserNflPicksAsync(string userId, int leagueId, int season, int week) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.NflPicks
@@ -296,6 +307,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         existing.StartWeek = mapping.StartWeek;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
+        if (cache is not null) LeagueCacheKeys.InvalidateLeagueSeason(cache, existing.LeagueId, existing.Season);
     }
 
     // Soft-delete — keeps the row (and the member's pick history) for audit purposes, just
@@ -407,6 +419,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await using var db = await dbContextFactory.CreateDbContextAsync();
         await db.LeagueJuiceMapping.AddAsync(mapping);
         await db.SaveChangesAsync();
+        if (cache is not null) LeagueCacheKeys.InvalidateLeagueSeason(cache, mapping.LeagueId, mapping.Season);
     }
 
     public async Task<HashSet<(int LeagueId, int Season)>> GetJuiceRemindersSentAsync() {
