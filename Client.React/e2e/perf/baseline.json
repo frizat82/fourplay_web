@@ -1,28 +1,28 @@
 {
   "dashboard": {
-    "jsBytes": 693928,
+    "jsBytes": 693950,
     "cssBytes": 8047,
     "thirdPartyRequests": 1,
     "apiRequests": 12,
-    "apiChainDepth": 4,
+    "apiChainDepth": 3,
     "cls": 0,
     "shiftsAfterReady": 0
   },
   "picks": {
-    "jsBytes": 693928,
+    "jsBytes": 693950,
     "cssBytes": 8047,
     "thirdPartyRequests": 1,
     "apiRequests": 10,
-    "apiChainDepth": 4,
+    "apiChainDepth": 3,
     "cls": 0,
     "shiftsAfterReady": 0
   },
   "scores": {
-    "jsBytes": 693928,
+    "jsBytes": 693950,
     "cssBytes": 8047,
     "thirdPartyRequests": 1,
     "apiRequests": 11,
-    "apiChainDepth": 4,
+    "apiChainDepth": 3,
     "cls": 0,
     "shiftsAfterReady": 0
   }

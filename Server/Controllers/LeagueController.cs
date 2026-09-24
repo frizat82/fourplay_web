@@ -608,17 +608,20 @@ public class LeagueController(
         if (!calculator.DoOddsExist())
             return NotFound("No odds available");
 
+        // No teams requested = every team with odds this week, so the client can fetch spreads in
+        // parallel with the ESPN scoreboard instead of waiting on it for the team list.
+        var teams = request.Requests.Count == 0
+            ? calculator.GetTeams()
+            : request.Requests.Select(r => r.Team).ToList();
         var response = new BatchSpreadResponse();
-        foreach (var calc in request.Requests) {
-                var key = $"{calc.Team}";
-
-                response.Responses[key] = new SpreadResponse {
-                    Team = calc.Team,
-                    Spread = calculator.GetSpread(calc.Team),
-                    Over = calculator.GetOverUnder(calc.Team, PickType.Over),
-                    Under = calculator.GetOverUnder(calc.Team, PickType.Under),
-                    DateCreated = calculator.GetDateCreated(calc.Team),
-                };
+        foreach (var team in teams) {
+            response.Responses[team] = new SpreadResponse {
+                Team = team,
+                Spread = calculator.GetSpread(team),
+                Over = calculator.GetOverUnder(team, PickType.Over),
+                Under = calculator.GetOverUnder(team, PickType.Under),
+                DateCreated = calculator.GetDateCreated(team),
+            };
         }
 
         return Ok(response);

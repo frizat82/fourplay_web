@@ -33,7 +33,7 @@ const sessionState = {
 vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/auth', () => ({ useAuth: () => ({ user: { userId: '123', name: 'TestUser', claims: [] } }) }));
 vi.mock('../api/espn', () => ({
-  getScores: vi.fn(), loadScoresWithRetry: vi.fn(), getWeekScores: vi.fn(), getLiveGames: vi.fn(),
+  getScores: vi.fn(), getWeekScores: vi.fn(), getLiveGames: vi.fn(),
   getCfbScoresForSlate: vi.fn(), getCfbLiveGames: vi.fn(),
 }));
 vi.mock('../api/league', () => ({

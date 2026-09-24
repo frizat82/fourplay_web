@@ -41,6 +41,9 @@ public class SpreadCalculator : ISpreadCalculator {
         return odds.Any();
     }
 
+    public IReadOnlyList<string> GetTeams() =>
+        odds.SelectMany(o => new[] { o.HomeTeam, o.AwayTeam }).Distinct().ToList();
+
     public double? GetOverUnder(string teamAbbr, PickType pickType) {
         //TODO: Add Caching
         var spread = GetOverUnderFromAbbreviation(teamAbbr);

@@ -31,7 +31,7 @@ vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/auth', () => ({ useAuth: () => authState }));
 vi.mock('../services/toast', () => ({ useToast: () => toastState }));
 
-vi.mock('../api/espn', () => ({ getScores: vi.fn(), loadScoresWithRetry: vi.fn(), getWeekScores: vi.fn(), getLiveGames: vi.fn() }));
+vi.mock('../api/espn', () => ({ getScores: vi.fn(), getWeekScores: vi.fn(), getLiveGames: vi.fn() }));
 vi.mock('../api/league', () => ({
   addPicks: vi.fn(),
   removeMyPick: vi.fn(),
@@ -44,13 +44,12 @@ vi.mock('../api/league', () => ({
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
 
-import { getScores, loadScoresWithRetry, getWeekScores } from '../api/espn';
+import { getScores, getWeekScores } from '../api/espn';
 import { addPicks, removeMyPick, doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
 
 const mockedGetScores = vi.mocked(getScores);
-const mockedLoadScoresWithRetry = vi.mocked(loadScoresWithRetry);
 const mockedGetWeekScores = vi.mocked(getWeekScores);
 const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetUserPicks = vi.mocked(getUserPicks);
@@ -136,7 +135,6 @@ describe('PicksPage', () => {
     sessionState.currentLeague = 1;
     toastState.push.mockReset();
     mockedGetScores.mockReset();
-    mockedLoadScoresWithRetry.mockReset();
     mockedGetWeekScores.mockReset();
     mockedGetNflCurrentWeek.mockReset();
     mockedDoOddsExist.mockReset();
