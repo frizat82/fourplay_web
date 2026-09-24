@@ -258,6 +258,10 @@ export function createCfbAdapter(): SportAdapter {
       return current?.season ?? CFB_CONFIGURED_SEASON;
     },
 
+    prefetchCurrentWeek() {
+      getCurrentSlate().catch(() => {});
+    },
+
     async loadCurrentGames(leagueId, userId) {
       const active = await getCurrentSlate();
       if (!active) {

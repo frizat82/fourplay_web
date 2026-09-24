@@ -437,4 +437,26 @@ describe('cfbAdapter', () => {
       expect(getCfbCurrentSlate).not.toHaveBeenCalled();
     });
   });
+
+  describe('prefetchCurrentWeek', () => {
+    it('starts the current-slate fetch, and loadCurrentGames reuses it', async () => {
+      const fresh = createCfbAdapter();
+      fresh.prefetchCurrentWeek();
+      expect(getCfbCurrentSlate).toHaveBeenCalledTimes(1);
+
+      await fresh.loadCurrentGames(1, 'user-1');
+      expect(getCfbCurrentSlate).toHaveBeenCalledTimes(1);
+    });
+
+    it('swallows a failed prefetch and lets the real load retry', async () => {
+      const fresh = createCfbAdapter();
+      vi.mocked(getCfbCurrentSlate).mockRejectedValueOnce(new Error('db down'));
+      fresh.prefetchCurrentWeek();
+      await Promise.resolve();
+
+      await fresh.loadCurrentGames(1, 'user-1');
+      expect(getCfbCurrentSlate).toHaveBeenCalledTimes(2);
+    });
+  });
 });
+
