@@ -153,6 +153,14 @@ export interface WeekState {
   isPostSeason: boolean;
 }
 
+/**
+ * React Query key for a league's picks-page data. weekState null = the live current week, which
+ * PicksPage and PicksIsland share as one cache entry — build it here, never by hand, so the two
+ * can't drift apart and silently double-fetch.
+ */
+export const picksQueryKey = (sport: SportAdapter['sport'], leagueId: number | null, userId: string | undefined, weekState: WeekState | null) =>
+  [sport, 'picks', leagueId, userId, weekState] as const;
+
 export interface LoadedWeek extends WeekState {
   games: GameView[];
   userPicks: PickView[];
@@ -212,4 +220,11 @@ export interface SportAdapter {
     weekLabelFn?: (week: number, isPostSeason: boolean) => string;
   };
   currentSeasonYear(): Promise<number>;
+  /**
+   * Starts the adapter's memoized current week/slate fetch without waiting on it — called when an
+   * adapter-driven route mounts so it overlaps the session's league fetch rather than queueing
+   * behind it. Fire-and-forget: a failure is swallowed here (memoizeOnce doesn't cache it), so
+   * the next real load retries and surfaces it through its own query.
+   */
+  prefetchCurrentWeek(): void;
 }

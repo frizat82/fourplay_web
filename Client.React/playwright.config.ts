@@ -16,7 +16,16 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testMatch: /^(?!.*[\\/]demo[\\/]).*\.spec\.ts$/,
+      testMatch: /^(?!.*[\\/](demo|perf)[\\/]).*\.spec\.ts$/,
+    },
+
+    // ── Cold-load perf baseline — production build via `vite preview`, not the dev server ──
+    // See e2e/perf/perf.spec.ts. Run with `npm run test:perf`.
+    {
+      name: 'perf',
+      use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium', baseURL: 'http://localhost:4173' },
+      testMatch: '**/perf/*.spec.ts',
+      expect: { timeout: 15_000 },
     },
 
     // ── Demo backend — setup (login once, save cookies) ────────────────────────
@@ -79,7 +88,13 @@ export default defineConfig({
   ],
   // In CI, auto-start the dev server on port 5173 (mock-based chromium tests only).
   // Demo tests (demo-nfl / demo-cfb) require a running DEMO_MODE=true backend — run locally.
-  webServer: process.env.CI ? {
+  // `npm run test:perf` sets PERF=1 and serves the already-built production bundle instead.
+  webServer: process.env.PERF ? {
+    command: 'npx vite preview --port 4173 --strictPort',
+    url: 'http://localhost:4173',
+    reuseExistingServer: !process.env.CI,
+    timeout: 60_000,
+  } : process.env.CI ? {
     command: 'VITE_API_TARGET=http://localhost:9999 npm run dev -- --port 5173',
     url: 'http://localhost:5173',
     reuseExistingServer: false,

@@ -208,6 +208,13 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    // ── Live-game situation overlay (Scores page) — no game is live in the fixtures. Previously
+    // unmocked, so it fell through to the dev-server proxy and failed with ECONNREFUSED.
+    if ((url.includes('/api/espn/livegames') || url.includes('/api/espn/cfb/livegames')) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      return;
+    }
+
     // ── NFL current-week (control table) — nflAdapter.ts resolves this FIRST for the current-
     // week path, then fetches that exact week via /api/espn/scores/nfl-week/ below. Must match
     // scoresData's week/season/isPostSeason or the two responses disagree.

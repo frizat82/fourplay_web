@@ -40,8 +40,7 @@ function makeAdapter(loadCurrentGames: SportAdapter['loadCurrentGames']): SportA
   } as unknown as SportAdapter;
 }
 
-const renderWithClient = (adapter: SportAdapter) => {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+const renderWithClient = (adapter: SportAdapter, client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })) => {
   return render(
     <QueryClientProvider client={client}>
       <PicksIsland adapter={adapter} />
@@ -196,5 +195,21 @@ describe('PicksIsland', () => {
 
     await screen.findByText('BUF O');
     expect(container.querySelector('[data-testid="CheckIcon"]')).toBeInTheDocument();
+  });
+
+  // PicksPage renders the island only after its own live query (same key) has resolved, so the
+  // island mounts onto fresh data. Refetching it there doubled every Picks cold load — the whole
+  // current-week chain (week → scores/picks/odds → spreads) ran a second time. PicksPage's own
+  // poll/SSE/focus refetches keep the shared entry live; the island only reads it.
+  it('does not refetch current-week data that was just loaded under the shared key', async () => {
+    sessionState.availableLeagues = [makeLeague(1, 'Demo League')];
+    const loadCurrentGames = vi.fn().mockResolvedValue(makeLoadedWeek({ userPicks: [] }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    client.setQueryData(['nfl', 'picks', 1, 'user-1', null], makeLoadedWeek({ userPicks: [] }));
+
+    renderWithClient(makeAdapter(loadCurrentGames), client);
+
+    await screen.findByText(/no picks yet — 4 needed/i);
+    expect(loadCurrentGames).not.toHaveBeenCalled();
   });
 });

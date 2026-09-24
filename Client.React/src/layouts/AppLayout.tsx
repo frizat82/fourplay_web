@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
@@ -50,6 +50,8 @@ import { isStandalonePwa } from '../utils/pwa';
 import { useSafeAreaRefresh } from '../utils/useSafeAreaRefresh';
 import PendingInviteBanner from '../components/PendingInviteBanner';
 import VersionFooter from '../components/VersionFooter';
+import RouteFallback from '../components/RouteFallback';
+import RouteErrorBoundary from '../components/RouteErrorBoundary';
 
 const drawerWidth = 260;
 
@@ -476,7 +478,13 @@ export default function AppLayout() {
         <Toolbar sx={toolbarSpacerSx} />
         <Box className="page-shell" sx={{ flex: 1 }}>
           <PendingInviteBanner />
-          {noAccessContent ?? <Outlet />}
+          {/* Lazy route chunks (App.tsx) suspend here, not at the app root, so the app bar and
+              drawer stay on screen while a page's code loads. */}
+          {noAccessContent ?? (
+            <RouteErrorBoundary key={location.pathname}>
+              <Suspense fallback={<RouteFallback />}><Outlet /></Suspense>
+            </RouteErrorBoundary>
+          )}
         </Box>
         <VersionFooter />
       </Box>
