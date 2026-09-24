@@ -16,6 +16,9 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     private readonly ILeagueRepository _leagueRepository;
     private readonly SettledScoreCache _settledCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
+    private readonly PolledItemSnapshot _polled = new();
+
+    private static string WeekCacheKey(int season, int nflWeek) => $"nfl-week-scores_{season}_{nflWeek}";
 
     public event Action? ScoresChanged
     {
@@ -34,12 +37,14 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
                 // or soonest-upcoming week, for UI-default purposes) — so its result alone can't
                 // gate off-season ESPN polling. IsSeasonActiveAsync is the purpose-built,
                 // season-level check for that (see SeasonWindowResolver).
-                if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return null;
+                if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return _polled.Clear();
 
                 var week = await nflCurrentWeekService.GetCurrentWeekAsync();
                 var configs = await leagueRepository.GetNflSeasonWeekConfigsAsync();
                 var matchingConfig = configs.FirstOrDefault(c => c.Season == week.Season && c.WeekId == week.WeekId);
-                return matchingConfig is null ? null : await _fetcher.FetchForWeekAsync(matchingConfig);
+                if (matchingConfig is null) return _polled.Clear();
+                return _polled.Record(WeekCacheKey(matchingConfig.Season, matchingConfig.WeekId),
+                    await _fetcher.FetchForWeekAsync(matchingConfig));
             },
             fingerprint: EspnScoresFingerprint.Compute,
             intervalSelector: current => AdaptivePollInterval.Compute(
@@ -70,11 +75,14 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         // Cache key is the resolved internal (season, WeekId) — matches
         // CfbCacheService's cfb-slate-scores_{slateId} shape and is what
         // InvalidateWeekCache(season, week) can actually address after an upsert.
-        var cacheKey = $"nfl-week-scores_{season}_{nflWeek}";
+        var cacheKey = WeekCacheKey(season, nflWeek);
         // Fast path: skip the config/current-week resolution entirely on a cache hit — a
         // settled week's response never changes, so repeat requests for it shouldn't pay for an
         // unfiltered NflSeasonWeekConfigs read just to re-derive a cache key we already have.
         if (_settledCache.TryGet(cacheKey, out var cached)) return cached;
+        // The week the background poller is tracking (the current one): answer from its latest
+        // poll — the same data the live fetch below would get, without a per-request ESPN call.
+        if (_polled.TryGet(cacheKey, out var polled)) return polled;
 
         // One unscoped fetch serves both purposes below — finding this week's own row and
         // resolving which week SeasonWindowResolver currently treats as "current" needs the
@@ -119,7 +127,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     }
 
     public void InvalidateWeekCache(int season, int week) =>
-        _settledCache.Invalidate($"nfl-week-scores_{season}_{week}");
+        _settledCache.Invalidate(WeekCacheKey(season, week));
 
     public ValueTask DisposeAsync() => _cache.DisposeAsync();
 }

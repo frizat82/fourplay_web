@@ -7,6 +7,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 ## 2026-09-24
 
 - Improved: leaderboards load much faster, especially for larger leagues and college football — they now read each week's results in a handful of queries instead of one per member per week
+- Improved: Picks, Scores and the dashboard load noticeably faster during the season — the current week's live scores now come from the server's shared ESPN feed instead of a fresh ESPN request for every page load
 - Fixed: a commissioner's tease or Start Week change could take up to an hour to show up in NFL spreads and the leaderboard; it now applies immediately
 
 ## 2026-09-23
