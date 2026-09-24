@@ -937,13 +937,12 @@ public class LeaderboardServiceTests {
         await picksRepo.DidNotReceive().GetUserPicksAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string>());
     }
 
-    // Slates 18 (Semifinals) and 19 (Championship) must both use JuiceConference, not 0.
-    // Borderline game: IU 28-20, spread -10. juice > 2 required to cover.
-    // JuiceConference=6 → WIN; juice=0 (old _ => 0 bug on slate 19) → LOSE.
+    // Product decision (2026-09-24): the CFP championship (slate 18; anything past it too) has no
+    // tease — same as the NFL Super Bowl. Borderline game: IU 28-20 at -10 only covers with a tease.
     [Theory]
     [InlineData(18)]
     [InlineData(19)]
-    public async Task CfbBuildLeaderboard_SemiAndChampionshipUseConferenceTease(int slateNumber) {
+    public async Task CfbBuildLeaderboard_ChampionshipHasNoTease(int slateNumber) {
         var userId = Guid.NewGuid().ToString();
         var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId, slateNumber: slateNumber);
 
@@ -957,8 +956,8 @@ public class LeaderboardServiceTests {
         var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2025);
 
-        // 28 + (-10) + JuiceConference(6) - 20 = 4 > 0 → Won
-        Assert.Equal(WeekResult.Won, result[0].WeekResults[0].WeekResult);
+        // 28 + (-10) + 0 - 20 = -2 → Lost (with the conference tease of 6 it would have been a win)
+        Assert.Equal(WeekResult.Lost, result[0].WeekResults[0].WeekResult);
     }
 
     // winner earns losers.Count × WeeklyCost; loser owes winners.Count × WeeklyCost; totals sum to 0

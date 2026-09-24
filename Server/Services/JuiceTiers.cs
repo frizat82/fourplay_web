@@ -8,8 +8,7 @@ namespace FourPlayWebApp.Server.Services;
 /// Which of a league's configured teases applies to a period (NFL week / CFB slate). The round a
 /// period belongs to is read from the required-pick table (GameHelpers) — the one place round
 /// boundaries live — so the two can't drift: 4 picks = regular tease, 3 = divisional, 2 =
-/// conference. The final (1 pick) is the only sport difference: NFL's Super Bowl has no tease, CFB's
-/// championship keeps the conference tease.
+/// conference, 1 (the final — NFL Super Bowl, CFP championship) = no tease.
 /// </summary>
 public static class JuiceTiers {
     public static double For(LeagueType sport, int period, LeagueJuiceMapping mapping) {
@@ -18,7 +17,7 @@ public static class JuiceTiers {
             >= 4 => mapping.Juice,
             3 => mapping.JuiceDivisional,
             2 => mapping.JuiceConference,
-            _ => sport == LeagueType.Cfb ? mapping.JuiceConference : 0,
+            _ => 0,
         };
     }
 }

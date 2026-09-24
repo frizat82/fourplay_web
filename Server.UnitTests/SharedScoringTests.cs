@@ -32,8 +32,8 @@ public class SharedScoringTests {
     [InlineData(15, 10)]   // CFP first round
     [InlineData(16, 10)]   // quarterfinals
     [InlineData(17, 6)]    // semifinals — frizat-dcz: was <= 17 => JuiceDivisional (10), not 6
-    [InlineData(18, 6)]    // championship
-    [InlineData(19, 6)]
+    [InlineData(18, 0)]    // championship — no tease (product decision, 2026-09-24), same as the Super Bowl
+    [InlineData(19, 0)]
     public void JuiceTiers_Cfb_BySlate(int slate, double expected) =>
         Assert.Equal(expected, JuiceTiers.For(LeagueType.Cfb, slate, Mapping));
 
