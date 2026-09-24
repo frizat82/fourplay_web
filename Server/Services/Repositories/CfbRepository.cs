@@ -142,10 +142,10 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
 
     // Subquery against CfbSlates (translated server-side), not a local slate-id list .Contains —
     // see CLAUDE.md's Npgsql gotcha.
-    public async Task<List<CfbSpreads>> GetSpreadsForSeasonAsync(int season) {
+    public async Task<List<CfbSpreads>> GetLeagueEligibleSpreadsForSeasonAsync(int season) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbSpreads.AsNoTracking()
-            .Where(s => db.CfbSlates.Any(sl => sl.Id == s.CfbSlateId && sl.Season == season))
+            .Where(s => s.IsLeagueEligible && db.CfbSlates.Any(sl => sl.Id == s.CfbSlateId && sl.Season == season))
             .ToListAsync();
     }
 

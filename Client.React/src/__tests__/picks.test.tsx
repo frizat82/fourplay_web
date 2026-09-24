@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import PicksPage from '../pages/PicksPage';
 import { createNflAdapter } from '../services/nflAdapter';
-import { createCompetition, createCurrentWeek, createPick, createScores, createSpreadResponse, mockLeagueJuiceEmpty, notFoundError } from '../test/fixtures';
+import { createCompetition, createCurrentWeek, createPick, createScores, createSpreadResponse, mockLeagueJuiceEmpty } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -47,6 +47,7 @@ import { getScores, getWeekScores } from '../api/espn';
 import { addPicks, removeMyPick, getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
+import { buildAxiosError } from './testUtils/axiosError';
 
 const mockedGetScores = vi.mocked(getScores);
 const mockedGetWeekScores = vi.mocked(getWeekScores);
@@ -110,7 +111,7 @@ const setupDefaults = async (options?: {
     },
   });
   // No odds posted = the spreads endpoint 404s (nflAdapter derives hasOdds from it).
-  if (options?.oddsExist === false) mockedSpreadBatch.mockRejectedValue(notFoundError());
+  if (options?.oddsExist === false) mockedSpreadBatch.mockRejectedValue(buildAxiosError(404));
 };
 
 const renderWithClient = (ui: React.ReactElement) => {

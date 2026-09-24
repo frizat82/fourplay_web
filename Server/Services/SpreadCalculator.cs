@@ -9,27 +9,27 @@ namespace FourPlayWebApp.Server.Services;
 // decides pick outcomes. Which tease applies to a given week/slate is JuiceTiers' job — the
 // caller passes the resolved amount, so there is no sport-specific path in here at all.
 public class SpreadCalculator : ISpreadCalculator {
-    private readonly IReadOnlyList<IOddsRow> odds;
     private readonly double juice;
     // Team -> (its odds row, whether it's the home side). Built once; every lookup below used to be
     // a linear FirstOrDefault scan over the week's rows (twice — home, then away — per call).
     private readonly Dictionary<string, (IOddsRow Row, bool IsHome)> byTeam = new();
 
     public SpreadCalculator(IEnumerable<IOddsRow> odds, double juice) {
-        this.odds = odds.ToList();
+        var rows = odds.ToList();
         this.juice = juice;
         // Home sides first: the scans this replaces checked every row's HomeTeam before any AwayTeam,
-        // so a team listed in two rows resolves to its home row, exactly as before.
-        foreach (var row in this.odds) byTeam.TryAdd(row.HomeTeam, (row, true));
-        foreach (var row in this.odds) byTeam.TryAdd(row.AwayTeam, (row, false));
+        // so a team listed in two rows resolves to its home row, exactly as before. A null team (bad
+        // row) is skipped rather than thrown on.
+        foreach (var row in rows) if (row.HomeTeam is not null) byTeam.TryAdd(row.HomeTeam, (row, true));
+        foreach (var row in rows) if (row.AwayTeam is not null) byTeam.TryAdd(row.AwayTeam, (row, false));
     }
 
-    public bool DoOddsExist() {
-        return odds.Any();
-    }
+    public bool DoOddsExist() => byTeam.Count > 0;
 
-    public IReadOnlyList<string> GetTeams() =>
-        odds.SelectMany(o => new[] { o.HomeTeam, o.AwayTeam }).Distinct().ToList();
+    public IReadOnlyList<string> GetTeams() => [.. byTeam.Keys];
+
+    private (IOddsRow Row, bool IsHome)? Find(string teamAbbr) =>
+        teamAbbr is not null && byTeam.TryGetValue(teamAbbr, out var t) ? t : null;
 
     public double? GetOverUnder(string teamAbbr, PickType pickType) {
         var spread = GetOverUnderFromAbbreviation(teamAbbr);
@@ -49,8 +49,7 @@ public class SpreadCalculator : ISpreadCalculator {
         return spread + juice;
     }
 
-    public DateTimeOffset? GetDateCreated(string teamAbbr) =>
-        teamAbbr is not null && byTeam.TryGetValue(teamAbbr, out var t) ? t.Row.DateCreated : null;
+    public DateTimeOffset? GetDateCreated(string teamAbbr) => Find(teamAbbr)?.Row.DateCreated;
 
     private bool DidUserWinSpread(string team, int pickTeamScore, int otherTeamScore) {
         var spread = GetSpread(team);
@@ -80,8 +79,7 @@ public class SpreadCalculator : ISpreadCalculator {
     }
 
     private double? GetSpreadFromAbbreviation(string teamAbbr) =>
-        teamAbbr is not null && byTeam.TryGetValue(teamAbbr, out var t) ? (t.IsHome ? t.Row.HomeTeamSpread : t.Row.AwayTeamSpread) : null;
+        Find(teamAbbr) is { } t ? (t.IsHome ? t.Row.HomeTeamSpread : t.Row.AwayTeamSpread) : null;
 
-    public double? GetOverUnderFromAbbreviation(string teamAbbr) =>
-        teamAbbr is not null && byTeam.TryGetValue(teamAbbr, out var t) ? t.Row.OverUnder : null;
+    public double? GetOverUnderFromAbbreviation(string teamAbbr) => Find(teamAbbr)?.Row.OverUnder;
 }

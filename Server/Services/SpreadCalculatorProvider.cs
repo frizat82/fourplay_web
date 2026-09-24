@@ -15,30 +15,24 @@ public class SpreadCalculatorProvider(ILeagueRepository repository, IMemoryCache
         // The calculator itself isn't cached — building one is trivial next to the two lookups it
         // needs, and caching it (keyed without season, and never evicted on a settings change) is
         // exactly what let a stale tease outlive a commissioner's edit or leak across seasons.
-        var spreadsKey = string.Format(_spreadsCacheKey, season, week);
-        var odds = await cache.GetOrCreateAsync(spreadsKey, async entry => {
-            var result = await repository.GetNflSpreadsAsync(season, week);
-            if (result != null && result.Count != 0) {
-                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
-                return result;
-            }
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(1);
-            return [];
-        });
+        var odds = await CacheIfFound(string.Format(_spreadsCacheKey, season, week), _ => { },
+            async () => { var rows = await repository.GetNflSpreadsAsync(season, week); return rows is { Count: > 0 } ? rows : null; }, []);
 
         // Per (league, season): the mapping is season-specific. LeagueRepository's juice writers evict
         // it on any change (and Track expires a read that was in flight when that happened).
-        var juiceMapping = await cache.GetOrCreateAsync(LeagueCacheKeys.Juice(leagueId, season), async entry => {
-            LeagueCacheKeys.Track(entry, leagueId, season);
-            var result = await repository.GetLeagueJuiceMappingAsync(leagueId, season);
-            if (result != null) {
-                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
-                return result;
-            }
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(1);
-            return new LeagueJuiceMapping();
-        });
+        var juiceMapping = await CacheIfFound(LeagueCacheKeys.Juice(leagueId, season),
+            entry => LeagueCacheKeys.Track(cache, entry, leagueId, season),
+            () => repository.GetLeagueJuiceMappingAsync(leagueId, season), new LeagueJuiceMapping());
 
-        return new SpreadCalculator(odds ?? [], JuiceTiers.For(LeagueType.Nfl, week, juiceMapping!));
+        return new SpreadCalculator(odds, JuiceTiers.For(LeagueType.Nfl, week, juiceMapping));
     }
+
+    // A hit is cached for an hour; a miss only for a second, so data posted moments later shows up.
+    private async Task<T> CacheIfFound<T>(string key, Action<ICacheEntry> track, Func<Task<T?>> load, T missing) where T : class =>
+        (await cache.GetOrCreateAsync(key, async entry => {
+            track(entry);
+            var found = await load();
+            entry.AbsoluteExpirationRelativeToNow = found is null ? TimeSpan.FromSeconds(1) : TimeSpan.FromHours(1);
+            return found ?? missing;
+        }))!;
 }

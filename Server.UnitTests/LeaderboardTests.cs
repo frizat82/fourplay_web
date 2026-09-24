@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
@@ -31,10 +32,7 @@ public class LeaderboardServiceTests {
 
 
     [AutoNSubData, Theory]
-    public async Task BuildLeaderboard_ReturnsEmptyList_WhenLeagueIdIsZero(
-        ISpreadCalculatorProvider spreadCalculator, ILeagueRepository repository) {
-        var memoryCache = new MemoryCache(new MemoryCacheOptions());
-
+    public async Task BuildLeaderboard_ReturnsEmptyList_WhenLeagueIdIsZero(ILeagueRepository repository) {
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), repository, TimeProvider.System);
 
         var result = await service.BuildLeaderboard(0, 2024);
@@ -475,11 +473,29 @@ public class LeaderboardServiceTests {
     // The leaderboard reads a whole season's spreads/scores in one query each; these tests describe
     // data per slate (and override single slates). Answer the season queries from those per-slate
     // mocks at call time — the union over the season's slates, exactly what the real query returns.
-    private static void WireSeasonQueriesFromSlateMocks(ICfbRepository cfbRepo) {
-        cfbRepo.GetSpreadsForSeasonAsync(Arg.Any<int>()).Returns(ci => cfbRepo.GetSlatesForSeasonAsync(ci.Arg<int>()).Result
-            .SelectMany(sl => cfbRepo.GetSpreadsForSlateAsync(sl.Id).Result ?? []).ToList());
-        cfbRepo.GetScoresForSeasonAsync(Arg.Any<int>()).Returns(ci => cfbRepo.GetSlatesForSeasonAsync(ci.Arg<int>()).Result
-            .SelectMany(sl => cfbRepo.GetScoresForSlateAsync(sl.Id).Result ?? []).ToList());
+    // The leaderboard reads a whole season per query; tests still think in slates. These keep one
+    // (slate -> rows) table per mocked repository and serve the season queries from it — a later call
+    // for the same slate replaces that slate's rows. Spreads honour the query's eligibility contract.
+    private static readonly ConditionalWeakTable<ICfbRepository, Dictionary<int, List<CfbSpreads>>> SpreadTables = new();
+    private static readonly ConditionalWeakTable<ICfbRepository, Dictionary<int, List<CfbScores>>> ScoreTables = new();
+
+    private static void SlateSpreads(ICfbRepository cfbRepo, int slateId, IEnumerable<CfbSpreads> rows) {
+        var table = SpreadTables.GetValue(cfbRepo, repo => {
+            var t = new Dictionary<int, List<CfbSpreads>>();
+            repo.GetLeagueEligibleSpreadsForSeasonAsync(Arg.Any<int>())
+                .Returns(_ => t.Values.SelectMany(r => r).Where(r => r.IsLeagueEligible).ToList());
+            return t;
+        });
+        table[slateId] = rows.ToList();
+    }
+
+    private static void SlateScores(ICfbRepository cfbRepo, int slateId, IEnumerable<CfbScores> rows) {
+        var table = ScoreTables.GetValue(cfbRepo, repo => {
+            var t = new Dictionary<int, List<CfbScores>>();
+            repo.GetScoresForSeasonAsync(Arg.Any<int>()).Returns(_ => t.Values.SelectMany(r => r).ToList());
+            return t;
+        });
+        table[slateId] = rows.ToList();
     }
 
     private static (ILeagueRepository repo, ICfbRepository cfbRepo, ICfbPicksRepository picksRepo, ICfbCurrentSlateService currentSlateService)
@@ -496,12 +512,11 @@ public class LeaderboardServiceTests {
 
         var cfbRepo = Substitute.For<ICfbRepository>();
 
-        WireSeasonQueriesFromSlateMocks(cfbRepo);
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
-        cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[
+        SlateSpreads(cfbRepo, slateId, [
             new CfbSpreads { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true }
         ]);
-        cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
+        SlateScores(cfbRepo, slateId, [
             new CfbScores { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal }
         ]);
 
@@ -541,10 +556,10 @@ public class LeaderboardServiceTests {
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate1, slate2]);
         // Slate 2 needs its own spreads/scores/picks so BuildLeaderboard doesn't just see an empty
         // slate — reuse the same fixture shape slate 1 already has in BuildCfbMocks.
-        cfbRepo.GetSpreadsForSlateAsync(2).Returns((IEnumerable<CfbSpreads>)[
+        SlateSpreads(cfbRepo, 2, [
             new CfbSpreads { Id = 2, CfbSlateId = 2, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true }
         ]);
-        cfbRepo.GetScoresForSlateAsync(2).Returns((IEnumerable<CfbScores>)[
+        SlateScores(cfbRepo, 2, [
             new CfbScores { Id = 2, CfbSlateId = 2, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal }
         ]);
         picksRepo.GetLeaguePicksForSeasonAsync(1, 2025).Returns((List<CfbPicks>)[
@@ -564,7 +579,7 @@ public class LeaderboardServiceTests {
         var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId);
 
         // Override scores: IU loses badly — 7 to 35, so IU 7 + (-7+5) = 5; 5 - 35 = -30 < 0 → loss
-        cfbRepo.GetScoresForSlateAsync(1).Returns((IEnumerable<CfbScores>)[
+        SlateScores(cfbRepo, 1, [
             new CfbScores { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 7, AwayTeamScore = 35, GameStatus = TypeName.StatusFinal }
         ]);
 
@@ -582,7 +597,7 @@ public class LeaderboardServiceTests {
         // Add a second game that the user did NOT pick. Neither game sets GameTime, which defaults
         // to DateTimeOffset.MinValue — always in the past, so this is the "picking window already
         // closed" case and MissingPicks (a genuine, terminal loss) is correct here.
-        cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
+        SlateSpreads(cfbRepo, 1, [
             new CfbSpreads { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true },
             new CfbSpreads { Id = 2, CfbSlateId = 1, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true },
         ]);
@@ -613,10 +628,9 @@ public class LeaderboardServiceTests {
 
         var cfbRepo = Substitute.For<ICfbRepository>();
 
-        WireSeasonQueriesFromSlateMocks(cfbRepo);
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
-        cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[]); // nothing released yet
-        cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[]);
+        SlateSpreads(cfbRepo, slateId, []); // nothing released yet
+        SlateScores(cfbRepo, slateId, []);
 
         var picksRepo = Substitute.For<ICfbPicksRepository>();
         picksRepo.GetLeaguePicksForSeasonAsync(leagueId, 2025).Returns((List<CfbPicks>)[]);
@@ -641,7 +655,7 @@ public class LeaderboardServiceTests {
         var kickoff = new DateTimeOffset(2026, 9, 12, 19, 0, 0, TimeSpan.Zero);
 
         // Second game the user did NOT pick, kicking off in the future relative to "now".
-        cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
+        SlateSpreads(cfbRepo, 1, [
             new CfbSpreads { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true, GameTime = kickoff },
             new CfbSpreads { Id = 2, CfbSlateId = 1, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true, GameTime = kickoff },
         ]);
@@ -659,7 +673,7 @@ public class LeaderboardServiceTests {
         var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId);
         var kickoff = new DateTimeOffset(2026, 9, 12, 19, 0, 0, TimeSpan.Zero);
 
-        cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
+        SlateSpreads(cfbRepo, 1, [
             new CfbSpreads { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true, GameTime = kickoff },
             new CfbSpreads { Id = 2, CfbSlateId = 1, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true, GameTime = kickoff },
         ]);
@@ -694,15 +708,14 @@ public class LeaderboardServiceTests {
 
         var cfbRepo = Substitute.For<ICfbRepository>();
 
-        WireSeasonQueriesFromSlateMocks(cfbRepo);
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
         // Decided user picks IU (spread exists AND has a final score). Pending user picks MIC
         // (spread exists, but no score row at all yet) — the exact shape of the real prod bug.
-        cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[
+        SlateSpreads(cfbRepo, slateId, [
             new CfbSpreads { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true },
             new CfbSpreads { Id = 2, CfbSlateId = slateId, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true },
         ]);
-        cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
+        SlateScores(cfbRepo, slateId, [
             new CfbScores { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal }
         ]);
 
@@ -750,15 +763,14 @@ public class LeaderboardServiceTests {
 
         var cfbRepo = Substitute.For<ICfbRepository>();
 
-        WireSeasonQueriesFromSlateMocks(cfbRepo);
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
         // Winner picks IU (spread + final score both exist, covers). Loser picks OSU (loses).
         // Pending picks MIC (spread exists, no score row at all yet).
-        cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[
+        SlateSpreads(cfbRepo, slateId, [
             new CfbSpreads { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true },
             new CfbSpreads { Id = 2, CfbSlateId = slateId, HomeTeam = "MIC", AwayTeam = "PSU", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 47, IsLeagueEligible = true },
         ]);
-        cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
+        SlateScores(cfbRepo, slateId, [
             new CfbScores { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal }
         ]);
 
@@ -815,8 +827,8 @@ public class LeaderboardServiceTests {
             new CfbSlates { Id = 1, Season = 2025, SlateNumber = 1, SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
             new CfbSlates { Id = 2, Season = 2025, SlateNumber = 2, SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(7)), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(13)) },
         ]);
-        cfbRepo.GetSpreadsForSlateAsync(2).Returns((IEnumerable<CfbSpreads>)[]);
-        cfbRepo.GetScoresForSlateAsync(2).Returns((IEnumerable<CfbScores>)[]);
+        SlateSpreads(cfbRepo, 2, []);
+        SlateScores(cfbRepo, 2, []);
         // Slate 2 has no picks — BuildCfbMocks' season-wide picks only cover slate 1.
         // "Now" is season 2026 — 2025 is fully in the past, so every one of its slates should
         // still show, not be clamped to whatever slate 2025 last resolved to.
@@ -890,12 +902,11 @@ public class LeaderboardServiceTests {
 
         var cfbRepo = Substitute.For<ICfbRepository>();
 
-        WireSeasonQueriesFromSlateMocks(cfbRepo);
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate]);
-        cfbRepo.GetSpreadsForSlateAsync(slateId).Returns((IEnumerable<CfbSpreads>)[
+        SlateSpreads(cfbRepo, slateId, [
             new CfbSpreads { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 50, IsLeagueEligible = true }
         ]);
-        cfbRepo.GetScoresForSlateAsync(slateId).Returns((IEnumerable<CfbScores>)[
+        SlateScores(cfbRepo, slateId, [
             new CfbScores { Id = 1, CfbSlateId = slateId, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal }
         ]);
 
@@ -920,7 +931,7 @@ public class LeaderboardServiceTests {
         var result = await service.BuildLeaderboard(1, 2025);
 
         Assert.Equal(5, result.Count);
-        await cfbRepo.Received(1).GetSpreadsForSeasonAsync(2025);
+        await cfbRepo.Received(1).GetLeagueEligibleSpreadsForSeasonAsync(2025);
         await cfbRepo.Received(1).GetScoresForSeasonAsync(2025);
         await picksRepo.Received(1).GetLeaguePicksForSeasonAsync(1, 2025);
         await picksRepo.DidNotReceive().GetUserPicksAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<string>());
@@ -936,10 +947,10 @@ public class LeaderboardServiceTests {
         var userId = Guid.NewGuid().ToString();
         var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId, slateNumber: slateNumber);
 
-        cfbRepo.GetSpreadsForSlateAsync(1).Returns((IEnumerable<CfbSpreads>)[
+        SlateSpreads(cfbRepo, 1, [
             new CfbSpreads { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamSpread = -10, AwayTeamSpread = 10, OverUnder = 50, IsLeagueEligible = true }
         ]);
-        cfbRepo.GetScoresForSlateAsync(1).Returns((IEnumerable<CfbScores>)[
+        SlateScores(cfbRepo, 1, [
             new CfbScores { Id = 1, CfbSlateId = 1, HomeTeam = "IU", AwayTeam = "OSU", HomeTeamScore = 28, AwayTeamScore = 20, GameStatus = TypeName.StatusFinal }
         ]);
 
@@ -975,7 +986,6 @@ public class LeaderboardServiceTests {
     public async Task CfbBuildLeaderboard_ReturnsEmpty_WhenLeagueIdIsZero() {
         var leagueRepo = Substitute.For<ILeagueRepository>();
         var cfbRepo = Substitute.For<ICfbRepository>();
-        WireSeasonQueriesFromSlateMocks(cfbRepo);
         var picksRepo = Substitute.For<ICfbPicksRepository>();
         var currentSlateService = Substitute.For<ICfbCurrentSlateService>();
         var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);

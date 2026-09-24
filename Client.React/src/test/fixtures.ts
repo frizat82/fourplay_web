@@ -228,9 +228,4 @@ export function createLeaderboardEntry(overrides?: Partial<LeaderboardDto>): Lea
   };
 }
 
-/** An axios-shaped 404 — how the NFL spreads endpoint says a week's odds haven't posted yet
- * (nflAdapter derives hasOdds from it; there is no separate /odds/exists call). */
-export function notFoundError(): Error {
-  return Object.assign(new Error('Request failed with status code 404'), { response: { status: 404 } });
-}
 

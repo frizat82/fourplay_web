@@ -26,7 +26,7 @@ public class LeaderboardController(
         if (!User.IsInRole(AppRoles.Administrator) && !await leagueRepository.UserExistsInLeagueAsync(callerId, leagueId))
             return Forbid();
         var scoreboard = await memoryCache.GetOrCreateAsync(LeagueCacheKeys.Leaderboard(leagueId, seasonYear), async entry => {
-            LeagueCacheKeys.Track(entry, leagueId, seasonYear);
+            LeagueCacheKeys.Track(memoryCache, entry, leagueId, seasonYear);
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
             var leagueInfo = await leagueRepository.GetLeagueInfoAsync(leagueId);
             return leagueInfo.LeagueType == LeagueType.Cfb

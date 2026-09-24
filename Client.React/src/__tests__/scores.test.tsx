@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import ScoresPage from '../pages/ScoresPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCfbAdapter } from '../services/cfbAdapter';
-import { createCurrentWeek, createPick, createScores, createSpreadResponse, createCompetition, mockLeagueJuiceEmpty, notFoundError } from '../test/fixtures';
+import { createCurrentWeek, createPick, createScores, createSpreadResponse, createCompetition, mockLeagueJuiceEmpty } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -53,6 +53,7 @@ vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 import { getLiveGames, getWeekScores, getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 import { getLeaguePicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbAllPicks } from '../api/cfb';
+import { buildAxiosError } from './testUtils/axiosError';
 
 const mockedGetLiveGames = vi.mocked(getLiveGames);
 const mockedGetWeekScores = vi.mocked(getWeekScores);
@@ -101,7 +102,7 @@ const setupDefaults = async (options?: {
   mockedGetLeaguePicks.mockResolvedValue(options?.picks ?? []);
   mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
   // No odds posted = the spreads endpoint 404s (nflAdapter derives hasOdds from it).
-  if (options?.oddsExist === false) mockedSpreadBatch.mockRejectedValue(notFoundError());
+  if (options?.oddsExist === false) mockedSpreadBatch.mockRejectedValue(buildAxiosError(404));
   mockLeagueJuiceEmpty(mockedGetLeagueJuice);
 };
 

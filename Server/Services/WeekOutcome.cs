@@ -8,8 +8,7 @@ namespace FourPlayWebApp.Server.Services;
 public sealed record PickRow(string Team, PickType PickType);
 
 /// <summary>
-/// How one user's week (NFL) or slate (CFB) resolves — one implementation for both leaderboards
-/// (previously LeaderboardService.CalculatePicks and CfbLeaderboardService.EvaluateSlate).
+/// How one user's week (NFL) or slate (CFB) resolves — one implementation for both leaderboards.
 /// </summary>
 public static class WeekOutcome {
     /// <param name="scores">This week's/slate's scores only.</param>
@@ -41,7 +40,7 @@ public static class WeekOutcome {
     }
 
     /// <summary>true/false once the pick's game has a score; null while it doesn't.</summary>
-    public static bool? PickResult(PickRow pick, IEnumerable<IScoreRow> scores, ISpreadCalculator calculator) {
+    private static bool? PickResult(PickRow pick, IEnumerable<IScoreRow> scores, ISpreadCalculator calculator) {
         var score = scores.FirstOrDefault(s => s.HomeTeam == pick.Team || s.AwayTeam == pick.Team);
         if (score is null) return null;
         var isHome = score.HomeTeam == pick.Team;

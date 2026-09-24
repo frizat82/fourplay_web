@@ -53,72 +53,29 @@ public class CfbLeaderboardService(
             if (juiceMapping is null || leagueUsers.Count == 0 || slates.Count == 0)
                 return leaderboard;
 
-            // Captured once for the whole run rather than re-queried per user/slate — otherwise the
-            // wall clock ticking past a kickoff boundary mid-run could give different users a
-            // different MissingPicks/MissingGameResults verdict for the identical slate.
-            var now = timeProvider.GetUtcNow();
-
             // Every query here is per season, never per member or per slate — three queries total,
             // the same shape as the NFL leaderboard (a 20-member league at slate 18 used to be 1,080
             // sequential round trips). Each repository call has its own DbContext, so they run together.
             var picksTask = cfbPicksRepository.GetLeaguePicksForSeasonAsync(leagueId, season);
-            var spreadsTask = cfbRepository.GetSpreadsForSeasonAsync(season);
+            var spreadsTask = cfbRepository.GetLeagueEligibleSpreadsForSeasonAsync(season);
             var scoresTask = cfbRepository.GetScoresForSeasonAsync(season);
-            // GetSpreadsFor* return the full FBS slate, not just league-eligible games (frizat-9m0) —
-            // scoring/MissingPicks must only ever consider eligible ones.
-            var spreadsBySlate = (await spreadsTask).WhereLeagueEligible().ToLookup(s => s.CfbSlateId);
+            // Scoring/MissingPicks only ever consider league-eligible games (frizat-9m0).
+            var spreadsBySlate = (await spreadsTask).ToLookup(s => s.CfbSlateId);
             var scoresBySlate = (await scoresTask).ToLookup(s => s.CfbSlateId);
-            // frizat-o3x: slates before the league's StartWeek aren't evaluated at all.
-            var slateData = slates
-                .Where(slate => !GameHelpers.IsWeekExcludedFromSeason(slate.SlateNumber, juiceMapping.StartWeek))
-                .ToDictionary(slate => slate.Id, slate => (Spreads: spreadsBySlate[slate.Id].ToList(), Scores: scoresBySlate[slate.Id].ToList()));
+            var picksBySlateUser = (await picksTask).ToLookup(p => (p.CfbSlateId, p.UserId), p => new PickRow(p.Team, p.PickType));
+            var slateIdByNumber = slates.ToDictionary(s => s.SlateNumber, s => s.Id);
 
-            var picksBySlateUser = (await picksTask).ToLookup(p => (p.CfbSlateId, p.UserId));
+            var periods = slates
+                .Select(slate => new LeaderboardPeriod(slate.SlateNumber, spreadsBySlate[slate.Id].ToList<IOddsRow>(), scoresBySlate[slate.Id].ToList<IScoreRow>()))
+                .ToList();
 
-            foreach (var user in leagueUsers) {
-                var userModel = new LeaderboardModel {
-                    User = user.User,
-                    WeekResults = new LeaderboardWeekResults[slates.Count],
-                };
-
-                for (int i = 0; i < slates.Count; i++) {
-                    var slate = slates[i];
-                    if (!slateData.TryGetValue(slate.Id, out var data)) {
-                        userModel.WeekResults[i] = new LeaderboardWeekResults { Week = slate.SlateNumber, WeekResult = WeekResult.Excluded };
-                        continue;
-                    }
-
-                    var picks = picksBySlateUser[(slate.Id, user.UserId)].ToList();
-                    var juice = JuiceTiers.For(LeagueType.Cfb, slate.SlateNumber, juiceMapping);
-                    userModel.WeekResults[i] = EvaluateSlate(slate.SlateNumber, data.Spreads, data.Scores, picks, juice, now);
-                }
-
-                leaderboard.Add(userModel);
-            }
-
-            leaderboard = CalculateTotals(leaderboard, juiceMapping, slates.Count);
+            leaderboard = LeaderboardEngine.Build(LeagueType.Cfb, leagueUsers, periods,
+                (userId, slateNumber) => picksBySlateUser[(slateIdByNumber[slateNumber], userId)], juiceMapping, timeProvider.GetUtcNow(),
+                (pick, slateNumber, ex) => logger.LogError(ex, "Error scoring CFB pick {@Pick} slate {Slate}", pick, slateNumber));
         } catch (Exception ex) {
             logger.LogError(ex, "Error building CFB leaderboard for league {LeagueId}", leagueId);
         }
 
         return leaderboard;
     }
-
-    // Everything sport-specific (which spreads/scores/picks, which tease) is resolved by the caller;
-    // how the slate resolves is WeekOutcome — the same rules the NFL leaderboard uses.
-    private LeaderboardWeekResults EvaluateSlate(int slateNumber, List<CfbSpreads> spreads, List<CfbScores> scores,
-        List<CfbPicks> picks, double juice, DateTimeOffset now) => new() {
-        Week = slateNumber,
-        WeekResult = WeekOutcome.Evaluate(
-            picks.Select(p => new PickRow(p.Team, p.PickType)).ToList(),
-            scores,
-            new SpreadCalculator(spreads, juice),
-            GameHelpers.GetCfbRequiredPicks(slateNumber),
-            GameHelpers.AllGamesStarted(spreads.Select(s => s.GameTime), now),
-            (pick, ex) => logger.LogError(ex, "Error scoring CFB pick {@Pick} slate {Slate}", pick, slateNumber)),
-    };
-
-    private static List<LeaderboardModel> CalculateTotals(List<LeaderboardModel> leaderboard,
-        LeagueJuiceMapping juiceMapping, int slateCount) =>
-        LeaderboardSettlementHelper.SettleWeeks(leaderboard, juiceMapping.WeeklyCost, slateCount, juiceMapping.StartWeek);
 }

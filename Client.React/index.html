@@ -38,9 +38,10 @@
         titleMeta.content = isCfb ? 'IV League CFB' : 'IV League NFL';
         document.head.appendChild(titleMeta);
 
-        // Theme attribute before any CSS applies — same key and fallback as ThemeModeProvider
-        // (services/theme.tsx), which keeps it in sync afterwards. Set only in that provider's
-        // effect, it landed after first paint: dark-mode cold loads painted light, then faded.
+        // Theme attribute before any CSS applies. ThemeModeProvider (services/theme.tsx) starts
+        // from this and keeps it in sync afterwards; set only in that provider's effect, it landed
+        // after first paint: dark-mode cold loads painted light, then faded. Same storage key as
+        // THEME_STORAGE_KEY (themeMode.test.tsx enforces it).
         var mode = null;
         try { mode = localStorage.getItem('FourPlayWebApp.ThemeMode'); } catch (e) { /* storage blocked */ }
         if (mode !== 'dark' && mode !== 'light') {

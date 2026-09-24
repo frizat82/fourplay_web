@@ -1,4 +1,4 @@
-import { extractApiErrorMessage } from '../utils/apiError';
+import { extractApiErrorMessage, isNotFound } from '../utils/apiError';
 import { buildAxiosError } from './testUtils/axiosError';
 
 describe('extractApiErrorMessage', () => {
@@ -42,5 +42,14 @@ describe('extractApiErrorMessage', () => {
 
   it('falls back for an empty-string response body', () => {
     expect(extractApiErrorMessage(buildAxiosError(400, ''), 'fallback')).toBe('fallback');
+  });
+});
+
+describe('isNotFound', () => {
+  it('is true only for an axios 404', () => {
+    expect(isNotFound(buildAxiosError(404))).toBe(true);
+    expect(isNotFound(buildAxiosError(500))).toBe(false);
+    expect(isNotFound(new Error('network'))).toBe(false);
+    expect(isNotFound(undefined)).toBe(false);
   });
 });

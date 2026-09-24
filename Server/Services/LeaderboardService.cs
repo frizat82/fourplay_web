@@ -1,5 +1,4 @@
 using FourPlayWebApp.Server.Models.Data;
-using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Enum;
@@ -35,48 +34,21 @@ public class LeaderboardService(
             if (leagueScores.Count == 0 || leagueUsers.Count == 0)
                 return leaderboard;
 
-            // One query for every member's picks all season, looked up per (user, week) below —
-            // not one query per member × week (a 25-member league at week 18 was 450 round trips).
+            // One query for every member's picks all season, looked up per (user, week) — not one
+            // query per member × week (a 25-member league at week 18 was 450 round trips).
             var picksByUserWeek = (await leagueRepository.GetLeagueNflPicksForSeasonAsync(leagueId, (int)seasonYear))
-                .ToLookup(p => (p.UserId, p.NflWeek));
+                .ToLookup(p => (p.UserId, p.NflWeek), p => new PickRow(p.Team, p.Pick));
 
             var maxWeek = leagueScores.Max(x => x.NflWeek);
-            // Captured/grouped once for the whole run rather than re-derived per user/week: "now"
-            // stays consistent across every user (a wall-clock tick past a kickoff boundary mid-run
-            // must not give different users a different verdict for the same week), and grouping
-            // avoids re-filtering the full-season lists for every one of the users × weeks below.
-            var now = timeProvider.GetUtcNow();
             var spreadsByWeek = leagueSpreads.ToLookup(s => s.NflWeek);
             var scoresByWeek = leagueScores.ToLookup(s => s.NflWeek);
-            // Each week's inputs are the same for every member, so they're built once per week —
-            // calculator straight from the spreads and juice loaded above (exactly how the CFB
-            // leaderboard builds its per-slate calculator), not a second, cached read of the same
-            // spreads that could disagree with the fresh ones used for AllGamesStarted.
             var weeks = Enumerable.Range(1, maxWeek)
-                .Where(week => !GameHelpers.IsWeekExcludedFromSeason(week, seasonJuice.StartWeek))
-                .ToDictionary(week => week, week => new WeekInputs(
-                    scoresByWeek[week].ToList<IScoreRow>(),
-                    new SpreadCalculator(spreadsByWeek[week], JuiceTiers.For(LeagueType.Nfl, week, seasonJuice)),
-                    GameHelpers.AllGamesStarted(spreadsByWeek[week].Select(s => s.GameTime), now)));
+                .Select(week => new LeaderboardPeriod(week, spreadsByWeek[week].ToList<IOddsRow>(), scoresByWeek[week].ToList<IScoreRow>()))
+                .ToList();
 
-            foreach (var user in leagueUsers) {
-                var userPoints = new LeaderboardModel {
-                    WeekResults = new LeaderboardWeekResults[maxWeek],
-                    User = user.User
-                };
-                for (int week = 1; week <= maxWeek; week++) {
-                    userPoints.WeekResults[week - 1] = new LeaderboardWeekResults {
-                        Week = week,
-                        // frizat-o3x: a week before the league's StartWeek is excluded outright —
-                        // not a win, loss or pending state (see LeaderboardSettlementHelper).
-                        WeekResult = weeks.TryGetValue(week, out var inputs)
-                            ? EvaluateWeek(inputs, picksByUserWeek[(user.UserId, week)], week)
-                            : WeekResult.Excluded,
-                    };
-                }
-                leaderboard.Add(userPoints);
-            }
-            leaderboard = await CalculateUserTotals(leaderboard, leagueId, seasonYear, maxWeek);
+            leaderboard = LeaderboardEngine.Build(LeagueType.Nfl, leagueUsers, weeks,
+                (userId, week) => picksByUserWeek[(userId, week)], seasonJuice, timeProvider.GetUtcNow(),
+                (pick, week, ex) => logger.LogError(ex, "Error scoring pick {@Pick} week {Week}", pick, week));
         } catch (Exception ex) {
             logger.LogError(ex, "Error loading leaderboard");
             return leaderboard;
@@ -85,18 +57,6 @@ public class LeaderboardService(
         return leaderboard;
     }
 
-
-    private sealed record WeekInputs(List<IScoreRow> Scores, SpreadCalculator Calculator, bool AllGamesStarted);
-
-    // How the week resolves is WeekOutcome — the same rules the CFB leaderboard uses.
-    private WeekResult EvaluateWeek(WeekInputs inputs, IEnumerable<NflPicks> userPicks, int week) =>
-        WeekOutcome.Evaluate(
-            userPicks.Select(p => new PickRow(p.Team, p.Pick)).ToList(),
-            inputs.Scores,
-            inputs.Calculator,
-            GameHelpers.GetRequiredPicks(week),
-            inputs.AllGamesStarted,
-            (pick, ex) => logger.LogError(ex, "Error scoring pick {@Pick} week {Week}", pick, week));
 
     public async Task<List<LeaderboardModel>> BuildLeaderboard(int leagueId, long seasonYear) {
         if (leagueId != 0) {
