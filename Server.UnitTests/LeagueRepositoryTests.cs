@@ -559,4 +559,23 @@ public class LeagueRepositoryTests
 
         Assert.Equal(["u1", "u1", "u2"], ids.Order());
     }
+
+    // Leaderboard perf: every member's picks for a whole season in one query, scoped to the league.
+    [Fact]
+    public async Task GetLeagueNflPicksForSeasonAsync_ReturnsEveryMembersPicks_ScopedToLeagueAndSeason()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetLeagueNflPicksForSeasonAsync_ReturnsEveryMembersPicks_ScopedToLeagueAndSeason));
+        var db = factory.CreateDbContext();
+        db.NflPicks.AddRange(
+            new NflPicks { UserId = "u1", LeagueId = 1, Season = 2026, NflWeek = 1, Team = "KC" },
+            new NflPicks { UserId = "u2", LeagueId = 1, Season = 2026, NflWeek = 2, Team = "BUF" },
+            new NflPicks { UserId = "u3", LeagueId = 2, Season = 2026, NflWeek = 1, Team = "DAL" }, // other league
+            new NflPicks { UserId = "u1", LeagueId = 1, Season = 2025, NflWeek = 1, Team = "SF" });  // other season
+        await db.SaveChangesAsync();
+        var repo = new LeagueRepository(factory);
+
+        var picks = await repo.GetLeagueNflPicksForSeasonAsync(1, 2026);
+
+        Assert.Equal(["BUF", "KC"], picks.Select(p => p.Team).Order());
+    }
 }

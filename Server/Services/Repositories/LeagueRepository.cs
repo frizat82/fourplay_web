@@ -243,6 +243,14 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             .ToListAsync();
     }
 
+    public async Task<List<NflPicks>> GetLeagueNflPicksForSeasonAsync(int leagueId, int season) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.NflPicks
+            .AsNoTracking()
+            .Where(pick => pick.LeagueId == leagueId && pick.Season == season)
+            .ToListAsync();
+    }
+
     public async Task<List<NflPicks>> GetUserNflPicksAsync(string userId, int leagueId, int season, int week) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.NflPicks
