@@ -85,7 +85,6 @@ vi.mock('../api/cfb', () => ({
 }));
 // Single espn mock covering both NFL and CFB needs
 vi.mock('../api/espn', () => ({
-  loadScoresWithRetry: vi.fn(),
   getWeekScores: vi.fn(),
   getScores: vi.fn(),
   getCfbScoresForSlate: vi.fn(),
