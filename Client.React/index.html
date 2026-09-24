@@ -37,6 +37,17 @@
         titleMeta.name = 'apple-mobile-web-app-title';
         titleMeta.content = isCfb ? 'IV League CFB' : 'IV League NFL';
         document.head.appendChild(titleMeta);
+
+        // Theme attribute before any CSS applies. ThemeModeProvider (services/theme.tsx) starts
+        // from this and keeps it in sync afterwards; set only in that provider's effect, it landed
+        // after first paint: dark-mode cold loads painted light, then faded. Same storage key as
+        // THEME_STORAGE_KEY (themeMode.test.tsx enforces it).
+        var mode = null;
+        try { mode = localStorage.getItem('FourPlayWebApp.ThemeMode'); } catch (e) { /* storage blocked */ }
+        if (mode !== 'dark' && mode !== 'light') {
+          mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', mode);
       })();
     </script>
     <!-- Mobile optimization for iOS and Android -->

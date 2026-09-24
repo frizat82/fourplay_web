@@ -15,6 +15,9 @@ public interface ICfbRepository : ISpreadRepository<CfbSpreads> {
     Task UpsertCfbScoresAsync(IEnumerable<CfbScores> scores);
     Task<IEnumerable<CfbSpreads>> GetSpreadsForSlateAsync(int cfbSlateId);
     Task<IEnumerable<CfbScores>> GetScoresForSlateAsync(int cfbSlateId);
+    /// <summary>Every slate's spreads / scores for a season in one query each — the leaderboard's source (NFL's shape).</summary>
+    Task<List<CfbSpreads>> GetLeagueEligibleSpreadsForSeasonAsync(int season);
+    Task<List<CfbScores>> GetScoresForSeasonAsync(int season);
     Task<IEnumerable<CfbSeasonWeekConfig>> GetWeekConfigsForSeasonAsync(int season);
     Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync();
     Task AddWeekConfigsAsync(IEnumerable<CfbSeasonWeekConfig> configs);

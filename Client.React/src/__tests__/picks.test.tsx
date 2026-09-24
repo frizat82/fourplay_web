@@ -31,11 +31,10 @@ vi.mock('../services/session', () => ({ useSession: () => sessionState }));
 vi.mock('../services/auth', () => ({ useAuth: () => authState }));
 vi.mock('../services/toast', () => ({ useToast: () => toastState }));
 
-vi.mock('../api/espn', () => ({ getScores: vi.fn(), loadScoresWithRetry: vi.fn(), getWeekScores: vi.fn(), getLiveGames: vi.fn() }));
+vi.mock('../api/espn', () => ({ getScores: vi.fn(), getWeekScores: vi.fn(), getLiveGames: vi.fn() }));
 vi.mock('../api/league', () => ({
   addPicks: vi.fn(),
   removeMyPick: vi.fn(),
-  doOddsExist: vi.fn(),
   getUserPicks: vi.fn(),
   spreadBatch: vi.fn(),
   getNflCurrentWeek: vi.fn(),
@@ -44,15 +43,14 @@ vi.mock('../api/league', () => ({
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
 
-import { getScores, loadScoresWithRetry, getWeekScores } from '../api/espn';
-import { addPicks, removeMyPick, doOddsExist, getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
+import { getScores, getWeekScores } from '../api/espn';
+import { addPicks, removeMyPick, getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
+import { buildAxiosError } from './testUtils/axiosError';
 
 const mockedGetScores = vi.mocked(getScores);
-const mockedLoadScoresWithRetry = vi.mocked(loadScoresWithRetry);
 const mockedGetWeekScores = vi.mocked(getWeekScores);
-const mockedDoOddsExist = vi.mocked(doOddsExist);
 const mockedGetUserPicks = vi.mocked(getUserPicks);
 const mockedSpreadBatch = vi.mocked(spreadBatch);
 const mockedAddPicks = vi.mocked(addPicks);
@@ -100,7 +98,6 @@ const setupDefaults = async (options?: {
   mockedGetScores.mockResolvedValue(scores);
   mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, postSeason));
   mockedGetWeekScores.mockResolvedValue(scores);
-  mockedDoOddsExist.mockResolvedValue(options?.oddsExist ?? true);
   mockedGetUserPicks.mockResolvedValue(options?.existingPicks ?? []);
   mockedGetAllJerseys.mockResolvedValue({});
   mockedGetNextSpreadJob.mockResolvedValue(null);
@@ -113,6 +110,8 @@ const setupDefaults = async (options?: {
       NYG: createSpreadResponse('NYG', 3.5, 44, 44),
     },
   });
+  // No odds posted = the spreads endpoint 404s (nflAdapter derives hasOdds from it).
+  if (options?.oddsExist === false) mockedSpreadBatch.mockRejectedValue(buildAxiosError(404));
 };
 
 const renderWithClient = (ui: React.ReactElement) => {
@@ -136,10 +135,8 @@ describe('PicksPage', () => {
     sessionState.currentLeague = 1;
     toastState.push.mockReset();
     mockedGetScores.mockReset();
-    mockedLoadScoresWithRetry.mockReset();
     mockedGetWeekScores.mockReset();
     mockedGetNflCurrentWeek.mockReset();
-    mockedDoOddsExist.mockReset();
     mockedGetUserPicks.mockReset();
     mockedSpreadBatch.mockReset();
     mockedAddPicks.mockReset();
@@ -436,7 +433,9 @@ describe('PicksPage', () => {
     await setupDefaults({ week: 1, oddsExist: false });
     await renderPage();
 
-    expect(screen.getByText(/Odds Not Posted/i)).toBeInTheDocument();
+    // SpreadRelease renders nothing until its own spread-lock-schedule request resolves — await
+    // it rather than assert synchronously after page load (CI-observed race: area still empty).
+    expect(await screen.findByText(/Odds Not Posted/i)).toBeInTheDocument();
     expect(screen.queryAllByRole('button', { name: /^(BUF|MIA|DAL|NYG)$/i })).toHaveLength(0);
 
     // Navigating to the season dropdown and back (without changing the actual week) must not
@@ -444,7 +443,7 @@ describe('PicksPage', () => {
     await userEvent.click(screen.getAllByRole('combobox')[2]);
     await userEvent.click(screen.getByRole('option', { name: /regular season/i }));
 
-    expect(screen.getByText(/Odds Not Posted/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Odds Not Posted/i)).toBeInTheDocument();
     expect(screen.queryAllByRole('button', { name: /^(BUF|MIA|DAL|NYG)$/i })).toHaveLength(0);
   });
 
@@ -493,7 +492,6 @@ describe('PicksPage', () => {
     mockedGetScores.mockResolvedValue(scores);
     mockedGetWeekScores.mockResolvedValue(scores);
     mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, false));
-    mockedDoOddsExist.mockResolvedValue(true);
     mockedGetUserPicks.mockResolvedValue([
       createPick({ team: 'BUF' }), createPick({ team: 'MIA' }),
       createPick({ team: 'DAL' }), createPick({ team: 'NYG' }),

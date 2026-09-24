@@ -1,5 +1,4 @@
 using FourPlayWebApp.Server.Models.Data;
-using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Enum;
@@ -13,7 +12,6 @@ namespace FourPlayWebApp.Server.Services;
 
 public class LeaderboardService(
     ILogger<LeaderboardService> logger,
-    IServiceScopeFactory scopeFactory,
     ILeagueRepository leagueRepository,
     TimeProvider timeProvider)
     : ILeaderboardService {
@@ -36,26 +34,21 @@ public class LeaderboardService(
             if (leagueScores.Count == 0 || leagueUsers.Count == 0)
                 return leaderboard;
 
+            // One query for every member's picks all season, looked up per (user, week) — not one
+            // query per member × week (a 25-member league at week 18 was 450 round trips).
+            var picksByUserWeek = (await leagueRepository.GetLeagueNflPicksForSeasonAsync(leagueId, (int)seasonYear))
+                .ToLookup(p => (p.UserId, p.NflWeek), p => new PickRow(p.Team, p.Pick));
+
             var maxWeek = leagueScores.Max(x => x.NflWeek);
-            // Captured/grouped once for the whole run rather than re-derived per user/week: "now"
-            // stays consistent across every user (a wall-clock tick past a kickoff boundary mid-run
-            // must not give different users a different verdict for the same week), and grouping
-            // avoids re-filtering the full-season spread list on every one of the users × weeks
-            // calls to CalculatePicks below.
-            var now = timeProvider.GetUtcNow();
             var spreadsByWeek = leagueSpreads.ToLookup(s => s.NflWeek);
-            foreach (var user in leagueUsers) {
-                var userPoints = new LeaderboardModel {
-                    WeekResults = new LeaderboardWeekResults[maxWeek],
-                    User = user.User
-                };
-                for (int week = 1; week <= maxWeek; week++) {
-                    var weekResult = await CalculatePicks(leagueId, seasonYear, leagueScores, spreadsByWeek[week], user, week, now, seasonJuice.StartWeek);
-                    userPoints.WeekResults[week - 1] = weekResult;
-                }
-                leaderboard.Add(userPoints);
-            }
-            leaderboard = await CalculateUserTotals(leaderboard, leagueId, seasonYear, maxWeek);
+            var scoresByWeek = leagueScores.ToLookup(s => s.NflWeek);
+            var weeks = Enumerable.Range(1, maxWeek)
+                .Select(week => new LeaderboardPeriod(week, spreadsByWeek[week].ToList<IOddsRow>(), scoresByWeek[week].ToList<IScoreRow>()))
+                .ToList();
+
+            leaderboard = LeaderboardEngine.Build(LeagueType.Nfl, leagueUsers, weeks,
+                (userId, week) => picksByUserWeek[(userId, week)], seasonJuice, timeProvider.GetUtcNow(),
+                (pick, week, ex) => logger.LogError(ex, "Error scoring pick {@Pick} week {Week}", pick, week));
         } catch (Exception ex) {
             logger.LogError(ex, "Error loading leaderboard");
             return leaderboard;
@@ -64,76 +57,6 @@ public class LeaderboardService(
         return leaderboard;
     }
 
-
-    private async Task<LeaderboardWeekResults> CalculatePicks(int leagueId, long seasonYear,
-        List<NflScores> userScores, IEnumerable<NflSpreads> weekSpreads, LeagueUserMapping user, int week, DateTimeOffset now, int startWeek) {
-        var weekResult = new LeaderboardWeekResults {
-            Week = week
-        };
-
-        // frizat-o3x: a week before the league's configured StartWeek needs no pick/spread
-        // evaluation at all — it's not a win, loss, or pending state, just excluded from the
-        // league's season entirely (see LeaderboardSettlementHelper for why this must never be
-        // confused with MissingPicks/MissingGameResults).
-        if (GameHelpers.IsWeekExcludedFromSeason(week, startWeek)) {
-            weekResult.WeekResult = WeekResult.Excluded;
-            return weekResult;
-        }
-
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var spreadCalculatorBuilder = scope.ServiceProvider.GetRequiredService<ISpreadCalculatorBuilder>();
-        var spreadCalculator = await spreadCalculatorBuilder.WithLeagueId(leagueId).WithWeek(week).WithSeason((int)seasonYear).BuildAsync();
-        var userPicks = await leagueRepository.GetUserNflPicksAsync(user.UserId, leagueId, (int)seasonYear, week);
-        var allPicksBeatSpread = userPicks.All(pick => {
-            try {
-                return IsPickAWinner(userScores, week, pick, spreadCalculator);
-            } catch (Exception ex) {
-                logger.LogError(ex, "Error calculating pick winner for user {User} week {Week} pick {@Pick}",
-                    user.UserId, week, pick);
-                return false;
-            }
-        });
-        // A user can submit or change a pick for any individual game right up until that game's own
-        // kickoff — so an incomplete pick set is only a genuine, terminal loss once every game for
-        // this week has already started (e.g. Thursday Night Football already final doesn't mean
-        // Sunday's picking window has closed too). Until then it's no different from "not decided
-        // yet", so it reuses MissingGameResults (frizat-tf1: a real user was shown as losing a week
-        // before any of that week's games had even kicked off — same root cause, CFB side).
-        var allGamesStarted = GameHelpers.AllGamesStarted(weekSpreads.Select(s => s.GameTime), now);
-        var incompletePicksResult = allGamesStarted ? WeekResult.MissingPicks : WeekResult.MissingGameResults;
-        if (!allPicksBeatSpread) {
-            weekResult.WeekResult = WeekResult.Lost; // Any loss is an immediate full week loss
-        }
-        else if (userPicks.Count < GameHelpers.GetRequiredPicks(week)) {
-            logger.LogDebug("{User} {League} Missing Picks {Week} {Count} {Required}", user.User, user.League.LeagueName, week, userPicks.Count,
-                GameHelpers.GetRequiredPicks(week));
-            weekResult.WeekResult = incompletePicksResult;
-        }
-        else if (userPicks.Any(pick => {
-                     var score = userScores.FirstOrDefault(s =>
-                         s.NflWeek == week && (s.HomeTeam == pick.Team || s.AwayTeam == pick.Team));
-                     return score is null;
-                 })) {
-            weekResult.WeekResult = WeekResult.MissingGameResults;
-        }
-        else {
-            weekResult.WeekResult = allPicksBeatSpread ? WeekResult.Won : WeekResult.Lost;
-        }
-
-        return weekResult;
-    }
-
-    private bool IsPickAWinner(List<NflScores> userScores, int week, NflPicks pick, ISpreadCalculator spreadCalculator)
-    {
-        var score = userScores.FirstOrDefault(s => s.NflWeek == week && (s.HomeTeam == pick.Team || s.AwayTeam == pick.Team));
-        if (score is null)
-            return true; // you are a winner if there is no score
-        var isHome = score!.HomeTeam == pick.Team;
-        var isWinner = spreadCalculator.DidUserWinPick(pick.Team, isHome ? score.HomeTeamScore : score.AwayTeamScore, isHome ? score.AwayTeamScore : score.HomeTeamScore, pick.Pick);
-        logger.LogDebug("{Week} Pick: {@Pick} Team: {Team} HomeScore: {HomeScore} AwayScore: {AwayScore} IsHome: {IsHome} IsWinner: {IsWinner}",
-            week, "Spread", pick.Team, score.HomeTeamScore, score.AwayTeamScore, isHome, isWinner);
-        return isWinner;
-    }
 
     public async Task<List<LeaderboardModel>> BuildLeaderboard(int leagueId, long seasonYear) {
         if (leagueId != 0) {

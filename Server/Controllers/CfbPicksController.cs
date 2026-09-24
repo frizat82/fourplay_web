@@ -54,8 +54,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     // Applies the league's configured juice to the displayed spread via the same SpreadCalculator
     // NFL's LeagueController.GetSpreadBatch uses (see CLAUDE.md's NFL/CFB sharing rule) — this
     // endpoint used to return the raw spread with no tease added at all. Juice is resolved from
-    // slate number (CfbLeaderboardService.JuiceForSlate), CFB's counterpart to NFL's week-number
-    // tiers; that resolution is the one genuine sport-specific difference, everything else is shared.
+    // slate number via the shared JuiceTiers (same resolver NFL uses, CFB's round boundaries).
     [HttpGet("spreads/{leagueId:int}/{cfbSlateId:int}")]
     public async Task<IActionResult> GetSpreads(int leagueId, int cfbSlateId) {
         if (!User.IsInRole(AppRoles.Administrator) && !await leagueRepo.UserExistsInLeagueAsync(CurrentUserId, leagueId))
@@ -82,7 +81,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             await Task.WhenAll(juiceMappingTask, rankingsTask);
 
             var juiceMapping = juiceMappingTask.Result ?? new LeagueJuiceMapping();
-            juice = CfbLeaderboardService.JuiceForSlate(slate.SlateNumber, juiceMapping);
+            juice = JuiceTiers.For(LeagueType.Cfb, slate.SlateNumber, juiceMapping);
             latestRankByTeam = rankingsTask.Result;
         }
 

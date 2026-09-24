@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 type ThemeMode = 'light' | 'dark';
-const STORAGE_KEY = 'FourPlayWebApp.ThemeMode';
+/** Also read by index.html's pre-paint script (themeMode.test.tsx pins the two together). */
+export const THEME_STORAGE_KEY = 'FourPlayWebApp.ThemeMode';
 
 interface ThemeContextValue {
   mode: ThemeMode;
@@ -12,13 +13,16 @@ const ThemeContext = createContext<ThemeContextValue>({ mode: 'light', toggleThe
 
 export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    // index.html's inline script already resolved this before first paint — start from its answer.
+    const painted = document.documentElement.getAttribute('data-theme');
+    if (painted === 'dark' || painted === 'light') return painted;
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === 'dark' || stored === 'light') return stored;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, mode);
+    localStorage.setItem(THEME_STORAGE_KEY, mode);
     document.documentElement.setAttribute('data-theme', mode);
   }, [mode]);
 

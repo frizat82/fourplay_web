@@ -40,4 +40,25 @@ test.describe('Page background color (frizat-2ey regression guard)', () => {
       }, { timeout: 3000 }).toBe('match');
     });
   }
+
+  // The dark-mode attribute used to be set only by ThemeModeProvider's effect, after React's
+  // first paint — so every dark-mode cold load painted the light background first and then ran
+  // body's 0.3s background transition to dark (the mid-fade colour this suite kept catching).
+  // It must already be in place when the document finishes parsing, before the app's JS runs.
+  test('dark mode is applied before the app script runs (no light-to-dark flash)', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('FourPlayWebApp.ThemeMode', 'dark');
+      document.addEventListener('readystatechange', () => {
+        if (document.readyState === 'interactive') {
+          (window as unknown as { __themeAtParse: string | null }).__themeAtParse =
+            document.documentElement.getAttribute('data-theme');
+        }
+      });
+    });
+    await mockAuth(page, { authUser: TEST_USER, navigateTo: '/league/manage' });
+
+    const themeAtParse = await page.evaluate(() => (window as unknown as { __themeAtParse: string | null }).__themeAtParse);
+    expect(themeAtParse).toBe('dark');
+  });
 });
+
