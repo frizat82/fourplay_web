@@ -1,43 +1,15 @@
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class SpreadCalculatorBuilder(ILeagueRepository repository, IMemoryCache cache) : ISpreadCalculatorBuilder {
-    private int _leagueId;
-    private int _week;
-    private int _season;
-
-    // Cache key templates
+public class SpreadCalculatorProvider(ILeagueRepository repository, IMemoryCache cache) : ISpreadCalculatorProvider {
     private const string _spreadsCacheKey = "spreads_{0}_{1}"; // season_week
 
-    public ISpreadCalculatorBuilder WithLeagueId(int leagueId)
-    {
-        _leagueId = leagueId;
-        return this;
-    }
-
-    public ISpreadCalculatorBuilder WithWeek(int week)
-    {
-        _week = week;
-        return this;
-    }
-
-    public ISpreadCalculatorBuilder WithSeason(int season)
-    {
-        _season = season;
-        return this;
-    }
-
-    public async Task<ISpreadCalculator> BuildAsync() {
-        // Snapshot instance fields immediately to avoid cross-contamination if the
-        // builder is (incorrectly) shared across concurrent callers.
-        var leagueId = _leagueId;
-        var week     = _week;
-        var season   = _season;
-
+    public async Task<ISpreadCalculator> GetForNflWeekAsync(int leagueId, int season, int week) {
         if (leagueId == 0 || week == 0 || season == 0)
             throw new ArgumentException("League ID, week, and season must be set.");
         // The calculator itself isn't cached — building one is trivial next to the two lookups it
@@ -66,6 +38,6 @@ public class SpreadCalculatorBuilder(ILeagueRepository repository, IMemoryCache 
             return new LeagueJuiceMapping();
         });
 
-        return new SpreadCalculator(odds ?? [], juiceMapping!, week);
+        return new SpreadCalculator(odds ?? [], JuiceTiers.For(LeagueType.Nfl, week, juiceMapping!));
     }
 }

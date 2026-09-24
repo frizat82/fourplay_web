@@ -30,15 +30,15 @@ public class LeaderboardServiceTests {
     }
 
     /// <summary>
-    /// Wraps an ISpreadCalculatorBuilder inside a fake IServiceScopeFactory so that
-    /// LeaderboardService (which now resolves ISpreadCalculatorBuilder via DI scope)
+    /// Wraps an ISpreadCalculatorProvider inside a fake IServiceScopeFactory so that
+    /// LeaderboardService (which now resolves ISpreadCalculatorProvider via DI scope)
     /// can be tested without a full DI container.
     /// </summary>
-    private static IServiceScopeFactory BuildScopeFactory(ISpreadCalculatorBuilder spreadCalculatorBuilder)
+    private static IServiceScopeFactory BuildScopeFactory(ISpreadCalculatorProvider spreadCalculatorProvider)
     {
         var serviceProvider = Substitute.For<IServiceProvider>();
-        serviceProvider.GetService(typeof(ISpreadCalculatorBuilder))
-                       .Returns(spreadCalculatorBuilder);
+        serviceProvider.GetService(typeof(ISpreadCalculatorProvider))
+                       .Returns(spreadCalculatorProvider);
 
         var scope = Substitute.For<IServiceScope>();
         scope.ServiceProvider.Returns(serviceProvider);
@@ -57,7 +57,7 @@ public class LeaderboardServiceTests {
 
     [AutoNSubData, Theory]
     public async Task BuildLeaderboard_ReturnsEmptyList_WhenLeagueIdIsZero(
-        ISpreadCalculatorBuilder spreadCalculator, ILeagueRepository repository) {
+        ISpreadCalculatorProvider spreadCalculator, ILeagueRepository repository) {
         var memoryCache = new MemoryCache(new MemoryCacheOptions());
         var scopeFactory = BuildScopeFactory(spreadCalculator);
 
@@ -75,16 +75,16 @@ public class LeaderboardServiceTests {
         await dbFactory.PopulateUserTestData();
         await dbFactory.PopulateScoresTestDataAsync();
         var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorBuilder =
-            new SpreadCalculatorBuilder(repository, new MemoryCache(new MemoryCacheOptions()));
+        var spreadCalculatorProvider =
+            new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
         var dbContext = await dbFactory.CreateDbContextAsync();
         var scores = dbContext.NflScores.ToList();
         // Generate regular season
-        _ = await FakePicks(spreadCalculatorBuilder, dbContext, scores, 18);
+        _ = await FakePicks(spreadCalculatorProvider, dbContext, scores, 18);
         // Generate playoff picks and get the results
-        var playoffResults = await FakePlayoffPicks(spreadCalculatorBuilder, dbContext, scores);
+        var playoffResults = await FakePlayoffPicks(spreadCalculatorProvider, dbContext, scores);
         // Create service and build leaderboard
-        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var scopeFactory = BuildScopeFactory(spreadCalculatorProvider);
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
         var result = await service.BuildLeaderboard(1, 2024);
 
@@ -101,15 +101,15 @@ public class LeaderboardServiceTests {
         await dbFactory.PopulateUserTestData();
         await dbFactory.PopulateScoresTestDataAsync();
         var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorBuilder =
-            new SpreadCalculatorBuilder(repository, new MemoryCache(new MemoryCacheOptions()));
+        var spreadCalculatorProvider =
+            new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
         var dbContext = await dbFactory.CreateDbContextAsync();
         var scores = dbContext.NflScores.ToList();
-        var isWinner = await FakePicks(spreadCalculatorBuilder, dbContext, scores, 4);
+        var isWinner = await FakePicks(spreadCalculatorProvider, dbContext, scores, 4);
 
         await dbContext.SaveChangesAsync();
 
-        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var scopeFactory = BuildScopeFactory(spreadCalculatorProvider);
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
 
         var result = await service.BuildLeaderboard(1, 2024);
@@ -137,9 +137,9 @@ public class LeaderboardServiceTests {
         await dbContext.SaveChangesAsync();
 
         var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorBuilder =
-            new SpreadCalculatorBuilder(repository, new MemoryCache(new MemoryCacheOptions()));
-        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var spreadCalculatorProvider =
+            new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
+        var scopeFactory = BuildScopeFactory(spreadCalculatorProvider);
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
 
         var result = await service.BuildLeaderboard(1, 2024);
@@ -155,8 +155,8 @@ public class LeaderboardServiceTests {
         await dbFactory.PopulateUserTestData(5); // Create 5 users (4 winners, 1 loser per week)
         await dbFactory.PopulateScoresTestDataAsync(4); // 4 weeks of scores
         var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorBuilder =
-            new SpreadCalculatorBuilder(repository, new MemoryCache(new MemoryCacheOptions()));
+        var spreadCalculatorProvider =
+            new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
         var dbContext = await dbFactory.CreateDbContextAsync();
 
         // Set the weekly cost to $10
@@ -191,7 +191,7 @@ public class LeaderboardServiceTests {
         }
 
         // Act
-        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var scopeFactory = BuildScopeFactory(spreadCalculatorProvider);
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
         var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 4);
 
@@ -238,7 +238,7 @@ public class LeaderboardServiceTests {
         await dbFactory.PopulateUserTestData(5); // Create 5 users
         await dbFactory.PopulateScoresTestDataAsync(4); // 4 weeks of scores
         var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorBuilder = new SpreadCalculatorBuilder(repository, new MemoryCache(new MemoryCacheOptions()));
+        var spreadCalculatorProvider = new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
         var dbContext = await dbFactory.CreateDbContextAsync();
 
         // Set the weekly cost to $10
@@ -293,7 +293,7 @@ public class LeaderboardServiceTests {
         }
 
         // Act
-        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var scopeFactory = BuildScopeFactory(spreadCalculatorProvider);
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
         var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 4);
 
@@ -365,7 +365,7 @@ public class LeaderboardServiceTests {
         await dbFactory.PopulateUserTestData(2);
         await dbFactory.PopulateScoresTestDataAsync(1);
         var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorBuilder = new SpreadCalculatorBuilder(repository, new MemoryCache(new MemoryCacheOptions()));
+        var spreadCalculatorProvider = new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
         var dbContext = await dbFactory.CreateDbContextAsync();
 
         var league = dbContext.LeagueJuiceMapping.First();
@@ -378,7 +378,7 @@ public class LeaderboardServiceTests {
             new() { User = users[1], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.MissingGameResults }] },
         };
 
-        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var scopeFactory = BuildScopeFactory(spreadCalculatorProvider);
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
         var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 1);
 
@@ -395,7 +395,7 @@ public class LeaderboardServiceTests {
         await dbFactory.PopulateUserTestData(3);
         await dbFactory.PopulateScoresTestDataAsync(1);
         var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorBuilder = new SpreadCalculatorBuilder(repository, new MemoryCache(new MemoryCacheOptions()));
+        var spreadCalculatorProvider = new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
         var dbContext = await dbFactory.CreateDbContextAsync();
 
         var league = dbContext.LeagueJuiceMapping.First();
@@ -409,7 +409,7 @@ public class LeaderboardServiceTests {
             new() { User = users[2], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.MissingGameResults }] },
         };
 
-        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var scopeFactory = BuildScopeFactory(spreadCalculatorProvider);
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repository, TimeProvider.System);
         var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 1);
 
@@ -427,7 +427,7 @@ public class LeaderboardServiceTests {
     private static readonly DateTimeOffset NflFinishedGameTime = new(2026, 9, 11, 20, 0, 0, TimeSpan.Zero); // Thu final
     private static readonly DateTimeOffset NflPendingGameTime = new(2026, 9, 14, 13, 0, 0, TimeSpan.Zero);  // Sun, not started
 
-    private static (ILeagueRepository repo, ISpreadCalculatorBuilder spreadCalculatorBuilder) BuildNflKickoffMocks(string userId) {
+    private static (ILeagueRepository repo, ISpreadCalculatorProvider spreadCalculatorProvider) BuildNflKickoffMocks(string userId) {
         var league = new LeagueInfo { Id = 1, LeagueName = "NFL Test", OwnerUserId = userId };
         var mapping = new LeagueUserMapping { LeagueId = 1, League = league, User = new ApplicationUser { Id = userId, UserName = "Alice" }, UserId = userId };
         var juice = new LeagueJuiceMapping { LeagueId = 1, Season = 2024, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
@@ -444,22 +444,19 @@ public class LeaderboardServiceTests {
         ]);
         repo.GetLeagueNflPicksForSeasonAsync(1, 2024).Returns(new List<NflPicks>());
 
-        var spreadCalculatorBuilder = Substitute.For<ISpreadCalculatorBuilder>();
-        spreadCalculatorBuilder.WithLeagueId(Arg.Any<int>()).Returns(spreadCalculatorBuilder);
-        spreadCalculatorBuilder.WithWeek(Arg.Any<int>()).Returns(spreadCalculatorBuilder);
-        spreadCalculatorBuilder.WithSeason(Arg.Any<int>()).Returns(spreadCalculatorBuilder);
-        spreadCalculatorBuilder.BuildAsync().Returns(Substitute.For<ISpreadCalculator>());
+        var spreadCalculatorProvider = Substitute.For<ISpreadCalculatorProvider>();
+        spreadCalculatorProvider.GetForNflWeekAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(Substitute.For<ISpreadCalculator>());
 
-        return (repo, spreadCalculatorBuilder);
+        return (repo, spreadCalculatorProvider);
     }
 
     [Fact]
     public async Task NflBuildLeaderboard_ReturnsMissingGameResults_NotMissingPicks_WhenGamesHaventStartedYet() {
         var userId = Guid.NewGuid().ToString();
-        var (repo, spreadCalculatorBuilder) = BuildNflKickoffMocks(userId);
+        var (repo, spreadCalculatorProvider) = BuildNflKickoffMocks(userId);
 
         var timeProvider = new FakeTimeProvider(NflFinishedGameTime.AddHours(1)); // after Thu, before Sun
-        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var scopeFactory = BuildScopeFactory(spreadCalculatorProvider);
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repo, timeProvider);
 
         var result = await service.BuildLeaderboard(1, 2024);
@@ -470,10 +467,10 @@ public class LeaderboardServiceTests {
     [Fact]
     public async Task NflBuildLeaderboard_ReturnsMissingPicks_OnceEveryGameHasKickedOff() {
         var userId = Guid.NewGuid().ToString();
-        var (repo, spreadCalculatorBuilder) = BuildNflKickoffMocks(userId);
+        var (repo, spreadCalculatorProvider) = BuildNflKickoffMocks(userId);
 
         var timeProvider = new FakeTimeProvider(NflPendingGameTime.AddHours(1)); // after every kickoff
-        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var scopeFactory = BuildScopeFactory(spreadCalculatorProvider);
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repo, timeProvider);
 
         var result = await service.BuildLeaderboard(1, 2024);
@@ -486,13 +483,13 @@ public class LeaderboardServiceTests {
     [Fact]
     public async Task NflBuildLeaderboard_LoadsPicksOnce_AndBuildsOneCalculatorPerWeek_RegardlessOfMemberCount() {
         var userIds = new[] { "u1", "u2", "u3" };
-        var (repo, spreadCalculatorBuilder) = BuildNflKickoffMocks(userIds[0]);
+        var (repo, spreadCalculatorProvider) = BuildNflKickoffMocks(userIds[0]);
         var league = new LeagueInfo { Id = 1, LeagueName = "NFL Test", OwnerUserId = userIds[0] };
         repo.GetLeagueUserMappingsAsync(1).Returns(userIds.Select(uid => new LeagueUserMapping {
             LeagueId = 1, League = league, User = new ApplicationUser { Id = uid, UserName = uid }, UserId = uid,
         }).ToList());
 
-        var scopeFactory = BuildScopeFactory(spreadCalculatorBuilder);
+        var scopeFactory = BuildScopeFactory(spreadCalculatorProvider);
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), scopeFactory, repo,
             new FakeTimeProvider(NflPendingGameTime.AddHours(1)));
 
@@ -501,7 +498,7 @@ public class LeaderboardServiceTests {
         Assert.Equal(3, result.Count);
         await repo.Received(1).GetLeagueNflPicksForSeasonAsync(1, 2024);
         await repo.DidNotReceive().GetUserNflPicksAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>());
-        await spreadCalculatorBuilder.Received(1).BuildAsync(); // one week of scores in the fixture
+        await spreadCalculatorProvider.Received(1).GetForNflWeekAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()); // one week of scores in the fixture
     }
 
     // ─── CFB Leaderboard Tests ────────────────────────────────────────────────
@@ -1010,7 +1007,7 @@ public class LeaderboardServiceTests {
         Assert.Empty(result);
     }
 
-    private static async Task<bool[]> FakePlayoffPicks(SpreadCalculatorBuilder spreadCalculatorBuilder,
+    private static async Task<bool[]> FakePlayoffPicks(SpreadCalculatorProvider spreadCalculatorProvider,
         ApplicationDbContext dbContext,
         List<NflScores> scores) {
         // [0] = Week 19 Wild Card, [1] = Week 20 Divisional, [2] = Week 21 Conf. Championship
@@ -1027,11 +1024,7 @@ public class LeaderboardServiceTests {
             bool winWeekend = true;
 
             // Configure a spread calculator for this week
-            var spreadCalculator = await spreadCalculatorBuilder
-                .WithLeagueId(dbContext.LeagueInfo.First().Id)
-                .WithWeek(week)
-                .WithSeason(2024)
-                .BuildAsync();
+            var spreadCalculator = await spreadCalculatorProvider.GetForNflWeekAsync(dbContext.LeagueInfo.First().Id, 2024, week);
 
             // Get scores for this week and take only what we need based on required picks
             var weekScores = scores.Where(y => y.NflWeek == week).Take(requiredPicks).ToList();
@@ -1073,15 +1066,14 @@ public class LeaderboardServiceTests {
         return isWinner;
     }
 
-    private static async Task<bool[]> FakePicks(SpreadCalculatorBuilder spreadCalculatorBuilder,
+    private static async Task<bool[]> FakePicks(SpreadCalculatorProvider spreadCalculatorProvider,
         ApplicationDbContext dbContext,
         List<NflScores> scores, int weeks) {
         var isWinner = new bool[weeks];
         for (var x = 1; x <= weeks; x++) {
             // Fake 4 Weeks Wins
             var winWeekend = true;
-            var spreadCalculator = await spreadCalculatorBuilder.WithLeagueId(dbContext.LeagueInfo.First().Id)
-                .WithWeek(x).WithSeason(2024).BuildAsync();
+            var spreadCalculator = await spreadCalculatorProvider.GetForNflWeekAsync(dbContext.LeagueInfo.First().Id, 2024, x);
             foreach (var score in scores.Where(y => y.NflWeek == x).Take(4)) {
                 var homeWinner =
                     spreadCalculator.DidUserWinPick(score.HomeTeam, score.HomeTeamScore, score.AwayTeamScore);

@@ -41,7 +41,7 @@ public class LeagueInviteLinkTests
             repo ?? Substitute.For<ILeagueRepository>(),
             NullLogger<LeagueController>.Instance,
             userManager,
-            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<ISpreadCalculatorProvider>(),
             Substitute.For<IEspnCacheService>(),
             invitationService ?? Substitute.For<IInvitationService>(),
             linkService ?? Substitute.For<ILeagueInviteLinkService>(),

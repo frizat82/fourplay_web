@@ -52,7 +52,7 @@ public class PicksTests
             repo,
             NullLogger<LeagueController>.Instance,
             BuildUserManager(),
-            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<ISpreadCalculatorProvider>(),
             espnCacheService,
             Substitute.For<IInvitationService>(),
             Substitute.For<ILeagueInviteLinkService>(),

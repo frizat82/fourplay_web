@@ -35,7 +35,7 @@ public class LeagueController(
     ILeagueRepository repo,
     ILogger<LeagueController> logger,
     UserManager<ApplicationUser> userManager,
-    ISpreadCalculatorBuilder spreadCalculatorBuilder,
+    ISpreadCalculatorProvider spreadCalculatorProvider,
     IEspnCacheService espnCacheService,
     IInvitationService invitationService,
     ILeagueInviteLinkService leagueInviteLinkService,
@@ -581,11 +581,7 @@ public class LeagueController(
     [HttpGet("{leagueId:int}/odds/{season:int}/{week:int}/exists")]
     [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
     public async Task<ActionResult<bool>> DoOddsExist(int leagueId, int season, int week) {
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
+        var calculator = await spreadCalculatorProvider.GetForNflWeekAsync(leagueId, season, week);
 
         return Ok(calculator.DoOddsExist());
     }
@@ -599,11 +595,7 @@ public class LeagueController(
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId, leagueId))
             return Forbid();
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
+        var calculator = await spreadCalculatorProvider.GetForNflWeekAsync(leagueId, season, week);
 
         if (!calculator.DoOddsExist())
             return NotFound("No odds available");
@@ -636,11 +628,7 @@ public class LeagueController(
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         if (!User.IsInRole(AppRoles.Administrator) && !await repo.UserExistsInLeagueAsync(callerId, leagueId))
             return Forbid();
-        var calculator = await spreadCalculatorBuilder
-            .WithLeagueId(leagueId)
-            .WithWeek(week)
-            .WithSeason(season)
-            .BuildAsync();
+        var calculator = await spreadCalculatorProvider.GetForNflWeekAsync(leagueId, season, week);
 
         if (!calculator.DoOddsExist())
             return NotFound("No odds available");

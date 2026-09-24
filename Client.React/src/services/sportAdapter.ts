@@ -7,6 +7,12 @@ export type { PickType };
 /** Canonical game status — both adapters normalize to this before populating GameView */
 export type GameStatusValue = 'final' | 'in_progress' | 'halftime' | 'scheduled' | null;
 
+/** Optional inputs that must never fail a whole page load (live situation, demo's frozen fixture,
+ * spreads before they post) — both adapters use this rather than each hand-rolling a catch. */
+export async function orFallback<T>(fetch: () => Promise<T>, fallback: T): Promise<T> {
+  try { return await fetch(); } catch { return fallback; }
+}
+
 /**
  * Caches an async fetch's resolved value for the lifetime of the closure it's created in —
  * both nflAdapter.ts (getCurrentWeek, control table) and cfbAdapter.ts (getCurrentSlate, slate)

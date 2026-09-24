@@ -1,4 +1,3 @@
-using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
@@ -6,35 +5,23 @@ using FourPlayWebApp.Shared.Models.Enum;
 
 namespace FourPlayWebApp.Server.Services;
 
-// Shared by NFL and CFB (SpreadCalculatorBuilder / CfbPicksController.GetSpreads): applies a
-// league's configured tease ("juice") to the raw Vegas spread/total and determines pick outcomes.
-// The two sports resolve that juice amount from different tier boundaries — NFL from week number
-// (the constructor below), CFB from slate number (CfbLeaderboardService.JuiceForSlate) — but once
-// resolved, the arithmetic is identical, so it lives in one place rather than two.
+// Shared by NFL and CFB: applies a league's tease ("juice") to the raw Vegas spread/total and
+// decides pick outcomes. Which tease applies to a given week/slate is JuiceTiers' job — the
+// caller passes the resolved amount, so there is no sport-specific path in here at all.
 public class SpreadCalculator : ISpreadCalculator {
-    private readonly IEnumerable<IOddsRow> odds;
+    private readonly IReadOnlyList<IOddsRow> odds;
     private readonly double juice;
+    // Team -> (its odds row, whether it's the home side). Built once; every lookup below used to be
+    // a linear FirstOrDefault scan over the week's rows (twice — home, then away — per call).
+    private readonly Dictionary<string, (IOddsRow Row, bool IsHome)> byTeam = new();
 
-    // NFL path: resolves juice from NFL's week-number tier boundaries.
-    public SpreadCalculator(IEnumerable<IOddsRow> odds, LeagueJuiceMapping juiceMapping, int week)
-        : this(odds, ResolveNflJuice(juiceMapping, week)) {
-    }
-
-    // Shared path: caller supplies an already-resolved tease amount (e.g. CFB's slate-based tiers).
     public SpreadCalculator(IEnumerable<IOddsRow> odds, double juice) {
-        this.odds = odds;
+        this.odds = odds.ToList();
         this.juice = juice;
-    }
-
-    private static double ResolveNflJuice(LeagueJuiceMapping juiceMapping, int week) {
-        if (juiceMapping is null)
-            throw new NullReferenceException("League Spread not configured");
-        return week switch {
-            <= 18 => juiceMapping.Juice,
-            < 21 => juiceMapping.JuiceDivisional,
-            21 => juiceMapping.JuiceConference,
-            _ => 0
-        };
+        // Home sides first: the scans this replaces checked every row's HomeTeam before any AwayTeam,
+        // so a team listed in two rows resolves to its home row, exactly as before.
+        foreach (var row in this.odds) byTeam.TryAdd(row.HomeTeam, (row, true));
+        foreach (var row in this.odds) byTeam.TryAdd(row.AwayTeam, (row, false));
     }
 
     public bool DoOddsExist() {
@@ -45,7 +32,6 @@ public class SpreadCalculator : ISpreadCalculator {
         odds.SelectMany(o => new[] { o.HomeTeam, o.AwayTeam }).Distinct().ToList();
 
     public double? GetOverUnder(string teamAbbr, PickType pickType) {
-        //TODO: Add Caching
         var spread = GetOverUnderFromAbbreviation(teamAbbr);
         if (spread is null)
             return null;
@@ -57,17 +43,14 @@ public class SpreadCalculator : ISpreadCalculator {
     }
 
     public double? GetSpread(string teamAbbr) {
-        //TODO: Add Caching
         var spread = GetSpreadFromAbbreviation(teamAbbr);
         if (spread is null)
             return null;
         return spread + juice;
     }
 
-    public DateTimeOffset? GetDateCreated(string teamAbbr) {
-        var spread = odds.FirstOrDefault(x => x.HomeTeam == teamAbbr || x.AwayTeam == teamAbbr);
-        return spread?.DateCreated;
-    }
+    public DateTimeOffset? GetDateCreated(string teamAbbr) =>
+        byTeam.TryGetValue(teamAbbr, out var t) ? t.Row.DateCreated : null;
 
     private bool DidUserWinSpread(string team, int pickTeamScore, int otherTeamScore) {
         var spread = GetSpread(team);
@@ -96,19 +79,9 @@ public class SpreadCalculator : ISpreadCalculator {
         }
     }
 
-    private double? GetSpreadFromAbbreviation(string teamAbbr) {
-        var spread = odds.FirstOrDefault(x => x.HomeTeam == teamAbbr);
-        if (spread is not null)
-            return spread.HomeTeamSpread;
-        spread = odds.FirstOrDefault(x => x.AwayTeam == teamAbbr);
-        return spread?.AwayTeamSpread;
-    }
+    private double? GetSpreadFromAbbreviation(string teamAbbr) =>
+        byTeam.TryGetValue(teamAbbr, out var t) ? (t.IsHome ? t.Row.HomeTeamSpread : t.Row.AwayTeamSpread) : null;
 
-    public double? GetOverUnderFromAbbreviation(string teamAbbr) {
-        var spread = odds.FirstOrDefault(x => x.HomeTeam == teamAbbr);
-        if (spread is not null)
-            return spread.OverUnder;
-        spread = odds.FirstOrDefault(x => x.AwayTeam == teamAbbr);
-        return spread?.OverUnder;
-    }
+    public double? GetOverUnderFromAbbreviation(string teamAbbr) =>
+        byTeam.TryGetValue(teamAbbr, out var t) ? t.Row.OverUnder : null;
 }

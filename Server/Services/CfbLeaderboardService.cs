@@ -90,7 +90,7 @@ public class CfbLeaderboardService(
                     }
 
                     var picks = picksBySlateUser[(slate.Id, user.UserId)].ToList();
-                    var juice = JuiceForSlate(slate.SlateNumber, juiceMapping);
+                    var juice = JuiceTiers.For(LeagueType.Cfb, slate.SlateNumber, juiceMapping);
                     userModel.WeekResults[i] = EvaluateSlate(slate.SlateNumber, data.Spreads, data.Scores, picks, juice, now);
                 }
 
@@ -105,78 +105,18 @@ public class CfbLeaderboardService(
         return leaderboard;
     }
 
-    // internal so CfbLeaderboardServiceTests can verify the per-slate tease amounts directly.
-    internal static double JuiceForSlate(int slateNumber, LeagueJuiceMapping juice) => slateNumber switch {
-        <= 14 => juice.Juice,
-        <= 16 => juice.JuiceDivisional,  // quarterfinals (slates 15–16)
-        _ => juice.JuiceConference,       // slate 17 Semifinals + slate 18 Championship
+    // Everything sport-specific (which spreads/scores/picks, which tease) is resolved by the caller;
+    // how the slate resolves is WeekOutcome — the same rules the NFL leaderboard uses.
+    private static LeaderboardWeekResults EvaluateSlate(int slateNumber, List<CfbSpreads> spreads, List<CfbScores> scores,
+        List<CfbPicks> picks, double juice, DateTimeOffset now) => new() {
+        Week = slateNumber,
+        WeekResult = WeekOutcome.Evaluate(
+            picks.Select(p => new PickRow(p.Team, p.PickType)).ToList(),
+            scores,
+            new SpreadCalculator(spreads, juice),
+            GameHelpers.GetCfbRequiredPicks(slateNumber),
+            GameHelpers.AllGamesStarted(spreads.Select(s => s.GameTime), now)),
     };
-
-    private LeaderboardWeekResults EvaluateSlate(int slateNumber, List<CfbSpreads> spreads, List<CfbScores> scores,
-        List<CfbPicks> picks, double juice, DateTimeOffset now) {
-        var result = new LeaderboardWeekResults { Week = slateNumber };
-
-        // A user can submit or change a pick for any individual game right up until that game's own
-        // kickoff (CfbPicksController.StartedTeams uses the identical GameTime <= now check) — so an
-        // incomplete pick set is only a genuine, terminal loss once every eligible game in this slate
-        // has already started. Until then it's no different from "not decided yet", so it reuses the
-        // exact MissingGameResults state (frizat-tf1: a real user was shown as losing a week before
-        // any of that week's games had even kicked off).
-        var allGamesStarted = GameHelpers.AllGamesStarted(spreads.Select(s => s.GameTime), now);
-        var incompletePicksResult = allGamesStarted ? WeekResult.MissingPicks : WeekResult.MissingGameResults;
-
-        if (picks.Count == 0 && spreads.Count > 0) {
-            result.WeekResult = incompletePicksResult;
-            return result;
-        }
-
-        // One calculator per slate (mirrors LeaderboardService.IsPickAWinner's per-week pattern)
-        // rather than rebuilding it per pick — the full spreads list is the odds source every
-        // pick's team lookup resolves against, same shape CfbPicksController.GetSpreads already
-        // constructs from.
-        var spreadCalculator = new SpreadCalculator(spreads, juice);
-        var allWon = picks.All(pick => {
-            try {
-                return DidPickWin(pick, spreads, scores, spreadCalculator);
-            } catch (Exception ex) {
-                logger.LogError(ex, "Error evaluating CFB pick {@Pick}", pick);
-                return false;
-            }
-        });
-
-        if (!allWon) {
-            result.WeekResult = WeekResult.Lost;
-        } else if (picks.Count < GameHelpers.GetCfbRequiredPicks(slateNumber)) {
-            result.WeekResult = incompletePicksResult;
-        } else if (picks.Any(pick => !scores.Any(s => s.HomeTeam == pick.Team || s.AwayTeam == pick.Team))) {
-            result.WeekResult = WeekResult.MissingGameResults;
-        } else {
-            result.WeekResult = WeekResult.Won;
-        }
-
-        return result;
-    }
-
-    internal static bool DidPickWin(CfbPicks pick, List<CfbSpreads> spreads, List<CfbScores> scores, ISpreadCalculator spreadCalculator) {
-        var score = scores.FirstOrDefault(s => s.HomeTeam == pick.Team || s.AwayTeam == pick.Team);
-        if (score is null) return true; // game not yet scored
-
-        // frizat-xtn: no longer pre-checks `spreads` for a matching row and fails open (true) if
-        // none exists — that silently WON a pick that was never actually evaluated against
-        // anything (a data-integrity edge case: a spread deleted/renamed after the pick was made,
-        // or an ESPN cache gap at pick time). NFL's IsPickAWinner has no equivalent pre-check; it
-        // relies entirely on the shared SpreadCalculator.DidUserWinSpread, which already fails
-        // CLOSED (`if (spread is null) return false`) — so removing this pre-check, rather than
-        // adding an equivalent guard, is what actually reconciles the two sports to one shared
-        // behavior, per CLAUDE.md's sibling-sharing rule. isHome is now read from `score` (always
-        // non-null here) instead of the no-longer-looked-up `spread`, so this needs no fallback
-        // for a missing spread row at all — DidUserWinPick below already handles that safely.
-        var isHome = score.HomeTeam == pick.Team;
-        var teamScore = isHome ? score.HomeTeamScore : score.AwayTeamScore;
-        var otherScore = isHome ? score.AwayTeamScore : score.HomeTeamScore;
-
-        return spreadCalculator.DidUserWinPick(pick.Team, teamScore, otherScore, pick.PickType);
-    }
 
     private static List<LeaderboardModel> CalculateTotals(List<LeaderboardModel> leaderboard,
         LeagueJuiceMapping juiceMapping, int slateCount) =>
