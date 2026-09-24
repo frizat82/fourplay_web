@@ -6,6 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-09-24
 
+- Changed: the college football national championship slate no longer applies a tease, matching the NFL Super Bowl
 - Fixed: opening the Leaderboard directly (refresh or link) briefly showed "No leaderboard data yet" before the standings loaded
 - Fixed: in dark mode, every page load flashed the light background for a moment before fading to dark
 - Improved: leaderboards load much faster, especially for larger leagues and college football — they now read each week's results in a handful of queries instead of one per member per week
