@@ -1,6 +1,6 @@
 {
   "dashboard": {
-    "jsBytes": 693266,
+    "jsBytes": 693928,
     "cssBytes": 8047,
     "thirdPartyRequests": 1,
     "apiRequests": 12,
@@ -9,7 +9,7 @@
     "shiftsAfterReady": 0
   },
   "picks": {
-    "jsBytes": 693266,
+    "jsBytes": 693928,
     "cssBytes": 8047,
     "thirdPartyRequests": 1,
     "apiRequests": 10,
@@ -18,7 +18,7 @@
     "shiftsAfterReady": 0
   },
   "scores": {
-    "jsBytes": 693266,
+    "jsBytes": 693928,
     "cssBytes": 8047,
     "thirdPartyRequests": 1,
     "apiRequests": 11,

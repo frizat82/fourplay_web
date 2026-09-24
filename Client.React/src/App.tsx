@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, type ComponentType } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './layouts/AppLayout';
 import RouteFallback from './components/RouteFallback';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 import HomePage from './pages/HomePage';
 import PicksPage from './pages/PicksPage';
 import ScoresPage from './pages/ScoresPage';
@@ -75,105 +76,108 @@ export default function App() {
   }, []);
 
   return (
-    // Pages outside AppLayout (account forms, join, 404). Pages inside it suspend at AppLayout's
-    // own boundary around <Outlet/>, so the nav stays up while a route chunk loads.
-    <Suspense fallback={<RouteFallback />}>
-      <Routes>
-        <Route path="/" element={<RootRedirect />} />
-        <Route path="/login" caseSensitive={false} element={<Navigate to="/account/login" replace />} />
-        <Route path="/register" caseSensitive={false} element={<Navigate to="/account/register" replace />} />
-        <Route path="/account/login" caseSensitive={false} element={<LoginPage />} />
-        <Route path="/account/register" caseSensitive={false} element={<RegisterPage />} />
-        <Route path="/join/:token" caseSensitive={false} element={<JoinLeaguePage />} />
-        <Route path="/account/registerconfirmation" caseSensitive={false} element={<RegisterConfirmationPage />} />
-        <Route path="/account/forgotpassword" caseSensitive={false} element={<ForgotPasswordPage />} />
-        <Route path="/account/forgotpasswordconfirmation" caseSensitive={false} element={<ForgotPasswordConfirmationPage />} />
-        <Route path="/account/resetpassword" caseSensitive={false} element={<ResetPasswordPage />} />
-        <Route path="/account/resetpasswordconfirmation" caseSensitive={false} element={<ResetPasswordConfirmationPage />} />
-        <Route path="/account/invalidpasswordreset" caseSensitive={false} element={<InvalidPasswordResetPage />} />
-        <Route path="/account/confirmemail" caseSensitive={false} element={<ConfirmEmailPage />} />
-        <Route path="/account/resendemailconfirmation" caseSensitive={false} element={<ResendEmailConfirmationPage />} />
-        <Route path="/account/invaliduser" caseSensitive={false} element={<InvalidUserPage />} />
-        <Route path="/account/lockout" caseSensitive={false} element={<LockoutPage />} />
-        {/* Not RequireAuth-guarded on purpose: logout clears auth state as part of its own
-            flow, which would otherwise race against RequireAuth's own reactive redirect to
-            login and strand the user there instead of on home. See App.logout.test.tsx. */}
-        <Route path="/logout" element={<LogoutPage />} />
-
-        <Route
-          element={
-            <RequireAuth>
-              <AppLayout />
-            </RequireAuth>
-          }
-        >
-          <Route path="/dashboard" element={<AdapterRoute page={HomePage} />} />
-          <Route path="/leaguepicker" element={<LeaguePickerPage />} />
-          <Route path="/picks" element={<AdapterRoute page={PicksPage} />} />
-          <Route path="/scores" element={<AdapterRoute page={ScoresPage} />} />
-          <Route path="/leaderboard" element={<AdapterRoute page={LeaderboardPage} />} />
-          <Route path="/auth" element={<AuthPage />} />
+    // Pages outside AppLayout (account forms, join, 404). Pages inside it suspend (and fail) at
+    // AppLayout's own boundaries around <Outlet/>, so the nav stays up while a route chunk loads.
+    // Not keyed by pathname here — that would remount AppLayout on every navigation.
+    <RouteErrorBoundary>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/login" caseSensitive={false} element={<Navigate to="/account/login" replace />} />
+          <Route path="/register" caseSensitive={false} element={<Navigate to="/account/register" replace />} />
+          <Route path="/account/login" caseSensitive={false} element={<LoginPage />} />
+          <Route path="/account/register" caseSensitive={false} element={<RegisterPage />} />
+          <Route path="/join/:token" caseSensitive={false} element={<JoinLeaguePage />} />
+          <Route path="/account/registerconfirmation" caseSensitive={false} element={<RegisterConfirmationPage />} />
+          <Route path="/account/forgotpassword" caseSensitive={false} element={<ForgotPasswordPage />} />
+          <Route path="/account/forgotpasswordconfirmation" caseSensitive={false} element={<ForgotPasswordConfirmationPage />} />
+          <Route path="/account/resetpassword" caseSensitive={false} element={<ResetPasswordPage />} />
+          <Route path="/account/resetpasswordconfirmation" caseSensitive={false} element={<ResetPasswordConfirmationPage />} />
+          <Route path="/account/invalidpasswordreset" caseSensitive={false} element={<InvalidPasswordResetPage />} />
+          <Route path="/account/confirmemail" caseSensitive={false} element={<ConfirmEmailPage />} />
+          <Route path="/account/resendemailconfirmation" caseSensitive={false} element={<ResendEmailConfirmationPage />} />
+          <Route path="/account/invaliduser" caseSensitive={false} element={<InvalidUserPage />} />
+          <Route path="/account/lockout" caseSensitive={false} element={<LockoutPage />} />
+          {/* Not RequireAuth-guarded on purpose: logout clears auth state as part of its own
+              flow, which would otherwise race against RequireAuth's own reactive redirect to
+              login and strand the user there instead of on home. See App.logout.test.tsx. */}
+          <Route path="/logout" element={<LogoutPage />} />
 
           <Route
-            path="/admin"
             element={
-              <RequireAdmin>
-                <Navigate to="/admin/jobManager" replace />
-              </RequireAdmin>
+              <RequireAuth>
+                <AppLayout />
+              </RequireAuth>
             }
-          />
-          <Route
-            path="/admin/jobManager"
-            element={
-              <RequireAdmin>
-                <AdminJobManagerPage />
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="/admin/users"
-            element={
-              <RequireAdmin>
-                <AdminUserManagementPage />
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="/admin/invitations"
-            caseSensitive={false}
-            element={
-              <RequireAdmin>
-                <AdminInvitationsPage />
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="/admin/leagueCosts"
-            caseSensitive={false}
-            element={
-              <RequireAdmin>
-                <AdminLeagueCostsPage />
-              </RequireAdmin>
-            }
-          />
-          <Route
-            path="/admin/changelog"
-            caseSensitive={false}
-            element={
-              <RequireAdmin>
-                <AdminChangelogPage />
-              </RequireAdmin>
-            }
-          />
-          <Route path="/account/manage" element={<ManageAccountPage />} />
-          <Route path="/account/manage/changepassword" caseSensitive={false} element={<ChangePasswordPage />} />
-          <Route path="/account/manage/changeusername" caseSensitive={false} element={<ChangeUsernamePage />} />
-          <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
-          <Route path="/league/manage" element={<AdapterRoute page={LeaguePortalPage} />} />
-        </Route>
-        <Route path="/account" element={<Navigate to="/account/login" replace />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </Suspense>
+          >
+            <Route path="/dashboard" element={<AdapterRoute page={HomePage} />} />
+            <Route path="/leaguepicker" element={<LeaguePickerPage />} />
+            <Route path="/picks" element={<AdapterRoute page={PicksPage} />} />
+            <Route path="/scores" element={<AdapterRoute page={ScoresPage} />} />
+            <Route path="/leaderboard" element={<AdapterRoute page={LeaderboardPage} />} />
+            <Route path="/auth" element={<AuthPage />} />
+
+            <Route
+              path="/admin"
+              element={
+                <RequireAdmin>
+                  <Navigate to="/admin/jobManager" replace />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/jobManager"
+              element={
+                <RequireAdmin>
+                  <AdminJobManagerPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                <RequireAdmin>
+                  <AdminUserManagementPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/invitations"
+              caseSensitive={false}
+              element={
+                <RequireAdmin>
+                  <AdminInvitationsPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/leagueCosts"
+              caseSensitive={false}
+              element={
+                <RequireAdmin>
+                  <AdminLeagueCostsPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/changelog"
+              caseSensitive={false}
+              element={
+                <RequireAdmin>
+                  <AdminChangelogPage />
+                </RequireAdmin>
+              }
+            />
+            <Route path="/account/manage" element={<ManageAccountPage />} />
+            <Route path="/account/manage/changepassword" caseSensitive={false} element={<ChangePasswordPage />} />
+            <Route path="/account/manage/changeusername" caseSensitive={false} element={<ChangeUsernamePage />} />
+            <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
+            <Route path="/league/manage" element={<AdapterRoute page={LeaguePortalPage} />} />
+          </Route>
+          <Route path="/account" element={<Navigate to="/account/login" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
+    </RouteErrorBoundary>
   );
 }

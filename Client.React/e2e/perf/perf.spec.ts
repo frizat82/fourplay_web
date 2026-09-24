@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Request } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setupRoutes } from '../helpers/routes';
@@ -96,38 +96,43 @@ async function measure(page: Page, path: string, ready: (page: Page) => Promise<
   let jsBytes = 0;
   let cssBytes = 0;
   let thirdPartyRequests = 0;
-  const pending = new Map<string, number>();
+  // Keyed by the Request object itself, not url+method — two identical GETs in flight at once
+  // (exactly the double-fetch this harness exists to catch) must count as two.
+  const pending = new Map<Request, number>();
+  const bodyReads: Promise<void>[] = [];
   const api: ApiTiming[] = [];
   const t0 = Date.now();
 
   page.on('request', req => {
     const url = new URL(req.url());
     if (!isLocal(url)) thirdPartyRequests++;
-    if (url.pathname.startsWith('/api/') && !url.pathname.includes('live-stream')) pending.set(req.url() + '#' + req.method(), Date.now() - t0);
+    if (url.pathname.startsWith('/api/') && !url.pathname.includes('live-stream')) pending.set(req, Date.now() - t0);
   });
-  page.on('requestfinished', async req => {
-    const key = req.url() + '#' + req.method();
-    const start = pending.get(key);
+  let reachedReady = false;
+  page.on('requestfinished', req => {
+    const start = pending.get(req);
     if (start !== undefined) {
       api.push({ url: req.url(), start, end: Date.now() - t0 });
-      pending.delete(key);
+      pending.delete(req);
     }
-    const res = await req.response();
-    if (!res) return;
     const type = req.resourceType();
-    if (type === 'script' || type === 'stylesheet') {
-      const size = (await res.body().catch(() => Buffer.alloc(0))).length;
+    // Bytes needed to reach "ready": only assets that finished downloading before it count, so
+    // idle preloads afterwards (App.tsx warms the Leaderboard chunk) aren't cold-load weight.
+    if (reachedReady || (type !== 'script' && type !== 'stylesheet')) return;
+    bodyReads.push((async () => {
+      const res = await req.response();
+      const size = res ? (await res.body().catch(() => Buffer.alloc(0))).length : 0;
       if (type === 'script') jsBytes += size; else cssBytes += size;
-    }
+    })());
   });
 
   await page.goto(path);
   await ready(page);
+  reachedReady = true;
   const timeToReadyMs = Date.now() - t0;
-  // Bytes needed to reach "ready" — snapshotted now so idle preloads afterwards (App.tsx warms the
-  // Leaderboard chunk) don't count as cold-load weight.
-  const readyJsBytes = jsBytes;
-  const readyCssBytes = cssBytes;
+  // Body reads are async — wait for every one started before "ready", or a slow read would be
+  // silently left out of the total.
+  await Promise.all(bodyReads);
   const readyPerfTime = await page.evaluate(() => performance.now());
 
   // Let late renders (background queries, banners) settle so shifts after "ready" are caught.
@@ -144,8 +149,8 @@ async function measure(page: Page, path: string, ready: (page: Page) => Promise<
   }
 
   return {
-    jsBytes: readyJsBytes,
-    cssBytes: readyCssBytes,
+    jsBytes,
+    cssBytes,
     thirdPartyRequests,
     apiRequests: api.length,
     apiChainDepth: chainDepth(api),
