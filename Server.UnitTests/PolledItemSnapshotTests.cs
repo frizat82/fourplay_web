@@ -4,11 +4,6 @@ using FourPlayWebApp.Shared.Models;
 namespace FourPlayWebApp.Server.UnitTests;
 
 public class PolledItemSnapshotTests {
-    private sealed class Clock(DateTimeOffset now) : TimeProvider {
-        public DateTimeOffset Now = now;
-        public override DateTimeOffset GetUtcNow() => Now;
-    }
-
     [Fact]
     public void Serves_TheRecordedItem_OnlyForItsOwnKey() {
         var snapshot = new PolledItemSnapshot(TimeSpan.FromMinutes(10));
@@ -24,14 +19,14 @@ public class PolledItemSnapshotTests {
     // their own live fetch rather than be served the last poll's scores indefinitely.
     [Fact]
     public void StopsServing_ASnapshotOlderThanItsMaxAge() {
-        var clock = new Clock(new DateTimeOffset(2026, 9, 20, 18, 0, 0, TimeSpan.Zero));
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 9, 20, 18, 0, 0, TimeSpan.Zero));
         var snapshot = new PolledItemSnapshot(TimeSpan.FromMinutes(10), clock);
         snapshot.Record("week-3", new EspnScores());
 
-        clock.Now = clock.Now.AddMinutes(9);
+        clock.Advance(TimeSpan.FromMinutes(9));
         Assert.True(snapshot.TryGet("week-3", out _));
 
-        clock.Now = clock.Now.AddMinutes(2);
+        clock.Advance(TimeSpan.FromMinutes(2));
         Assert.False(snapshot.TryGet("week-3", out _));
     }
 

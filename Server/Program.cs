@@ -475,6 +475,7 @@ builder.Services.AddQuartz(q => {
         // stack (DemoDataSeeder's seeded users are always EmailConfirmed=true anyway, so it
         // would be a no-op there, but there's no reason to run it against an ephemeral stack).
         q.ScheduleCstCronJob<UnconfirmedAccountCleanupJob>("Unconfirmed Account Cleanup", "Deletes accounts that never confirmed their email within 24h", "0 0 * * * ?");
+        q.ScheduleCstCronJob<DeadTokenCleanupJob>("Dead Token Cleanup", "Deletes revoked/expired refresh tokens and revoked league invite links", "0 30 3 * * ?");
     }
 });
 

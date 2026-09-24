@@ -375,3 +375,9 @@ Client.React/test-results/
 # Claude Code
 memory/
 .claude/worktrees/
+
+# Database dumps/backups — never commit (fp.bak, a prod pg_dump, was public in history)
+*.bak
+*.dump
+*.backup
+*.sql.gz
