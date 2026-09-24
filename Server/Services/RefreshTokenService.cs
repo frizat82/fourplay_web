@@ -23,25 +23,6 @@ namespace FourPlayWebApp.Server.Services
             await using var db = await dbFactory.CreateDbContextAsync();
             db.RefreshTokens.Add(refreshToken);
             await db.SaveChangesAsync();
-
-            // Rotation revokes a token on every refresh and nothing else ever deleted one (prod:
-            // 4,625 rows for ~114 live sessions). A dead token is never accepted again, so clear
-            // this user's — AFTER the new token is committed, and best-effort: two overlapping
-            // issues for one user (phone + laptop refreshing together) load the same dead rows,
-            // and the second delete then affects 0 rows and throws. That must never fail the
-            // sign-in itself. Load + RemoveRange, not ExecuteDelete (see CLAUDE.md).
-            var now = DateTimeOffset.UtcNow;
-            var dead = await db.RefreshTokens
-                .Where(rt => rt.UserId == user.Id && rt.Token != refreshToken.Token && (rt.Revoked != null || rt.Expires < now))
-                .ToListAsync();
-            if (dead.Count > 0) {
-                db.RefreshTokens.RemoveRange(dead);
-                try {
-                    await db.SaveChangesAsync();
-                } catch (DbUpdateConcurrencyException) {
-                    // A concurrent issue for this user already pruned them — nothing left to do.
-                }
-            }
             return refreshToken;
         }
 
