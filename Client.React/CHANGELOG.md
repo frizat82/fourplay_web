@@ -4,6 +4,11 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-24
+
+- Improved: leaderboards load much faster, especially for larger leagues and college football — they now read each week's results in a handful of queries instead of one per member per week
+- Fixed: a commissioner's tease or Start Week change could take up to an hour to show up in NFL spreads and the leaderboard; it now applies immediately
+
 ## 2026-09-23
 
 - Improved: faster first load on phones — the app downloads about a quarter less code up front (admin, account, league-management and leaderboard screens now load on demand), drops two unused third-party scripts/fonts, and the Picks page no longer loads its whole week of data twice

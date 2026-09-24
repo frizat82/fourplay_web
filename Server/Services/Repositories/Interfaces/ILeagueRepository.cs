@@ -36,6 +36,8 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     /// <summary>One user id per SUBMITTED pick — selects nothing else (no team), so pick secrecy holds by construction (frizat-xbq).</summary>
     Task<List<string>> GetNflPickUserIdsAsync(int leagueId, int season, int week);
     Task<List<NflPicks>> GetUserNflPicksAsync(string userId, int leagueId, int season, int week);
+    /// <summary>Every member's picks for a league's whole season in one query — the leaderboard's source, instead of one query per member × week.</summary>
+    Task<List<NflPicks>> GetLeagueNflPicksForSeasonAsync(int leagueId, int season);
 
     // Commissioner portal methods
     Task<List<LeagueInfo>> GetLeaguesByOwnerAsync(string ownerId);

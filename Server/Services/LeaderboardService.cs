@@ -36,6 +36,11 @@ public class LeaderboardService(
             if (leagueScores.Count == 0 || leagueUsers.Count == 0)
                 return leaderboard;
 
+            // One query for every member's picks all season, looked up per (user, week) below —
+            // not one query per member × week (a 25-member league at week 18 was 450 round trips).
+            var picksByUserWeek = (await leagueRepository.GetLeagueNflPicksForSeasonAsync(leagueId, (int)seasonYear))
+                .ToLookup(p => (p.UserId, p.NflWeek));
+
             var maxWeek = leagueScores.Max(x => x.NflWeek);
             // Captured/grouped once for the whole run rather than re-derived per user/week: "now"
             // stays consistent across every user (a wall-clock tick past a kickoff boundary mid-run
@@ -44,13 +49,26 @@ public class LeaderboardService(
             // calls to CalculatePicks below.
             var now = timeProvider.GetUtcNow();
             var spreadsByWeek = leagueSpreads.ToLookup(s => s.NflWeek);
+            // One calculator per week, shared by every member (each build costs cache lookups, and
+            // the answer doesn't depend on who's asking). One DI scope for the whole run.
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var spreadCalculatorBuilder = scope.ServiceProvider.GetRequiredService<ISpreadCalculatorBuilder>();
+            var calculators = new Dictionary<int, ISpreadCalculator>();
+            async Task<ISpreadCalculator> CalculatorFor(int week) {
+                if (!calculators.TryGetValue(week, out var calc)) {
+                    calc = await spreadCalculatorBuilder.WithLeagueId(leagueId).WithWeek(week).WithSeason((int)seasonYear).BuildAsync();
+                    calculators[week] = calc;
+                }
+                return calc;
+            }
             foreach (var user in leagueUsers) {
                 var userPoints = new LeaderboardModel {
                     WeekResults = new LeaderboardWeekResults[maxWeek],
                     User = user.User
                 };
                 for (int week = 1; week <= maxWeek; week++) {
-                    var weekResult = await CalculatePicks(leagueId, seasonYear, leagueScores, spreadsByWeek[week], user, week, now, seasonJuice.StartWeek);
+                    var weekResult = await CalculatePicks(leagueScores, spreadsByWeek[week], picksByUserWeek[(user.UserId, week)].ToList(),
+                        CalculatorFor, user, week, now, seasonJuice.StartWeek);
                     userPoints.WeekResults[week - 1] = weekResult;
                 }
                 leaderboard.Add(userPoints);
@@ -65,8 +83,9 @@ public class LeaderboardService(
     }
 
 
-    private async Task<LeaderboardWeekResults> CalculatePicks(int leagueId, long seasonYear,
-        List<NflScores> userScores, IEnumerable<NflSpreads> weekSpreads, LeagueUserMapping user, int week, DateTimeOffset now, int startWeek) {
+    private async Task<LeaderboardWeekResults> CalculatePicks(List<NflScores> userScores, IEnumerable<NflSpreads> weekSpreads,
+        List<NflPicks> userPicks, Func<int, Task<ISpreadCalculator>> calculatorFor, LeagueUserMapping user, int week,
+        DateTimeOffset now, int startWeek) {
         var weekResult = new LeaderboardWeekResults {
             Week = week
         };
@@ -80,10 +99,7 @@ public class LeaderboardService(
             return weekResult;
         }
 
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var spreadCalculatorBuilder = scope.ServiceProvider.GetRequiredService<ISpreadCalculatorBuilder>();
-        var spreadCalculator = await spreadCalculatorBuilder.WithLeagueId(leagueId).WithWeek(week).WithSeason((int)seasonYear).BuildAsync();
-        var userPicks = await leagueRepository.GetUserNflPicksAsync(user.UserId, leagueId, (int)seasonYear, week);
+        var spreadCalculator = await calculatorFor(week);
         var allPicksBeatSpread = userPicks.All(pick => {
             try {
                 return IsPickAWinner(userScores, week, pick, spreadCalculator);

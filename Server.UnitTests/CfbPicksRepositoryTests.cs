@@ -43,4 +43,22 @@ public class CfbPicksRepositoryTests
 
         Assert.Equal(["u1", "u1", "u2"], ids.Order());
     }
+
+    // Leaderboard perf: every member's picks for a whole season in one query, scoped to the league.
+    [Fact]
+    public async Task GetLeaguePicksForSeasonAsync_ReturnsEveryMembersPicks_ScopedToLeagueAndSeason()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetLeaguePicksForSeasonAsync_ReturnsEveryMembersPicks_ScopedToLeagueAndSeason));
+        var repo = new CfbPicksRepository(factory);
+        await repo.AddPicksAsync([
+            new CfbPicks { UserId = "u1", LeagueId = 1, CfbSlateId = 7, Team = "ALA", Season = 2026 },
+            new CfbPicks { UserId = "u2", LeagueId = 1, CfbSlateId = 8, Team = "UGA", Season = 2026 },
+            new CfbPicks { UserId = "u3", LeagueId = 2, CfbSlateId = 7, Team = "TEX", Season = 2026 }, // other league
+            new CfbPicks { UserId = "u1", LeagueId = 1, CfbSlateId = 1, Team = "OSU", Season = 2025 }, // other season
+        ]);
+
+        var picks = await repo.GetLeaguePicksForSeasonAsync(1, 2026);
+
+        Assert.Equal(["ALA", "UGA"], picks.Select(p => p.Team).Order());
+    }
 }
