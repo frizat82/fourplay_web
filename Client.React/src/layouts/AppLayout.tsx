@@ -51,6 +51,7 @@ import { useSafeAreaRefresh } from '../utils/useSafeAreaRefresh';
 import PendingInviteBanner from '../components/PendingInviteBanner';
 import VersionFooter from '../components/VersionFooter';
 import RouteFallback from '../components/RouteFallback';
+import RouteErrorBoundary from '../components/RouteErrorBoundary';
 
 const drawerWidth = 260;
 
@@ -479,7 +480,11 @@ export default function AppLayout() {
           <PendingInviteBanner />
           {/* Lazy route chunks (App.tsx) suspend here, not at the app root, so the app bar and
               drawer stay on screen while a page's code loads. */}
-          {noAccessContent ?? <Suspense fallback={<RouteFallback />}><Outlet /></Suspense>}
+          {noAccessContent ?? (
+            <RouteErrorBoundary key={location.pathname}>
+              <Suspense fallback={<RouteFallback />}><Outlet /></Suspense>
+            </RouteErrorBoundary>
+          )}
         </Box>
         <VersionFooter />
       </Box>
