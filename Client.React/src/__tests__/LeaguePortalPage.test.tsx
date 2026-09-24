@@ -16,11 +16,14 @@ import type { UserInfo } from '../types/auth';
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const adapter = sportContext.isCfb ? createCfbAdapter() : createNflAdapter();
-  return render(
-    <QueryClientProvider client={client}>
-      <LeaguePortalPage adapter={adapter} />
-    </QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <LeaguePortalPage adapter={adapter} />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 const sessionState = {
@@ -198,6 +201,22 @@ beforeEach(() => {
 });
 
 describe('LeaguePortalPage (owner, non-admin)', () => {
+  // useLeagueJuice caches ['leagueJuice', leagueId] with a long staleTime so Picks/Scores don't
+  // refetch it on every mount — which is only safe if the one page that edits juice keeps that
+  // cache entry current. Otherwise an edited StartWeek would show stale on Picks for minutes.
+  it('writes every juice load into the shared leagueJuice query cache', async () => {
+    const initial = [makeJuice(CURRENT_SEASON)];
+    mockedGetJuice.mockResolvedValue(initial);
+    const { client } = renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+    await waitFor(() => expect(client.getQueryData(['leagueJuice', 1])).toEqual(initial));
+
+    const updated = [{ ...makeJuice(CURRENT_SEASON), startWeek: 3 }];
+    mockedGetJuice.mockResolvedValue(updated);
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+    await waitFor(() => expect(client.getQueryData(['leagueJuice', 1])).toEqual(updated));
+  });
+
   it('shows the member email, not the raw user id', async () => {
     renderPage();
     await screen.findByText('frizat@example.com');

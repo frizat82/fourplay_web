@@ -24,6 +24,10 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
     private readonly ICfbLiveScoreFetcher _fetcher;
     private readonly SettledScoreCache _settledCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
+    // 2x the slowest poll interval: a healthy poller always refreshes well within it.
+    private readonly PolledItemSnapshot _polled = new(2 * EspnPollCadence.SlowPollInterval);
+
+    private static string SlateCacheKey(int slateId) => $"cfb-slate-scores_{slateId}";
 
     public event Action? ScoresChanged
     {
@@ -50,13 +54,14 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                 // or soonest-upcoming slate, for UI-default purposes) — so its null-ness alone can
                 // no longer be used to gate off-season ESPN polling. IsSeasonActiveAsync is the
                 // purpose-built, season-level check for that (see SeasonWindowResolver).
-                if (!await currentSlateService.IsSeasonActiveAsync()) return null;
+                if (!await currentSlateService.IsSeasonActiveAsync()) return _polled.Clear();
 
                 var currentSlate = await currentSlateService.GetCurrentSlateAsync();
-                if (currentSlate is null) return null;
+                if (currentSlate is null) return _polled.Clear();
 
                 var slate = await cfbRepo.GetSlateByIdAsync(currentSlate.Id);
-                return slate is null ? null : await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true);
+                if (slate is null) return _polled.Clear();
+                return _polled.Record(SlateCacheKey(slate.Id), await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true));
             },
             fingerprint: EspnScoresFingerprint.Compute,
             intervalSelector: current => AdaptivePollInterval.Compute(
@@ -74,11 +79,14 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
     // Fresh scope for the same reason the periodic-poll fetch above needs one — Scoped
     // dependencies consumed from a Singleton.
     public async Task<EspnScores?> GetSlateScoresAsync(int slateId) {
-        var cacheKey = $"cfb-slate-scores_{slateId}";
+        var cacheKey = SlateCacheKey(slateId);
         // Fast path: skip the slate/current-slate DB resolution entirely on a cache hit — a
         // settled slate's response never changes, so repeat requests for it shouldn't pay for
         // any of the lookups below just to re-derive a cache key it turns out we already have.
         if (_settledCache.TryGet(cacheKey, out var cached)) return cached;
+        // The slate the background poller is tracking (the current one): answer from its latest
+        // poll — mirrors EspnCacheService.GetWeekScoresAsync (see PolledItemSnapshot).
+        if (_polled.TryGet(cacheKey, out var polled)) return polled;
 
         using var scope = _scopeFactory.CreateScope();
         var cfbRepo = scope.ServiceProvider.GetRequiredService<ICfbRepository>();
@@ -112,7 +120,7 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
             liveFetchAsync: () => _fetcher.FetchForSlateAsync(slate, isCurrentSlate));
     }
 
-    public void InvalidateSlateCache(int slateId) => _settledCache.Invalidate($"cfb-slate-scores_{slateId}");
+    public void InvalidateSlateCache(int slateId) => _settledCache.Invalidate(SlateCacheKey(slateId));
 
     public ValueTask DisposeAsync() => _cache.DisposeAsync();
 }

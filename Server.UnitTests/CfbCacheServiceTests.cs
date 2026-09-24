@@ -307,4 +307,36 @@ public class CfbCacheServiceTests
 
         await _cfbRepo.Received(2).GetScoresForSlateAsync(SettledSlate.Id);
     }
+
+    // Perf: mirrors EspnCacheServiceTests — the current slate was live-fetched from ESPN on every
+    // client request (prod p50 ~300-650ms, p95 up to 5.3s) although the poller already holds it.
+    [Fact]
+    public async Task GetSlateScoresAsync_ForTheSlateThePollerHolds_ReturnsThePolledSnapshot_WithoutAnotherEspnCall()
+    {
+        var polled = BuildScoreboard();
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(polled);
+
+        await using var svc = BuildService(initialDelay: TimeSpan.FromMilliseconds(50));
+        await WaitForScoresChangedAsync(svc);
+        var result = await svc.GetSlateScoresAsync(DefaultSlate.Id);
+
+        Assert.Same(polled, result);
+        await _fetcher.Received(1).FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()); // the poll's own fetch only
+    }
+
+    [Fact]
+    public async Task GetSlateScoresAsync_ForADifferentSlateThanThePollerHolds_StillFetchesThatSlate()
+    {
+        var polled = BuildScoreboard();
+        var other = BuildScoreboard(homeScore: 3);
+        _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == DefaultSlate.Id), Arg.Any<bool>()).Returns(polled);
+        _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == SettledSlate.Id), Arg.Any<bool>()).Returns(other);
+
+        await using var svc = BuildService(initialDelay: TimeSpan.FromMilliseconds(50));
+        await WaitForScoresChangedAsync(svc);
+        var result = await svc.GetSlateScoresAsync(SettledSlate.Id); // no persisted rows → live
+
+        Assert.Same(other, result);
+    }
 }
+

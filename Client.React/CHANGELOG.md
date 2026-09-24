@@ -4,6 +4,21 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-24
+
+- Changed: the college football national championship slate no longer applies a tease, matching the NFL Super Bowl
+- Fixed: opening the Leaderboard directly (refresh or link) briefly showed "No leaderboard data yet" before the standings loaded
+- Fixed: in dark mode, every page load flashed the light background for a moment before fading to dark
+- Improved: leaderboards load much faster, especially for larger leagues and college football — they now read each week's results in a handful of queries instead of one per member per week
+- Improved: Picks, Scores and the dashboard load noticeably faster during the season — the current week's live scores now come from the server's shared ESPN feed instead of a fresh ESPN request for every page load
+- Improved: NFL Picks, Scores and past-week views load in fewer round trips — spreads and live game situations are fetched alongside the scoreboard instead of after it, and viewing a past week no longer waits up to 2.5 seconds on the current scoreboard during the off-season
+- Fixed: a commissioner's tease or Start Week change could take up to an hour to show up in NFL spreads and the leaderboard; it now applies immediately
+- Added: a nightly Dead Token Cleanup job (Job Manager) deletes expired and revoked sign-in tokens and revoked league invite links, which previously piled up forever
+
+## 2026-09-23
+
+- Improved: faster first load on phones — the app downloads about a quarter less code up front (admin, account, league-management and leaderboard screens now load on demand), drops two unused third-party scripts/fonts, and the Picks page no longer loads its whole week of data twice
+
 ## 2026-09-22
 
 - Added: the "Your Picks" summary now shows a check or X on each pick once its game is decided (live or final), and a lock icon once a still-undecided pick's game has kicked off

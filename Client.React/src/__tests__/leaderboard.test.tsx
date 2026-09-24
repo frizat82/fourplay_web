@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { alpha, ThemeProvider } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -62,6 +62,7 @@ const mockAdapter: SportAdapter = {
   clearPicks: vi.fn(),
   getMissingPicks: vi.fn(),
   currentSeasonYear: vi.fn().mockResolvedValue(2023),
+  prefetchCurrentWeek: vi.fn(),
   pollIntervalMs: 0,
   weekSelectorConfig: { maxRegularSeasonWeek: 18, minSeason: 2020 },
 };
@@ -90,8 +91,40 @@ function renderPage(mode: 'light' | 'dark' = 'light') {
 describe('LeaderboardPage', () => {
   beforeEach(() => {
     sessionState.currentLeague = 1;
+    sessionState.leaguesLoaded = true;
     mockedGetLeaderboard.mockReset();
     vi.mocked(mockAdapter.currentSeasonYear).mockResolvedValue(2023);
+  });
+
+  // Cold load straight to /leaderboard (refresh, deep link): the session's leagues aren't loaded
+  // yet on first render. The page used to treat that as "done loading", flashing "No leaderboard
+  // data yet" between two skeletons before the real standings arrived.
+  it('keeps the skeleton, not a false empty state, while the session is still loading leagues', async () => {
+    sessionState.leaguesLoaded = false;
+    sessionState.currentLeague = null;
+    mockedGetLeaderboard.mockResolvedValue([createLeaderboardEntry({ userName: 'Alice' })]);
+
+    const { rerender, queryClient } = renderPage();
+    await act(async () => {});
+
+    expect(screen.queryByText(/No leaderboard data yet/i)).toBeNull();
+    expect(document.querySelectorAll('.MuiSkeleton-root').length).toBeGreaterThan(0);
+
+    sessionState.leaguesLoaded = true;
+    sessionState.currentLeague = 1;
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider theme={createAppTheme('light')}>
+          <MemoryRouter initialEntries={['/leaderboard']}>
+            <Routes>
+              <Route path="/leaderboard" element={<LeaderboardPage adapter={mockAdapter} />} />
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Alice')).toBeInTheDocument();
   });
 
   it('renders leaderboard with valid data', async () => {

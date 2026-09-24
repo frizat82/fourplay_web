@@ -10,4 +10,5 @@ public interface IOddsRow {
     double AwayTeamSpread { get; }
     double OverUnder { get; }
     DateTimeOffset DateCreated { get; }
+    DateTimeOffset GameTime { get; }
 }

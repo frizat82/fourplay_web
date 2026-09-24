@@ -7,6 +7,12 @@ export type { PickType };
 /** Canonical game status — both adapters normalize to this before populating GameView */
 export type GameStatusValue = 'final' | 'in_progress' | 'halftime' | 'scheduled' | null;
 
+/** Optional inputs that must never fail a whole page load (live situation, demo's frozen fixture)
+ * — both adapters use this rather than each hand-rolling a catch. */
+export async function orFallback<T>(fetch: () => Promise<T>, fallback: T): Promise<T> {
+  try { return await fetch(); } catch { return fallback; }
+}
+
 /**
  * Caches an async fetch's resolved value for the lifetime of the closure it's created in —
  * both nflAdapter.ts (getCurrentWeek, control table) and cfbAdapter.ts (getCurrentSlate, slate)
@@ -153,6 +159,14 @@ export interface WeekState {
   isPostSeason: boolean;
 }
 
+/**
+ * React Query key for a league's picks-page data. weekState null = the live current week, which
+ * PicksPage and PicksIsland share as one cache entry — build it here, never by hand, so the two
+ * can't drift apart and silently double-fetch.
+ */
+export const picksQueryKey = (sport: SportAdapter['sport'], leagueId: number | null, userId: string | undefined, weekState: WeekState | null) =>
+  [sport, 'picks', leagueId, userId, weekState] as const;
+
 export interface LoadedWeek extends WeekState {
   games: GameView[];
   userPicks: PickView[];
@@ -212,4 +226,11 @@ export interface SportAdapter {
     weekLabelFn?: (week: number, isPostSeason: boolean) => string;
   };
   currentSeasonYear(): Promise<number>;
+  /**
+   * Starts the adapter's memoized current week/slate fetch without waiting on it — called when an
+   * adapter-driven route mounts so it overlaps the session's league fetch rather than queueing
+   * behind it. Fire-and-forget: a failure is swallowed here (memoizeOnce doesn't cache it), so
+   * the next real load retries and surfaces it through its own query.
+   */
+  prefetchCurrentWeek(): void;
 }

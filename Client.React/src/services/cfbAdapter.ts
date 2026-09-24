@@ -5,7 +5,7 @@ import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../type
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, PickType, WeekState } from './sportAdapter';
-import { revealPicksForStartedGames, memoizeOnce, pickCountsToMap } from './sportAdapter';
+import { revealPicksForStartedGames, memoizeOnce, orFallback, pickCountsToMap } from './sportAdapter';
 
 /** Map CFB backend status strings to canonical GameStatusValue */
 
@@ -182,7 +182,7 @@ function cfbPickToPickView(pick: CfbPickDto, teamToHomeTeam: Map<string, string>
 async function fetchCfbEspnData(slate: CfbSlateDto): Promise<{ espn: EspnScores | null; liveGameMap: Map<string, import('../types/liveGame').LiveGame> }> {
   const [espn, liveGames] = await Promise.all([
     getCfbScoresForSlate(slate.id),
-    getCfbLiveGames().catch(() => []),
+    orFallback(getCfbLiveGames, []),
   ]);
   const liveGameMap = new Map<string, import('../types/liveGame').LiveGame>();
   for (const live of liveGames) {
@@ -256,6 +256,10 @@ export function createCfbAdapter(): SportAdapter {
     async currentSeasonYear() {
       const current = await getCurrentSlate();
       return current?.season ?? CFB_CONFIGURED_SEASON;
+    },
+
+    prefetchCurrentWeek() {
+      getCurrentSlate().catch(() => {});
     },
 
     async loadCurrentGames(leagueId, userId) {

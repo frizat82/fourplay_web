@@ -35,7 +35,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - DAL is -7, wins by 10 (covers the spread)
             var result = calculator.DidUserWinPick("DAL", 28, 18, PickType.Spread);
@@ -50,7 +50,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - DAL is -7, wins by only 3 (doesn't cover)
             var result = calculator.DidUserWinPick("DAL", 21, 18, PickType.Spread);
@@ -65,7 +65,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - NYG is +7, wins outright (easily covers)
             var result = calculator.DidUserWinPick("NYG", 24, 21, PickType.Spread);
@@ -80,7 +80,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - NYG is +7, loses by only 3 (still covers +7)
             var result = calculator.DidUserWinPick("NYG", 18, 21, PickType.Spread);
@@ -95,7 +95,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - DAL vs NYG, O/U is 45.5, total score is 49
             var result = calculator.DidUserWinPick("DAL", 28, 21, PickType.Over);
@@ -110,7 +110,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - DAL vs NYG, O/U is 45.5, total score is 35
             var result = calculator.DidUserWinPick("DAL", 21, 14, PickType.Over);
@@ -125,7 +125,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - DAL vs NYG, O/U is 45.5, total score is 35
             var result = calculator.DidUserWinPick("DAL", 21, 14, PickType.Under);
@@ -140,7 +140,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - DAL vs NYG, O/U is 45.5, total score is 49
             var result = calculator.DidUserWinPick("DAL", 28, 21, PickType.Under);
@@ -155,7 +155,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - DAL is -7, wins by exactly 7 (push)
             var result = calculator.DidUserWinPick("DAL", 28, 21, PickType.Spread);
@@ -170,7 +170,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Default to false
             var didWin = calculator.DidUserWinPick("XYZ", 21, 14, PickType.Spread);
@@ -183,7 +183,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act
             var result = calculator.GetSpread("DAL");
@@ -198,7 +198,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act
             var result = calculator.GetSpread("NYG");
@@ -213,7 +213,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act
             var result = calculator.GetOverUnder("DAL", PickType.Over);
@@ -228,7 +228,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act
             var result = calculator.GetOverUnder("DAL", PickType.Under);
@@ -243,7 +243,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // Arrange
             var spreads = CreateMockSpreads();
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act
             var result = calculator.GetSpread("XYZ");
@@ -256,7 +256,7 @@ namespace FourPlayWebApp.Server.UnitTests
         public void Constructor_EmptySpreads_CreatesValidCalculator()
         {
             // Arrange & Act
-            var calculator = new SpreadCalculator([], new LeagueJuiceMapping(), 5);
+            var calculator = new SpreadCalculator([], JuiceTiers.For(LeagueType.Nfl, 5, new LeagueJuiceMapping()));
 
             // Assert
             Assert.NotNull(calculator);
@@ -278,7 +278,7 @@ namespace FourPlayWebApp.Server.UnitTests
                 }
             };
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - Pick'em game, DAL wins
             var result = calculator.DidUserWinPick("DAL", 21, 14, PickType.Spread);
@@ -302,7 +302,7 @@ namespace FourPlayWebApp.Server.UnitTests
                 }
             };
             var juiceMapping = new LeagueJuiceMapping { Juice = 0 };
-            var calculator = new SpreadCalculator(spreads, juiceMapping, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, juiceMapping));
 
             // Act - DAL wins by exactly 7 (covers -6.5)
             var dalWin = calculator.DidUserWinPick("DAL", 28, 21, PickType.Spread);
@@ -329,7 +329,7 @@ namespace FourPlayWebApp.Server.UnitTests
                     DateCreated = postedAt,
                 },
             };
-            var calculator = new SpreadCalculator(spreads, new LeagueJuiceMapping { Juice = 0 }, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, new LeagueJuiceMapping { Juice = 0 }));
 
             Assert.Equal(postedAt, calculator.GetDateCreated("DAL"));
             Assert.Equal(postedAt, calculator.GetDateCreated("NYG"));
@@ -339,7 +339,7 @@ namespace FourPlayWebApp.Server.UnitTests
         public void GetDateCreated_ReturnsNull_ForUnknownTeam()
         {
             var spreads = CreateMockSpreads();
-            var calculator = new SpreadCalculator(spreads, new LeagueJuiceMapping { Juice = 0 }, 5);
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(LeagueType.Nfl, 5, new LeagueJuiceMapping { Juice = 0 }));
 
             Assert.Null(calculator.GetDateCreated("KC"));
         }
@@ -348,9 +348,7 @@ namespace FourPlayWebApp.Server.UnitTests
         // with no league tease applied, unlike NFL) was fixed by making this same SpreadCalculator
         // — not a CFB-only duplicate — serve both sports. These tests prove the shared arithmetic
         // (GetSpread/GetOverUnder/DidUserWinPick) behaves identically for CfbSpreads via the
-        // pre-resolved-juice constructor that CfbPicksController.GetSpreads uses; only *which*
-        // tier-resolution scheme produces that juice value differs per sport (NFL: week number via
-        // the other constructor; CFB: slate number via CfbLeaderboardService.JuiceForSlate).
+        // same (odds, juice) constructor both sports use; which tease a period gets is JuiceTiers'.
         private static List<CfbSpreads> CreateMockCfbSpreads() {
             return [
                 new CfbSpreads {

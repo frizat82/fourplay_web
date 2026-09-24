@@ -437,4 +437,45 @@ public class EspnCacheServiceTests
 
         await _leagueRepo.Received(2).GetNflScoresAsync(2025, 1);
     }
+
+    // -----------------------------------------------------------------------
+    // GetWeekScoresAsync — current week served from the background poll
+    // -----------------------------------------------------------------------
+
+    // Perf: the current week was live-fetched from ESPN on EVERY client request (prod p50
+    // ~450ms, p90 ~1s, on every Picks/Scores/Dashboard load and every SSE push, from every
+    // client at once) although the background poller already holds exactly that week.
+    [Fact]
+    public async Task GetWeekScoresAsync_ForTheWeekThePollerHolds_ReturnsThePolledSnapshot_WithoutAnotherEspnCall()
+    {
+        var polled = new EspnScores { Season = new Season { Year = 2025 } };
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(Task.FromResult<EspnScores?>(polled));
+
+        await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
+        await WaitForScoresChangedAsync(svc);
+        var result = await svc.GetWeekScoresAsync(DefaultWeek.Season, DefaultWeek.WeekId);
+
+        Assert.Same(polled, result);
+        await _fetcher.Received(1).FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()); // the poll's own fetch only
+    }
+
+    [Fact]
+    public async Task GetWeekScoresAsync_ForADifferentWeekThanThePollerHolds_StillFetchesThatWeekLive()
+    {
+        _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> {
+            BuildConfig(DefaultWeek.WeekId, DefaultWeek.Season), BuildConfig(4, DefaultWeek.Season),
+        });
+        var polled = new EspnScores { Season = new Season { Year = 2025 } };
+        var week4 = new EspnScores { Season = new Season { Year = 2025 } };
+        _fetcher.FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == DefaultWeek.WeekId)).Returns(Task.FromResult<EspnScores?>(polled));
+        _fetcher.FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 4)).Returns(Task.FromResult<EspnScores?>(week4));
+
+        await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
+        await WaitForScoresChangedAsync(svc);
+        var result = await svc.GetWeekScoresAsync(DefaultWeek.Season, 4);
+
+        Assert.Same(week4, result);
+        await _fetcher.Received(1).FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 4));
+    }
 }
+

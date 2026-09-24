@@ -19,7 +19,7 @@ import PicksIsland from '../components/PicksIsland';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import type { SportAdapter, LoadedWeek, PickType, WeekState } from '../services/sportAdapter';
-import { sortGamesByTimeThenRank } from '../services/sportAdapter';
+import { picksQueryKey, sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useToast } from '../services/toast';
 import { isGameLocked, isWeekExcludedFromSeason } from '../utils/gameHelpers';
 import { extractApiErrorMessage } from '../utils/apiError';
@@ -57,7 +57,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const isCurrentWeek = weekState === null;
   const enabled = leaguesLoaded && !!currentLeague && !!user?.userId;
   const queryKey = useMemo(
-    () => [adapter.sport, 'picks', currentLeague, user?.userId, weekState] as const,
+    () => picksQueryKey(adapter.sport, currentLeague, user?.userId, weekState),
     [adapter.sport, currentLeague, user?.userId, weekState],
   );
 

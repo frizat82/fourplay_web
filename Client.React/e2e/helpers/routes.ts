@@ -142,12 +142,6 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
-    // ── Odds exists ──────────────────────────────────────────────────────────
-    if (url.includes('/api/league/') && url.includes('/odds/') && url.endsWith('/exists') && method === 'GET') {
-      void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(true) });
-      return;
-    }
-
     // ── POST /api/league/*/odds/*/*/calculate-batch — scores page ───────────
     if (url.includes('/api/league/') && url.includes('/odds/') && url.includes('/calculate-batch') && method === 'POST') {
       void route.fulfill({
@@ -205,6 +199,13 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
     // ── CFB live-stream (SSE) — same role as espn/live-stream for NFL ───────
     if (url.includes('/api/cfb/live-stream') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
+      return;
+    }
+
+    // ── Live-game situation overlay (Scores page) — no game is live in the fixtures. Previously
+    // unmocked, so it fell through to the dev-server proxy and failed with ECONNREFUSED.
+    if ((url.includes('/api/espn/livegames') || url.includes('/api/espn/cfb/livegames')) && method === 'GET') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
       return;
     }
 
