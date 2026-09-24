@@ -140,6 +140,22 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         return await db.CfbScores.Where(s => s.CfbSlateId == cfbSlateId).ToListAsync();
     }
 
+    // Subquery against CfbSlates (translated server-side), not a local slate-id list .Contains —
+    // see CLAUDE.md's Npgsql gotcha.
+    public async Task<List<CfbSpreads>> GetSpreadsForSeasonAsync(int season) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.CfbSpreads.AsNoTracking()
+            .Where(s => db.CfbSlates.Any(sl => sl.Id == s.CfbSlateId && sl.Season == season))
+            .ToListAsync();
+    }
+
+    public async Task<List<CfbScores>> GetScoresForSeasonAsync(int season) {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.CfbScores.AsNoTracking()
+            .Where(s => db.CfbSlates.Any(sl => sl.Id == s.CfbSlateId && sl.Season == season))
+            .ToListAsync();
+    }
+
     public async Task<IEnumerable<CfbSeasonWeekConfig>> GetWeekConfigsForSeasonAsync(int season) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbSeasonWeekConfigs

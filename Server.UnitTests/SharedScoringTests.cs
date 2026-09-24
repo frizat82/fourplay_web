@@ -3,6 +3,9 @@ using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
+using FourPlayWebApp.Server.Services.Interfaces;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
@@ -77,4 +80,29 @@ public class SharedScoringTests {
         Assert.Equal(WeekResult.Won, WeekOutcome.Evaluate([new PickRow("KC", PickType.Over)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true));
         Assert.Equal(WeekResult.Lost, WeekOutcome.Evaluate([new PickRow("KC", PickType.Under)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true));
     }
+
+    // Both leaderboards used to catch a failure scoring one pick (logging it, counting that pick as
+    // a loss) so one bad row can't take down everyone's standings; the shared path must keep that.
+    [Fact]
+    public void WeekOutcome_APickThatFailsToScore_CountsAsALoss_AndIsReported_NotThrown() {
+        var calc = Substitute.For<ISpreadCalculator>();
+        calc.DidUserWinPick(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<PickType>())
+            .Throws(new InvalidOperationException("bad row"));
+        var reported = new List<PickRow>();
+
+        var result = WeekOutcome.Evaluate([new PickRow("KC", PickType.Spread)], KcWins, calc, requiredPicks: 1,
+            allGamesStarted: true, onPickError: (pick, _) => reported.Add(pick));
+
+        Assert.Equal(WeekResult.Lost, result);
+        Assert.Equal([new PickRow("KC", PickType.Spread)], reported);
+    }
+
+    // The old linear scans compared x.HomeTeam == null and simply found nothing; the team index
+    // must not start throwing on a null team (a bad row) either.
+    [Fact]
+    public void SpreadCalculator_NullTeam_ResolvesToNothing_NotAnException() {
+        Assert.Null(Calc().GetSpread(null!));
+        Assert.Null(Calc().GetOverUnder(null!, PickType.Over));
+    }
 }
+

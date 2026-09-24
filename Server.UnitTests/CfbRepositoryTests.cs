@@ -282,4 +282,29 @@ public class CfbRepositoryTests
         var saved = (await repo.GetScoresForSlateAsync(1)).Single();
         Assert.Equal(TypeName.StatusFinal, saved.GameStatus);
     }
+
+    // Leaderboard: a whole season's spreads/scores in one query each (NFL's shape), not one per slate.
+    [Fact]
+    public async Task GetSpreadsAndScoresForSeasonAsync_ReturnOnlyThatSeasonsSlates()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetSpreadsAndScoresForSeasonAsync_ReturnOnlyThatSeasonsSlates));
+        var db = factory.CreateDbContext();
+        db.CfbSlates.AddRange(
+            new CfbSlates { Id = 1, Season = 2026, SlateNumber = 1, Label = "W1", SlateType = "RegularSeason" },
+            new CfbSlates { Id = 2, Season = 2026, SlateNumber = 2, Label = "W2", SlateType = "RegularSeason" },
+            new CfbSlates { Id = 3, Season = 2025, SlateNumber = 1, Label = "W1", SlateType = "RegularSeason" });
+        db.CfbSpreads.AddRange(
+            new CfbSpreads { CfbSlateId = 1, HomeTeam = "OSU", AwayTeam = "MICH" },
+            new CfbSpreads { CfbSlateId = 2, HomeTeam = "UGA", AwayTeam = "ALA" },
+            new CfbSpreads { CfbSlateId = 3, HomeTeam = "TEX", AwayTeam = "OU" });
+        db.CfbScores.AddRange(
+            new CfbScores { CfbSlateId = 2, HomeTeam = "UGA", AwayTeam = "ALA" },
+            new CfbScores { CfbSlateId = 3, HomeTeam = "TEX", AwayTeam = "OU" });
+        await db.SaveChangesAsync();
+        var repo = new CfbRepository(factory);
+
+        Assert.Equal(["OSU", "UGA"], (await repo.GetSpreadsForSeasonAsync(2026)).Select(s => s.HomeTeam).Order());
+        Assert.Equal(["UGA"], (await repo.GetScoresForSeasonAsync(2026)).Select(s => s.HomeTeam));
+    }
 }
+

@@ -18,9 +18,21 @@ public static class WeekOutcome {
     /// a terminal MissingPicks once every game has started — until then it's MissingGameResults
     /// (frizat-tf1: a user was shown losing a week before any game had kicked off).
     /// </param>
+    /// <param name="onPickError">
+    /// A pick that fails to score (bad data) counts as a loss and is reported here — one bad row must
+    /// never take down the whole leaderboard build (both sports' scorers always isolated this).
+    /// </param>
     public static WeekResult Evaluate(IReadOnlyCollection<PickRow> picks, IReadOnlyCollection<IScoreRow> scores,
-        ISpreadCalculator calculator, int requiredPicks, bool allGamesStarted) {
-        var results = picks.Select(p => PickResult(p, scores, calculator)).ToList();
+        ISpreadCalculator calculator, int requiredPicks, bool allGamesStarted,
+        Action<PickRow, Exception>? onPickError = null) {
+        var results = picks.Select(p => {
+            try {
+                return PickResult(p, scores, calculator);
+            } catch (Exception ex) {
+                onPickError?.Invoke(p, ex);
+                return false;
+            }
+        }).ToList();
         if (results.Any(r => r == false)) return WeekResult.Lost; // any loss decides the week
         if (picks.Count < requiredPicks)
             return allGamesStarted ? WeekResult.MissingPicks : WeekResult.MissingGameResults;

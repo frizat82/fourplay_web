@@ -717,7 +717,6 @@ public class LeagueController(
             DateCreated = mappingDto.DateCreated
         };
         await repo.AddLeagueJuiceMappingAsync(mapping);
-        LeagueCacheKeys.InvalidateLeagueSeason(memoryCache, mapping.LeagueId, mapping.Season);
         return NoContent();
     }
 
@@ -925,9 +924,6 @@ public class LeagueController(
         existing.WeeklyCost = dto.WeeklyCost;
         existing.StartWeek = dto.StartWeek;
         await repo.UpdateLeagueJuiceMappingAsync(existing);
-        // Spreads and the leaderboard are both derived from these settings — drop what was cached
-        // from the old values rather than serve them until expiry (up to an hour).
-        LeagueCacheKeys.InvalidateLeagueSeason(memoryCache, leagueId, season);
         return NoContent();
     }
 
@@ -944,7 +940,6 @@ public class LeagueController(
         if (priorMapping is null)
             return BadRequest("No prior season juice mapping to copy from.");
         await repo.AddLeagueJuiceMappingAsync(LeagueJuiceRollForward.BuildMapping(leagueId, toSeason, priorMapping));
-        LeagueCacheKeys.InvalidateLeagueSeason(memoryCache, leagueId, toSeason);
         return NoContent();
     }
 

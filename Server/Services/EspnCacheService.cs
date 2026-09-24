@@ -16,7 +16,8 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     private readonly ILeagueRepository _leagueRepository;
     private readonly SettledScoreCache _settledCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
-    private readonly PolledItemSnapshot _polled = new();
+    // 2x the slowest poll interval: a healthy poller always refreshes well within it.
+    private readonly PolledItemSnapshot _polled = new(2 * EspnPollCadence.SlowPollInterval);
 
     private static string WeekCacheKey(int season, int nflWeek) => $"nfl-week-scores_{season}_{nflWeek}";
 
