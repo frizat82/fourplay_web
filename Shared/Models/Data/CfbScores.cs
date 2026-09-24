@@ -5,7 +5,7 @@ using FourPlayWebApp.Shared.Models;
 namespace FourPlayWebApp.Shared.Models.Data;
 
 [ExcludeFromCodeCoverage]
-public class CfbScores {
+public class CfbScores : IScoreRow {
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
     public int CfbSlateId { get; set; }

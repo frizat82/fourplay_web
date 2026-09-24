@@ -269,7 +269,7 @@ builder.Services.AddScoped<IInvitationService, InvitationService>();
 builder.Services.AddScoped<ILeagueInviteLinkService, LeagueInviteLinkService>();
 builder.Services.AddScoped<ILeagueMembershipInviteService, LeagueMembershipInviteService>();
 
-builder.Services.AddScoped<ISpreadCalculatorBuilder, SpreadCalculatorBuilder>();
+builder.Services.AddScoped<ISpreadCalculatorProvider, SpreadCalculatorProvider>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
 builder.Services.AddScoped<ICfbLeaderboardService, CfbLeaderboardService>();
 builder.Services.AddSingleton<ILeagueRepository, LeagueRepository>();

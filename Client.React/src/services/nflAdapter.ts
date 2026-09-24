@@ -15,7 +15,7 @@ import {
   computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins,
 } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, PickView, PickType } from './sportAdapter';
-import { revealPicksForStartedGames, memoizeOnce, pickCountsToMap } from './sportAdapter';
+import { revealPicksForStartedGames, memoizeOnce, orFallback, pickCountsToMap } from './sportAdapter';
 
 // Cap navigation at the real current week, not a hardcoded season length — once the season
 // moves into the postseason the full regular season (18) is legitimately browsable/complete;
@@ -92,11 +92,6 @@ function nflPickToPickView(pick: NflPickDto, games: GameView[]): PickView | null
   };
 }
 
-// For optional inputs that must never fail the whole load (live situation, demo's frozen fixture).
-async function orFallback<T>(fetch: () => Promise<T>, fallback: T): Promise<T> {
-  try { return await fetch(); } catch { return fallback; }
-}
-
 // Every team's spreads for the week in one request that doesn't need the scoreboard's team list
 // (an empty request = all teams), so it goes out alongside getWeekScores instead of after it.
 // A failure — a 404 before odds post, most often — is just "no spreads"; hasOdds (doOddsExist)
@@ -132,7 +127,7 @@ async function buildSpreadCache(
 // competitionToGameView can read situation and period/displayClock as the two independently-
 // nullable concerns they actually are — never fabricating one from the presence of the other.
 // liveGames is fetched by the caller alongside the scoreboard (it doesn't depend on it), with a
-// failure treated as "none live" — same as cfbAdapter's getCfbLiveGames().catch(() => []).
+// failure treated as "none live" (orFallback) — same as cfbAdapter's live games.
 function buildLiveGameMap(events: Event[], liveGames: LiveGame[]): Map<string, LiveGame> {
   const map = new Map<string, LiveGame>();
   for (const event of events) {

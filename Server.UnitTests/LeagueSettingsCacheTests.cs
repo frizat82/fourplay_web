@@ -27,7 +27,7 @@ public class LeagueSettingsCacheTests {
     ];
 
     [Fact]
-    public async Task SpreadCalculatorBuilder_UsesEachSeasonsOwnJuice_WhenTheCacheIsShared() {
+    public async Task SpreadCalculatorProvider_UsesEachSeasonsOwnJuice_WhenTheCacheIsShared() {
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetNflSpreadsAsync(2024, 1).Returns(Week1(2024));
         repo.GetNflSpreadsAsync(2025, 1).Returns(Week1(2025));
@@ -35,8 +35,8 @@ public class LeagueSettingsCacheTests {
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { LeagueId = 1, Season = 2025, Juice = 7 });
         var cache = new MemoryCache(new MemoryCacheOptions());
 
-        var past = await new SpreadCalculatorBuilder(repo, cache).WithLeagueId(1).WithSeason(2024).WithWeek(1).BuildAsync();
-        var current = await new SpreadCalculatorBuilder(repo, cache).WithLeagueId(1).WithSeason(2025).WithWeek(1).BuildAsync();
+        var past = await new SpreadCalculatorProvider(repo, cache).GetForNflWeekAsync(1, 2024, 1);
+        var current = await new SpreadCalculatorProvider(repo, cache).GetForNflWeekAsync(1, 2025, 1);
 
         Assert.Equal((double?)(-3 + 13), past.GetSpread("KC"));
         Assert.Equal((double?)(-3 + 7), current.GetSpread("KC"));
@@ -58,7 +58,7 @@ public class LeagueSettingsCacheTests {
         repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig>());
 
         var cache = new MemoryCache(new MemoryCacheOptions());
-        var before = await new SpreadCalculatorBuilder(repo, cache).WithLeagueId(1).WithSeason(2025).WithWeek(1).BuildAsync();
+        var before = await new SpreadCalculatorProvider(repo, cache).GetForNflWeekAsync(1, 2025, 1);
         Assert.Equal((double?)(-3 + 13), before.GetSpread("KC"));
         cache.Set(LeagueCacheKeys.Leaderboard(1, 2025), new List<LeaderboardModel>());
 
@@ -67,7 +67,7 @@ public class LeagueSettingsCacheTests {
             new LeagueJuiceScheduleSource(repo, Substitute.For<ICfbRepository>(), TimeProvider.System));
 
         Assert.IsType<NoContentResult>(result);
-        var after = await new SpreadCalculatorBuilder(repo, cache).WithLeagueId(1).WithSeason(2025).WithWeek(1).BuildAsync();
+        var after = await new SpreadCalculatorProvider(repo, cache).GetForNflWeekAsync(1, 2025, 1);
         Assert.Equal((double?)(-3 + 9), after.GetSpread("KC"));
         Assert.False(cache.TryGetValue(LeagueCacheKeys.Leaderboard(1, 2025), out _));
     }
@@ -95,7 +95,7 @@ public class LeagueSettingsCacheTests {
             Substitute.For<IUserStore<ApplicationUser>>(), null, null, null, null, null, null, null, null);
         var ctrl = new LeagueController(
             cache, repo, NullLogger<LeagueController>.Instance, userManager,
-            Substitute.For<ISpreadCalculatorBuilder>(), Substitute.For<IEspnCacheService>(),
+            Substitute.For<ISpreadCalculatorProvider>(), Substitute.For<IEspnCacheService>(),
             Substitute.For<IInvitationService>(), Substitute.For<ILeagueInviteLinkService>(),
             Substitute.For<ILeagueMembershipInviteService>());
         ctrl.ControllerContext = new ControllerContext {

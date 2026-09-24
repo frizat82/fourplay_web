@@ -49,14 +49,15 @@ public class LeaderboardService(
             // calls to CalculatePicks below.
             var now = timeProvider.GetUtcNow();
             var spreadsByWeek = leagueSpreads.ToLookup(s => s.NflWeek);
+            var scoresByWeek = leagueScores.ToLookup(s => s.NflWeek);
             // One calculator per week, shared by every member (each build costs cache lookups, and
             // the answer doesn't depend on who's asking). One DI scope for the whole run.
             await using var scope = scopeFactory.CreateAsyncScope();
-            var spreadCalculatorBuilder = scope.ServiceProvider.GetRequiredService<ISpreadCalculatorBuilder>();
+            var spreadCalculatorProvider = scope.ServiceProvider.GetRequiredService<ISpreadCalculatorProvider>();
             var calculators = new Dictionary<int, ISpreadCalculator>();
             async Task<ISpreadCalculator> CalculatorFor(int week) {
                 if (!calculators.TryGetValue(week, out var calc)) {
-                    calc = await spreadCalculatorBuilder.WithLeagueId(leagueId).WithWeek(week).WithSeason((int)seasonYear).BuildAsync();
+                    calc = await spreadCalculatorProvider.GetForNflWeekAsync(leagueId, (int)seasonYear, week);
                     calculators[week] = calc;
                 }
                 return calc;
@@ -67,8 +68,8 @@ public class LeaderboardService(
                     User = user.User
                 };
                 for (int week = 1; week <= maxWeek; week++) {
-                    var weekResult = await CalculatePicks(leagueScores, spreadsByWeek[week], picksByUserWeek[(user.UserId, week)].ToList(),
-                        CalculatorFor, user, week, now, seasonJuice.StartWeek);
+                    var weekResult = await CalculatePicks(scoresByWeek[week].ToList<IScoreRow>(), spreadsByWeek[week], picksByUserWeek[(user.UserId, week)].ToList(),
+                        CalculatorFor, week, now, seasonJuice.StartWeek);
                     userPoints.WeekResults[week - 1] = weekResult;
                 }
                 leaderboard.Add(userPoints);
@@ -83,8 +84,8 @@ public class LeaderboardService(
     }
 
 
-    private async Task<LeaderboardWeekResults> CalculatePicks(List<NflScores> userScores, IEnumerable<NflSpreads> weekSpreads,
-        List<NflPicks> userPicks, Func<int, Task<ISpreadCalculator>> calculatorFor, LeagueUserMapping user, int week,
+    private async Task<LeaderboardWeekResults> CalculatePicks(IReadOnlyCollection<IScoreRow> weekScores, IEnumerable<NflSpreads> weekSpreads,
+        List<NflPicks> userPicks, Func<int, Task<ISpreadCalculator>> calculatorFor, int week,
         DateTimeOffset now, int startWeek) {
         var weekResult = new LeaderboardWeekResults {
             Week = week
@@ -100,55 +101,13 @@ public class LeaderboardService(
         }
 
         var spreadCalculator = await calculatorFor(week);
-        var allPicksBeatSpread = userPicks.All(pick => {
-            try {
-                return IsPickAWinner(userScores, week, pick, spreadCalculator);
-            } catch (Exception ex) {
-                logger.LogError(ex, "Error calculating pick winner for user {User} week {Week} pick {@Pick}",
-                    user.UserId, week, pick);
-                return false;
-            }
-        });
-        // A user can submit or change a pick for any individual game right up until that game's own
-        // kickoff — so an incomplete pick set is only a genuine, terminal loss once every game for
-        // this week has already started (e.g. Thursday Night Football already final doesn't mean
-        // Sunday's picking window has closed too). Until then it's no different from "not decided
-        // yet", so it reuses MissingGameResults (frizat-tf1: a real user was shown as losing a week
-        // before any of that week's games had even kicked off — same root cause, CFB side).
-        var allGamesStarted = GameHelpers.AllGamesStarted(weekSpreads.Select(s => s.GameTime), now);
-        var incompletePicksResult = allGamesStarted ? WeekResult.MissingPicks : WeekResult.MissingGameResults;
-        if (!allPicksBeatSpread) {
-            weekResult.WeekResult = WeekResult.Lost; // Any loss is an immediate full week loss
-        }
-        else if (userPicks.Count < GameHelpers.GetRequiredPicks(week)) {
-            logger.LogDebug("{User} {League} Missing Picks {Week} {Count} {Required}", user.User, user.League.LeagueName, week, userPicks.Count,
-                GameHelpers.GetRequiredPicks(week));
-            weekResult.WeekResult = incompletePicksResult;
-        }
-        else if (userPicks.Any(pick => {
-                     var score = userScores.FirstOrDefault(s =>
-                         s.NflWeek == week && (s.HomeTeam == pick.Team || s.AwayTeam == pick.Team));
-                     return score is null;
-                 })) {
-            weekResult.WeekResult = WeekResult.MissingGameResults;
-        }
-        else {
-            weekResult.WeekResult = allPicksBeatSpread ? WeekResult.Won : WeekResult.Lost;
-        }
-
+        weekResult.WeekResult = WeekOutcome.Evaluate(
+            userPicks.Select(p => new PickRow(p.Team, p.Pick)).ToList(),
+            weekScores,
+            spreadCalculator,
+            GameHelpers.GetRequiredPicks(week),
+            GameHelpers.AllGamesStarted(weekSpreads.Select(s => s.GameTime), now));
         return weekResult;
-    }
-
-    private bool IsPickAWinner(List<NflScores> userScores, int week, NflPicks pick, ISpreadCalculator spreadCalculator)
-    {
-        var score = userScores.FirstOrDefault(s => s.NflWeek == week && (s.HomeTeam == pick.Team || s.AwayTeam == pick.Team));
-        if (score is null)
-            return true; // you are a winner if there is no score
-        var isHome = score!.HomeTeam == pick.Team;
-        var isWinner = spreadCalculator.DidUserWinPick(pick.Team, isHome ? score.HomeTeamScore : score.AwayTeamScore, isHome ? score.AwayTeamScore : score.HomeTeamScore, pick.Pick);
-        logger.LogDebug("{Week} Pick: {@Pick} Team: {Team} HomeScore: {HomeScore} AwayScore: {AwayScore} IsHome: {IsHome} IsWinner: {IsWinner}",
-            week, "Spread", pick.Team, score.HomeTeamScore, score.AwayTeamScore, isHome, isWinner);
-        return isWinner;
     }
 
     public async Task<List<LeaderboardModel>> BuildLeaderboard(int leagueId, long seasonYear) {

@@ -32,7 +32,7 @@ public class NflCurrentWeekEndpointTests
             repo,
             NullLogger<LeagueController>.Instance,
             userManager,
-            Substitute.For<ISpreadCalculatorBuilder>(),
+            Substitute.For<ISpreadCalculatorProvider>(),
             Substitute.For<IEspnCacheService>(),
             Substitute.For<IInvitationService>(),
             Substitute.For<ILeagueInviteLinkService>(),

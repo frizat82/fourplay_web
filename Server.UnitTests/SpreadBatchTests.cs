@@ -36,7 +36,7 @@ public class SpreadBatchTests {
             Substitute.For<IUserStore<ApplicationUser>>(), null, null, null, null, null, null, null, null);
         var ctrl = new LeagueController(
             cache, repo, NullLogger<LeagueController>.Instance, userManager,
-            new SpreadCalculatorBuilder(repo, cache), Substitute.For<IEspnCacheService>(),
+            new SpreadCalculatorProvider(repo, cache), Substitute.For<IEspnCacheService>(),
             Substitute.For<IInvitationService>(), Substitute.For<ILeagueInviteLinkService>(),
             Substitute.For<ILeagueMembershipInviteService>());
         ctrl.ControllerContext = new ControllerContext {

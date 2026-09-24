@@ -7,7 +7,7 @@ namespace FourPlayWebApp.Server.Services;
 /// one place so the writers that change those settings can evict exactly what the readers cached.
 /// </summary>
 public static class LeagueCacheKeys {
-    /// <summary>A league's juice mapping for one season (SpreadCalculatorBuilder).</summary>
+    /// <summary>A league's juice mapping for one season (SpreadCalculatorProvider).</summary>
     public static string Juice(int leagueId, int season) => $"juice_{leagueId}_{season}";
 
     /// <summary>A league's built leaderboard for one season (LeaderboardController).</summary>
