@@ -434,7 +434,9 @@ describe('PicksPage', () => {
     await setupDefaults({ week: 1, oddsExist: false });
     await renderPage();
 
-    expect(screen.getByText(/Odds Not Posted/i)).toBeInTheDocument();
+    // SpreadRelease renders nothing until its own spread-lock-schedule request resolves — await
+    // it rather than assert synchronously after page load (CI-observed race: area still empty).
+    expect(await screen.findByText(/Odds Not Posted/i)).toBeInTheDocument();
     expect(screen.queryAllByRole('button', { name: /^(BUF|MIA|DAL|NYG)$/i })).toHaveLength(0);
 
     // Navigating to the season dropdown and back (without changing the actual week) must not
@@ -442,7 +444,7 @@ describe('PicksPage', () => {
     await userEvent.click(screen.getAllByRole('combobox')[2]);
     await userEvent.click(screen.getByRole('option', { name: /regular season/i }));
 
-    expect(screen.getByText(/Odds Not Posted/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Odds Not Posted/i)).toBeInTheDocument();
     expect(screen.queryAllByRole('button', { name: /^(BUF|MIA|DAL|NYG)$/i })).toHaveLength(0);
   });
 

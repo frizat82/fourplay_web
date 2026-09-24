@@ -36,6 +36,29 @@ public class RefreshTokenServiceTests
         Assert.Equal(1, factory.CreateDbContext().RefreshTokens.Count());
     }
 
+    // Rotation revokes a token on every refresh and nothing ever deleted one: prod had 4,625 rows
+    // for ~114 live sessions. Dead tokens (revoked or expired) are never accepted again, so a new
+    // issue for a user clears that user's dead ones — live tokens and other users' rows untouched.
+    [Fact]
+    public async Task IssueTokenAsync_PrunesThatUsersRevokedAndExpiredTokens_KeepsLiveOnesAndOtherUsers()
+    {
+        var factory = BuildFactory();
+        var service = new RefreshTokenService(factory);
+        var user    = BuildUser("user-1");
+        var db      = factory.CreateDbContext();
+        db.RefreshTokens.AddRange(
+            new RefreshToken { UserId = "user-1", Token = "revoked", Created = DateTimeOffset.UtcNow.AddDays(-2), Expires = DateTimeOffset.UtcNow.AddDays(5), Revoked = DateTimeOffset.UtcNow.AddDays(-1) },
+            new RefreshToken { UserId = "user-1", Token = "expired", Created = DateTimeOffset.UtcNow.AddDays(-20), Expires = DateTimeOffset.UtcNow.AddDays(-6) },
+            new RefreshToken { UserId = "user-1", Token = "live", Created = DateTimeOffset.UtcNow, Expires = DateTimeOffset.UtcNow.AddDays(14) },
+            new RefreshToken { UserId = "user-2", Token = "other-users-dead", Created = DateTimeOffset.UtcNow.AddDays(-20), Expires = DateTimeOffset.UtcNow.AddDays(-6) });
+        await db.SaveChangesAsync();
+
+        var issued = await service.IssueTokenAsync(user, TimeSpan.FromDays(14));
+
+        var remaining = factory.CreateDbContext().RefreshTokens.Select(t => t.Token).ToList();
+        Assert.Equal(new[] { "live", "other-users-dead", issued.Token }.Order(), remaining.Order());
+    }
+
     [Fact]
     public async Task IssueTokenAsync_GeneratesUniqueTokensEachCall()
     {
@@ -131,9 +154,11 @@ public class RefreshTokenServiceTests
         Assert.NotNull(rotated);
         Assert.NotEqual(original.Token, rotated.Token);
 
-        // Old token must now be revoked
-        var oldInDb = factory.CreateDbContext().RefreshTokens.First(rt => rt.Token == original.Token);
-        Assert.NotNull(oldInDb.Revoked);
+        // Old token must never be accepted again — rotation revokes it, and the new token's issue
+        // then prunes that dead row outright (IssueTokenAsync), so it's either revoked or gone.
+        Assert.Null(await service.ValidateTokenAsync(original.Token));
+        var oldInDb = factory.CreateDbContext().RefreshTokens.FirstOrDefault(rt => rt.Token == original.Token);
+        Assert.True(oldInDb is null || oldInDb.Revoked is not null);
     }
 
     [Fact]

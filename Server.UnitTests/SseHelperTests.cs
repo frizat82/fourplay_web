@@ -12,25 +12,24 @@ public class SseHelperTests {
     [Fact]
     public async Task StreamAsync_WritesHeartbeatAsDataEvent_NotBareComment() {
         var context = new DefaultHttpContext();
-        var body = new MemoryStream();
+        var body = new SignalingStream();
         context.Response.Body = body;
         using var cts = new CancellationTokenSource();
 
-        Action? onChanged = null;
         var streamTask = SseHelper.StreamAsync(
             context.Response,
-            h => onChanged = h,
+            _ => { },
             _ => { },
             cts.Token,
             heartbeatInterval: TimeSpan.FromMilliseconds(15));
 
-        // Let a couple of heartbeat ticks fire, then cancel to unblock the stream loop. Generous
-        // margin over the interval to stay robust on a loaded CI runner.
-        await Task.Delay(150);
+        // Wait for the heartbeat to actually be written, then cancel — not a fixed sleep, which
+        // raced the write on a loaded CI runner (CI-observed: body came back empty).
+        await body.WaitForAsync(SseHelper.HeartbeatMessage);
         cts.Cancel();
         await streamTask;
 
-        var written = Encoding.UTF8.GetString(body.ToArray());
+        var written = body.Text;
         Assert.Contains(SseHelper.HeartbeatMessage, written);
         // The old bare-comment format was a line starting with ": heartbeat" with nothing before
         // the colon — distinct from "data: heartbeat", which legitimately contains that same
@@ -42,7 +41,7 @@ public class SseHelperTests {
     [Fact]
     public async Task StreamAsync_WritesScoresUpdatedMessage_WhenSubscribedHandlerFires() {
         var context = new DefaultHttpContext();
-        var body = new MemoryStream();
+        var body = new SignalingStream();
         context.Response.Body = body;
         using var cts = new CancellationTokenSource();
 
@@ -57,15 +56,14 @@ public class SseHelperTests {
             heartbeatInterval: TimeSpan.FromMinutes(5));
 
         onChanged?.Invoke();
-        // Reading the channel, writing, and flushing all happen on a background continuation, not
-        // synchronously inside Invoke() — 20ms was cutting it close enough that a loaded CI runner
-        // could cancel before that continuation ran, losing the write entirely (CI-observed
-        // flake: body came back empty). Same generous margin as the heartbeat test above.
-        await Task.Delay(150);
+        // Reading the channel, writing, and flushing happen on a background continuation, not
+        // inside Invoke() — wait for the write itself. A fixed sleep (20ms, then 150ms) still lost
+        // the race on a loaded CI runner: body came back empty.
+        await body.WaitForAsync(SseHelper.ScoresUpdatedMessage);
         cts.Cancel();
         await streamTask;
 
-        var written = Encoding.UTF8.GetString(body.ToArray());
+        var written = body.Text;
         Assert.Contains(SseHelper.ScoresUpdatedMessage, written);
     }
 
@@ -88,4 +86,47 @@ public class SseHelperTests {
 
         Assert.True(unsubscribed);
     }
+
+    // Response body that lets a test await specific text being written, so assertions follow the
+    // write itself instead of a wall-clock guess about when a background continuation runs.
+    private sealed class SignalingStream : MemoryStream {
+        private readonly object _gate = new();
+        private readonly List<(string Text, TaskCompletionSource Done)> _waiters = [];
+
+        public string Text { get { lock (_gate) return Encoding.UTF8.GetString(ToArray()); } }
+
+        public override void Write(byte[] buffer, int offset, int count) {
+            lock (_gate) {
+                base.Write(buffer, offset, count);
+                var text = Encoding.UTF8.GetString(ToArray());
+                foreach (var w in _waiters.Where(w => text.Contains(w.Text)).ToList()) {
+                    w.Done.TrySetResult();
+                    _waiters.Remove(w);
+                }
+            }
+        }
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken ct) {
+            Write(buffer, offset, count);
+            return Task.CompletedTask;
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default) {
+            Write(buffer.ToArray(), 0, buffer.Length);
+            return ValueTask.CompletedTask;
+        }
+
+        public async Task WaitForAsync(string text) {
+            Task done;
+            lock (_gate) {
+                if (Encoding.UTF8.GetString(ToArray()).Contains(text)) return;
+                var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _waiters.Add((text, tcs));
+                done = tcs.Task;
+            }
+            // Generous ceiling only so a real regression fails instead of hanging the run.
+            await done.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+    }
 }
+

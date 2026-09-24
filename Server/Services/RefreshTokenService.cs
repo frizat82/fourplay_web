@@ -21,6 +21,14 @@ namespace FourPlayWebApp.Server.Services
                 Created = DateTimeOffset.UtcNow
             };
             await using var db = await dbFactory.CreateDbContextAsync();
+            // Rotation revokes a token on every refresh and nothing else ever deleted one (prod:
+            // 4,625 rows for ~114 live sessions). A dead token is never accepted again, so clear
+            // this user's while issuing — load + RemoveRange, not ExecuteDelete (see CLAUDE.md).
+            var now = DateTimeOffset.UtcNow;
+            var dead = await db.RefreshTokens
+                .Where(rt => rt.UserId == user.Id && (rt.Revoked != null || rt.Expires < now))
+                .ToListAsync();
+            db.RefreshTokens.RemoveRange(dead);
             db.RefreshTokens.Add(refreshToken);
             await db.SaveChangesAsync();
             return refreshToken;
