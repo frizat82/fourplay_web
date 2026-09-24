@@ -21,7 +21,8 @@ vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 
 import { getScores, getWeekScores, getLiveGames } from '../api/espn';
 import { getUserPicks, spreadBatch, getNflCurrentWeek, getLeaguePicks, getLeaguePickCounts } from '../api/league';
-import { createSpreadResponse, notFoundError } from '../test/fixtures';
+import { createSpreadResponse } from '../test/fixtures';
+import { buildAxiosError } from './testUtils/axiosError';
 
 function makeScores(homeTeam: string, awayTeam: string, homeScore = 24, awayScore = 17) {
   const comp = createCompetition({ homeTeam, awayTeam, homeScore, awayScore });
@@ -52,7 +53,7 @@ describe('nflAdapter', () => {
     vi.mocked(getLeaguePickCounts).mockResolvedValue([]);
     vi.mocked(getUserPicks).mockResolvedValue([]);
     // Default: no odds posted — the spreads endpoint 404s (nflAdapter derives hasOdds from it).
-    vi.mocked(spreadBatch).mockRejectedValue(notFoundError());
+    vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
     adapter = createNflAdapter();
   });
 
@@ -101,7 +102,7 @@ describe('nflAdapter', () => {
 
     it('sets hasOdds=false when no odds', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(spreadBatch).mockRejectedValue(notFoundError());
+      vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
 
       const result = await adapter.loadCurrentGames(1, 'user1');
       expect(result.hasOdds).toBe(false);
@@ -189,7 +190,7 @@ describe('nflAdapter', () => {
 
     it('reflects hasOdds=false for the resolved week when no odds have posted yet', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(spreadBatch).mockRejectedValue(notFoundError());
+      vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
 
       const result = await adapter.loadCurrentScores(1, 'user1');
       expect(result.hasOdds).toBe(false);
@@ -219,7 +220,7 @@ describe('nflAdapter', () => {
     // LiveGame's own top-level period/displayClock, not anything nested inside situation.
     it('does not fabricate a placeholder situation when ESPN gives period/clock but no full situation detail — but still surfaces period/displayClock for the status line', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(spreadBatch).mockRejectedValue(notFoundError());
+      vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
       vi.mocked(getLiveGames).mockResolvedValue([{
         homeTeam: 'KC', awayTeam: 'BUF', homeScore: 24, awayScore: 17,
         isCompleted: false, kickoffUtc: new Date().toISOString(),
@@ -235,7 +236,7 @@ describe('nflAdapter', () => {
 
     it('surfaces a real situation object unmodified, alongside period/displayClock as separate fields', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(spreadBatch).mockRejectedValue(notFoundError());
+      vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
       vi.mocked(getLiveGames).mockResolvedValue([{
         homeTeam: 'KC', awayTeam: 'BUF', homeScore: 24, awayScore: 17,
         isCompleted: false, kickoffUtc: new Date().toISOString(),
@@ -394,7 +395,7 @@ describe('nflAdapter', () => {
     // its 404 means no odds yet; any other failure is a real error, not a silent "no odds".
     it('treats a 404 from the spreads request as no odds, and any other failure as an error', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
-      vi.mocked(spreadBatch).mockRejectedValue(notFoundError());
+      vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
 
       const result = await adapter.loadCurrentGames(1, 'user1');
       expect(result.hasOdds).toBe(false);

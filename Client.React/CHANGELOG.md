@@ -12,6 +12,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 - Improved: Picks, Scores and the dashboard load noticeably faster during the season — the current week's live scores now come from the server's shared ESPN feed instead of a fresh ESPN request for every page load
 - Improved: NFL Picks, Scores and past-week views load in fewer round trips — spreads and live game situations are fetched alongside the scoreboard instead of after it, and viewing a past week no longer waits up to 2.5 seconds on the current scoreboard during the off-season
 - Fixed: a commissioner's tease or Start Week change could take up to an hour to show up in NFL spreads and the leaderboard; it now applies immediately
+- Added: a nightly Dead Token Cleanup job (Job Manager) deletes expired and revoked sign-in tokens and revoked league invite links, which previously piled up forever
 
 ## 2026-09-23
 

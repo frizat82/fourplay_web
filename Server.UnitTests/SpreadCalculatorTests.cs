@@ -348,9 +348,7 @@ namespace FourPlayWebApp.Server.UnitTests
         // with no league tease applied, unlike NFL) was fixed by making this same SpreadCalculator
         // — not a CFB-only duplicate — serve both sports. These tests prove the shared arithmetic
         // (GetSpread/GetOverUnder/DidUserWinPick) behaves identically for CfbSpreads via the
-        // pre-resolved-juice constructor that CfbPicksController.GetSpreads uses; only *which*
-        // tier-resolution scheme produces that juice value differs per sport (NFL: week number via
-        // the other constructor; CFB: slate number via CfbLeaderboardService.JuiceForSlate).
+        // same (odds, juice) constructor both sports use; which tease a period gets is JuiceTiers'.
         private static List<CfbSpreads> CreateMockCfbSpreads() {
             return [
                 new CfbSpreads {

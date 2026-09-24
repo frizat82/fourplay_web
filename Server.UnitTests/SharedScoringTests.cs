@@ -10,9 +10,7 @@ using NSubstitute.ExceptionExtensions;
 namespace FourPlayWebApp.Server.UnitTests;
 
 // One implementation for both sports (CLAUDE.md): which tease a period uses (JuiceTiers) and how a
-// user's week/slate resolves (WeekOutcome). Previously NFL's SpreadCalculator.ResolveNflJuice /
-// LeaderboardService.CalculatePicks and CFB's CfbLeaderboardService.JuiceForSlate / EvaluateSlate
-// were two hand-written copies of the same rules.
+// user's week/slate resolves (WeekOutcome).
 public class SharedScoringTests {
     private static readonly LeagueJuiceMapping Mapping = new() { Juice = 13, JuiceDivisional = 10, JuiceConference = 6 };
 
