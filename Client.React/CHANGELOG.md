@@ -6,6 +6,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-09-24
 
+- Fixed: opening the Leaderboard directly (refresh or link) briefly showed "No leaderboard data yet" before the standings loaded
+- Fixed: in dark mode, every page load flashed the light background for a moment before fading to dark
 - Improved: leaderboards load much faster, especially for larger leagues and college football — they now read each week's results in a handful of queries instead of one per member per week
 - Improved: Picks, Scores and the dashboard load noticeably faster during the season — the current week's live scores now come from the server's shared ESPN feed instead of a fresh ESPN request for every page load
 - Improved: NFL Picks, Scores and past-week views load in fewer round trips — spreads and live game situations are fetched alongside the scoreboard instead of after it, and viewing a past week no longer waits up to 2.5 seconds on the current scoreboard during the off-season
