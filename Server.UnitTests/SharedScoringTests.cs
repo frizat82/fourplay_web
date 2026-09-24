@@ -22,7 +22,7 @@ public class SharedScoringTests {
     [InlineData(19, 10)]   // Wild Card
     [InlineData(20, 10)]   // Divisional
     [InlineData(21, 6)]    // Conference Championship
-    [InlineData(22, 0)]    // Super Bowl — current rule: no tease (pending product decision)
+    [InlineData(22, 0)]    // Super Bowl — no tease (product decision, 2026-09-24)
     public void JuiceTiers_Nfl_ByWeek(int week, double expected) =>
         Assert.Equal(expected, JuiceTiers.For(LeagueType.Nfl, week, Mapping));
 
