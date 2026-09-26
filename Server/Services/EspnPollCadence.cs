@@ -17,15 +17,19 @@ public static class EspnPollCadence
 {
     public static readonly TimeSpan FastPollInterval = TimeSpan.FromSeconds(15);
     public static readonly TimeSpan SlowPollInterval = TimeSpan.FromMinutes(5);
-    // A game still "scheduled" this long after kickoff is postponed/canceled (ESPN keeps those
-    // scheduled), not a delayed start.
     public static readonly TimeSpan LiveGameDuration = TimeSpan.FromHours(4);
-    // A game that has started stays live until final (delays, OT) — for at most this long, so a
-    // status stuck "in progress" at ESPN can't keep the pollers fast forever.
     public static readonly TimeSpan OverlongGameLimit = TimeSpan.FromHours(12);
 
-    /// <summary>A game is on: kicked off and not final (a delayed start counts; a postponed game doesn't).</summary>
+    /// <summary>
+    /// A game is on: past its kickoff time and not final. One that has started stays live until
+    /// final (delays, OT), capped at <see cref="OverlongGameLimit"/> so a status stuck "in progress"
+    /// at ESPN can't keep the pollers fast forever. One not started yet is a delayed start for up to
+    /// <see cref="LiveGameDuration"/>; after that it's postponed/canceled (ESPN keeps those "scheduled").
+    /// </summary>
     public static bool IsLive(Competition game, DateTimeOffset now) =>
         !GameHelpers.IsGameOver(game) && game.Date <= now
         && now <= game.Date + (GameHelpers.IsGameStarted(game) ? OverlongGameLimit : LiveGameDuration);
+
+    /// <summary>A game that hasn't reached its kickoff time yet.</summary>
+    public static bool IsUpcoming(Competition game, DateTimeOffset now) => !GameHelpers.IsGameOver(game) && game.Date > now;
 }

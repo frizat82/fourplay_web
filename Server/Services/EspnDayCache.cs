@@ -1,4 +1,3 @@
-using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -51,7 +50,7 @@ public sealed class EspnDayCache(IMemoryCache cache, TimeProvider time) {
         var games = day.Events?.SelectMany(e => e.Competitions).ToList() ?? [];
         if (games.Count == 0) return EmptyTtl;
         if (games.Any(g => EspnPollCadence.IsLive(g, now))) return LiveTtl;
-        var upcoming = games.Where(g => !GameHelpers.IsGameOver(g) && g.Date > now).ToList();
+        var upcoming = games.Where(g => EspnPollCadence.IsUpcoming(g, now)).ToList();
         if (upcoming.Count == 0) return SettledTtl; // all final, or postponed/canceled (ESPN keeps those "scheduled")
         var untilKickoff = upcoming.Min(g => g.Date) - now;
         return untilKickoff < SettledTtl ? untilKickoff : SettledTtl;

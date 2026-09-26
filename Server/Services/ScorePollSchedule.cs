@@ -1,4 +1,3 @@
-using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
 
 namespace FourPlayWebApp.Server.Services;
@@ -48,7 +47,7 @@ public sealed class ScorePollSchedule {
         if (games.Any(g => EspnPollCadence.IsLive(g, now))) return EspnPollCadence.FastPollInterval;
         if (_lastPollFailed) return EspnPollCadence.SlowPollInterval;
 
-        var wakeAt = games.Where(g => !GameHelpers.IsGameOver(g) && g.Date > now).Select(g => g.Date).ToList();
+        var wakeAt = games.Where(g => EspnPollCadence.IsUpcoming(g, now)).Select(g => g.Date).ToList();
         var scheduledTicks = Interlocked.Read(ref _nextWakePointTicks);
         if (scheduledTicks > now.UtcTicks) wakeAt.Add(new DateTimeOffset(scheduledTicks, TimeSpan.Zero));
 
