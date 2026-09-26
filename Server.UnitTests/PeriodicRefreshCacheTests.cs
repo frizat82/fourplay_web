@@ -179,4 +179,20 @@ public class PeriodicRefreshCacheTests
             Assert.Contains("value-1", seenByselector);
         }
     }
+
+    // The interval selector runs outside the refresh's own try/catch; if it ever throws (e.g. a
+    // malformed ESPN payload), the loop must fall back to a retry delay, not die silently.
+    [Fact]
+    public async Task ASelectorThatThrows_DoesNotStopTheRefreshLoop() {
+        var fetches = 0;
+        var second = new TaskCompletionSource();
+        await using var cache = new PeriodicRefreshCache<string>(
+            fetch: () => { if (Interlocked.Increment(ref fetches) == 2) second.TrySetResult(); return Task.FromResult<string?>("v"); },
+            fingerprint: v => v,
+            intervalSelector: _ => throw new InvalidOperationException("bad payload"),
+            intervalOnError: TimeSpan.FromMilliseconds(10));
+
+        var completed = await Task.WhenAny(second.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        Assert.Same(second.Task, completed);
+    }
 }

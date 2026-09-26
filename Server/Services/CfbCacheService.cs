@@ -24,7 +24,9 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
     private readonly ICfbLiveScoreFetcher _fetcher;
     private readonly SettledScoreCache _settledCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
-    // 2x the slowest poll interval: a healthy poller always refreshes well within it.
+    // Fresh for 2x the slow poll: during games the poller refreshes every 30s. Between games it
+    // sleeps for hours, so the snapshot lapses and requests fetch for themselves — through
+    // EspnDayCache, so that's an in-memory read for any day that can't have changed.
     private readonly PolledItemSnapshot _polled = new(2 * EspnPollCadence.SlowPollInterval);
     private readonly ScorePollSchedule _pollSchedule = new();
 
@@ -55,18 +57,29 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                 // or soonest-upcoming slate, for UI-default purposes) — so its null-ness alone can
                 // no longer be used to gate off-season ESPN polling. IsSeasonActiveAsync is the
                 // purpose-built, season-level check for that (see SeasonWindowResolver).
-                // Next slate's first kickoff (or next season's) — when to wake once this slate is done.
-                _pollSchedule.SetNextScheduledKickoff((await cfbRepo.GetAllSlatesAsync()).Select(s =>
-                    s.FirstGameUtc ?? new DateTimeOffset(s.StartDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)), DateTimeOffset.UtcNow);
+                _pollSchedule.PollStarted();
+                // When to wake next once nothing is on: each slate flipping current, each first kickoff.
+                var slates = (await cfbRepo.GetAllSlatesAsync()).ToList();
+                var slateWindows = CfbCurrentSlateService.BuildSlateWindows(slates, await cfbRepo.GetAllWeekConfigsAsync());
+                var wakePoints = SeasonWindowResolver.ChangePoints(slateWindows.Select(sw => sw.Window))
+                    .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)))
+                    .Concat(slates.Where(s => s.FirstGameUtc.HasValue).Select(s => s.FirstGameUtc!.Value))
+                    .ToList();
 
-                if (!await currentSlateService.IsSeasonActiveAsync()) return _polled.Clear();
+                if (!await currentSlateService.IsSeasonActiveAsync()) {
+                    _pollSchedule.PollSucceeded(wakePoints, DateTimeOffset.UtcNow);
+                    return _polled.Clear();
+                }
 
                 var currentSlate = await currentSlateService.GetCurrentSlateAsync();
-                if (currentSlate is null) return _polled.Clear();
-
-                var slate = await cfbRepo.GetSlateByIdAsync(currentSlate.Id);
-                if (slate is null) return _polled.Clear();
-                return _polled.Record(SlateCacheKey(slate.Id), await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true));
+                var slate = currentSlate is null ? null : await cfbRepo.GetSlateByIdAsync(currentSlate.Id);
+                if (slate is null) {
+                    _pollSchedule.PollSucceeded(wakePoints, DateTimeOffset.UtcNow);
+                    return _polled.Clear();
+                }
+                var scores = await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true);
+                if (scores is not null) _pollSchedule.PollSucceeded(wakePoints, DateTimeOffset.UtcNow);
+                return _polled.Record(SlateCacheKey(slate.Id), scores);
             },
             fingerprint: EspnScoresFingerprint.Compute,
             intervalSelector: current => _pollSchedule.NextInterval(current, DateTimeOffset.UtcNow),

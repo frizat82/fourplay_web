@@ -7,9 +7,10 @@ namespace FourPlayWebApp.Server.Services;
 /// <summary>
 /// Caches each ESPN single-day scoreboard response (and the CFP bucket) for as long as it can't
 /// change — shared by the NFL and CFB API services. ESPN only answers single-day queries now, so a
-/// week/slate window is one request per day, and the pollers re-fetch the window every 30s during
-/// games and every 5 min otherwise. With this cache those polls only reach ESPN for days that can
-/// actually have changed. The ESPN-reading jobs opt out with <see cref="Fresh"/>.
+/// week/slate window is one request per day, re-fetched by every poll (every 30s during games —
+/// see ScorePollSchedule) and by requests that fall back to their own fetch between polls. With
+/// this cache those only reach ESPN for days that can actually have changed. The ESPN-reading jobs
+/// opt out with <see cref="Fresh"/>.
 /// <para>Cached responses are shared by every reader: treat them as read-only (nothing mutates
 /// them today — the fetchers build new scoreboards via GameHelpers.WithEvents).</para>
 /// </summary>
@@ -18,7 +19,7 @@ public sealed class EspnDayCache(IMemoryCache cache, TimeProvider time) {
     public static readonly TimeSpan LiveTtl = TimeSpan.FromSeconds(20);
     /// <summary>A day whose last game only just finished: re-checked for post-final score corrections.</summary>
     public static readonly TimeSpan RecentlyFinishedTtl = TimeSpan.FromMinutes(15);
-    /// <summary>A day with no games — or a response that came back empty; re-checked every few slow polls.</summary>
+    /// <summary>A day with no games — or a response that came back empty; re-checked every 15 min when read.</summary>
     public static readonly TimeSpan EmptyTtl = TimeSpan.FromMinutes(15);
     /// <summary>A day that finished long ago, or upcoming games far off.</summary>
     public static readonly TimeSpan SettledTtl = TimeSpan.FromHours(6);

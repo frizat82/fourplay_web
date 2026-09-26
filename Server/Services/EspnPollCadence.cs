@@ -1,5 +1,3 @@
-using FourPlayWebApp.Shared.Models;
-
 namespace FourPlayWebApp.Server.Services;
 
 /// <summary>
@@ -19,9 +17,4 @@ public static class EspnPollCadence
     public static readonly TimeSpan LiveGameDuration = TimeSpan.FromHours(4);
     public static readonly TimeSpan FastPollInterval = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan SlowPollInterval = TimeSpan.FromMinutes(5);
-
-    // Both EspnCacheService and CfbCacheService cache the identical EspnScores shape (NFL/CFB
-    // scoreboards share one ESPN wire format) — one extraction, not two copies.
-    public static IEnumerable<DateTimeOffset> KickoffTimes(EspnScores scores) =>
-        scores.Events?.SelectMany(e => e.Competitions).Select(c => c.Date) ?? [];
 }

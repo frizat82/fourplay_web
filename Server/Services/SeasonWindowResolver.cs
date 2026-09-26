@@ -47,6 +47,13 @@ public static class SeasonWindowResolver {
         return lastStarted ?? next;
     }
 
+    // Every instant at which ResolveCurrentWeek or IsSeasonActive can give a different answer:
+    // each window's Start/End, its SpreadLockDatetime, and the early-activation point before it.
+    // The score pollers sleep between games and wake at these (ScorePollSchedule), so a week
+    // rolling over is picked up at once rather than whenever they next happen to wake.
+    public static IEnumerable<DateTime> ChangePoints(IEnumerable<WeekWindow> windows) =>
+        windows.SelectMany(w => new[] { w.Start, w.End, w.SpreadLockDatetime, w.SpreadLockDatetime - EarlyActivationWindow });
+
     // SEASON-LEVEL: "is a season actually happening right now, at all?" — coarse, used
     // exclusively by the two ESPN cache pollers and the two score jobs to decide whether
     // to do any ESPN-facing work this tick/run. A season's overall span is [earliest
