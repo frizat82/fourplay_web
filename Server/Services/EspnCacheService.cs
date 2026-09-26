@@ -49,13 +49,14 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
                 // or soonest-upcoming week, for UI-default purposes) — so its result alone can't
                 // gate off-season ESPN polling. IsSeasonActiveAsync is the purpose-built,
                 // season-level check for that (see SeasonWindowResolver).
-                if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return new(_polled.Clear(), wakePoints);
+                if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
 
                 var week = await nflCurrentWeekService.GetCurrentWeekAsync();
                 var matchingConfig = configs.FirstOrDefault(c => c.Season == week.Season && c.WeekId == week.WeekId);
-                if (matchingConfig is null) return new(_polled.Clear(), wakePoints);
+                if (matchingConfig is null) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
+                // Every NFL week has games — no scoreboard means ESPN failed.
                 return new(_polled.Record(WeekCacheKey(matchingConfig.Season, matchingConfig.WeekId),
-                    await _fetcher.FetchForWeekAsync(matchingConfig)), wakePoints);
+                    await _fetcher.FetchForWeekAsync(matchingConfig)), wakePoints, ExpectedGames: true);
             }, DateTimeOffset.UtcNow),
             fingerprint: EspnScoresFingerprint.Compute,
             intervalSelector: current => _pollSchedule.NextInterval(current, DateTimeOffset.UtcNow),

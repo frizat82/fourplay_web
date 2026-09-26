@@ -21,8 +21,13 @@ public sealed class ScorePollSchedule {
     // until it goes final, for at most this long after kickoff (a stuck ESPN status can't poll forever).
     private static readonly TimeSpan OverlongGameLimit = TimeSpan.FromHours(12);
 
-    /// <summary>What a poll produced: its scoreboard (null = no games / nothing to fetch) and the schedule's wake points.</summary>
-    public readonly record struct Outcome(EspnScores? Scores, IReadOnlyCollection<DateTimeOffset> WakePoints);
+    /// <summary>
+    /// What a poll produced: its scoreboard, the schedule's wake points, and whether the week/slate
+    /// it fetched has games. The API services turn ESPN errors into a null scoreboard, so null for a
+    /// week that has games is a failed poll; null for one without (off-season, a CFP round before
+    /// matchups post) isn't.
+    /// </summary>
+    public readonly record struct Outcome(EspnScores? Scores, IReadOnlyCollection<DateTimeOffset> WakePoints, bool ExpectedGames);
 
     private long _nextWakePointTicks; // UTC ticks; 0 = none known
     private volatile bool _lastPollFailed;
@@ -30,14 +35,15 @@ public sealed class ScorePollSchedule {
     /// <summary>
     /// Runs the whole poll — scope setup, schedule reads, the ESPN fetch. Anything it throws marks
     /// the poll failed (retried at the slow cadence) and propagates to the refresh engine; a poll
-    /// that completes, even with no games, records the schedule's wake points.
+    /// that completes records the schedule's wake points, and fails only if a week that has games
+    /// came back with no scoreboard.
     /// </summary>
     public async Task<EspnScores?> PollAsync(Func<Task<Outcome>> poll, DateTimeOffset now) {
         _lastPollFailed = true;
         var outcome = await poll();
         var next = outcome.WakePoints.Where(p => p > now).Select(p => (DateTimeOffset?)p).Min();
         Interlocked.Exchange(ref _nextWakePointTicks, next?.UtcTicks ?? 0);
-        _lastPollFailed = false;
+        _lastPollFailed = outcome.Scores is null && outcome.ExpectedGames;
         return outcome.Scores;
     }
 

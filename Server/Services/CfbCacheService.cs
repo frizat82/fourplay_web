@@ -67,7 +67,7 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                 // or soonest-upcoming slate, for UI-default purposes) — so its null-ness alone can
                 // no longer be used to gate off-season ESPN polling. IsSeasonActiveAsync is the
                 // purpose-built, season-level check for that (see SeasonWindowResolver).
-                if (!await currentSlateService.IsSeasonActiveAsync()) return new(_polled.Clear(), wakePoints);
+                if (!await currentSlateService.IsSeasonActiveAsync()) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
 
                 wakePoints.AddRange(SeasonWindowResolver.ChangePoints(
                         CfbCurrentSlateService.BuildSlateWindows(slates, await cfbRepo.GetAllWeekConfigsAsync()).Select(sw => sw.Window))
@@ -75,8 +75,10 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
 
                 var currentSlate = await currentSlateService.GetCurrentSlateAsync();
                 var slate = currentSlate is null ? null : await cfbRepo.GetSlateByIdAsync(currentSlate.Id);
-                if (slate is null) return new(_polled.Clear(), wakePoints);
-                return new(_polled.Record(SlateCacheKey(slate.Id), await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true)), wakePoints);
+                if (slate is null) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
+                // A slate has games once its first kickoff is known (a CFP round's matchups may not be yet).
+                return new(_polled.Record(SlateCacheKey(slate.Id), await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true)),
+                    wakePoints, ExpectedGames: slate.FirstGameUtc.HasValue);
             }, DateTimeOffset.UtcNow),
             fingerprint: EspnScoresFingerprint.Compute,
             intervalSelector: current => _pollSchedule.NextInterval(current, DateTimeOffset.UtcNow),

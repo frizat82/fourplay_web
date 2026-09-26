@@ -13,7 +13,7 @@ public class ScorePollScheduleTests {
 
     private static ScorePollSchedule Polled(params DateTimeOffset[] scheduleWakePoints) {
         var schedule = new ScorePollSchedule();
-        schedule.PollAsync(() => Task.FromResult(new ScorePollSchedule.Outcome(null, scheduleWakePoints)), Now).GetAwaiter().GetResult();
+        schedule.PollAsync(() => Task.FromResult(new ScorePollSchedule.Outcome(null, scheduleWakePoints, ExpectedGames: false)), Now).GetAwaiter().GetResult();
         return schedule;
     }
 
@@ -58,14 +58,23 @@ public class ScorePollScheduleTests {
         Assert.Equal(EspnPollCadence.SlowPollInterval, schedule.NextInterval(Day(Game(Now.AddHours(-20), TypeName.StatusFinal)), Now));
     }
 
-    // A week/slate with no games yet (fetcher returns null — e.g. a CFP round before matchups post)
-    // is a successful poll, not a failure: sleep to the next wake point, don't retry every 5 min.
+    // A week/slate with no games yet (e.g. a CFP round before matchups post) is a successful poll,
+    // not a failure: sleep to the next wake point, don't retry every 5 min...
     [Fact]
     public async Task AnEmptyWeek_IsNotAFailure() {
         var schedule = new ScorePollSchedule();
-        var scores = await schedule.PollAsync(() => Task.FromResult(new ScorePollSchedule.Outcome(null, [Now.AddHours(2)])), Now);
+        var scores = await schedule.PollAsync(() => Task.FromResult(new ScorePollSchedule.Outcome(null, [Now.AddHours(2)], ExpectedGames: false)), Now);
         Assert.Null(scores);
         Assert.Equal(TimeSpan.FromHours(2), schedule.NextInterval(null, Now));
+    }
+
+    // ...but no scoreboard for a week that has games means ESPN failed (the API services swallow
+    // HTTP errors into null): retry at the slow cadence, don't sleep through an outage.
+    [Fact]
+    public async Task NoScoreboardForAWeekWithGames_IsAFailure() {
+        var schedule = new ScorePollSchedule();
+        await schedule.PollAsync(() => Task.FromResult(new ScorePollSchedule.Outcome(null, [Now.AddDays(4)], ExpectedGames: true)), Now);
+        Assert.Equal(EspnPollCadence.SlowPollInterval, schedule.NextInterval(Day(Game(Now.AddHours(-20), TypeName.StatusFinal)), Now));
     }
 
     // ESPN sometimes corrects a score after marking the game final: keep checking for a while —
