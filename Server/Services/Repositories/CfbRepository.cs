@@ -46,16 +46,18 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
 
     // Per-season and by-id reads filter the cached whole table (ordered Season, SlateNumber).
     public async Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season) =>
-        (await GetAllSlatesAsync()).Where(s => s.Season == season).ToList();
+        ScheduleCache.Copies((await SlateRowsAsync()).Where(s => s.Season == season));
 
-    public async Task<IEnumerable<CfbSlates>> GetAllSlatesAsync() =>
-        await ScheduleCache.GetAsync(cache, ScheduleCache.CfbSlates, async () => {
+    public async Task<IEnumerable<CfbSlates>> GetAllSlatesAsync() => ScheduleCache.Copies(await SlateRowsAsync());
+
+    public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) =>
+        ScheduleCache.Copy((await SlateRowsAsync()).FirstOrDefault(s => s.Id == slateId));
+
+    private Task<IReadOnlyList<CfbSlates>> SlateRowsAsync() =>
+        ScheduleCache.RowsAsync(cache, ScheduleCache.CfbSlates, async () => {
             await using var db = await dbFactory.CreateDbContextAsync();
             return await db.CfbSlates.AsNoTracking().OrderBy(s => s.Season).ThenBy(s => s.SlateNumber).ToListAsync();
         });
-
-    public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) =>
-        (await GetAllSlatesAsync()).FirstOrDefault(s => s.Id == slateId);
 
     public async Task UpsertAsync(IEnumerable<CfbSpreads> spreads) {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -156,10 +158,12 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
     }
 
     public async Task<IEnumerable<CfbSeasonWeekConfig>> GetWeekConfigsForSeasonAsync(int season) =>
-        (await GetAllWeekConfigsAsync()).Where(c => c.Season == season).ToList();
+        ScheduleCache.Copies((await WeekConfigRowsAsync()).Where(c => c.Season == season));
 
-    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync() =>
-        await ScheduleCache.GetAsync(cache, ScheduleCache.CfbWeekConfigs, async () => {
+    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync() => ScheduleCache.Copies(await WeekConfigRowsAsync());
+
+    private Task<IReadOnlyList<CfbSeasonWeekConfig>> WeekConfigRowsAsync() =>
+        ScheduleCache.RowsAsync(cache, ScheduleCache.CfbWeekConfigs, async () => {
             await using var db = await dbFactory.CreateDbContextAsync();
             return await db.CfbSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.EspnWeekNumber).ToListAsync();
         });

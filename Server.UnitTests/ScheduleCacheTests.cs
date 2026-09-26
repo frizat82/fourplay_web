@@ -58,11 +58,11 @@ public class ScheduleCacheTests {
         Assert.Single(await repo.GetAllWeekConfigsAsync());
     }
 
-    // Callers get their own list: one caller sorting or filtering in place can't change what the
-    // next caller sees.
+    // Callers get their own list AND their own row objects: one caller sorting a list or tweaking a
+    // row can't change what every other request and poller sees for the next hour.
     [Fact]
-    public async Task CachedLists_AreCopies() {
-        var factory = new DbContextFactoryStub(nameof(CachedLists_AreCopies));
+    public async Task CachedRows_AreCopies() {
+        var factory = new DbContextFactoryStub(nameof(CachedRows_AreCopies));
         var repo = new LeagueRepository(factory, new MemoryCache(new MemoryCacheOptions()));
         var db = factory.CreateDbContext();
         db.NflSeasonWeekConfigs.AddRange(
@@ -71,9 +71,11 @@ public class ScheduleCacheTests {
         await db.SaveChangesAsync();
 
         var first = await repo.GetNflSeasonWeekConfigsAsync();
+        first[0].WeekLabel = "changed by a caller";
         first.Clear();
 
         Assert.Equal(2, (await repo.GetNflSeasonWeekConfigsAsync()).Count);
+        Assert.Equal("Week 1", (await repo.GetNflSeasonWeekConfigsAsync())[0].WeekLabel);
         Assert.Equal([1, 2], (await repo.GetNflSeasonWeekConfigsAsync(2026)).Select(c => c.WeekId));
     }
 
@@ -88,5 +90,27 @@ public class ScheduleCacheTests {
         await db.SaveChangesAsync();
 
         Assert.Empty(await repo.GetNflSeasonWeekConfigsAsync());
+    }
+
+    // DemoDataSeeder writes these tables directly (and UserManagerJob re-runs it after the app is
+    // serving), so it evicts everything when it's done.
+    [Fact]
+    public async Task InvalidateAll_EvictsEveryScheduleTable() {
+        var factory = new DbContextFactoryStub(nameof(InvalidateAll_EvictsEveryScheduleTable));
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var cfb = new CfbRepository(factory, cache);
+        var nfl = new LeagueRepository(factory, cache);
+        await cfb.GetAllSlatesAsync(); await cfb.GetAllWeekConfigsAsync(); await nfl.GetNflSeasonWeekConfigsAsync();
+
+        var db = factory.CreateDbContext();
+        db.CfbSlates.Add(Slate(1, 2026, 1));
+        db.CfbSeasonWeekConfigs.Add(WeekConfig(1, 2026, 1));
+        db.NflSeasonWeekConfigs.Add(new NflSeasonWeekConfig { Id = 1, Season = 2026, WeekId = 1, WeekLabel = "Week 1", WeekType = "RegularSeason", ScoringFormat = "Standard" });
+        await db.SaveChangesAsync();
+        FourPlayWebApp.Server.Services.ScheduleCache.InvalidateAll(cache);
+
+        Assert.Single(await cfb.GetAllSlatesAsync());
+        Assert.Single(await cfb.GetAllWeekConfigsAsync());
+        Assert.Single(await nfl.GetNflSeasonWeekConfigsAsync());
     }
 }

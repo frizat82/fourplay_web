@@ -44,11 +44,9 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
                 var configs = await leagueRepository.GetNflSeasonWeekConfigsAsync();
                 var matchingConfig = configs.FirstOrDefault(c => c.Season == week.Season && c.WeekId == week.WeekId);
                 if (matchingConfig is null) return _polled.Clear();
-                var key = WeekCacheKey(matchingConfig.Season, matchingConfig.WeekId);
-                _polled.TryGet(key, out var previous);
-                return _polled.Record(key, await LiveDayRefresh.FetchAsync(previous, DateTimeOffset.UtcNow,
+                return await _polled.RefreshAsync(WeekCacheKey(matchingConfig.Season, matchingConfig.WeekId),
                     days => _fetcher.FetchDaysAsync(matchingConfig, days),
-                    () => _fetcher.FetchForWeekAsync(matchingConfig)));
+                    () => _fetcher.FetchForWeekAsync(matchingConfig));
             },
             fingerprint: EspnScoresFingerprint.Compute,
             intervalSelector: current => AdaptivePollInterval.Compute(

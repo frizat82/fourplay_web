@@ -16,12 +16,14 @@ namespace FourPlayWebApp.Server.Services;
 /// </summary>
 public sealed class PolledItemSnapshot(TimeSpan maxAge, TimeProvider? timeProvider = null) {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
-    private sealed record Entry(string Key, EspnScores Scores, DateTimeOffset At);
+    // FullAt: when this item last had a full-window fetch (vs a live-day merge — see RefreshAsync).
+    private sealed record Entry(string Key, EspnScores Scores, DateTimeOffset At, DateTimeOffset FullAt);
     private volatile Entry? _latest;
 
     /// <summary>Records a poll's result for <paramref name="key"/> (a null result clears it) and returns the result.</summary>
     public EspnScores? Record(string key, EspnScores? scores) {
-        _latest = scores is null ? null : new Entry(key, scores, _time.GetUtcNow());
+        var now = _time.GetUtcNow();
+        _latest = scores is null ? null : new Entry(key, scores, now, now);
         return scores;
     }
 
@@ -29,6 +31,26 @@ public sealed class PolledItemSnapshot(TimeSpan maxAge, TimeProvider? timeProvid
     public EspnScores? Clear() {
         _latest = null;
         return null;
+    }
+
+    /// <summary>
+    /// One poll of <paramref name="key"/> (shared by the NFL and CFB pollers). While a game is live
+    /// and this item had a full fetch within <see cref="EspnPollCadence.LiveFullRefreshInterval"/>,
+    /// only the live day is fetched and merged (LiveDayRefresh); otherwise — first poll, a new
+    /// week/slate, nothing live, the day fetch came back empty, or the full refresh is due — the
+    /// full window is fetched. Returns (and records) the result.
+    /// </summary>
+    public async Task<EspnScores?> RefreshAsync(string key,
+        Func<IReadOnlyCollection<DateOnly>, Task<EspnScores?>> fetchDays, Func<Task<EspnScores?>> fetchAll) {
+        var now = _time.GetUtcNow();
+        var latest = _latest;
+        if (latest is not null && latest.Key == key && now - latest.At <= maxAge
+            && now - latest.FullAt < EspnPollCadence.LiveFullRefreshInterval
+            && await LiveDayRefresh.TryMergeLiveDaysAsync(latest.Scores, now, fetchDays) is { } merged) {
+            _latest = latest with { Scores = merged, At = now };
+            return merged;
+        }
+        return Record(key, await fetchAll());
     }
 
     public bool TryGet(string key, out EspnScores? scores) {

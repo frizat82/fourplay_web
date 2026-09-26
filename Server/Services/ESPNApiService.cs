@@ -28,7 +28,7 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
 
     // Deliberately no Error-level logging here — right now every call takes this path and falls
     // back (ESPN's range endpoint is confirmed broken), so logging that as an error would just be
-    // permanent noise. GetScoresForSingleDayAsync's own error logging below covers the case that
+    // permanent noise. GetScoresForDayAsync's own error logging below covers the case that
     // actually needs attention: the fallback itself failing.
     private async Task<EspnScores?> TryGetScoresByRangeAsync(DateOnly startDate, DateOnly endDate, bool postSeason) {
         try {

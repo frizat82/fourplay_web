@@ -18,6 +18,9 @@ public static class EspnPollCadence
     public static readonly TimeSpan LiveGameDuration = TimeSpan.FromHours(4);
     public static readonly TimeSpan FastPollInterval = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan SlowPollInterval = TimeSpan.FromMinutes(5);
+    // While games are live, polls fetch only the live day (LiveDayRefresh); a full-window fetch still
+    // runs at least this often so a new/re-dated game doesn't wait out a whole 10h+ game day.
+    public static readonly TimeSpan LiveFullRefreshInterval = TimeSpan.FromMinutes(30);
 
     // Both EspnCacheService and CfbCacheService cache the identical EspnScores shape (NFL/CFB
     // scoreboards share one ESPN wire format) — one extraction, not two copies.

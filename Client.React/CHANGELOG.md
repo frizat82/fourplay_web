@@ -6,7 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-09-26
 
-- Improved: during games, live scores refresh with 1-2 ESPN requests per update instead of one per day of the whole week, and the current week/slate lookup is cached so the database can idle between uses
+- Improved: during games, live scores refresh with a single ESPN request per update instead of one per day of the whole week, and the current week/slate lookup is cached so the database can idle between uses
 
 ## 2026-09-24
 

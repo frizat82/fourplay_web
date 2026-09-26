@@ -14,7 +14,7 @@ namespace FourPlayWebApp.Server.Services;
 internal static class EspnDateRangeFetcher {
     public static Task<EspnScores?> FetchRangeAsync(
         DateOnly startDate, DateOnly endDate, Func<DateOnly, Task<EspnScores?>> fetchSingleDayAsync) =>
-        FetchDaysAsync(Enumerable.Range(0, endDate.DayNumber - startDate.DayNumber + 1).Select(startDate.AddDays), fetchSingleDayAsync);
+        FetchDaysAsync(Enumerable.Range(0, Math.Max(0, endDate.DayNumber - startDate.DayNumber + 1)).Select(startDate.AddDays), fetchSingleDayAsync);
 
     // Same merge for an arbitrary set of days — a live poll's (LiveDayRefresh) day buckets.
     public static async Task<EspnScores?> FetchDaysAsync(

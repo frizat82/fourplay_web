@@ -61,11 +61,9 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
 
                 var slate = await cfbRepo.GetSlateByIdAsync(currentSlate.Id);
                 if (slate is null) return _polled.Clear();
-                var key = SlateCacheKey(slate.Id);
-                _polled.TryGet(key, out var previous);
-                return _polled.Record(key, await LiveDayRefresh.FetchAsync(previous, DateTimeOffset.UtcNow,
+                return await _polled.RefreshAsync(SlateCacheKey(slate.Id),
                     days => fetcher.FetchDaysAsync(slate, days),
-                    () => fetcher.FetchForSlateAsync(slate, isCurrentSlate: true)));
+                    () => fetcher.FetchForSlateAsync(slate, isCurrentSlate: true));
             },
             fingerprint: EspnScoresFingerprint.Compute,
             intervalSelector: current => AdaptivePollInterval.Compute(
