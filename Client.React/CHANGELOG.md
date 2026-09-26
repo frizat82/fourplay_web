@@ -6,7 +6,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-09-26
 
-- Improved: far fewer ESPN requests — score polling runs every 30s only while a game is on and otherwise sleeps until the next kickoff (no more polling every 5 minutes all week and all off-season), each day of scores is cached until it can change, and the current week/slate lookup is cached so the database can idle between uses
+- Improved: live scores update every 15s instead of 30s while a game is on, and score polling stops once every game is final (the scores job records finals) — no more re-checking finished games
+- Improved: far fewer ESPN requests — score polling runs only while a game is on and otherwise sleeps until the next kickoff (no more polling every 5 minutes all week and all off-season), each day of scores is cached until it can change, and the current week/slate lookup is cached so the database can idle between uses
 
 ## 2026-09-24
 

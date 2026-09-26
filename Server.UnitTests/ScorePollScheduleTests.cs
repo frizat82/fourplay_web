@@ -77,21 +77,19 @@ public class ScorePollScheduleTests {
         Assert.Equal(EspnPollCadence.SlowPollInterval, schedule.NextInterval(Day(Game(Now.AddHours(-20), TypeName.StatusFinal)), Now));
     }
 
-    // ESPN sometimes corrects a score after marking the game final: keep checking for a while —
-    // counted from kickoff over the same window EspnDayCache uses, so a long-delayed game still gets it.
+    // Once every game is final the poller stops: no re-checks for score corrections (ESPN doesn't
+    // issue them in practice, and the scores job persists finals on its own schedule).
     [Fact]
-    public void JustFinished_KeepsCheckingForCorrections() {
-        Assert.Equal(ScorePollSchedule.RecentlyFinishedInterval,
-            Polled(Now.AddDays(4)).NextInterval(Day(Game(Now.AddHours(-9), TypeName.StatusFinal)), Now));
-        Assert.Equal(ScorePollSchedule.IdleCap,
-            Polled(Now.AddDays(4)).NextInterval(Day(Game(Now - EspnPollCadence.RecentlyFinishedWindow - TimeSpan.FromHours(1), TypeName.StatusFinal)), Now));
-    }
+    public void AllGamesFinal_SleepsUntilTheNextKickoff() =>
+        Assert.Equal(TimeSpan.FromHours(2),
+            Polled(Now.AddDays(4)).NextInterval(Day(Game(Now.AddMinutes(-230), TypeName.StatusFinal), Game(Now.AddHours(2), TypeName.StatusScheduled)), Now));
 
-    // A game running past the usual 4h window (weather delay, OT) keeps being polled until final.
+    // A game running past the usual 4h window (weather delay, OT) is still a game on: polled fast
+    // until it goes final — but a status stuck "in progress" can't poll forever.
     [Fact]
-    public void AnOverlongGame_IsPolledSlowlyUntilFinal() {
-        var week = Day(Game(Now.AddHours(-5), TypeName.StatusInProgress), Game(Now.AddDays(1), TypeName.StatusScheduled));
-        Assert.Equal(EspnPollCadence.SlowPollInterval, Polled().NextInterval(week, Now));
+    public void AnOverlongGame_IsPolledFastUntilFinal() {
+        Assert.Equal(EspnPollCadence.FastPollInterval, Polled().NextInterval(Day(Game(Now.AddHours(-5), TypeName.StatusInProgress)), Now));
+        Assert.Equal(ScorePollSchedule.IdleCap, Polled().NextInterval(Day(Game(Now.AddHours(-13), TypeName.StatusInProgress)), Now));
     }
 
     // Postponed/canceled games stay "scheduled" at ESPN: hours past kickoff they're not live.
