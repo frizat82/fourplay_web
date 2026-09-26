@@ -71,16 +71,10 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     // NFL Season Week Config
     // Cached (ScheduleCache); any save touching the table evicts it (ScheduleCacheInterceptor).
     public async Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync() =>
-        ScheduleCache.Copies(await NflWeekConfigRowsAsync());
+        ScheduleCache.Copies(await ScheduleCache.NflWeekConfigRowsAsync(cache, dbContextFactory));
 
     public async Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync(int season) =>
-        ScheduleCache.Copies((await NflWeekConfigRowsAsync()).Where(c => c.Season == season));
-
-    private Task<IReadOnlyList<NflSeasonWeekConfig>> NflWeekConfigRowsAsync() =>
-        ScheduleCache.RowsAsync(cache, ScheduleCache.NflWeekConfigs, async () => {
-            await using var db = await dbContextFactory.CreateDbContextAsync();
-            return await db.NflSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.WeekId).ToListAsync();
-        });
+        ScheduleCache.Copies((await ScheduleCache.NflWeekConfigRowsAsync(cache, dbContextFactory)).Where(c => c.Season == season));
 
     // NFL Weeks
     public async Task UpsertNflWeeksAsync(List<NflWeeks> weeks)
@@ -341,7 +335,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
 
     public async Task<int> GetLeagueMemberCountAsync(int leagueId, int season, LeagueType leagueType) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        var range = await GetSeasonDateRangeAsync(db, season, leagueType);
+        var range = await GetSeasonDateRangeAsync(season, leagueType);
         if (range is null) return 0;
         var (start, end) = range.Value;
         return await db.LeagueUserMapping
@@ -354,7 +348,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await using var db = await dbContextFactory.CreateDbContextAsync();
         var result = new Dictionary<int, int>();
         foreach (var sport in new[] { LeagueType.Nfl, LeagueType.Cfb }) {
-            var range = await GetSeasonDateRangeAsync(db, season, sport);
+            var range = await GetSeasonDateRangeAsync(season, sport);
             if (range is null) continue;
             var (start, end) = range.Value;
             var counts = await db.LeagueUserMapping
@@ -374,10 +368,10 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     // Computed client-side (not ORDER BY in SQL) — avoids the SQLite/EF DateTimeOffset ORDER BY
     // translation gap that bit LeagueMembershipInviteService; MIN/MAX over an already-materialized
     // list sidesteps it entirely and this table is small (one row per week per season).
-    private static async Task<(DateTimeOffset Start, DateTimeOffset End)?> GetSeasonDateRangeAsync(
-        ApplicationDbContext db, int season, LeagueType leagueType) {
+    private async Task<(DateTimeOffset Start, DateTimeOffset End)?> GetSeasonDateRangeAsync(int season, LeagueType leagueType) {
+        // Read from the cached schedule tables (ScheduleCache), not a second uncached query path.
         if (leagueType == LeagueType.Cfb) {
-            var weeks = await db.CfbSeasonWeekConfigs.Where(c => c.Season == season).ToListAsync();
+            var weeks = (await ScheduleCache.CfbWeekConfigRowsAsync(cache, dbContextFactory)).Where(c => c.Season == season).ToList();
             if (weeks.Count == 0) return null;
             var start = weeks.Min(w => w.WeekStartDate).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
             // MaxValue (end of day), not MinValue — a DateOnly season end means the whole of that
@@ -388,7 +382,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             var end = weeks.Max(w => w.WeekEndDate).ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
             return (start, end);
         } else {
-            var weeks = await db.NflSeasonWeekConfigs.Where(c => c.Season == season).ToListAsync();
+            var weeks = (await ScheduleCache.NflWeekConfigRowsAsync(cache, dbContextFactory)).Where(c => c.Season == season).ToList();
             if (weeks.Count == 0) return null;
             return (weeks.Min(w => w.WeekStartDatetime), weeks.Max(w => w.WeekEndDatetime));
         }

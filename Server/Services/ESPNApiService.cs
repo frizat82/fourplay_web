@@ -25,7 +25,7 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
     // season types.
     private Task<EspnScores?> GetScoresForSingleDayAsync(DateOnly date, bool postSeason) {
         var url = $"{_scoreboardEndpoint}?dates={date:yyyyMMdd}&seasontype={(postSeason ? 3 : 2)}&limit=100";
-        return dayCache is null ? FetchDayAsync(url) : dayCache.GetOrFetchAsync(url, () => FetchDayAsync(url));
+        return dayCache.GetOrFetchDayAsync(url, () => FetchDayAsync(url));
     }
 
     private async Task<EspnScores?> FetchDayAsync(string url) {

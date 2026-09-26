@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.UnitTests.TestHelpers;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -58,4 +59,48 @@ public class ESPNApiServiceTests {
         Assert.Equal(expectedWeekNumber, result!.Week.Number);
         Assert.Equal(expectedWeekNumber, Assert.Single(result.Events!).Week.Number);
     }
+
+    // A day whose games are all final isn't requested again (EspnDayCache); the season type is part
+    // of the cached day, so a regular-season and a postseason query for the same date don't collide.
+    [Fact]
+    public async Task FinishedDays_AreServedFromTheDayCache_PerSeasonType() {
+        var handler = new CapturingHandler { ResponseBody = FinalDayBody };
+        var sut = new EspnApiService(new HttpClient(handler) { BaseAddress = new Uri("http://site.api.espn.com") },
+            NullLogger<EspnApiService>.Instance, new EspnDayCache(new MemoryCache(new MemoryCacheOptions()), TimeProvider.System));
+        var day = new DateOnly(2025, 9, 14);
+
+        await sut.GetScoresByDateRangeAsync(day, day);
+        await sut.GetScoresByDateRangeAsync(day, day);
+        await sut.GetScoresByDateRangeAsync(day, day, postSeason: true);
+
+        Assert.Equal(2, handler.RequestUris.Count);
+        Assert.Contains(handler.RequestUris, u => u.Query.Contains("seasontype=3"));
+    }
+
+    private const string FinalDayBody = """
+    {
+      "season": { "type": 2, "year": 2025 },
+      "week": { "number": 2 },
+      "events": [
+        {
+          "id": "401772000", "season": { "type": 2, "year": 2025 }, "week": { "number": 2 },
+          "date": "2025-09-14T17:00Z",
+          "competitions": [
+            {
+              "id": "401772000", "date": "2025-09-14T17:00Z",
+              "competitors": [
+                { "id": "1", "homeAway": "home", "score": "24", "team": { "abbreviation": "KC" } },
+                { "id": "2", "homeAway": "away", "score": "17", "team": { "abbreviation": "BUF" } }
+              ],
+              "status": {
+                "clock": 0, "displayClock": "0:00", "period": 4,
+                "type": { "id": "3", "name": "STATUS_FINAL", "state": "post", "completed": true, "description": "Final" }
+              },
+              "odds": []
+            }
+          ]
+        }
+      ]
+    }
+    """;
 }

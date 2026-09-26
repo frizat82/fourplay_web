@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -22,6 +23,8 @@ public class CfbRankingCaptureJob(ICfbLiveScoreFetcher fetcher, ICfbRepository r
     private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;
 
     public async Task Execute(IJobExecutionContext context) {
+        // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
+        using var freshEspn = EspnDayCache.Fresh();
         Log.Information("CfbRankingCaptureJob: capturing CFB rankings at {Time}", DateTime.UtcNow);
 
         var allSlates = (await repo.GetSlatesForSeasonAsync(Season)).ToList();

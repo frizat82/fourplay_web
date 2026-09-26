@@ -42,8 +42,7 @@ public class CfbApiService(HttpClient httpClient, ILogger<CfbApiService> logger,
 
     // Same EspnDayCache rules whether the response is one day or the CFP bucket: cached until a
     // game in it can change.
-    private Task<EspnScores?> GetCachedAsync(string url) =>
-        dayCache is null ? FetchAndParseAsync(url) : dayCache.GetOrFetchAsync(url, () => FetchAndParseAsync(url));
+    private Task<EspnScores?> GetCachedAsync(string url) => dayCache.GetOrFetchDayAsync(url, () => FetchAndParseAsync(url));
 
     private async Task<EspnScores?> FetchAndParseAsync(string url) {
         try {

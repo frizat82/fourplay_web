@@ -1,4 +1,7 @@
 using System.Reflection;
+using FourPlayWebApp.Server.Data;
+using FourPlayWebApp.Server.Models.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services;
@@ -31,6 +34,26 @@ public static class ScheduleCache {
             return load();
         }))!;
     }
+
+    // The three tables, each loaded whole (ordered) — shared by LeagueRepository and CfbRepository
+    // so every reader of a table goes through the one cached copy.
+    public static Task<IReadOnlyList<NflSeasonWeekConfig>> NflWeekConfigRowsAsync(IMemoryCache? cache, IDbContextFactory<ApplicationDbContext> factory) =>
+        RowsAsync(cache, NflWeekConfigs, async () => {
+            await using var db = await factory.CreateDbContextAsync();
+            return await db.NflSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.WeekId).ToListAsync();
+        });
+
+    public static Task<IReadOnlyList<CfbSlates>> CfbSlateRowsAsync(IMemoryCache? cache, IDbContextFactory<ApplicationDbContext> factory) =>
+        RowsAsync(cache, CfbSlates, async () => {
+            await using var db = await factory.CreateDbContextAsync();
+            return await db.CfbSlates.AsNoTracking().OrderBy(s => s.Season).ThenBy(s => s.SlateNumber).ToListAsync();
+        });
+
+    public static Task<IReadOnlyList<CfbSeasonWeekConfig>> CfbWeekConfigRowsAsync(IMemoryCache? cache, IDbContextFactory<ApplicationDbContext> factory) =>
+        RowsAsync(cache, CfbWeekConfigs, async () => {
+            await using var db = await factory.CreateDbContextAsync();
+            return await db.CfbSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.EspnWeekNumber).ToListAsync();
+        });
 
     // Shallow copies: these are flat rows (no navigation data loaded), so a caller changing a field
     // or reordering its list can't alter what every other request and poller sees.

@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
@@ -18,6 +19,8 @@ public class NflSpreadJob(
     IJobObserverService observer)
     : IJob {
     public async Task Execute(IJobExecutionContext context) {
+        // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
+        using var freshEspn = EspnDayCache.Fresh();
         var jobName = context.JobDetail.Key.Name;
         try {
             Log.Information("Grabbing NFL Spreads at {Time}", DateTime.UtcNow);

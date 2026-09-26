@@ -51,11 +51,7 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
     public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) =>
         ScheduleCache.Copy((await SlateRowsAsync()).FirstOrDefault(s => s.Id == slateId));
 
-    private Task<IReadOnlyList<CfbSlates>> SlateRowsAsync() =>
-        ScheduleCache.RowsAsync(cache, ScheduleCache.CfbSlates, async () => {
-            await using var db = await dbFactory.CreateDbContextAsync();
-            return await db.CfbSlates.AsNoTracking().OrderBy(s => s.Season).ThenBy(s => s.SlateNumber).ToListAsync();
-        });
+    private Task<IReadOnlyList<CfbSlates>> SlateRowsAsync() => ScheduleCache.CfbSlateRowsAsync(cache, dbFactory);
 
     public async Task UpsertAsync(IEnumerable<CfbSpreads> spreads) {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -160,11 +156,7 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
 
     public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync() => ScheduleCache.Copies(await WeekConfigRowsAsync());
 
-    private Task<IReadOnlyList<CfbSeasonWeekConfig>> WeekConfigRowsAsync() =>
-        ScheduleCache.RowsAsync(cache, ScheduleCache.CfbWeekConfigs, async () => {
-            await using var db = await dbFactory.CreateDbContextAsync();
-            return await db.CfbSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.EspnWeekNumber).ToListAsync();
-        });
+    private Task<IReadOnlyList<CfbSeasonWeekConfig>> WeekConfigRowsAsync() => ScheduleCache.CfbWeekConfigRowsAsync(cache, dbFactory);
 
     public async Task AddWeekConfigsAsync(IEnumerable<CfbSeasonWeekConfig> configs) {
         await using var db = await dbFactory.CreateDbContextAsync();
