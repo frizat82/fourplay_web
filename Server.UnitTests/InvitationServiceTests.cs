@@ -207,26 +207,14 @@ namespace FourPlayWebApp.Server.UnitTests
         // caller getting a clean result. The InMemory provider used by BuildService above doesn't
         // enforce unique indexes, so this needs a real constraint-enforcing provider (SQLite,
         // mirroring LeagueMembershipInviteServiceTests' setup) to actually reproduce.
-        private static ApplicationDbContext OpenSqliteDb(string dbName) =>
-            new(new DbContextOptionsBuilder<ApplicationDbContext>()
-                .UseSqlite($"Data Source={dbName};Mode=Memory;Cache=Shared")
-                .Options);
-
-        private static IDbContextFactory<ApplicationDbContext> BuildSqliteFactory(string dbName)
-        {
-            var factory = Substitute.For<IDbContextFactory<ApplicationDbContext>>();
-            factory.CreateDbContextAsync().Returns(_ => Task.FromResult(OpenSqliteDb(dbName)));
-            return factory;
-        }
-
         [Fact]
         public async Task CreateInvitationAsync_ConcurrentCallsForSameNewPair_BothSucceed_ExactlyOneRowCreated()
         {
             var dbName = nameof(CreateInvitationAsync_ConcurrentCallsForSameNewPair_BothSucceed_ExactlyOneRowCreated);
             await using var keepAlive = new SqliteConnection($"Data Source={dbName};Mode=Memory;Cache=Shared");
             await keepAlive.OpenAsync();
-            await using (var init = OpenSqliteDb(dbName)) { await init.Database.EnsureCreatedAsync(); }
-            await using (var seed = OpenSqliteDb(dbName)) {
+            await using (var init = SqliteTestDb.Open(dbName)) { await init.Database.EnsureCreatedAsync(); }
+            await using (var seed = SqliteTestDb.Open(dbName)) {
                 seed.Users.Add(new ApplicationUser {
                     Id = "owner", UserName = "owner", NormalizedUserName = "OWNER", Email = "owner@example.com",
                     SecurityStamp = Guid.NewGuid().ToString(), ConcurrencyStamp = Guid.NewGuid().ToString(),
@@ -234,7 +222,7 @@ namespace FourPlayWebApp.Server.UnitTests
                 seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
                 await seed.SaveChangesAsync();
             }
-            var factory = BuildSqliteFactory(dbName);
+            var factory = SqliteTestDb.Factory(dbName);
             var emailSender = Substitute.For<IEmailSender>();
             var serviceA = new InvitationService(factory, emailSender);
             var serviceB = new InvitationService(factory, emailSender);
@@ -243,7 +231,7 @@ namespace FourPlayWebApp.Server.UnitTests
                 serviceA.CreateInvitationAsync("race@example.com", "owner", leagueId: 1),
                 serviceB.CreateInvitationAsync("race@example.com", "owner", leagueId: 1));
 
-            await using var verify = OpenSqliteDb(dbName);
+            await using var verify = SqliteTestDb.Open(dbName);
             Assert.Equal(1, await verify.Invitations.CountAsync(i => i.Email == "race@example.com" && i.LeagueId == 1));
         }
     }
