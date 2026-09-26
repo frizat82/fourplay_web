@@ -20,7 +20,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     // sleeps for hours, so the snapshot lapses and requests fetch for themselves — through
     // EspnDayCache, so that's an in-memory read for any day that can't have changed.
     private readonly PolledItemSnapshot _polled = new(2 * EspnPollCadence.SlowPollInterval);
-    private readonly ScorePollSchedule _pollSchedule = new();
+    private readonly ScorePollSchedule _pollSchedule;
 
     private static string WeekCacheKey(int season, int nflWeek) => $"nfl-week-scores_{season}_{nflWeek}";
 
@@ -30,8 +30,9 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         remove => _cache.Changed -= value;
     }
 
-    public EspnCacheService(INflLiveScoreFetcher fetcher, INflCurrentWeekService nflCurrentWeekService, ILeagueRepository leagueRepository, IMemoryCache historicalCache, TimeSpan? initialDelay = null)
+    public EspnCacheService(INflLiveScoreFetcher fetcher, INflCurrentWeekService nflCurrentWeekService, ILeagueRepository leagueRepository, IMemoryCache historicalCache, TimeSpan? initialDelay = null, IJobFailureNotifier? outageNotifier = null)
     {
+        _pollSchedule = new ScorePollSchedule("NFL live scores", outageNotifier);
         _fetcher = fetcher;
         _leagueRepository = leagueRepository;
         _settledCache = new SettledScoreCache(historicalCache);

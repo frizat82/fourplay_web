@@ -28,7 +28,7 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
     // sleeps for hours, so the snapshot lapses and requests fetch for themselves — through
     // EspnDayCache, so that's an in-memory read for any day that can't have changed.
     private readonly PolledItemSnapshot _polled = new(2 * EspnPollCadence.SlowPollInterval);
-    private readonly ScorePollSchedule _pollSchedule = new();
+    private readonly ScorePollSchedule _pollSchedule;
 
     private static string SlateCacheKey(int slateId) => $"cfb-slate-scores_{slateId}";
 
@@ -42,8 +42,10 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
         IServiceScopeFactory scopeFactory,
         ICfbLiveScoreFetcher fetcher,
         IMemoryCache settledCache,
-        TimeSpan? initialDelay = null)
+        TimeSpan? initialDelay = null,
+        IJobFailureNotifier? outageNotifier = null)
     {
+        _pollSchedule = new ScorePollSchedule("CFB live scores", outageNotifier);
         _scopeFactory = scopeFactory;
         _fetcher = fetcher;
         _settledCache = new SettledScoreCache(settledCache);

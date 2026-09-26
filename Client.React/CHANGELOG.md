@@ -6,6 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-09-26
 
+- Improved: if ESPN blocks or stops answering during games, live scores keep showing the last good update instead of dropping games, polling backs off from every 15s to every 5 minutes until ESPN recovers, and admins get a Discord alert after 10 minutes of failures
 - Improved: live scores update every 15s instead of 30s while a game is on, and score polling stops once every game is final (the scores job records finals) — no more re-checking finished games
 - Improved: far fewer ESPN requests — score polling runs only while a game is on and otherwise sleeps until the next kickoff (no more polling every 5 minutes all week and all off-season), each day of scores is cached until it can change, and the current week/slate lookup is cached so the database can idle between uses
 
