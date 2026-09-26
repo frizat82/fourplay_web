@@ -11,7 +11,7 @@ namespace FourPlayWebApp.Server.UnitTests;
 public class EspnDayCacheTests {
     private static readonly DateTimeOffset Now = new(2026, 9, 27, 18, 0, 0, TimeSpan.Zero);
 
-    private static Event Game(DateTimeOffset kickoff, TypeName status) => new() {
+    internal static Event Game(DateTimeOffset kickoff, TypeName status) => new() {
         Id = kickoff.Ticks.ToString() + status,
         Date = kickoff,
         Competitions = [new Competition {
@@ -29,7 +29,7 @@ public class EspnDayCacheTests {
         }],
     };
 
-    private static EspnScores Day(params Event[] games) => new() { Events = games };
+    internal static EspnScores Day(params Event[] games) => new() { Events = games };
 
     [Fact]
     public void ADayThatFinishedLongAgo_IsCachedForHours() =>

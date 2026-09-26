@@ -26,6 +26,7 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
     private readonly PeriodicRefreshCache<EspnScores> _cache;
     // 2x the slowest poll interval: a healthy poller always refreshes well within it.
     private readonly PolledItemSnapshot _polled = new(2 * EspnPollCadence.SlowPollInterval);
+    private readonly ScorePollSchedule _pollSchedule = new();
 
     private static string SlateCacheKey(int slateId) => $"cfb-slate-scores_{slateId}";
 
@@ -54,6 +55,10 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                 // or soonest-upcoming slate, for UI-default purposes) — so its null-ness alone can
                 // no longer be used to gate off-season ESPN polling. IsSeasonActiveAsync is the
                 // purpose-built, season-level check for that (see SeasonWindowResolver).
+                // Next slate's first kickoff (or next season's) — when to wake once this slate is done.
+                _pollSchedule.SetNextScheduledKickoff((await cfbRepo.GetAllSlatesAsync()).Select(s =>
+                    s.FirstGameUtc ?? new DateTimeOffset(s.StartDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)), DateTimeOffset.UtcNow);
+
                 if (!await currentSlateService.IsSeasonActiveAsync()) return _polled.Clear();
 
                 var currentSlate = await currentSlateService.GetCurrentSlateAsync();
@@ -64,11 +69,7 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                 return _polled.Record(SlateCacheKey(slate.Id), await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true));
             },
             fingerprint: EspnScoresFingerprint.Compute,
-            intervalSelector: current => AdaptivePollInterval.Compute(
-                current,
-                EspnPollCadence.KickoffTimes,
-                EspnPollCadence.LiveGameDuration, EspnPollCadence.FastPollInterval, EspnPollCadence.SlowPollInterval,
-                DateTimeOffset.UtcNow),
+            intervalSelector: current => _pollSchedule.NextInterval(current, DateTimeOffset.UtcNow),
             initialDelay: initialDelay);
     }
 

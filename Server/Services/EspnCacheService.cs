@@ -18,6 +18,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     private readonly PeriodicRefreshCache<EspnScores> _cache;
     // 2x the slowest poll interval: a healthy poller always refreshes well within it.
     private readonly PolledItemSnapshot _polled = new(2 * EspnPollCadence.SlowPollInterval);
+    private readonly ScorePollSchedule _pollSchedule = new();
 
     private static string WeekCacheKey(int season, int nflWeek) => $"nfl-week-scores_{season}_{nflWeek}";
 
@@ -38,21 +39,21 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
                 // or soonest-upcoming week, for UI-default purposes) — so its result alone can't
                 // gate off-season ESPN polling. IsSeasonActiveAsync is the purpose-built,
                 // season-level check for that (see SeasonWindowResolver).
+                // Next week's first kickoff (or next season's) — when to wake once this week is done.
+                var configs = await leagueRepository.GetNflSeasonWeekConfigsAsync();
+                _pollSchedule.SetNextScheduledKickoff(configs.Select(c => new DateTimeOffset(
+                    DateTime.SpecifyKind(c.FirstGameOfWeekStartDatetime ?? c.WeekStartDatetime, DateTimeKind.Utc))), DateTimeOffset.UtcNow);
+
                 if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return _polled.Clear();
 
                 var week = await nflCurrentWeekService.GetCurrentWeekAsync();
-                var configs = await leagueRepository.GetNflSeasonWeekConfigsAsync();
                 var matchingConfig = configs.FirstOrDefault(c => c.Season == week.Season && c.WeekId == week.WeekId);
                 if (matchingConfig is null) return _polled.Clear();
                 return _polled.Record(WeekCacheKey(matchingConfig.Season, matchingConfig.WeekId),
                     await _fetcher.FetchForWeekAsync(matchingConfig));
             },
             fingerprint: EspnScoresFingerprint.Compute,
-            intervalSelector: current => AdaptivePollInterval.Compute(
-                current,
-                EspnPollCadence.KickoffTimes,
-                EspnPollCadence.LiveGameDuration, EspnPollCadence.FastPollInterval, EspnPollCadence.SlowPollInterval,
-                DateTimeOffset.UtcNow),
+            intervalSelector: current => _pollSchedule.NextInterval(current, DateTimeOffset.UtcNow),
             initialDelay: initialDelay);
     }
 
