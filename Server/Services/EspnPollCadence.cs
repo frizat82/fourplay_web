@@ -17,4 +17,7 @@ public static class EspnPollCadence
     public static readonly TimeSpan LiveGameDuration = TimeSpan.FromHours(4);
     public static readonly TimeSpan FastPollInterval = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan SlowPollInterval = TimeSpan.FromMinutes(5);
+    // How long after kickoff a finished game is still re-checked for ESPN's post-final score
+    // corrections — by both the poll schedule and EspnDayCache, so the two layers agree.
+    public static readonly TimeSpan RecentlyFinishedWindow = TimeSpan.FromHours(12);
 }

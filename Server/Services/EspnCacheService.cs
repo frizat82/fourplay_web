@@ -36,12 +36,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         _leagueRepository = leagueRepository;
         _settledCache = new SettledScoreCache(historicalCache);
         _cache = new PeriodicRefreshCache<EspnScores>(
-            fetch: async () => {
-                // NflCurrentWeekService always resolves *something* now (most-recently-completed
-                // or soonest-upcoming week, for UI-default purposes) — so its result alone can't
-                // gate off-season ESPN polling. IsSeasonActiveAsync is the purpose-built,
-                // season-level check for that (see SeasonWindowResolver).
-                _pollSchedule.PollStarted();
+            fetch: () => _pollSchedule.PollAsync(async () => {
                 var configs = await leagueRepository.GetNflSeasonWeekConfigsAsync();
                 // When to wake next once nothing is on: each week flipping current, each first kickoff.
                 var wakePoints = SeasonWindowResolver.ChangePoints(configs.Select(c =>
@@ -50,21 +45,18 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
                     .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)))
                     .ToList();
 
-                if (!await nflCurrentWeekService.IsSeasonActiveAsync()) {
-                    _pollSchedule.PollSucceeded(wakePoints, DateTimeOffset.UtcNow);
-                    return _polled.Clear();
-                }
+                // NflCurrentWeekService always resolves *something* now (most-recently-completed
+                // or soonest-upcoming week, for UI-default purposes) — so its result alone can't
+                // gate off-season ESPN polling. IsSeasonActiveAsync is the purpose-built,
+                // season-level check for that (see SeasonWindowResolver).
+                if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return new(_polled.Clear(), wakePoints);
 
                 var week = await nflCurrentWeekService.GetCurrentWeekAsync();
                 var matchingConfig = configs.FirstOrDefault(c => c.Season == week.Season && c.WeekId == week.WeekId);
-                if (matchingConfig is null) {
-                    _pollSchedule.PollSucceeded(wakePoints, DateTimeOffset.UtcNow);
-                    return _polled.Clear();
-                }
-                var scores = await _fetcher.FetchForWeekAsync(matchingConfig);
-                if (scores is not null) _pollSchedule.PollSucceeded(wakePoints, DateTimeOffset.UtcNow);
-                return _polled.Record(WeekCacheKey(matchingConfig.Season, matchingConfig.WeekId), scores);
-            },
+                if (matchingConfig is null) return new(_polled.Clear(), wakePoints);
+                return new(_polled.Record(WeekCacheKey(matchingConfig.Season, matchingConfig.WeekId),
+                    await _fetcher.FetchForWeekAsync(matchingConfig)), wakePoints);
+            }, DateTimeOffset.UtcNow),
             fingerprint: EspnScoresFingerprint.Compute,
             intervalSelector: current => _pollSchedule.NextInterval(current, DateTimeOffset.UtcNow),
             initialDelay: initialDelay);

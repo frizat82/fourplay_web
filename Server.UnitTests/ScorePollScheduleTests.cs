@@ -13,8 +13,7 @@ public class ScorePollScheduleTests {
 
     private static ScorePollSchedule Polled(params DateTimeOffset[] scheduleWakePoints) {
         var schedule = new ScorePollSchedule();
-        schedule.PollStarted();
-        schedule.PollSucceeded(scheduleWakePoints, Now);
+        schedule.PollAsync(() => Task.FromResult(new ScorePollSchedule.Outcome(null, scheduleWakePoints)), Now).GetAwaiter().GetResult();
         return schedule;
     }
 
@@ -49,20 +48,35 @@ public class ScorePollScheduleTests {
     public void OffSeason_SleepsTheIdleCap() =>
         Assert.Equal(ScorePollSchedule.IdleCap, Polled(Now.AddMonths(4)).NextInterval(null, Now));
 
-    // A failed poll (ESPN error, schedule read threw) retries at the slow cadence — never sleeps
-    // hours on a stale all-final scoreboard and misses a game.
+    // A poll that throws (schedule read failed, scope couldn't be built, ESPN threw) retries at the
+    // slow cadence — never sleeps hours on a stale all-final scoreboard and misses a game.
     [Fact]
-    public void AFailedPoll_RetriesSlow() {
+    public async Task AFailedPoll_RetriesSlow() {
         var schedule = Polled(Now.AddDays(4));
-        schedule.PollStarted(); // ...and this one never succeeds
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            schedule.PollAsync(() => throw new InvalidOperationException("db down"), Now));
         Assert.Equal(EspnPollCadence.SlowPollInterval, schedule.NextInterval(Day(Game(Now.AddHours(-20), TypeName.StatusFinal)), Now));
     }
 
-    // ESPN sometimes corrects a score after marking the game final: keep checking for a while.
+    // A week/slate with no games yet (fetcher returns null — e.g. a CFP round before matchups post)
+    // is a successful poll, not a failure: sleep to the next wake point, don't retry every 5 min.
     [Fact]
-    public void JustFinished_KeepsCheckingForCorrections() =>
+    public async Task AnEmptyWeek_IsNotAFailure() {
+        var schedule = new ScorePollSchedule();
+        var scores = await schedule.PollAsync(() => Task.FromResult(new ScorePollSchedule.Outcome(null, [Now.AddHours(2)])), Now);
+        Assert.Null(scores);
+        Assert.Equal(TimeSpan.FromHours(2), schedule.NextInterval(null, Now));
+    }
+
+    // ESPN sometimes corrects a score after marking the game final: keep checking for a while —
+    // counted from kickoff over the same window EspnDayCache uses, so a long-delayed game still gets it.
+    [Fact]
+    public void JustFinished_KeepsCheckingForCorrections() {
         Assert.Equal(ScorePollSchedule.RecentlyFinishedInterval,
-            Polled(Now.AddDays(4)).NextInterval(Day(Game(Now.AddHours(-4), TypeName.StatusFinal)), Now));
+            Polled(Now.AddDays(4)).NextInterval(Day(Game(Now.AddHours(-9), TypeName.StatusFinal)), Now));
+        Assert.Equal(ScorePollSchedule.IdleCap,
+            Polled(Now.AddDays(4)).NextInterval(Day(Game(Now - EspnPollCadence.RecentlyFinishedWindow - TimeSpan.FromHours(1), TypeName.StatusFinal)), Now));
+    }
 
     // A game running past the usual 4h window (weather delay, OT) keeps being polled until final.
     [Fact]

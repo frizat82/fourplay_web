@@ -23,7 +23,6 @@ public sealed class EspnDayCache(IMemoryCache cache, TimeProvider time) {
     public static readonly TimeSpan EmptyTtl = TimeSpan.FromMinutes(15);
     /// <summary>A day that finished long ago, or upcoming games far off.</summary>
     public static readonly TimeSpan SettledTtl = TimeSpan.FromHours(6);
-    private static readonly TimeSpan RecentlyFinishedWindow = TimeSpan.FromHours(12);
 
     private static readonly AsyncLocal<bool> Bypass = new();
 
@@ -56,7 +55,7 @@ public sealed class EspnDayCache(IMemoryCache cache, TimeProvider time) {
         // Postponed/canceled games stay "scheduled" at ESPN; hours past kickoff they're done, not pending.
         var pending = games.Where(g => !GameHelpers.IsGameOver(g) && now <= g.Date + EspnPollCadence.LiveGameDuration).ToList();
         if (pending.Count == 0)
-            return now - games.Max(g => g.Date) < RecentlyFinishedWindow ? RecentlyFinishedTtl : SettledTtl;
+            return now - games.Max(g => g.Date) < EspnPollCadence.RecentlyFinishedWindow ? RecentlyFinishedTtl : SettledTtl;
         // In progress, or past its kickoff time but not started yet (a delayed start).
         if (pending.Any(g => GameHelpers.IsGameStarted(g) || g.Date <= now)) return LiveTtl;
         var untilKickoff = pending.Min(g => g.Date) - now;

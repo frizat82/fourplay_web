@@ -1,55 +1,59 @@
+using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
 
 namespace FourPlayWebApp.Server.Services;
 
 /// <summary>
-/// When a score poller (NFL EspnCacheService / CFB CfbCacheService — one instance each, one
-/// implementation) wakes up next. Fast while a game is on; otherwise asleep until the next thing
-/// that can change what it serves — a kickoff in the scoreboard it holds, or a schedule wake point
-/// (a week/slate flipping current, a first kickoff, next season — recorded by
-/// <see cref="PollSucceeded"/>) — capped at <see cref="IdleCap"/> so a schedule change still gets
-/// noticed. A failed poll retries at the slow cadence. Replaces "every 5 min whenever nothing is
-/// live", which polled all week and all off-season.
+/// Runs one score poll and decides when the next happens — one implementation for the NFL
+/// (EspnCacheService) and CFB (CfbCacheService) pollers, one instance each. Fast while a game is
+/// on; otherwise asleep until the next thing that can change what the poller serves — a kickoff
+/// in the scoreboard it holds, or a schedule wake point (a week/slate flipping current, a first
+/// kickoff, next season) — capped at <see cref="IdleCap"/> so an out-of-band schedule change still
+/// gets noticed. A poll that throws retries at the slow cadence. Replaces "every 5 min whenever
+/// nothing is live", which polled all week and all off-season.
 /// </summary>
 public sealed class ScorePollSchedule {
     /// <summary>The longest a poller sleeps without a known reason to wake.</summary>
     public static readonly TimeSpan IdleCap = TimeSpan.FromHours(3);
     /// <summary>After a game goes final, ESPN sometimes corrects the score; keep checking this often for a while.</summary>
     public static readonly TimeSpan RecentlyFinishedInterval = TimeSpan.FromMinutes(15);
-    private static readonly TimeSpan RecentlyFinishedWindow = TimeSpan.FromHours(6);
     // A game still in progress past the usual live window (weather delay, OT) is polled slowly
     // until it goes final, for at most this long after kickoff (a stuck ESPN status can't poll forever).
     private static readonly TimeSpan OverlongGameLimit = TimeSpan.FromHours(12);
 
+    /// <summary>What a poll produced: its scoreboard (null = no games / nothing to fetch) and the schedule's wake points.</summary>
+    public readonly record struct Outcome(EspnScores? Scores, IReadOnlyCollection<DateTimeOffset> WakePoints);
+
     private long _nextWakePointTicks; // UTC ticks; 0 = none known
     private volatile bool _lastPollFailed;
 
-    /// <summary>Call as a poll starts: it counts as failed until <see cref="PollSucceeded"/>.</summary>
-    public void PollStarted() => _lastPollFailed = true;
-
     /// <summary>
-    /// Call once a poll has done its work (including "off-season, nothing to fetch"), with the
-    /// schedule's wake points: every instant the current week/slate can flip and every first kickoff.
+    /// Runs the whole poll — scope setup, schedule reads, the ESPN fetch. Anything it throws marks
+    /// the poll failed (retried at the slow cadence) and propagates to the refresh engine; a poll
+    /// that completes, even with no games, records the schedule's wake points.
     /// </summary>
-    public void PollSucceeded(IEnumerable<DateTimeOffset> scheduleWakePoints, DateTimeOffset now) {
-        var next = scheduleWakePoints.Where(p => p > now).Select(p => (DateTimeOffset?)p).Min();
+    public async Task<EspnScores?> PollAsync(Func<Task<Outcome>> poll, DateTimeOffset now) {
+        _lastPollFailed = true;
+        var outcome = await poll();
+        var next = outcome.WakePoints.Where(p => p > now).Select(p => (DateTimeOffset?)p).Min();
         Interlocked.Exchange(ref _nextWakePointTicks, next?.UtcTicks ?? 0);
         _lastPollFailed = false;
+        return outcome.Scores;
     }
 
     public TimeSpan NextInterval(EspnScores? current, DateTimeOffset now) {
         // A competition missing its status (malformed payload) is skipped, not thrown on.
         var games = current?.Events?.SelectMany(e => e.Competitions ?? []).Where(g => g.Status?.Type is not null).ToList() ?? [];
-        var unfinished = games.Where(g => g.Status.Type.Name != TypeName.StatusFinal).ToList();
+        var unfinished = games.Where(g => !GameHelpers.IsGameOver(g)).ToList();
 
         if (unfinished.Any(g => g.Date <= now && now <= g.Date + EspnPollCadence.LiveGameDuration))
             return EspnPollCadence.FastPollInterval;
         if (_lastPollFailed) return EspnPollCadence.SlowPollInterval;
 
         var wakeAt = new List<DateTimeOffset>();
-        if (unfinished.Any(g => g.Status.Type.Name != TypeName.StatusScheduled && now <= g.Date + OverlongGameLimit))
+        if (unfinished.Any(g => GameHelpers.IsGameStarted(g) && now <= g.Date + OverlongGameLimit))
             wakeAt.Add(now + EspnPollCadence.SlowPollInterval);
-        if (games.Any(g => g.Status.Type.Name == TypeName.StatusFinal && now <= g.Date + RecentlyFinishedWindow))
+        if (games.Any(g => GameHelpers.IsGameOver(g) && now <= g.Date + EspnPollCadence.RecentlyFinishedWindow))
             wakeAt.Add(now + RecentlyFinishedInterval);
         wakeAt.AddRange(unfinished.Where(g => g.Date > now).Select(g => g.Date));
         var scheduledTicks = Interlocked.Read(ref _nextWakePointTicks);
