@@ -479,7 +479,9 @@ builder.Services.AddQuartz(q => {
         // ESPN/sport data at all — it's here purely so it never runs against the demo/replay
         // stack (DemoDataSeeder's seeded users are always EmailConfirmed=true anyway, so it
         // would be a no-op there, but there's no reason to run it against an ephemeral stack).
-        q.ScheduleCstCronJob<UnconfirmedAccountCleanupJob>("Unconfirmed Account Cleanup", "Deletes accounts that never confirmed their email within 24h", "0 0 * * * ?");
+        // Daily, not hourly: an hourly sweep woke the database every hour for a job that almost
+        // never has work. Run just before Dead Token Cleanup so both share one wake.
+        q.ScheduleCstCronJob<UnconfirmedAccountCleanupJob>("Unconfirmed Account Cleanup", "Daily: deletes accounts that never confirmed their email within 24h", "0 25 3 * * ?");
         q.ScheduleCstCronJob<DeadTokenCleanupJob>("Dead Token Cleanup", "Deletes revoked/expired refresh tokens and revoked league invite links", "0 30 3 * * ?");
     }
 });
