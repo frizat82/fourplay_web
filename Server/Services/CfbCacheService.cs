@@ -24,8 +24,11 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
     private readonly ICfbLiveScoreFetcher _fetcher;
     private readonly SettledScoreCache _settledCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
-    // 2x the slowest poll interval: a healthy poller always refreshes well within it.
+    // Fresh for 2x the slow poll: during games the poller refreshes every 30s. Between games it
+    // sleeps for hours, so the snapshot lapses and requests fetch for themselves — through
+    // EspnDayCache, so that's an in-memory read for any day that can't have changed.
     private readonly PolledItemSnapshot _polled = new(2 * EspnPollCadence.SlowPollInterval);
+    private readonly ScorePollSchedule _pollSchedule = new();
 
     private static string SlateCacheKey(int slateId) => $"cfb-slate-scores_{slateId}";
 
@@ -45,30 +48,40 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
         _fetcher = fetcher;
         _settledCache = new SettledScoreCache(settledCache);
         _cache = new PeriodicRefreshCache<EspnScores>(
-            fetch: async () => {
+            fetch: () => _pollSchedule.PollAsync(async () => {
                 using var scope = scopeFactory.CreateScope();
                 var currentSlateService = scope.ServiceProvider.GetRequiredService<ICfbCurrentSlateService>();
                 var cfbRepo = scope.ServiceProvider.GetRequiredService<ICfbRepository>();
+
+                // When to wake next once nothing is on: each slate's window and first kickoff —
+                // enough to catch a season starting. Spread-lock points are added once in season
+                // (BuildSlateWindows needs every slate's config row, and throws when one's missing).
+                var slates = (await cfbRepo.GetAllSlatesAsync()).ToList();
+                var wakePoints = slates
+                    .SelectMany(s => new[] { s.StartDate.ToDateTime(TimeOnly.MinValue), s.EndDate.ToDateTime(TimeOnly.MaxValue) })
+                    .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)))
+                    .Concat(slates.Where(s => s.FirstGameUtc.HasValue).Select(s => s.FirstGameUtc!.Value))
+                    .ToList();
 
                 // CfbCurrentSlateService always resolves *something* now (most-recently-completed
                 // or soonest-upcoming slate, for UI-default purposes) — so its null-ness alone can
                 // no longer be used to gate off-season ESPN polling. IsSeasonActiveAsync is the
                 // purpose-built, season-level check for that (see SeasonWindowResolver).
-                if (!await currentSlateService.IsSeasonActiveAsync()) return _polled.Clear();
+                if (!await currentSlateService.IsSeasonActiveAsync()) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
+
+                wakePoints.AddRange(SeasonWindowResolver.ChangePoints(
+                        CfbCurrentSlateService.BuildSlateWindows(slates, await cfbRepo.GetAllWeekConfigsAsync()).Select(sw => sw.Window))
+                    .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc))));
 
                 var currentSlate = await currentSlateService.GetCurrentSlateAsync();
-                if (currentSlate is null) return _polled.Clear();
-
-                var slate = await cfbRepo.GetSlateByIdAsync(currentSlate.Id);
-                if (slate is null) return _polled.Clear();
-                return _polled.Record(SlateCacheKey(slate.Id), await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true));
-            },
+                var slate = currentSlate is null ? null : await cfbRepo.GetSlateByIdAsync(currentSlate.Id);
+                if (slate is null) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
+                // A slate has games once its first kickoff is known (a CFP round's matchups may not be yet).
+                return new(_polled.Record(SlateCacheKey(slate.Id), await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true)),
+                    wakePoints, ExpectedGames: slate.FirstGameUtc.HasValue);
+            }, DateTimeOffset.UtcNow),
             fingerprint: EspnScoresFingerprint.Compute,
-            intervalSelector: current => AdaptivePollInterval.Compute(
-                current,
-                EspnPollCadence.KickoffTimes,
-                EspnPollCadence.LiveGameDuration, EspnPollCadence.FastPollInterval, EspnPollCadence.SlowPollInterval,
-                DateTimeOffset.UtcNow),
+            intervalSelector: current => _pollSchedule.NextInterval(current, DateTimeOffset.UtcNow),
             initialDelay: initialDelay);
     }
 

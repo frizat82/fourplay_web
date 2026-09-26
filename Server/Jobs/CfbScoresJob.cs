@@ -16,6 +16,8 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
     private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;
 
     public async Task Execute(IJobExecutionContext context) {
+        // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
+        using var freshEspn = EspnDayCache.Fresh();
         Log.Information("CfbScoresJob: fetching CFB scores at {Time}", DateTime.UtcNow);
 
         var slates = (await repo.GetSlatesForSeasonAsync(Season)).ToList();

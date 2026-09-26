@@ -3,10 +3,14 @@ using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services.Repositories;
 
-public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : ICfbRepository {
+// cache: the schedule tables (CfbSlates, CfbSeasonWeekConfigs) are cached via ScheduleCache (saves
+// evict it — ScheduleCacheInterceptor). Optional so tests that don't care can omit it (reads go
+// straight to the database).
+public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IMemoryCache? cache = null) : ICfbRepository {
     public async Task<bool> SlatesExistForSeasonAsync(int season) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbSlates.AnyAsync(s => s.Season == season);
@@ -38,25 +42,16 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         return true;
     }
 
-    public async Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season) {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSlates
-            .Where(s => s.Season == season)
-            .OrderBy(s => s.SlateNumber)
-            .ToListAsync();
-    }
+    // Per-season and by-id reads filter the cached whole table (ordered Season, SlateNumber).
+    public async Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season) =>
+        ScheduleCache.Copies((await SlateRowsAsync()).Where(s => s.Season == season));
 
-    public async Task<IEnumerable<CfbSlates>> GetAllSlatesAsync() {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSlates
-            .OrderBy(s => s.Season).ThenBy(s => s.SlateNumber)
-            .ToListAsync();
-    }
+    public async Task<IEnumerable<CfbSlates>> GetAllSlatesAsync() => ScheduleCache.Copies(await SlateRowsAsync());
 
-    public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSlates.FirstOrDefaultAsync(s => s.Id == slateId);
-    }
+    public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) =>
+        ScheduleCache.Copy((await SlateRowsAsync()).FirstOrDefault(s => s.Id == slateId));
+
+    private Task<IReadOnlyList<CfbSlates>> SlateRowsAsync() => ScheduleCache.CfbSlateRowsAsync(cache, dbFactory);
 
     public async Task UpsertAsync(IEnumerable<CfbSpreads> spreads) {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -156,20 +151,12 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetWeekConfigsForSeasonAsync(int season) {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSeasonWeekConfigs
-            .Where(c => c.Season == season)
-            .OrderBy(c => c.EspnWeekNumber)
-            .ToListAsync();
-    }
+    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetWeekConfigsForSeasonAsync(int season) =>
+        ScheduleCache.Copies((await WeekConfigRowsAsync()).Where(c => c.Season == season));
 
-    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync() {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSeasonWeekConfigs
-            .OrderBy(c => c.Season).ThenBy(c => c.EspnWeekNumber)
-            .ToListAsync();
-    }
+    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync() => ScheduleCache.Copies(await WeekConfigRowsAsync());
+
+    private Task<IReadOnlyList<CfbSeasonWeekConfig>> WeekConfigRowsAsync() => ScheduleCache.CfbWeekConfigRowsAsync(cache, dbFactory);
 
     public async Task AddWeekConfigsAsync(IEnumerable<CfbSeasonWeekConfig> configs) {
         await using var db = await dbFactory.CreateDbContextAsync();

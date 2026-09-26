@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using AutoFixture;
 using AutoFixture.AutoNSubstitute;
 using AutoFixture.Xunit2;
@@ -22,10 +23,12 @@ public class DbContextFactoryStub : IDbContextFactory<ApplicationDbContext>
 
     public DbContextFactoryStub() : this("TestDb") { }
 
-    public DbContextFactoryStub(string dbName) {
+    // interceptors: e.g. ScheduleCacheInterceptor, the way Program.cs wires the real factory.
+    public DbContextFactoryStub(string dbName, params IInterceptor[] interceptors) {
         _dbName = dbName;
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(dbName)
+            .AddInterceptors(interceptors)
             .Options;
         _dbContext = new TestApplicationDbContext(options);
         _dbContext.Database.EnsureDeleted();

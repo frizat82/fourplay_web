@@ -274,4 +274,31 @@ public class SeasonWindowResolverTests
 
         Assert.False(SeasonWindowResolver.IsSeasonActive(windows, now));
     }
+
+    // The pollers sleep between games, so they need to know every instant "current week" can flip:
+    // each window's own start/end, its spread lock, and the early-activation point before it.
+    [Fact]
+    public void ChangePoints_AreEveryInstantTheCurrentWeekOrSeasonCanFlip() {
+        var start = new DateTime(2026, 9, 22, 0, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(7);
+        var spreadLock = start.AddDays(1);
+        Assert.Equal([spreadLock.AddDays(-2), start, spreadLock, end],
+            SeasonWindowResolver.ChangePoints([WeekWindow(2026, start, end, spreadLock)]).Order());
+    }
+
+    // ...and between two consecutive change points, the resolved current week never changes.
+    [Fact]
+    public void ResolveCurrentWeek_OnlyChangesAtAChangePoint() {
+        var windows = Enumerable.Range(0, 4).Select(i => {
+            var start = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(7 * i);
+            return WeekWindow(2026, start, start.AddDays(7), start.AddDays(2).AddHours(10));
+        }).ToList();
+        var points = SeasonWindowResolver.ChangePoints(windows).Order().ToList();
+
+        for (var t = windows[0].Start.AddDays(-5); t < windows[^1].End.AddDays(5); t = t.AddHours(1)) {
+            var before = SeasonWindowResolver.ResolveCurrentWeek(windows, t);
+            var after = SeasonWindowResolver.ResolveCurrentWeek(windows, t.AddHours(1));
+            if (before != after) Assert.Contains(points, p => p > t && p <= t.AddHours(1));
+        }
+    }
 }

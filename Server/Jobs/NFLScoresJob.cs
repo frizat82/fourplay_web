@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -22,6 +23,8 @@ public class NflScoresJob(
     INflCurrentWeekService currentWeekService,
     IEspnCacheService espnCacheService) : IJob {
     public async Task Execute(IJobExecutionContext context) {
+        // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
+        using var freshEspn = EspnDayCache.Fresh();
         Log.Information("Grabbing NFL scores at {Time}", DateTime.UtcNow);
         var allWeeksFailed = false;
 
