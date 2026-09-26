@@ -13,9 +13,6 @@ test.describe('NFL picks — demo backend', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/picks');
     await waitForSpinner(page);
-  });
-
-  test('Picks heading is visible', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Picks', exact: true })).toBeVisible();
   });
 

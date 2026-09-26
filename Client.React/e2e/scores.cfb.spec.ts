@@ -21,17 +21,11 @@ test.describe('CFB Scores page (authenticated)', () => {
 
   const scoresOptions = { leaguePicks, gameStarted: true };
 
-  test('renders scores page for authenticated user', async ({ page }) => {
-    await mockCfbAuth(page, { navigateTo: '/scores', ...scoresOptions });
-
-    await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('heading', { name: 'Scores' })).toBeVisible({ timeout: 5000 });
-  });
-
   test('shows spread badge count for OSU (2 picks)', async ({ page }) => {
     await mockCfbAuth(page, { navigateTo: '/scores', ...scoresOptions });
 
     await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Scores' })).toBeVisible({ timeout: 5000 });
 
     const osuBadge = page.locator('[data-testid="badge-OSU-spread"]');
     await expect(osuBadge).toBeVisible({ timeout: 5000 });

@@ -397,15 +397,6 @@ describe('cfbAdapter', () => {
       expect(getCfbAllPicks).not.toHaveBeenCalled();
     });
 
-    it('never reads the visible-picks endpoint, which hides other users\' picks on unstarted games', async () => {
-      vi.mocked(getCfbPickCounts).mockResolvedValue([{ userId: 'dhoward', pickCount: 4 }]);
-
-      const result = await adapter.getMissingPicks(1);
-
-      expect(result.picksByUser.get('dhoward')).toBe(4);
-      expect(getCfbAllPicks).not.toHaveBeenCalled();
-    });
-
     // frizat-4bv: the Members tab's "This Week" column header shows this instead of a generic
     // static label — reuses getCurrentSlate()'s own label rather than re-deriving one.
     it('includes the resolved current slate\'s human-readable label', async () => {

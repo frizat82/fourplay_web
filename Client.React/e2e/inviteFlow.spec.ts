@@ -55,13 +55,6 @@ async function setupUnauthRoutes(page: Page): Promise<void> {
 // ── Group 1: League portal — invite link generation ──────────────────────────
 
 test.describe('League portal: Generate Invite Link', () => {
-  test('shows Generate Invite Link button on Members tab when no link exists', async ({ page }) => {
-    // routes.ts mocks GET /api/league/{id}/invite-link → 404 (no existing link)
-    await mockAuth(page, { authUser: TEST_USER, navigateTo: '/league/manage' });
-    await waitForSpinner(page);
-
-    await expect(page.getByRole('button', { name: /generate invite link/i })).toBeVisible({ timeout: 5000 });
-  });
 
   test('clicking Generate Invite Link shows the join URL and Copy/Share buttons', async ({ page }) => {
     // routes.ts mocks POST /api/league/{id}/invite-link → mockInviteLink() with MOCK_TOKEN
@@ -111,13 +104,6 @@ test.describe('Join page: unauthenticated user', () => {
     await expect(page.getByText(MOCK_LEAGUE_NAME, { exact: false })).toBeVisible({ timeout: 5000 });
   });
 
-  test('shows Create an account to join button when not logged in', async ({ page }) => {
-    await setupUnauthRoutes(page);
-    await page.goto(`/join/${MOCK_TOKEN}`);
-
-    await expect(page.getByRole('button', { name: /create an account to join/i })).toBeVisible({ timeout: 5000 });
-  });
-
   test('Create an account to join navigates to register page with inviteLinkToken param', async ({ page }) => {
     await setupUnauthRoutes(page);
     await page.goto(`/join/${MOCK_TOKEN}`);
@@ -148,19 +134,6 @@ test.describe('Join page: unauthenticated user', () => {
 // ── Group 3: Join page — authenticated user ───────────────────────────────────
 
 test.describe('Join page: authenticated user', () => {
-  test('shows Join League button when logged in', async ({ page }) => {
-    // Use setupRoutes (no navigation) so routes are mocked, then set cookie and navigate
-    await setupRoutes(page, { authUser: TEST_USER });
-    await page.goto('/');
-    await page.context().addCookies([
-      { name: 'AuthToken', value: 'fake-jwt', domain: 'localhost', path: '/', httpOnly: false, secure: false, sameSite: 'Lax' },
-    ]);
-    await page.goto(`/join/${MOCK_TOKEN}`);
-
-    // Authenticated user sees Join League, not Create an account
-    await expect(page.getByRole('button', { name: /join league/i })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByRole('button', { name: /create an account/i })).not.toBeVisible();
-  });
 
   test('clicking Join League redirects authenticated user to /dashboard', async ({ page }) => {
     await setupRoutes(page, { authUser: TEST_USER });

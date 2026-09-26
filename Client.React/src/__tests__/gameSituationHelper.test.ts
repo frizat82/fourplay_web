@@ -131,19 +131,10 @@ describe('getSituations', () => {
   describe('last-writer-wins ordering', () => {
     // The function overwrites `output` sequentially; the last truthy condition wins.
     it('under message takes precedence over home spread when both trigger', () => {
-      // homeSpread: BUF -3, BUF leads 10-0 → covers → no home spread message
-      // underLine: total 10 > 7 → exceeded by 3
-      const result = getSituations('BUF', 'MIA', 10, 0, -3, undefined, undefined, 7);
-      // home doesn't trigger (covers), under triggers → under wins
-      expect(result).toBe('The game has exceeded the Under by 3 points (7).');
-    });
-
-    it('under message wins when it is evaluated last', () => {
-      // Both over and under conditions can't both trigger simultaneously for the same game,
-      // but if only under triggers it should be the result.
-      const result = getSituations('BUF', 'MIA', 30, 25, undefined, undefined, undefined, 47);
-      // total = 55 > 47 → exceeded by 8
-      expect(result).toBe('The game has exceeded the Under by 8 points (47).');
+      // homeSpread: BUF -10, BUF leads 10-7 → 10 - 10 - 7 = -7 → BUF still needs 7 (triggers)
+      // underLine: total 17 > 15 → exceeded by 2 (triggers too) — the later message wins
+      const result = getSituations('BUF', 'MIA', 10, 7, -10, undefined, undefined, 15);
+      expect(result).toBe('The game has exceeded the Under by 2 points (15).');
     });
   });
 });

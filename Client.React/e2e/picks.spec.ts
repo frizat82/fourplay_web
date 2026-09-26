@@ -2,23 +2,12 @@ import { test, expect } from '@playwright/test';
 import { mockAuth } from './helpers/auth';
 
 test.describe('Picks page (authenticated)', () => {
-  test('renders picks page for authenticated user', async ({ page }) => {
-    await mockAuth(page, { navigateTo: '/picks' });
-
-    // Wait for loading spinner to disappear
-    await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
-
-    // Page header should show "Picks" — use exact match to avoid matching "Picks Remaining"
-    await expect(page.getByRole('heading', { name: 'Picks', exact: true })).toBeVisible({ timeout: 5000 });
-
-    // Game rows should be rendered (BUF/MIA and DAL/NYG)
-    await expect(page.getByRole('button', { name: /^Pick \w/i }).first()).toBeVisible({ timeout: 5000 });
-  });
 
   test('shows pick buttons for upcoming games', async ({ page }) => {
     await mockAuth(page, { navigateTo: '/picks' });
 
     await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Picks', exact: true })).toBeVisible({ timeout: 5000 });
 
     // Games are in the future (gameStarted: false), so Pick buttons are not locked
     // Match "Pick BUF", "Pick MIA" etc. — not "Submit Pick(s)"
@@ -28,19 +17,6 @@ test.describe('Picks page (authenticated)', () => {
 
     // Should have 4 Pick buttons (2 games × 2 teams each)
     await expect(pickButtons).toHaveCount(4, { timeout: 5000 });
-  });
-
-  test('user can click a pick button and it toggles to Picked', async ({ page }) => {
-    await mockAuth(page, { navigateTo: '/picks' });
-
-    await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
-
-    const firstPickButton = page.getByRole('button', { name: /^Pick \w/i }).first();
-    await expect(firstPickButton).toBeVisible({ timeout: 5000 });
-    await firstPickButton.click();
-
-    // After clicking, the button should change to "{team} picked" (pending state)
-    await expect(page.getByRole('button', { name: /\bpicked\b/i })).toBeVisible({ timeout: 3000 });
   });
 
   // frizat-immediate-pick-toggle: no more Submit/Clear step — a click writes to the backend
