@@ -5,7 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 namespace FourPlayWebApp.Server.UnitTests;
 
 // ESPN only answers single-day scoreboard queries now, so a week/slate window is one request per
-// day — and the pollers re-fetch the window every 30s during games and every 5 min otherwise. A
+// day — and the pollers re-fetch the window every 15s during games. A
 // day only changes while it has games still to finish, so each day's response is cached for as
 // long as it can't change. NFL and CFB share this cache; the ESPN-reading jobs bypass it.
 public class EspnDayCacheTests {
@@ -35,12 +35,16 @@ public class EspnDayCacheTests {
     public void ADayThatFinishedLongAgo_IsCachedForHours() =>
         Assert.Equal(EspnDayCache.SettledTtl, EspnDayCache.TtlFor(Day(Game(Now.AddHours(-20), TypeName.StatusFinal)), Now));
 
-    // ESPN sometimes corrects a score after marking the game final; a day that only just finished
-    // keeps getting re-checked for a while.
+    // Final is final: no re-checks for post-final corrections (the scores job reads ESPN fresh anyway).
     [Fact]
-    public void ADayThatJustFinished_IsRecheckedForCorrections() =>
-        Assert.Equal(EspnDayCache.RecentlyFinishedTtl,
+    public void ADayThatJustFinished_IsSettled() =>
+        Assert.Equal(EspnDayCache.SettledTtl,
             EspnDayCache.TtlFor(Day(Game(Now.AddHours(-8), TypeName.StatusFinal), Game(Now.AddHours(-4), TypeName.StatusFinal)), Now));
+
+    // A game in progress past the usual window (delay, OT) keeps its day live until it goes final.
+    [Fact]
+    public void ADayWithAnOverlongGame_StaysLive() =>
+        Assert.Equal(EspnDayCache.LiveTtl, EspnDayCache.TtlFor(Day(Game(Now.AddHours(-5), TypeName.StatusInProgress)), Now));
 
     [Fact]
     public void ADayWithAGameOn_IsCachedForLessThanOneFastPoll() {

@@ -24,7 +24,7 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
     private readonly ICfbLiveScoreFetcher _fetcher;
     private readonly SettledScoreCache _settledCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
-    // Fresh for 2x the slow poll: during games the poller refreshes every 30s. Between games it
+    // Fresh for 2x the slow poll: during games the poller refreshes every 15s. Between games it
     // sleeps for hours, so the snapshot lapses and requests fetch for themselves — through
     // EspnDayCache, so that's an in-memory read for any day that can't have changed.
     private readonly PolledItemSnapshot _polled = new(2 * EspnPollCadence.SlowPollInterval);
