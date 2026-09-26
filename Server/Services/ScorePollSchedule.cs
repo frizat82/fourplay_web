@@ -5,21 +5,16 @@ namespace FourPlayWebApp.Server.Services;
 
 /// <summary>
 /// Runs one score poll and decides when the next happens — one implementation for the NFL
-/// (EspnCacheService) and CFB (CfbCacheService) pollers, one instance each. Fast while a game is
-/// on; otherwise asleep until the next thing that can change what the poller serves — a kickoff
-/// in the scoreboard it holds, or a schedule wake point (a week/slate flipping current, a first
-/// kickoff, next season) — capped at <see cref="IdleCap"/> so an out-of-band schedule change still
-/// gets noticed. A poll that throws retries at the slow cadence. Replaces "every 5 min whenever
-/// nothing is live", which polled all week and all off-season.
+/// (EspnCacheService) and CFB (CfbCacheService) pollers, one instance each. Polls only while a
+/// game is on; once every game is final it stops (the scores jobs persist finals) and sleeps until
+/// the next thing that can change what the poller serves — a kickoff in the scoreboard it holds,
+/// or a schedule wake point (a week/slate flipping current, a first kickoff, next season) — capped
+/// at <see cref="IdleCap"/> so an out-of-band schedule change still gets noticed. A failed poll
+/// retries at the slow cadence.
 /// </summary>
 public sealed class ScorePollSchedule {
     /// <summary>The longest a poller sleeps without a known reason to wake.</summary>
     public static readonly TimeSpan IdleCap = TimeSpan.FromHours(3);
-    /// <summary>After a game goes final, ESPN sometimes corrects the score; keep checking this often for a while.</summary>
-    public static readonly TimeSpan RecentlyFinishedInterval = TimeSpan.FromMinutes(15);
-    // A game still in progress past the usual live window (weather delay, OT) is polled slowly
-    // until it goes final, for at most this long after kickoff (a stuck ESPN status can't poll forever).
-    private static readonly TimeSpan OverlongGameLimit = TimeSpan.FromHours(12);
 
     /// <summary>
     /// What a poll produced: its scoreboard, the schedule's wake points, and whether the week/slate
@@ -50,18 +45,10 @@ public sealed class ScorePollSchedule {
     public TimeSpan NextInterval(EspnScores? current, DateTimeOffset now) {
         // A competition missing its status (malformed payload) is skipped, not thrown on.
         var games = current?.Events?.SelectMany(e => e.Competitions ?? []).Where(g => g.Status?.Type is not null).ToList() ?? [];
-        var unfinished = games.Where(g => !GameHelpers.IsGameOver(g)).ToList();
-
-        if (unfinished.Any(g => g.Date <= now && now <= g.Date + EspnPollCadence.LiveGameDuration))
-            return EspnPollCadence.FastPollInterval;
+        if (games.Any(g => EspnPollCadence.IsLive(g, now))) return EspnPollCadence.FastPollInterval;
         if (_lastPollFailed) return EspnPollCadence.SlowPollInterval;
 
-        var wakeAt = new List<DateTimeOffset>();
-        if (unfinished.Any(g => GameHelpers.IsGameStarted(g) && now <= g.Date + OverlongGameLimit))
-            wakeAt.Add(now + EspnPollCadence.SlowPollInterval);
-        if (games.Any(g => GameHelpers.IsGameOver(g) && now <= g.Date + EspnPollCadence.RecentlyFinishedWindow))
-            wakeAt.Add(now + RecentlyFinishedInterval);
-        wakeAt.AddRange(unfinished.Where(g => g.Date > now).Select(g => g.Date));
+        var wakeAt = games.Where(g => !GameHelpers.IsGameOver(g) && g.Date > now).Select(g => g.Date).ToList();
         var scheduledTicks = Interlocked.Read(ref _nextWakePointTicks);
         if (scheduledTicks > now.UtcTicks) wakeAt.Add(new DateTimeOffset(scheduledTicks, TimeSpan.Zero));
 
