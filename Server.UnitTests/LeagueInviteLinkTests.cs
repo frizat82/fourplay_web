@@ -9,8 +9,6 @@ using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using System.Security.Claims;
 
@@ -32,8 +30,7 @@ public class LeagueInviteLinkTests
         IInvitationService? invitationService = null,
         ILeagueMembershipInviteService? membershipInviteService = null)
     {
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = UserManagerStub.Create(store);
+        var userManager = UserManagerStub.Create();
 
         var controller = LeagueControllerFactory.Build(
             repo,

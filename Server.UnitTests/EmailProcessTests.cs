@@ -187,8 +187,7 @@ public class EmailProcessTests
         invitationService.ValidateInvitationAsync(inviteCode).Returns(invitation);
         invitationService.MarkInvitationAsUsedAsync(inviteCode, Arg.Any<string>()).Returns(true);
 
-        var userStore = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = UserManagerStub.Create(userStore);
+        var userManager = UserManagerStub.Create();
 
         var createdUser = new ApplicationUser { Id = "new-user-id", UserName = username, Email = email };
 
@@ -246,8 +245,7 @@ public class EmailProcessTests
         invitationService.ValidateInvitationAsync(inviteCode).Returns(invitation);
         invitationService.MarkInvitationAsUsedAsync(inviteCode, Arg.Any<string>()).Returns(true);
 
-        var userStore = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = UserManagerStub.Create(userStore);
+        var userManager = UserManagerStub.Create();
 
         var createdUser = new ApplicationUser { Id = "new-user-id-2", UserName = "newuser2", Email = email };
         userManager.FindByEmailAsync(email).Returns((ApplicationUser?)null);

@@ -7,8 +7,6 @@ using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using System.Security.Claims;
 
@@ -40,8 +38,7 @@ public class PickCountsEndpointTests
 
     private static LeagueController Controller(ILeagueRepository repo, ClaimsPrincipal principal, IEspnCacheService? espn = null)
     {
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = UserManagerStub.Create(store);
+        var userManager = UserManagerStub.Create();
         var controller = LeagueControllerFactory.Build(repo, userManager, espnCacheService: espn);
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = principal } };
         return controller;

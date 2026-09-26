@@ -7,8 +7,6 @@ using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -26,8 +24,7 @@ public class SpreadLockScheduleEndpointTests
 
     private static LeagueController BuildLeagueController(ILeagueRepository repo)
     {
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = UserManagerStub.Create(store);
+        var userManager = UserManagerStub.Create();
 
         var controller = LeagueControllerFactory.Build(repo, userManager);
 

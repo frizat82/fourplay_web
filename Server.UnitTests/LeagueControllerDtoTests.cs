@@ -7,8 +7,6 @@ using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -21,8 +19,7 @@ public class LeagueControllerDtoTests
     private static LeagueController BuildController(ILeagueRepository repo, UserManager<ApplicationUser>? userManager = null)
     {
         if (userManager is null) {
-            var store = Substitute.For<IUserStore<ApplicationUser>>();
-            userManager = UserManagerStub.Create(store);
+            userManager = UserManagerStub.Create();
         }
 
         var controller = LeagueControllerFactory.Build(repo, userManager);
@@ -144,8 +141,7 @@ public class LeagueControllerDtoTests
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetUsersAsync().Returns([admin, regular]);
 
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = UserManagerStub.Create(store);
+        var userManager = UserManagerStub.Create();
         userManager.GetUsersInRoleAsync("Administrator").Returns([admin]);
 
         var result = await BuildController(repo, userManager).GetUsers();

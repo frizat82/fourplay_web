@@ -241,4 +241,5 @@ public class JwtTokenServiceTests
         // ValidateToken should return a non-null principal for a valid token
         var principal = svc.ValidateToken(token);
         Assert.NotNull(principal);
-    }}
+    }
+}

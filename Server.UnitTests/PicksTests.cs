@@ -11,7 +11,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using System.Security.Claims;
 
@@ -32,8 +31,7 @@ public class PicksTests
 
     private static UserManager<ApplicationUser> BuildUserManager()
     {
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        return UserManagerStub.Create(store);
+        return UserManagerStub.Create();
     }
 
     /// <summary>

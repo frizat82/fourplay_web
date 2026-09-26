@@ -41,8 +41,7 @@ public class InvitationLeagueTests
 
     private static UserManager<ApplicationUser> BuildUserManager()
     {
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var mgr = UserManagerStub.Create(store);
+        var mgr = UserManagerStub.Create();
         mgr.GetAccessFailedCountAsync(Arg.Any<ApplicationUser>()).Returns(0);
         return mgr;
     }

@@ -13,8 +13,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using System.Reflection;
 using System.Security.Claims;
@@ -127,8 +125,7 @@ public class LeagueOwnershipTests
         var repo = Substitute.For<ILeagueRepository>();
         var invSvc = Substitute.For<IInvitationService>();
         var membershipInviteSvc = Substitute.For<ILeagueMembershipInviteService>();
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = UserManagerStub.Create(store);
+        var userManager = UserManagerStub.Create();
         var ctrl = LeagueControllerFactory.Build(
             repo,
             userManager,
@@ -1082,8 +1079,7 @@ public class LeagueOwnershipTests
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
 
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = UserManagerStub.Create(store);
+        var userManager = UserManagerStub.Create();
         var ctrl = LeagueControllerFactory.Build(repo, userManager, invitationService: invSvc);
         ctrl.ControllerContext = new ControllerContext
         {
@@ -1105,8 +1101,7 @@ public class LeagueOwnershipTests
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
 
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = UserManagerStub.Create(store);
+        var userManager = UserManagerStub.Create();
         var ctrl = LeagueControllerFactory.Build(repo, userManager, invitationService: invSvc);
         ctrl.ControllerContext = new ControllerContext
         {
