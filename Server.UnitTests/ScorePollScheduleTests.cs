@@ -96,10 +96,12 @@ public class ScorePollScheduleTests {
         Assert.Equal(2 * EspnPollCadence.FastPollInterval, schedule.NextInterval(scores, time.GetUtcNow()));
     }
 
-    // Someone should hear about it: once ESPN has been failing for 10 minutes straight, one alert
-    // through the job-failure channel (Discord) — not one per failed poll.
+    // Someone should hear about it: once ESPN has been failing for 10 minutes straight, the outage
+    // goes to the job-failure channel (Discord). Every failed poll after that is handed over under
+    // the same outage key — the notifier's own dedupe turns that into one message, and a send that
+    // failed (webhook down) is retried on the next poll instead of being lost.
     [Fact]
-    public async Task AnOutageLastingTenMinutes_AlertsOnce() {
+    public async Task AnOutage_IsReportedAfterTenMinutes_UnderOneKey() {
         var notifier = Substitute.For<IJobFailureNotifier>();
         var schedule = new ScorePollSchedule("CFB live scores", notifier);
         Task Fail(TimeSpan at) => Assert.ThrowsAsync<HttpRequestException>(() =>
@@ -111,12 +113,17 @@ public class ScorePollScheduleTests {
 
         await Fail(TimeSpan.FromMinutes(10));
         await Fail(TimeSpan.FromMinutes(15));
-        await notifier.Received(1).NotifyAsync("CFB live scores", Arg.Any<string>(), Arg.Is<string>(m => m.Contains("403")), Arg.Any<CancellationToken>());
+        var reports = notifier.ReceivedCalls().Select(c => c.GetArguments()).ToList();
+        Assert.Equal(2, reports.Count);
+        Assert.Single(reports.Select(a => (string)a[0]!).Distinct());
+        Assert.StartsWith("CFB live scores", (string)reports[0][0]!);
+        Assert.Contains("403", (string)reports[0][2]!);
     }
 
-    // A recovered outage resets: the next one alerts again.
+    // A recovered outage is over: the next one is a new key, so it isn't swallowed by the
+    // notifier's 6h dedupe of the first.
     [Fact]
-    public async Task AfterRecovery_ANewOutageAlertsAgain() {
+    public async Task AfterRecovery_ANewOutageIsReportedUnderANewKey() {
         var notifier = Substitute.For<IJobFailureNotifier>();
         var schedule = new ScorePollSchedule("NFL live scores", notifier);
         Task Fail(TimeSpan at) => Assert.ThrowsAsync<HttpRequestException>(() =>
@@ -128,7 +135,9 @@ public class ScorePollScheduleTests {
         await Fail(TimeSpan.FromMinutes(20));
         await Fail(TimeSpan.FromMinutes(30));
 
-        await notifier.ReceivedWithAnyArgs(2).NotifyAsync(default!, default!, default!);
+        var keys = notifier.ReceivedCalls().Select(c => (string)c.GetArguments()[0]!).ToList();
+        Assert.Equal(2, keys.Count);
+        Assert.NotEqual(keys[0], keys[1]);
     }
 
     // A week/slate with no games yet (e.g. a CFP round before matchups post) is a successful poll,

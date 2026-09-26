@@ -14,7 +14,9 @@ namespace FourPlayWebApp.Server.Services;
 /// <para>A failed poll — anything thrown, any ESPN day request failing (EspnDayCache then serves
 /// the last good copy), or no scoreboard for a week with games — backs off exponentially from 30s
 /// to the slow cadence, even with a game on, so a block (403/429) or outage isn't hammered every
-/// 15s. After <see cref="OutageAlertAfter"/> of failures, one alert goes to the job-failure channel.</para>
+/// 15s. After <see cref="OutageAlertAfter"/> of failures, the outage goes to the job-failure
+/// channel under a per-outage key: the notifier's dedupe sends one message per outage and retries a
+/// send that failed, and a later outage is a new key rather than swallowed by that dedupe.</para>
 /// </summary>
 public sealed class ScorePollSchedule(string name = "ESPN score poller", IJobFailureNotifier? outageNotifier = null) {
     /// <summary>The longest a poller sleeps without a known reason to wake.</summary>
@@ -33,7 +35,7 @@ public sealed class ScorePollSchedule(string name = "ESPN score poller", IJobFai
     private long _nextWakePointTicks; // UTC ticks; 0 = none known
     private int _consecutiveFailures;
     private DateTimeOffset? _failingSince;
-    private bool _outageAlerted;
+    private bool _outageLogged;
 
     /// <summary>
     /// Runs the whole poll — scope setup, schedule reads, the ESPN fetch — and records whether it
@@ -63,18 +65,22 @@ public sealed class ScorePollSchedule(string name = "ESPN score poller", IJobFai
             if (_failingSince is { } since)
                 Log.Information("{Poller}: ESPN answering again after {Minutes:F0} min of failed polls", name, (now - since).TotalMinutes);
             _failingSince = null;
-            _outageAlerted = false;
+            _outageLogged = false;
             Volatile.Write(ref _consecutiveFailures, 0);
             return;
         }
         var failures = Interlocked.Increment(ref _consecutiveFailures);
         _failingSince ??= now;
-        if (_outageAlerted || now - _failingSince < OutageAlertAfter) return;
-        _outageAlerted = true;
-        var message = $"ESPN polls failing for {(now - _failingSince.Value).TotalMinutes:F0} min ({failures} in a row), last: {failure}. " +
+        var outageStart = _failingSince.Value;
+        if (now - outageStart < OutageAlertAfter) return;
+        var message = $"ESPN polls failing for {(now - outageStart).TotalMinutes:F0} min ({failures} in a row), last: {failure}. " +
                       $"Serving the last good scores and retrying every {EspnPollCadence.SlowPollInterval.TotalMinutes:F0} min until ESPN answers.";
-        Log.Error("{Poller}: {Message}", name, message);
-        if (outageNotifier is not null) await outageNotifier.NotifyAsync(name, "score poll", message);
+        if (!_outageLogged) {
+            _outageLogged = true;
+            Log.Error("{Poller}: {Message}", name, message);
+        }
+        if (outageNotifier is not null)
+            await outageNotifier.NotifyAsync($"{name} — ESPN outage since {outageStart:yyyy-MM-dd HH:mm} UTC", "score poll", message);
     }
 
     public TimeSpan NextInterval(EspnScores? current, DateTimeOffset now) {
