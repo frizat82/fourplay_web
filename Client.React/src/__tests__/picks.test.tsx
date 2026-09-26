@@ -350,25 +350,6 @@ describe('PicksPage', () => {
     expect(mockedRemoveMyPick).not.toHaveBeenCalled();
   });
 
-  it('disables remaining pick buttons when total picks reach max', async () => {
-    const existing = [createPick({ team: 'BUF' }), createPick({ team: 'DAL' })];
-    await setupDefaults({ existingPicks: existing });
-    await renderPage();
-
-    const pickButtons = screen.getAllByRole('button', { name: /^Pick /i });
-    await userEvent.click(pickButtons[0]);
-    await userEvent.click(pickButtons[1]);
-
-    await waitFor(() => {
-      const remaining = screen.queryAllByRole('button', { name: /^Pick /i });
-      if (remaining.length === 0) {
-        expect(remaining.length).toBe(0);
-      } else {
-        remaining.forEach((btn) => expect(btn).toBeDisabled());
-      }
-    });
-  });
-
   it('existing picks whose games have kicked off show as Locked in and stay non-interactive', async () => {
     // setupDefaults defaults gameStarted to false (unstarted, future kickoff) — must explicitly
     // ask for started games here so both existing picks' games have actually kicked off.

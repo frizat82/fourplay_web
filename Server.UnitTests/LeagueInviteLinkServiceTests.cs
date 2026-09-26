@@ -2,7 +2,6 @@ using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Xunit;
@@ -10,50 +9,13 @@ using Xunit;
 namespace FourPlayWebApp.Server.UnitTests;
 
 /// <summary>
-/// Service-level tests for LeagueInviteLinkService.
-/// Uses SQLite in-memory with shared cache because ExecuteUpdateAsync requires real SQL
-/// (the EF InMemory provider throws NotImplementedException for bulk update operations).
-/// A keepalive connection pins the named in-memory database open for the test duration.
+/// Service-level tests for LeagueInviteLinkService on in-memory SQLite (the EF InMemory provider
+/// can't run the service's ExecuteUpdateAsync at all). Which links a Generate/Revoke actually
+/// revokes is a bulk update, so that's proven on real Postgres instead, per CLAUDE.md — see
+/// LeagueInviteLinkServicePostgresTests.
 /// </summary>
 public class LeagueInviteLinkServiceTests
 {
-    private static ApplicationDbContext OpenDb(string dbName) =>
-        new(new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseSqlite($"Data Source={dbName};Mode=Memory;Cache=Shared")
-            .Options);
-
-    private static IDbContextFactory<ApplicationDbContext> BuildFactory(string dbName)
-    {
-        var factory = Substitute.For<IDbContextFactory<ApplicationDbContext>>();
-        factory.CreateDbContextAsync().Returns(_ => Task.FromResult(OpenDb(dbName)));
-        return factory;
-    }
-
-    /// <summary>Keeps the named in-memory SQLite database alive for <paramref name="action"/>.</summary>
-    private static async Task WithDb(string dbName, Func<IDbContextFactory<ApplicationDbContext>, Task> action)
-    {
-        // SQLite named in-memory databases are destroyed when the last connection closes.
-        // This keepalive connection ensures the database outlives any EF context the test creates.
-        await using var keepAlive = new SqliteConnection($"Data Source={dbName};Mode=Memory;Cache=Shared");
-        await keepAlive.OpenAsync();
-        await using (var init = OpenDb(dbName)) { await init.Database.EnsureCreatedAsync(); }
-        await action(BuildFactory(dbName));
-    }
-
-    /// <summary>Seed a minimal ApplicationUser row to satisfy the LeagueInviteLink.CreatedByUserId FK.</summary>
-    private static async Task SeedUser(ApplicationDbContext db, string userId)
-    {
-        db.Users.Add(new ApplicationUser
-        {
-            Id = userId,
-            UserName = userId,
-            NormalizedUserName = userId.ToUpperInvariant(),
-            SecurityStamp = Guid.NewGuid().ToString(),
-            ConcurrencyStamp = Guid.NewGuid().ToString(),
-        });
-        await db.SaveChangesAsync();
-    }
-
     // ── GenerateAsync ────────────────────────────────────────────────────────
 
     [Fact]
@@ -63,11 +25,11 @@ public class LeagueInviteLinkServiceTests
         // into GenerateAsync, which set link.League = <entity from a different context>.
         // EF tracked the entire object graph as Added → Npgsql 23505 PK duplicate in prod.
         var db = nameof(GenerateAsync_CreatesLink_WithoutReinsertingLeague);
-        await WithDb(db, async factory =>
+        await SqliteTestDb.WithDb(db, async factory =>
         {
-            await using (var seed = OpenDb(db))
+            await using (var seed = SqliteTestDb.Open(db))
             {
-                await SeedUser(seed, "owner");
+                await SqliteTestDb.SeedUser(seed, "owner");
                 seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
                 await seed.SaveChangesAsync();
             }
@@ -79,37 +41,9 @@ public class LeagueInviteLinkServiceTests
             Assert.NotEmpty(link.Token);
             Assert.True(link.ExpiresAt > DateTimeOffset.UtcNow);
 
-            await using var verify = OpenDb(db);
+            await using var verify = SqliteTestDb.Open(db);
             Assert.Equal(1, await verify.LeagueInfo.CountAsync());
             Assert.Equal(1, await verify.LeagueInviteLinks.CountAsync());
-        });
-    }
-
-    [Fact]
-    public async Task GenerateAsync_RevokesExistingActiveLink_BeforeCreatingNew()
-    {
-        var db = nameof(GenerateAsync_RevokesExistingActiveLink_BeforeCreatingNew);
-        await WithDb(db, async factory =>
-        {
-            await using (var seed = OpenDb(db))
-            {
-                await SeedUser(seed, "owner");
-                seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
-                seed.LeagueInviteLinks.Add(new LeagueInviteLink
-                {
-                    Token = "old-token", LeagueId = 1, CreatedByUserId = "owner",
-                    ExpiresAt = DateTimeOffset.UtcNow.AddHours(12), IsRevoked = false,
-                });
-                await seed.SaveChangesAsync();
-            }
-
-            var service = new LeagueInviteLinkService(factory);
-            var newLink = await service.GenerateAsync(1, "owner");
-
-            await using var verify = OpenDb(db);
-            Assert.True((await verify.LeagueInviteLinks.SingleAsync(l => l.Token == "old-token")).IsRevoked);
-            Assert.NotEqual("old-token", newLink.Token);
-            Assert.Equal(2, await verify.LeagueInviteLinks.CountAsync());
         });
     }
 
@@ -117,11 +51,11 @@ public class LeagueInviteLinkServiceTests
     public async Task GenerateAsync_DoesNotRevokeAlreadyRevokedLinks()
     {
         var db = nameof(GenerateAsync_DoesNotRevokeAlreadyRevokedLinks);
-        await WithDb(db, async factory =>
+        await SqliteTestDb.WithDb(db, async factory =>
         {
-            await using (var seed = OpenDb(db))
+            await using (var seed = SqliteTestDb.Open(db))
             {
-                await SeedUser(seed, "owner");
+                await SqliteTestDb.SeedUser(seed, "owner");
                 seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
                 seed.LeagueInviteLinks.Add(new LeagueInviteLink
                 {
@@ -133,7 +67,7 @@ public class LeagueInviteLinkServiceTests
 
             await new LeagueInviteLinkService(factory).GenerateAsync(1, "owner");
 
-            await using var verify = OpenDb(db);
+            await using var verify = SqliteTestDb.Open(db);
             Assert.Equal(2, await verify.LeagueInviteLinks.CountAsync());
             Assert.True((await verify.LeagueInviteLinks.SingleAsync(l => l.Token == "already-revoked")).IsRevoked);
         });
@@ -144,7 +78,7 @@ public class LeagueInviteLinkServiceTests
     [Fact]
     public async Task GetCurrentAsync_ReturnsNull_WhenNoLinksExist()
     {
-        await WithDb(nameof(GetCurrentAsync_ReturnsNull_WhenNoLinksExist), async factory =>
+        await SqliteTestDb.WithDb(nameof(GetCurrentAsync_ReturnsNull_WhenNoLinksExist), async factory =>
         {
             var result = await new LeagueInviteLinkService(factory).GetCurrentAsync(99);
             Assert.Null(result);
@@ -155,11 +89,11 @@ public class LeagueInviteLinkServiceTests
     public async Task GetCurrentAsync_ReturnsNull_WhenAllLinksRevoked()
     {
         var db = nameof(GetCurrentAsync_ReturnsNull_WhenAllLinksRevoked);
-        await WithDb(db, async factory =>
+        await SqliteTestDb.WithDb(db, async factory =>
         {
-            await using (var seed = OpenDb(db))
+            await using (var seed = SqliteTestDb.Open(db))
             {
-                await SeedUser(seed, "owner");
+                await SqliteTestDb.SeedUser(seed, "owner");
                 seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
                 seed.LeagueInviteLinks.Add(new LeagueInviteLink
                 {
@@ -178,11 +112,11 @@ public class LeagueInviteLinkServiceTests
     public async Task GetCurrentAsync_ReturnsMostRecentNonRevokedLink()
     {
         var db = nameof(GetCurrentAsync_ReturnsMostRecentNonRevokedLink);
-        await WithDb(db, async factory =>
+        await SqliteTestDb.WithDb(db, async factory =>
         {
-            await using (var seed = OpenDb(db))
+            await using (var seed = SqliteTestDb.Open(db))
             {
-                await SeedUser(seed, "owner");
+                await SqliteTestDb.SeedUser(seed, "owner");
                 seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
                 // Insert "older" first so it gets a lower auto-increment Id.
                 // GetCurrentAsync orders by Id descending, so "newer" (higher Id) should win.
@@ -207,11 +141,11 @@ public class LeagueInviteLinkServiceTests
         // Expired-but-not-revoked links are still returned so the UI can show
         // "this link expired — regenerate" rather than a blank invite-link panel.
         var db = nameof(GetCurrentAsync_ReturnsExpiredLink_IfNotRevoked);
-        await WithDb(db, async factory =>
+        await SqliteTestDb.WithDb(db, async factory =>
         {
-            await using (var seed = OpenDb(db))
+            await using (var seed = SqliteTestDb.Open(db))
             {
-                await SeedUser(seed, "owner");
+                await SqliteTestDb.SeedUser(seed, "owner");
                 seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
                 seed.LeagueInviteLinks.Add(new LeagueInviteLink
                 {
@@ -230,72 +164,11 @@ public class LeagueInviteLinkServiceTests
     // ── RevokeAsync ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task RevokeAsync_ActiveLink_MarksItRevoked_WithoutCreatingAReplacement()
-    {
-        // Unlike GenerateAsync, revoking must shut off signups without immediately producing
-        // a new link a commissioner would have to reshare.
-        var db = nameof(RevokeAsync_ActiveLink_MarksItRevoked_WithoutCreatingAReplacement);
-        await WithDb(db, async factory =>
-        {
-            await using (var seed = OpenDb(db))
-            {
-                await SeedUser(seed, "owner");
-                seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
-                seed.LeagueInviteLinks.Add(new LeagueInviteLink
-                {
-                    Token = "live-token", LeagueId = 1, CreatedByUserId = "owner",
-                    ExpiresAt = DateTimeOffset.UtcNow.AddHours(12), IsRevoked = false,
-                });
-                await seed.SaveChangesAsync();
-            }
-
-            var service = new LeagueInviteLinkService(factory);
-            await service.RevokeAsync(1);
-
-            await using var verify = OpenDb(db);
-            Assert.True((await verify.LeagueInviteLinks.SingleAsync(l => l.Token == "live-token")).IsRevoked);
-            Assert.Equal(1, await verify.LeagueInviteLinks.CountAsync());
-            // Not asserting ValidateAsync here — its ExpiresAt > DateTimeOffset.UtcNow filter
-            // doesn't translate under this file's SQLite in-memory provider (pre-existing,
-            // unrelated to this change: no other test in this file calls it either).
-            Assert.Null(await service.GetCurrentAsync(1));
-        });
-    }
-
-    [Fact]
     public async Task RevokeAsync_NoActiveLink_DoesNotThrow()
     {
-        await WithDb(nameof(RevokeAsync_NoActiveLink_DoesNotThrow), async factory =>
+        await SqliteTestDb.WithDb(nameof(RevokeAsync_NoActiveLink_DoesNotThrow), async factory =>
         {
             await new LeagueInviteLinkService(factory).RevokeAsync(999);
-        });
-    }
-
-    [Fact]
-    public async Task RevokeAsync_DoesNotAffectOtherLeaguesLinks()
-    {
-        var db = nameof(RevokeAsync_DoesNotAffectOtherLeaguesLinks);
-        await WithDb(db, async factory =>
-        {
-            await using (var seed = OpenDb(db))
-            {
-                await SeedUser(seed, "owner");
-                seed.LeagueInfo.AddRange(
-                    new LeagueInfo { Id = 1, LeagueName = "League One", OwnerUserId = "owner" },
-                    new LeagueInfo { Id = 2, LeagueName = "League Two", OwnerUserId = "owner" });
-                seed.LeagueInviteLinks.AddRange(
-                    new LeagueInviteLink { Token = "league-1-token", LeagueId = 1, CreatedByUserId = "owner",
-                        ExpiresAt = DateTimeOffset.UtcNow.AddHours(12), IsRevoked = false },
-                    new LeagueInviteLink { Token = "league-2-token", LeagueId = 2, CreatedByUserId = "owner",
-                        ExpiresAt = DateTimeOffset.UtcNow.AddHours(12), IsRevoked = false });
-                await seed.SaveChangesAsync();
-            }
-
-            await new LeagueInviteLinkService(factory).RevokeAsync(1);
-
-            await using var verify = OpenDb(db);
-            Assert.True((await verify.LeagueInviteLinks.SingleAsync(l => l.Token == "league-1-token")).IsRevoked);
-            Assert.False((await verify.LeagueInviteLinks.SingleAsync(l => l.Token == "league-2-token")).IsRevoked);
         });
     }
 }

@@ -77,8 +77,7 @@ public class ChangePasswordTests
         const string victimEmail  = "victim@example.com";
 
         var userStore   = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            userStore, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(userStore);
 
         var callerUser = new ApplicationUser { Id = callerUserId, Email = callerEmail };
         var victimUser = new ApplicationUser { Id = "victim-id", Email = victimEmail };
@@ -115,8 +114,7 @@ public class ChangePasswordTests
     public async Task ChangePassword_ReturnsUnauthorized_WhenCallerNotFound()
     {
         var userStore   = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            userStore, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(userStore);
 
         // JWT claim userId resolves to nothing (token for deleted user)
         userManager.FindByIdAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);

@@ -35,7 +35,7 @@ public class UnconfirmedAccountCleanupJob(ApplicationDbContext db, UserManager<A
             // uses (frizat-5rp: every FK referencing AspNetUsers cascades at the DB level, so this
             // is already a safe, well-exercised deletion path, not new cascade logic to get right).
             // /simplify: mirrors DeleteUser's own DbUpdateException handling too — one un-cascaded
-            // FK on one row must not abort the whole hourly batch, leaving the rest undeleted with
+            // FK on one row must not abort the whole daily batch, leaving the rest undeleted with
             // no log until the next tick retries from scratch.
             try {
                 var result = await userManager.DeleteAsync(user);

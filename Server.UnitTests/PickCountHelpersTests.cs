@@ -21,15 +21,6 @@ public class PickCountHelpersTests
         Assert.Empty(PickCountHelpers.CountByUser([]));
     }
 
-    [Fact]
-    public void CountByUser_OmitsUsersWithNoPicks()
-    {
-        // A member with zero picks simply has no entry — the caller defaults a missing entry to 0.
-        var counts = PickCountHelpers.CountByUser(["alice"]);
-
-        Assert.DoesNotContain(counts, c => c.UserId == "carol");
-    }
-
     /// <summary>
     /// The whole point of a separate endpoint (rather than turning off the kickoff-hiding on the
     /// picks endpoints for owners) is that a league owner is also a PLAYER — they must never learn

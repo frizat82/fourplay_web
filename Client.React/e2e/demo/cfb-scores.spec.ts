@@ -14,9 +14,6 @@ test.describe('CFB scores — demo backend', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/scores');
     await waitForSpinner(page);
-  });
-
-  test('Scores heading is visible', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Scores' })).toBeVisible();
   });
 

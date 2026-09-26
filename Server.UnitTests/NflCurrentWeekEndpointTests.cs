@@ -5,8 +5,6 @@ using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -23,20 +21,9 @@ public class NflCurrentWeekEndpointTests
     private static LeagueController BuildController(INflCurrentWeekService svc)
     {
         var repo = Substitute.For<ILeagueRepository>();
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create();
 
-        var controller = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            repo,
-            NullLogger<LeagueController>.Instance,
-            userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var controller = LeagueControllerFactory.Build(repo, userManager);
 
         controller.ControllerContext = new ControllerContext
         {

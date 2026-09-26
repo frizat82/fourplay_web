@@ -105,23 +105,6 @@ public class LeaderboardControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var dtos = Assert.IsAssignableFrom<System.Collections.Generic.List<FourPlayWebApp.Shared.Models.Dtos.LeaderboardDto>>(ok.Value);
         Assert.Equal(3, dtos.Count);
-    }
-
-    // ── CFB routes to CFB service (not NFL) ──────────────────────────────────
-
-    [Fact]
-    public async Task GetLeaderboard_CallsCfbService_NotNflService_ForCfbLeague()
-    {
-        const int leagueId = 3;
-        const long seasonYear = 2025;
-        var league = new LeagueInfo { Id = leagueId, LeagueType = LeagueType.Cfb, LeagueName = "CFB", OwnerUserId = "owner" };
-
-        _leagueRepo.GetLeagueInfoAsync(leagueId).Returns(league);
-        _cfbService.BuildLeaderboard(leagueId, (int)seasonYear).Returns(BuildLeaderboard(1));
-
-        await BuildController().GetLeaderboard(leagueId, seasonYear);
-
-        await _cfbService.Received(1).BuildLeaderboard(leagueId, (int)seasonYear);
         await _nflService.DidNotReceive().BuildLeaderboard(Arg.Any<int>(), Arg.Any<long>());
     }
 

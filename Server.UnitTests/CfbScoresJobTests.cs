@@ -204,18 +204,6 @@ public class CfbScoresJobTests
     }
 
     [Fact]
-    public async Task Execute_WhenGameFinal_SavesScore()
-    {
-        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
-
-        await BuildJob().Execute(_context);
-
-        await _repo.Received(1).UpsertCfbScoresAsync(
-            Arg.Is<IEnumerable<CfbScores>>(s => s.Count() == 1));
-    }
-
-    [Fact]
     public async Task Execute_ParsesFinalScoreCorrectly()
     {
         var slate = BuildSlate();

@@ -58,8 +58,8 @@ public class EspnCacheServiceTests
     // The service's constructor kicks off its refresh loop as a fire-and-forget background task
     // (only the immediate first run matters in these tests — the PeriodicTimer's 5-minute interval
     // never ticks again within a test's lifetime). Fixed Task.Delay windows racing that background
-    // work are flaky under CI load (observed: EspnCacheServiceTests.ScoresChanged_Fires_WhenDataChanges
-    // failed in CI while passing locally — a CPU-contention timing miss, not a logic bug). This waits
+    // work are flaky under CI load (observed: a ScoresChanged test here failed in CI while passing
+    // locally — a CPU-contention timing miss, not a logic bug). This waits
     // for the actual ScoresChanged fire instead of gambling on a fixed wall-clock window.
     private static async Task WaitForScoresChangedAsync(EspnCacheService svc, TimeSpan? timeout = null)
     {
@@ -141,44 +141,9 @@ public class EspnCacheServiceTests
     }
 
     // -----------------------------------------------------------------------
-    // ScoresChanged — fires when data changes, silent when unchanged/null
+    // ScoresChanged — silent when the API returns null (change detection itself is
+    // PeriodicRefreshCacheTests')
     // -----------------------------------------------------------------------
-
-    [Fact]
-    public async Task ScoresChanged_Fires_WhenDataChanges()
-    {
-        var first = new EspnScores { Events = [new Event { Id = "1", Competitions = [new Competition { Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Description = Description.Scheduled } }, Competitors = [new Competitor { HomeAway = HomeAway.Home, Score = 0 }, new Competitor { HomeAway = HomeAway.Away, Score = 0 }], Odds = [] }] }] };
-        var second = new EspnScores { Events = [new Event { Id = "1", Competitions = [new Competition { Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusFinal, Description = Description.Final } }, Competitors = [new Competitor { HomeAway = HomeAway.Home, Score = 28 }, new Competitor { HomeAway = HomeAway.Away, Score = 17 }], Odds = [] }] }] };
-
-        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(
-            Task.FromResult<EspnScores?>(first),
-            Task.FromResult<EspnScores?>(second));
-
-        int fireCount = 0;
-        // initialDelay gives us time to subscribe before the first refresh fires
-        await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
-        svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
-
-        await WaitForScoresChangedAsync(svc);
-
-        Assert.Equal(1, fireCount); // fired once for initial data
-    }
-
-    [Fact]
-    public async Task ScoresChanged_DoesNotFire_WhenDataUnchanged()
-    {
-        var scores = new EspnScores { Events = [new Event { Id = "1", Competitions = [new Competition { Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusFinal, Description = Description.Final } }, Competitors = [new Competitor { HomeAway = HomeAway.Home, Score = 28 }, new Competitor { HomeAway = HomeAway.Away, Score = 17 }], Odds = [] }] }] };
-
-        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(Task.FromResult<EspnScores?>(scores));
-
-        int fireCount = 0;
-        await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
-        svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
-
-        await WaitForScoresChangedAsync(svc);
-
-        Assert.Equal(1, fireCount); // fired once on initial load — no second fire since data unchanged
-    }
 
     [Fact]
     public async Task ScoresChanged_DoesNotFire_WhenApiReturnsNull()

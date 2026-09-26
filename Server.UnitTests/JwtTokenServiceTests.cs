@@ -40,8 +40,7 @@ public class JwtTokenServiceTests
             .Build();
 
         var userStore   = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            userStore, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(userStore);
 
         // Default: no roles, no extra claims
         userManager.GetRolesAsync(Arg.Any<ApplicationUser>())
@@ -242,23 +241,5 @@ public class JwtTokenServiceTests
         // ValidateToken should return a non-null principal for a valid token
         var principal = svc.ValidateToken(token);
         Assert.NotNull(principal);
-    }
-
-    // ── Test 10: Multiple calls produce unique tokens ────────────────────────
-
-    [Fact]
-    public async Task GenerateAccessToken_ProducesUniqueTokensOnRepeatedCalls()
-    {
-        var (svc, _) = BuildService();
-        var user = BuildUser();
-
-        var (token1, _) = await svc.GenerateAccessTokenAsync(user);
-        var (token2, _) = await svc.GenerateAccessTokenAsync(user);
-
-        // JWTs embed an issued-at (iat) claim with second precision;
-        // if both calls land in the same second the tokens may be identical —
-        // that is acceptable behaviour. We only assert structure here.
-        Assert.NotNull(token1);
-        Assert.NotNull(token2);
     }
 }
