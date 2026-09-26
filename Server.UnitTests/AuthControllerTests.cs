@@ -334,8 +334,6 @@ public class AuthControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
 
-    // ── Bonus Test 7: FindByName returns null, FindByEmail also null → same as wrong password ─
-
     // ── Bonus Test 8: Successful login with RememberMe=true issues refresh token ─
 
     [Fact]

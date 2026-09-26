@@ -58,8 +58,8 @@ public class EspnCacheServiceTests
     // The service's constructor kicks off its refresh loop as a fire-and-forget background task
     // (only the immediate first run matters in these tests — the PeriodicTimer's 5-minute interval
     // never ticks again within a test's lifetime). Fixed Task.Delay windows racing that background
-    // work are flaky under CI load (observed: EspnCacheServiceTests.ScoresChanged_Fires_WhenDataChanges
-    // failed in CI while passing locally — a CPU-contention timing miss, not a logic bug). This waits
+    // work are flaky under CI load (observed: a ScoresChanged test here failed in CI while passing
+    // locally — a CPU-contention timing miss, not a logic bug). This waits
     // for the actual ScoresChanged fire instead of gambling on a fixed wall-clock window.
     private static async Task WaitForScoresChangedAsync(EspnCacheService svc, TimeSpan? timeout = null)
     {
@@ -141,7 +141,8 @@ public class EspnCacheServiceTests
     }
 
     // -----------------------------------------------------------------------
-    // ScoresChanged — fires when data changes, silent when unchanged/null
+    // ScoresChanged — silent when the API returns null (change detection itself is
+    // PeriodicRefreshCacheTests')
     // -----------------------------------------------------------------------
 
     [Fact]

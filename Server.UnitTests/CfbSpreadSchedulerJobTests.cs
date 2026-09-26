@@ -55,6 +55,19 @@ public class CfbSpreadSchedulerJobTests
     }
 
     [Fact]
+    public async Task Execute_PastLockTime_NoData_FiresNowAsCatchUp()
+    {
+        _repo.GetAllWeekConfigsAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(-1)));
+
+        await BuildJob().Execute(_context);
+
+        await _scheduler.Received(1).ScheduleJob(
+            Arg.Is<IJobDetail>(j => j.JobType == typeof(CfbSpreadJob)),
+            Arg.Any<ITrigger>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Execute_PastLockTime_HasData_Skipped()
     {
         _repo.GetAllWeekConfigsAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(-1)));

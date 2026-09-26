@@ -7,9 +7,10 @@ using Xunit;
 namespace FourPlayWebApp.Server.UnitTests;
 
 /// <summary>
-/// LeagueInviteLinkService revokes links with a bulk ExecuteUpdateAsync. CLAUDE.md: a bulk EF
-/// operation must be proven on real Postgres — SQLite translates filters Npgsql can silently
-/// no-op on, leaving rows untouched. LeagueInviteLinkServiceTests covers the rest on SQLite.
+/// LeagueInviteLinkService revokes links with a bulk ExecuteUpdateAsync, which CLAUDE.md requires
+/// to be proven on real Postgres (a SQLite pass says nothing about Npgsql's translation). Its filter
+/// is scalar (league id + not revoked); a future `.Contains(ids)`-shaped bulk update would need its
+/// own test here. LeagueInviteLinkServiceTests covers the rest on SQLite.
 /// </summary>
 [Collection(PostgresCollection.Name)]
 public class LeagueInviteLinkServicePostgresTests(PostgresFixture postgres) {
@@ -31,6 +32,15 @@ public class LeagueInviteLinkServicePostgresTests(PostgresFixture postgres) {
         ExpiresAt = DateTimeOffset.UtcNow.AddHours(12), IsRevoked = false,
     };
 
+    // The container is shared across the collection: leave nothing behind.
+    private async Task DeleteSeededAsync(string ownerId) {
+        await using var db = postgres.OpenDb();
+        db.LeagueInviteLinks.RemoveRange(await db.LeagueInviteLinks.Where(l => l.CreatedByUserId == ownerId).ToListAsync());
+        db.LeagueInfo.RemoveRange(await db.LeagueInfo.Where(l => l.OwnerUserId == ownerId).ToListAsync());
+        db.Users.RemoveRange(await db.Users.Where(u => u.Id == ownerId).ToListAsync());
+        await db.SaveChangesAsync();
+    }
+
     private async Task<List<LeagueInviteLink>> LinksAsync(int leagueId) {
         await using var db = postgres.OpenDb();
         return await db.LeagueInviteLinks.Where(l => l.LeagueId == leagueId).ToListAsync();
@@ -39,22 +49,29 @@ public class LeagueInviteLinkServicePostgresTests(PostgresFixture postgres) {
     [Fact]
     public async Task GenerateAsync_RevokesTheLeaguesActiveLink_OnPostgres() {
         var (ownerId, leagueA, leagueB) = await SeedTwoLeaguesWithActiveLinksAsync();
+        try {
+            var fresh = await new LeagueInviteLinkService(postgres.Factory()).GenerateAsync(leagueA, ownerId);
 
-        var fresh = await new LeagueInviteLinkService(postgres.Factory()).GenerateAsync(leagueA, ownerId);
-
-        var linksA = await LinksAsync(leagueA);
-        Assert.Equal(2, linksA.Count);
-        Assert.Equal(fresh.Token, Assert.Single(linksA, l => !l.IsRevoked).Token);
-        Assert.False(Assert.Single(await LinksAsync(leagueB)).IsRevoked);
+            var linksA = await LinksAsync(leagueA);
+            Assert.Equal(2, linksA.Count);
+            Assert.Equal(fresh.Token, Assert.Single(linksA, l => !l.IsRevoked).Token);
+            Assert.False(Assert.Single(await LinksAsync(leagueB)).IsRevoked);
+        } finally {
+            await DeleteSeededAsync(ownerId);
+        }
     }
 
     [Fact]
     public async Task RevokeAsync_RevokesOnlyThatLeaguesActiveLink_OnPostgres() {
-        var (_, leagueA, leagueB) = await SeedTwoLeaguesWithActiveLinksAsync();
+        var (ownerId, leagueA, leagueB) = await SeedTwoLeaguesWithActiveLinksAsync();
+        try {
+            await new LeagueInviteLinkService(postgres.Factory()).RevokeAsync(leagueA);
 
-        await new LeagueInviteLinkService(postgres.Factory()).RevokeAsync(leagueA);
-
-        Assert.True(Assert.Single(await LinksAsync(leagueA)).IsRevoked);
-        Assert.False(Assert.Single(await LinksAsync(leagueB)).IsRevoked);
+            // Revoked, and no replacement created.
+            Assert.True(Assert.Single(await LinksAsync(leagueA)).IsRevoked);
+            Assert.False(Assert.Single(await LinksAsync(leagueB)).IsRevoked);
+        } finally {
+            await DeleteSeededAsync(ownerId);
+        }
     }
 }

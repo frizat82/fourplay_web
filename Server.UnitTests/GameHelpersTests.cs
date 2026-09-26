@@ -174,6 +174,4 @@ public class GameHelpersTests
         var gameTimes = new[] { now.AddHours(-2), now.AddHours(1) };
         Assert.False(GameHelpers.AllGamesStarted(gameTimes, now));
     }
-
-    // ─── DaysHoursMinutesUntilNoonCst ─────────────────────────────────────────
 }

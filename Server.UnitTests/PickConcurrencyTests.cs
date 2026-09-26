@@ -4,7 +4,6 @@ using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Repositories;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.EntityFrameworkCore;
-using NSubstitute;
 using Xunit;
 
 namespace FourPlayWebApp.Server.UnitTests;

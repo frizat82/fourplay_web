@@ -347,6 +347,62 @@ public class LeaderboardServiceTests {
         return repo;
     }
 
+    // frizat-tf1: a user still awaiting a final score for the week isn't a loser yet — settling
+    // their week now (and paying out on an incomplete picture) would have to be silently
+    // re-computed once the score lands. Same fix as the CFB carve-out above, NFL side.
+    [Fact]
+    public async Task CalculateUserTotals_DoesNotSettle_WhenAnyUserHasMissingGameResultsForTheWeek() {
+        var dbFactory = new DbContextFactoryStub();
+        await dbFactory.PopulateUserTestData(2);
+        await dbFactory.PopulateScoresTestDataAsync(1);
+        var repository = new LeagueRepository(dbFactory);
+        var dbContext = await dbFactory.CreateDbContextAsync();
+
+        var league = dbContext.LeagueJuiceMapping.First();
+        league.WeeklyCost = 10;
+        await dbContext.SaveChangesAsync();
+
+        var users = dbContext.Users.Take(2).ToList();
+        var leaderboard = new List<LeaderboardModel> {
+            new() { User = users[0], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Won }] },
+            new() { User = users[1], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.MissingGameResults }] },
+        };
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), repository, TimeProvider.System);
+        var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 1);
+
+        Assert.All(result, u => Assert.Equal(0, u.WeekResults[0].Score));
+        Assert.Equal(0, result.Sum(u => u.Total));
+    }
+
+    // Once at least one decided winner AND one decided loser exist, they settle against each
+    // other provisionally even while a third user's pick is still pending — only the pending
+    // user's own outcome stays unresolved.
+    [Fact]
+    public async Task CalculateUserTotals_SettlesDecidedUsersProvisionally_WhenOneUserIsStillPending() {
+        var dbFactory = new DbContextFactoryStub();
+        await dbFactory.PopulateUserTestData(3);
+        await dbFactory.PopulateScoresTestDataAsync(1);
+        var repository = new LeagueRepository(dbFactory);
+        var dbContext = await dbFactory.CreateDbContextAsync();
+
+        var league = dbContext.LeagueJuiceMapping.First();
+        league.WeeklyCost = 10;
+        await dbContext.SaveChangesAsync();
+
+        var users = dbContext.Users.Take(3).ToList();
+        var leaderboard = new List<LeaderboardModel> {
+            new() { User = users[0], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Won }] },
+            new() { User = users[1], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Lost }] },
+            new() { User = users[2], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.MissingGameResults }] },
+        };
+        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), repository, TimeProvider.System);
+        var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 1);
+
+        Assert.Equal(10, result.Single(u => u.User.Id == users[0].Id).WeekResults[0].Score);
+        Assert.Equal(-10, result.Single(u => u.User.Id == users[1].Id).WeekResults[0].Score);
+        Assert.Equal(0, result.Single(u => u.User.Id == users[2].Id).WeekResults[0].Score);
+    }
+
     [Fact]
     public async Task NflBuildLeaderboard_ReturnsMissingGameResults_NotMissingPicks_WhenGamesHaventStartedYet() {
         var userId = Guid.NewGuid().ToString();

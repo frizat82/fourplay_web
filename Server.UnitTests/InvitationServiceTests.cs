@@ -4,7 +4,6 @@ using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Xunit;
@@ -211,28 +210,24 @@ namespace FourPlayWebApp.Server.UnitTests
         public async Task CreateInvitationAsync_ConcurrentCallsForSameNewPair_BothSucceed_ExactlyOneRowCreated()
         {
             var dbName = nameof(CreateInvitationAsync_ConcurrentCallsForSameNewPair_BothSucceed_ExactlyOneRowCreated);
-            await using var keepAlive = new SqliteConnection($"Data Source={dbName};Mode=Memory;Cache=Shared");
-            await keepAlive.OpenAsync();
-            await using (var init = SqliteTestDb.Open(dbName)) { await init.Database.EnsureCreatedAsync(); }
-            await using (var seed = SqliteTestDb.Open(dbName)) {
-                seed.Users.Add(new ApplicationUser {
-                    Id = "owner", UserName = "owner", NormalizedUserName = "OWNER", Email = "owner@example.com",
-                    SecurityStamp = Guid.NewGuid().ToString(), ConcurrencyStamp = Guid.NewGuid().ToString(),
-                });
-                seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
-                await seed.SaveChangesAsync();
-            }
-            var factory = SqliteTestDb.Factory(dbName);
-            var emailSender = Substitute.For<IEmailSender>();
-            var serviceA = new InvitationService(factory, emailSender);
-            var serviceB = new InvitationService(factory, emailSender);
+            await SqliteTestDb.WithDb(dbName, async factory =>
+            {
+                await using (var seed = SqliteTestDb.Open(dbName)) {
+                    await SqliteTestDb.SeedUser(seed, "owner");
+                    seed.LeagueInfo.Add(new LeagueInfo { Id = 1, LeagueName = "Test", OwnerUserId = "owner" });
+                    await seed.SaveChangesAsync();
+                }
+                var emailSender = Substitute.For<IEmailSender>();
+                var serviceA = new InvitationService(factory, emailSender);
+                var serviceB = new InvitationService(factory, emailSender);
 
-            await Task.WhenAll(
-                serviceA.CreateInvitationAsync("race@example.com", "owner", leagueId: 1),
-                serviceB.CreateInvitationAsync("race@example.com", "owner", leagueId: 1));
+                await Task.WhenAll(
+                    serviceA.CreateInvitationAsync("race@example.com", "owner", leagueId: 1),
+                    serviceB.CreateInvitationAsync("race@example.com", "owner", leagueId: 1));
 
-            await using var verify = SqliteTestDb.Open(dbName);
-            Assert.Equal(1, await verify.Invitations.CountAsync(i => i.Email == "race@example.com" && i.LeagueId == 1));
+                await using var verify = SqliteTestDb.Open(dbName);
+                Assert.Equal(1, await verify.Invitations.CountAsync(i => i.Email == "race@example.com" && i.LeagueId == 1));
+            });
         }
     }
 }
