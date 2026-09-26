@@ -23,6 +23,7 @@ public sealed class PeriodicRefreshCache<T> : IAsyncDisposable where T : class
     private readonly Func<T, string> _fingerprint;
     private readonly Func<T?, TimeSpan> _intervalSelector;
     private readonly TimeSpan _initialDelay;
+    private readonly TimeSpan _intervalOnError;
     private readonly CancellationTokenSource _cts = new();
     private string? _lastFingerprint;
 
@@ -33,12 +34,14 @@ public sealed class PeriodicRefreshCache<T> : IAsyncDisposable where T : class
         Func<Task<T?>> fetch,
         Func<T, string> fingerprint,
         Func<T?, TimeSpan> intervalSelector,
-        TimeSpan? initialDelay = null)
+        TimeSpan? initialDelay = null,
+        TimeSpan? intervalOnError = null)
     {
         _fetch = fetch;
         _fingerprint = fingerprint;
         _intervalSelector = intervalSelector;
         _initialDelay = initialDelay ?? TimeSpan.Zero;
+        _intervalOnError = intervalOnError ?? TimeSpan.FromMinutes(1);
         _ = RefreshLoopAsync();
     }
 
@@ -49,13 +52,28 @@ public sealed class PeriodicRefreshCache<T> : IAsyncDisposable where T : class
         {
             while (!_cts.IsCancellationRequested)
             {
-                await Task.Delay(_intervalSelector(Current), _cts.Token);
+                await Task.Delay(NextInterval(), _cts.Token);
                 await RefreshAsync();
             }
         }
         catch (OperationCanceledException)
         {
             // Cancelled — expected on dispose.
+        }
+    }
+
+    // The selector runs outside RefreshAsync's try/catch — a throw here (e.g. a malformed payload)
+    // must not end the loop for the life of the process.
+    private TimeSpan NextInterval()
+    {
+        try
+        {
+            return _intervalSelector(Current);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "PeriodicRefreshCache<{Type}> interval selector failed; retrying in {Delay}", typeof(T).Name, _intervalOnError);
+            return _intervalOnError;
         }
     }
 

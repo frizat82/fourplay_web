@@ -16,8 +16,11 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
     private readonly ILeagueRepository _leagueRepository;
     private readonly SettledScoreCache _settledCache;
     private readonly PeriodicRefreshCache<EspnScores> _cache;
-    // 2x the slowest poll interval: a healthy poller always refreshes well within it.
+    // Fresh for 2x the slow poll: during games the poller refreshes every 30s. Between games it
+    // sleeps for hours, so the snapshot lapses and requests fetch for themselves — through
+    // EspnDayCache, so that's an in-memory read for any day that can't have changed.
     private readonly PolledItemSnapshot _polled = new(2 * EspnPollCadence.SlowPollInterval);
+    private readonly ScorePollSchedule _pollSchedule = new();
 
     private static string WeekCacheKey(int season, int nflWeek) => $"nfl-week-scores_{season}_{nflWeek}";
 
@@ -33,26 +36,30 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         _leagueRepository = leagueRepository;
         _settledCache = new SettledScoreCache(historicalCache);
         _cache = new PeriodicRefreshCache<EspnScores>(
-            fetch: async () => {
+            fetch: () => _pollSchedule.PollAsync(async () => {
+                var configs = await leagueRepository.GetNflSeasonWeekConfigsAsync();
+                // When to wake next once nothing is on: each week flipping current, each first kickoff.
+                var wakePoints = SeasonWindowResolver.ChangePoints(configs.Select(c =>
+                        new SeasonWindowResolver.WeekWindow(c.Season, c.WeekStartDatetime, c.WeekEndDatetime, c.SpreadLockDatetime)))
+                    .Concat(configs.Where(c => c.FirstGameOfWeekStartDatetime.HasValue).Select(c => c.FirstGameOfWeekStartDatetime!.Value))
+                    .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)))
+                    .ToList();
+
                 // NflCurrentWeekService always resolves *something* now (most-recently-completed
                 // or soonest-upcoming week, for UI-default purposes) — so its result alone can't
                 // gate off-season ESPN polling. IsSeasonActiveAsync is the purpose-built,
                 // season-level check for that (see SeasonWindowResolver).
-                if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return _polled.Clear();
+                if (!await nflCurrentWeekService.IsSeasonActiveAsync()) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
 
                 var week = await nflCurrentWeekService.GetCurrentWeekAsync();
-                var configs = await leagueRepository.GetNflSeasonWeekConfigsAsync();
                 var matchingConfig = configs.FirstOrDefault(c => c.Season == week.Season && c.WeekId == week.WeekId);
-                if (matchingConfig is null) return _polled.Clear();
-                return _polled.Record(WeekCacheKey(matchingConfig.Season, matchingConfig.WeekId),
-                    await _fetcher.FetchForWeekAsync(matchingConfig));
-            },
+                if (matchingConfig is null) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
+                // Every NFL week has games — no scoreboard means ESPN failed.
+                return new(_polled.Record(WeekCacheKey(matchingConfig.Season, matchingConfig.WeekId),
+                    await _fetcher.FetchForWeekAsync(matchingConfig)), wakePoints, ExpectedGames: true);
+            }, DateTimeOffset.UtcNow),
             fingerprint: EspnScoresFingerprint.Compute,
-            intervalSelector: current => AdaptivePollInterval.Compute(
-                current,
-                EspnPollCadence.KickoffTimes,
-                EspnPollCadence.LiveGameDuration, EspnPollCadence.FastPollInterval, EspnPollCadence.SlowPollInterval,
-                DateTimeOffset.UtcNow),
+            intervalSelector: current => _pollSchedule.NextInterval(current, DateTimeOffset.UtcNow),
             initialDelay: initialDelay);
     }
 

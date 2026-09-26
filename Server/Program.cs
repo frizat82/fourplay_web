@@ -59,6 +59,8 @@ builder.Services.AddTransient<IEmailSender<ApplicationUser>, GoogleEmailSender>(
 // leaning on an access-control gap rather than a sanctioned API contract. Tracked as a real
 // follow-up: move off this endpoint onto a licensed sports-data provider.
 const string espnUserAgent = "curl/8.14.1";
+// One cache of ESPN day responses for both sports' API services (see EspnDayCache).
+builder.Services.AddSingleton<EspnDayCache>();
 builder.Services.AddHttpClient<IEspnCoreOddsService, EspnCoreOddsService>(x => {
     x.BaseAddress = new Uri("https://sports.core.api.espn.com");
     x.DefaultRequestHeaders.UserAgent.ParseAdd(espnUserAgent);
@@ -105,8 +107,11 @@ builder.Services.AddHttpClient<IJerseyCacheService, JerseyCacheService>(c => {
     c.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/html"));
 });
 #endregion
-builder.Services.AddDbContextFactory<ApplicationDbContext>(options => {
+// Evicts the schedule-table cache after any save that touches those tables (see ScheduleCache).
+builder.Services.AddSingleton<ScheduleCacheInterceptor>();
+builder.Services.AddDbContextFactory<ApplicationDbContext>((sp, options) => {
     options.UseNpgsql(connectionString);
+    options.AddInterceptors(sp.GetRequiredService<ScheduleCacheInterceptor>());
     if (builder.Environment.IsDevelopment()) {
         options.EnableSensitiveDataLogging();
         options.EnableDetailedErrors();

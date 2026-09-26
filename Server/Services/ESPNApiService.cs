@@ -8,48 +8,29 @@ using ILogger=Microsoft.Extensions.Logging.ILogger;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logger)
+// dayCache: optional so tests that don't care can omit it (every day then goes to the HttpClient).
+public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logger, EspnDayCache? dayCache = null)
     : IEspnApiService {
     private const string _scoreboardEndpoint = "/apis/site/v2/sports/football/nfl/scoreboard";
 
     // frizat-11t (NFL mirror): scoped to the caller's own control-table window, not week=N — see
-    // IEspnApiService's doc comment for why. frizat-4gn: ESPN broke the dates=START-END range
-    // query (HTTP 400 for every range, every date, every ESPN sport we tested — not transient),
-    // so this now tries the (cheap, single-call) range query first, and falls back to fetching
-    // one day at a time via EspnDateRangeFetcher only if that fails. If ESPN ever fixes the range
-    // endpoint again, the range path resumes taking over with zero further changes needed.
-    public async Task<EspnScores?> GetScoresByDateRangeAsync(DateOnly startDate, DateOnly endDate, bool postSeason = false) {
-        var rangeResult = await TryGetScoresByRangeAsync(startDate, endDate, postSeason);
-        if (rangeResult is not null) return rangeResult;
-
-        logger.LogWarning("ESPN Date Range Not Working falling back to Days");
-        return await EspnDateRangeFetcher.FetchRangeAsync(startDate, endDate, date => GetScoresForSingleDayAsync(date, postSeason));
-    }
-
-    // Deliberately no Error-level logging here — right now every call takes this path and falls
-    // back (ESPN's range endpoint is confirmed broken), so logging that as an error would just be
-    // permanent noise. GetScoresForSingleDayAsync's own error logging below covers the case that
-    // actually needs attention: the fallback itself failing.
-    private async Task<EspnScores?> TryGetScoresByRangeAsync(DateOnly startDate, DateOnly endDate, bool postSeason) {
-        try {
-            var dates = $"{startDate:yyyyMMdd}-{endDate:yyyyMMdd}";
-            var response = await httpClient.GetAsync(
-                $"{_scoreboardEndpoint}?dates={dates}&seasontype={(postSeason ? 3 : 2)}&limit=100");
-            if (!response.IsSuccessStatusCode) return null;
-            return await ParseResponseAsync(response);
-        }
-        catch (HttpRequestException) {
-            return null;
-        }
-    }
+    // IEspnApiService's doc comment for why. frizat-4gn: ESPN answers only single-day dates= queries
+    // (a dates=START-END range is HTTP 400), so the window is fetched one day at a time — each day
+    // through EspnDayCache, so only days that can still change reach ESPN.
+    public Task<EspnScores?> GetScoresByDateRangeAsync(DateOnly startDate, DateOnly endDate, bool postSeason = false) =>
+        EspnDateRangeFetcher.FetchRangeAsync(startDate, endDate, date => GetScoresForSingleDayAsync(date, postSeason));
 
     // seasontype still needs to be passed explicitly (2=regular, 3=postseason) since ESPN's date
     // filter alone doesn't disambiguate a rescheduled/rare doubleheader week that straddles both
     // season types.
-    private async Task<EspnScores?> GetScoresForSingleDayAsync(DateOnly date, bool postSeason) {
+    private Task<EspnScores?> GetScoresForSingleDayAsync(DateOnly date, bool postSeason) {
+        var url = $"{_scoreboardEndpoint}?dates={date:yyyyMMdd}&seasontype={(postSeason ? 3 : 2)}&limit=100";
+        return dayCache.GetOrFetchDayAsync(url, () => FetchDayAsync(url));
+    }
+
+    private async Task<EspnScores?> FetchDayAsync(string url) {
         try {
-            var response = await httpClient.GetAsync(
-                $"{_scoreboardEndpoint}?dates={date:yyyyMMdd}&seasontype={(postSeason ? 3 : 2)}&limit=100");
+            var response = await httpClient.GetAsync(url);
             response.EnsureSuccessStatusCode();
             return await ParseResponseAsync(response);
         }
