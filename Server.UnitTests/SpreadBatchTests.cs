@@ -32,13 +32,12 @@ public class SpreadBatchTests {
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { LeagueId = 1, Season = 2025, Juice = 10 });
         var cache = new MemoryCache(new MemoryCacheOptions());
 
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            Substitute.For<IUserStore<ApplicationUser>>(), null, null, null, null, null, null, null, null);
-        var ctrl = new LeagueController(
-            cache, repo, NullLogger<LeagueController>.Instance, userManager,
-            new SpreadCalculatorProvider(repo, cache), Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(), Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var userManager = UserManagerStub.Create(Substitute.For<IUserStore<ApplicationUser>>());
+        var ctrl = LeagueControllerFactory.Build(
+            repo,
+            userManager,
+            spreadCalculatorProvider: new SpreadCalculatorProvider(repo, cache),
+            memoryCache: cache);
         ctrl.ControllerContext = new ControllerContext {
             HttpContext = new DefaultHttpContext {
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, UserId)], "test")),

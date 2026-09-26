@@ -41,17 +41,8 @@ public class PickCountsEndpointTests
     private static LeagueController Controller(ILeagueRepository repo, ClaimsPrincipal principal, IEspnCacheService? espn = null)
     {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
-        var controller = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            repo,
-            NullLogger<LeagueController>.Instance,
-            userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            espn ?? Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var userManager = UserManagerStub.Create(store);
+        var controller = LeagueControllerFactory.Build(repo, userManager, espnCacheService: espn);
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = principal } };
         return controller;
     }

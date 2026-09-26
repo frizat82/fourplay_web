@@ -83,8 +83,7 @@ public class DemoDataSeederIdempotencyTests : IClassFixture<PostgresSeederFixtur
     private static UserManager<ApplicationUser> BuildUserManager(ApplicationUser adminUser)
     {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var mgr = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var mgr = UserManagerStub.Create(store);
         mgr.FindByEmailAsync(AdminEmail).Returns(adminUser);
         mgr.FindByNameAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
         return mgr;

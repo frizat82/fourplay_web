@@ -26,7 +26,7 @@ public class LeagueJuiceReminderJobTests
         Environment.SetEnvironmentVariable("APP_URL", "https://ivleague.com");
         _repo = Substitute.For<ILeagueRepository>();
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        _userManager = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        _userManager = UserManagerStub.Create(store);
         _emailSender = Substitute.For<IEmailSender>();
         _observer = Substitute.For<IJobObserverService>();
         _context = Substitute.For<IJobExecutionContext>();

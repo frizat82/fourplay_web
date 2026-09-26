@@ -40,8 +40,7 @@ public class JwtTokenServiceTests
             .Build();
 
         var userStore   = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            userStore, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(userStore);
 
         // Default: no roles, no extra claims
         userManager.GetRolesAsync(Arg.Any<ApplicationUser>())

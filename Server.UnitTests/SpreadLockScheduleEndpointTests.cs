@@ -27,19 +27,9 @@ public class SpreadLockScheduleEndpointTests
     private static LeagueController BuildLeagueController(ILeagueRepository repo)
     {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(store);
 
-        var controller = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            repo,
-            NullLogger<LeagueController>.Instance,
-            userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var controller = LeagueControllerFactory.Build(repo, userManager);
 
         controller.ControllerContext = new ControllerContext
         {

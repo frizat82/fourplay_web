@@ -40,8 +40,7 @@ public class EmailProcessTests
         IEmailSender<ApplicationUser> emailSenderApp)
     {
         var invitationService = Substitute.For<IInvitationService>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            Substitute.For<IUserStore<ApplicationUser>>(), null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(Substitute.For<IUserStore<ApplicationUser>>());
         return new InvitationController(
             invitationService, emailSenderApp,
             userManager, Substitute.For<ILeagueRepository>(), Substitute.For<ILeagueMembershipInviteService>());
@@ -189,8 +188,7 @@ public class EmailProcessTests
         invitationService.MarkInvitationAsUsedAsync(inviteCode, Arg.Any<string>()).Returns(true);
 
         var userStore = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            userStore, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(userStore);
 
         var createdUser = new ApplicationUser { Id = "new-user-id", UserName = username, Email = email };
 
@@ -249,8 +247,7 @@ public class EmailProcessTests
         invitationService.MarkInvitationAsUsedAsync(inviteCode, Arg.Any<string>()).Returns(true);
 
         var userStore = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            userStore, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(userStore);
 
         var createdUser = new ApplicationUser { Id = "new-user-id-2", UserName = "newuser2", Email = email };
         userManager.FindByEmailAsync(email).Returns((ApplicationUser?)null);

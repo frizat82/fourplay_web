@@ -21,8 +21,7 @@ public class InvitationControllerTests
         invitationService ??= Substitute.For<IInvitationService>();
         var leagueRepo = Substitute.For<ILeagueRepository>();
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(store);
         var membershipInviteService = Substitute.For<ILeagueMembershipInviteService>();
         var ctrl = new InvitationController(
             invitationService, Substitute.For<IEmailSender<ApplicationUser>>(),

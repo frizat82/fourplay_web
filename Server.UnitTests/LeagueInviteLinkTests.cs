@@ -33,19 +33,14 @@ public class LeagueInviteLinkTests
         ILeagueMembershipInviteService? membershipInviteService = null)
     {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(store);
 
-        var controller = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            repo ?? Substitute.For<ILeagueRepository>(),
-            NullLogger<LeagueController>.Instance,
+        var controller = LeagueControllerFactory.Build(
+            repo,
             userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            invitationService ?? Substitute.For<IInvitationService>(),
-            linkService ?? Substitute.For<ILeagueInviteLinkService>(),
-            membershipInviteService ?? Substitute.For<ILeagueMembershipInviteService>());
+            invitationService: invitationService,
+            leagueInviteLinkService: linkService,
+            membershipInviteService: membershipInviteService);
 
         controller.ControllerContext = new ControllerContext
         {

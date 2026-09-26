@@ -22,20 +22,10 @@ public class LeagueControllerDtoTests
     {
         if (userManager is null) {
             var store = Substitute.For<IUserStore<ApplicationUser>>();
-            userManager = Substitute.For<UserManager<ApplicationUser>>(
-                store, null, null, null, null, null, null, null, null);
+            userManager = UserManagerStub.Create(store);
         }
 
-        var controller = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            repo,
-            NullLogger<LeagueController>.Instance,
-            userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var controller = LeagueControllerFactory.Build(repo, userManager);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -155,8 +145,7 @@ public class LeagueControllerDtoTests
         repo.GetUsersAsync().Returns([admin, regular]);
 
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(store);
         userManager.GetUsersInRoleAsync("Administrator").Returns([admin]);
 
         var result = await BuildController(repo, userManager).GetUsers();

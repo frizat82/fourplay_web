@@ -30,8 +30,7 @@ public class DemoDataSeederReplayClockTests {
 
     private static UserManager<ApplicationUser> BuildUserManager() {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        return Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        return UserManagerStub.Create(store);
     }
 
     private static IConfiguration BuildConfiguration() =>

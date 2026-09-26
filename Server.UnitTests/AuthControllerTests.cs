@@ -31,8 +31,7 @@ public class AuthControllerTests
     private static UserManager<ApplicationUser> BuildUserManager()
     {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var mgr   = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var mgr   = UserManagerStub.Create(store);
         // Reasonable defaults
         mgr.GetAccessFailedCountAsync(Arg.Any<ApplicationUser>()).Returns(0);
         return mgr;

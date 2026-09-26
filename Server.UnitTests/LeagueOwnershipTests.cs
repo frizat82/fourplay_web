@@ -33,19 +33,9 @@ public class LeagueOwnershipTests
     private static LeagueController BuildController(ClaimsPrincipal principal)
     {
         var store       = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(store);
 
-        var controller = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            Substitute.For<ILeagueRepository>(),
-            NullLogger<LeagueController>.Instance,
-            userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var controller = LeagueControllerFactory.Build(userManager: userManager);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -91,19 +81,9 @@ public class LeagueOwnershipTests
         repo.GetLeagueUserMappingsAsync(Arg.Any<ApplicationUser>()).Returns([]);
 
         var store       = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(store);
 
-        var controller = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            repo,
-            NullLogger<LeagueController>.Instance,
-            userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var controller = LeagueControllerFactory.Build(repo, userManager);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -125,19 +105,9 @@ public class LeagueOwnershipTests
         repo.GetLeagueUserMappingsAsync(Arg.Any<ApplicationUser>()).Returns([]);
 
         var store       = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(store);
 
-        var controller = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            repo,
-            NullLogger<LeagueController>.Instance,
-            userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var controller = LeagueControllerFactory.Build(repo, userManager);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -158,18 +128,12 @@ public class LeagueOwnershipTests
         var invSvc = Substitute.For<IInvitationService>();
         var membershipInviteSvc = Substitute.For<ILeagueMembershipInviteService>();
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
-        var ctrl = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
+        var userManager = UserManagerStub.Create(store);
+        var ctrl = LeagueControllerFactory.Build(
             repo,
-            NullLogger<LeagueController>.Instance,
             userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            invSvc,
-            Substitute.For<ILeagueInviteLinkService>(),
-            membershipInviteSvc);
+            invitationService: invSvc,
+            membershipInviteService: membershipInviteSvc);
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = principal }
@@ -1119,18 +1083,8 @@ public class LeagueOwnershipTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
 
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
-        var ctrl = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            repo,
-            NullLogger<LeagueController>.Instance,
-            userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            invSvc,
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var userManager = UserManagerStub.Create(store);
+        var ctrl = LeagueControllerFactory.Build(repo, userManager, invitationService: invSvc);
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }
@@ -1152,18 +1106,8 @@ public class LeagueOwnershipTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
 
         var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
-        var ctrl = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            repo,
-            NullLogger<LeagueController>.Instance,
-            userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            invSvc,
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var userManager = UserManagerStub.Create(store);
+        var ctrl = LeagueControllerFactory.Build(repo, userManager, invitationService: invSvc);
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }
