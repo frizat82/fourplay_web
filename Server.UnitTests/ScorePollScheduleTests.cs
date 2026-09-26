@@ -96,6 +96,9 @@ public class ScorePollScheduleTests {
         Assert.Equal(2 * EspnPollCadence.FastPollInterval, schedule.NextInterval(scores, time.GetUtcNow()));
     }
 
+    private static Task FailAt(ScorePollSchedule schedule, TimeSpan at, string error) =>
+        Assert.ThrowsAsync<HttpRequestException>(() => schedule.PollAsync(() => throw new HttpRequestException(error), Now + at));
+
     // Someone should hear about it: once ESPN has been failing for 10 minutes straight, the outage
     // goes to the job-failure channel (Discord). Every failed poll after that is handed over under
     // the same outage key — the notifier's own dedupe turns that into one message, and a send that
@@ -104,8 +107,7 @@ public class ScorePollScheduleTests {
     public async Task AnOutage_IsReportedAfterTenMinutes_UnderOneKey() {
         var notifier = Substitute.For<IJobFailureNotifier>();
         var schedule = new ScorePollSchedule("CFB live scores", notifier);
-        Task Fail(TimeSpan at) => Assert.ThrowsAsync<HttpRequestException>(() =>
-            schedule.PollAsync(() => throw new HttpRequestException("403 (Forbidden)"), Now + at));
+        Task Fail(TimeSpan at) => FailAt(schedule, at, "403 (Forbidden)");
 
         await Fail(TimeSpan.Zero);
         await Fail(TimeSpan.FromMinutes(5));
@@ -126,8 +128,7 @@ public class ScorePollScheduleTests {
     public async Task AfterRecovery_ANewOutageIsReportedUnderANewKey() {
         var notifier = Substitute.For<IJobFailureNotifier>();
         var schedule = new ScorePollSchedule("NFL live scores", notifier);
-        Task Fail(TimeSpan at) => Assert.ThrowsAsync<HttpRequestException>(() =>
-            schedule.PollAsync(() => throw new HttpRequestException("timeout"), Now + at));
+        Task Fail(TimeSpan at) => FailAt(schedule, at, "timeout");
 
         await Fail(TimeSpan.Zero);
         await Fail(TimeSpan.FromMinutes(10));
