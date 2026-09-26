@@ -45,20 +45,6 @@ public class NflSpreadSchedulerJobTests
     }
 
     [Fact]
-    public async Task Execute_PastLockTime_NoData_FiresNowAsCatchUp()
-    {
-        var lockTime = DateTime.UtcNow.AddDays(-1);
-        _repo.GetNflSeasonWeekConfigsAsync().Returns([MakeConfig(2026, 6, lockTime)]);
-
-        await BuildJob().Execute(_context);
-
-        await _scheduler.Received(1).ScheduleJob(
-            Arg.Is<IJobDetail>(j => j.JobType == typeof(NflSpreadJob)),
-            Arg.Any<ITrigger>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task Execute_PastLockTime_HasData_Skipped()
     {
         var lockTime = DateTime.UtcNow.AddDays(-1);

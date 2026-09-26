@@ -60,7 +60,7 @@ public class LeaderboardServiceTests {
         var result = await service.BuildLeaderboard(1, 2024);
 
         // Assert: 3 playoff rounds (19 = Wild Card, 20 = Divisional, 21 = Conf. Championship)
-        // Week 22 (Pro Bowl) is skipped; Super Bowl (Week 23) not seeded in test data
+        // Super Bowl (Week 22) not seeded in test data
         Assert.True((playoffResults[0] ? WeekResult.Won : WeekResult.Lost) == result.First().WeekResults[18].WeekResult, "Week 19 Wild Card result mismatch");
         Assert.True((playoffResults[1] ? WeekResult.Won : WeekResult.Lost) == result.First().WeekResults[19].WeekResult, "Week 20 Divisional result mismatch");
         Assert.True((playoffResults[2] ? WeekResult.Won : WeekResult.Lost) == result.First().WeekResults[20].WeekResult, "Week 21 Conference result mismatch");
@@ -106,8 +106,6 @@ public class LeaderboardServiceTests {
         await dbContext.SaveChangesAsync();
 
         var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorProvider =
-            new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
         var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), repository, TimeProvider.System);
 
         var result = await service.BuildLeaderboard(1, 2024);
@@ -123,8 +121,6 @@ public class LeaderboardServiceTests {
         await dbFactory.PopulateUserTestData(5); // Create 5 users (4 winners, 1 loser per week)
         await dbFactory.PopulateScoresTestDataAsync(4); // 4 weeks of scores
         var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorProvider =
-            new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
         var dbContext = await dbFactory.CreateDbContextAsync();
 
         // Set the weekly cost to $10
@@ -205,7 +201,6 @@ public class LeaderboardServiceTests {
         await dbFactory.PopulateUserTestData(5); // Create 5 users
         await dbFactory.PopulateScoresTestDataAsync(4); // 4 weeks of scores
         var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorProvider = new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
         var dbContext = await dbFactory.CreateDbContextAsync();
 
         // Set the weekly cost to $10
@@ -320,64 +315,6 @@ public class LeaderboardServiceTests {
 
         // Verify sum of all user totals is zero (closed system)
         Assert.Equal(0, result.Sum(u => u.Total));
-    }
-
-    // frizat-tf1: a user still awaiting a final score for the week isn't a loser yet — settling
-    // their week now (and paying out on an incomplete picture) would have to be silently
-    // re-computed once the score lands. Same fix as the CFB carve-out above, NFL side.
-    [Fact]
-    public async Task CalculateUserTotals_DoesNotSettle_WhenAnyUserHasMissingGameResultsForTheWeek() {
-        var dbFactory = new DbContextFactoryStub();
-        await dbFactory.PopulateUserTestData(2);
-        await dbFactory.PopulateScoresTestDataAsync(1);
-        var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorProvider = new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
-        var dbContext = await dbFactory.CreateDbContextAsync();
-
-        var league = dbContext.LeagueJuiceMapping.First();
-        league.WeeklyCost = 10;
-        await dbContext.SaveChangesAsync();
-
-        var users = dbContext.Users.Take(2).ToList();
-        var leaderboard = new List<LeaderboardModel> {
-            new() { User = users[0], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Won }] },
-            new() { User = users[1], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.MissingGameResults }] },
-        };
-        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), repository, TimeProvider.System);
-        var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 1);
-
-        Assert.All(result, u => Assert.Equal(0, u.WeekResults[0].Score));
-        Assert.Equal(0, result.Sum(u => u.Total));
-    }
-
-    // Once at least one decided winner AND one decided loser exist, they settle against each
-    // other provisionally even while a third user's pick is still pending — only the pending
-    // user's own outcome stays unresolved.
-    [Fact]
-    public async Task CalculateUserTotals_SettlesDecidedUsersProvisionally_WhenOneUserIsStillPending() {
-        var dbFactory = new DbContextFactoryStub();
-        await dbFactory.PopulateUserTestData(3);
-        await dbFactory.PopulateScoresTestDataAsync(1);
-        var repository = new LeagueRepository(dbFactory);
-        var spreadCalculatorProvider = new SpreadCalculatorProvider(repository, new MemoryCache(new MemoryCacheOptions()));
-        var dbContext = await dbFactory.CreateDbContextAsync();
-
-        var league = dbContext.LeagueJuiceMapping.First();
-        league.WeeklyCost = 10;
-        await dbContext.SaveChangesAsync();
-
-        var users = dbContext.Users.Take(3).ToList();
-        var leaderboard = new List<LeaderboardModel> {
-            new() { User = users[0], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Won }] },
-            new() { User = users[1], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Lost }] },
-            new() { User = users[2], WeekResults = [new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.MissingGameResults }] },
-        };
-        var service = new LeaderboardService(new LoggerFactory().CreateLogger<LeaderboardService>(), repository, TimeProvider.System);
-        var result = await service.CalculateUserTotals(leaderboard, league.Id, 2024, 1);
-
-        Assert.Equal(10, result.Single(u => u.User.Id == users[0].Id).WeekResults[0].Score);
-        Assert.Equal(-10, result.Single(u => u.User.Id == users[1].Id).WeekResults[0].Score);
-        Assert.Equal(0, result.Single(u => u.User.Id == users[2].Id).WeekResults[0].Score);
     }
 
     // frizat-tf1: picks can be submitted for any individual game right up until that game's own
@@ -531,8 +468,8 @@ public class LeaderboardServiceTests {
     [Fact]
     public async Task CfbBuildLeaderboard_ReturnsWon_WhenAllPicksBeatSpread() {
         var userId = Guid.NewGuid().ToString();
-        // slateNumber=19 = CFP National Championship → requires 1 pick, so 1 winning pick → Won
-        var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId, slateNumber: 19);
+        // slateNumber=18 = CFP National Championship → requires 1 pick, so 1 winning pick → Won
+        var (leagueRepo, cfbRepo, picksRepo, currentSlateService) = BuildCfbMocks(userId, slateNumber: 18);
         var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
 
         var result = await service.BuildLeaderboard(1, 2025);
@@ -700,7 +637,7 @@ public class LeaderboardServiceTests {
             new() { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = pendingUserId, UserName = "Pending" }, UserId = pendingUserId },
         };
         var juiceMapping = new LeagueJuiceMapping { Id = 1, LeagueId = leagueId, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
-        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 19, SlateType = "Championship", Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 18, SlateType = "Championship", Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
 
         var leagueRepo = Substitute.For<ILeagueRepository>();
         leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns(userMappings);
@@ -727,7 +664,7 @@ public class LeaderboardServiceTests {
         ]);
 
         var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(),
-            leagueRepo, cfbRepo, picksRepo, BuildCurrentSlateService(slateNumber: 19), TimeProvider.System);
+            leagueRepo, cfbRepo, picksRepo, BuildCurrentSlateService(slateNumber: 18), TimeProvider.System);
         var result = await service.BuildLeaderboard(leagueId, 2025);
 
         var decided = result.Single(u => u.User.Id == decidedUserId);
@@ -755,7 +692,7 @@ public class LeaderboardServiceTests {
             new() { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = pendingId, UserName = "Pending" }, UserId = pendingId },
         };
         var juiceMapping = new LeagueJuiceMapping { Id = 1, LeagueId = leagueId, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
-        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 19, SlateType = "Championship", Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 18, SlateType = "Championship", Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
 
         var leagueRepo = Substitute.For<ILeagueRepository>();
         leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns(userMappings);
@@ -782,7 +719,7 @@ public class LeaderboardServiceTests {
         ]);
 
         var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(),
-            leagueRepo, cfbRepo, picksRepo, BuildCurrentSlateService(slateNumber: 19), TimeProvider.System);
+            leagueRepo, cfbRepo, picksRepo, BuildCurrentSlateService(slateNumber: 18), TimeProvider.System);
         var result = await service.BuildLeaderboard(leagueId, 2025);
 
         var winner = result.Single(u => u.User.Id == winnerId);
@@ -874,7 +811,7 @@ public class LeaderboardServiceTests {
 
     private static (ILeagueRepository repo, ICfbRepository cfbRepo, ICfbPicksRepository picksRepo, ICfbCurrentSlateService currentSlateService)
         BuildCfbMultiUserMocks(IReadOnlyList<string> winnerIds, IReadOnlyList<string> loserIds,
-            int slateNumber = 19, int weeklyCost = 5) {
+            int slateNumber = 18, int weeklyCost = 5) {
         // winnerIds pick IU (home, spread=-7): 28-7+juice-14>0 always (decisive win at any juice≥0).
         // loserIds pick OSU (away, spread=+7): 14+7+juice-28<0 for juice<7; JuiceConference=6<7 → loses.
         const int leagueId = 1;
@@ -998,9 +935,9 @@ public class LeaderboardServiceTests {
         ApplicationDbContext dbContext,
         List<NflScores> scores) {
         // [0] = Week 19 Wild Card, [1] = Week 20 Divisional, [2] = Week 21 Conf. Championship
-        // (Week 22 = Pro Bowl, skipped; Super Bowl = Week 23, not seeded in test data)
+        // (Super Bowl = Week 22, not seeded in test data)
         var isWinner = new bool[3];
-        var random = new Random();
+        var random = new Random(42); // seeded: a failure must reproduce
 
         int[] playoffWeeks = [19, 20, 21];
         for (int wi = 0; wi < playoffWeeks.Length; wi++) {

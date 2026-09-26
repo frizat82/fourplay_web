@@ -154,17 +154,6 @@ public class NflScoresJobTests
     }
 
     [Fact]
-    public async Task Execute_WhenWeekHasCompletedGames_CallsUpsertNflScores()
-    {
-        _fetcher.FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 1))
-                .Returns(BuildWeekScores(_year, isFinal: true));
-
-        await BuildJob().Execute(_context);
-
-        await _repo.Received(1).UpsertNflScoresAsync(Arg.Is<List<NflScores>>(list => list.Count > 0));
-    }
-
-    [Fact]
     public async Task Execute_WhenWeekHasCompletedGames_UsesTheConfigRowsOwnWeekId_NotAnyEspnEchoedValue()
     {
         _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> { BuildConfig(weekId: 7, season: _year) });

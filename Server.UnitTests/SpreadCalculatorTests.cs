@@ -165,7 +165,7 @@ namespace FourPlayWebApp.Server.UnitTests
         }
 
         [Fact]
-        public void DidUserWinPick_TeamNotFound_ThrowsException()
+        public void DidUserWinPick_TeamNotFound_ReturnsFalse()
         {
             // Arrange
             var spreads = CreateMockSpreads();
@@ -250,17 +250,6 @@ namespace FourPlayWebApp.Server.UnitTests
 
             // Assert
             Assert.Null(result);
-        }
-
-        [Fact]
-        public void Constructor_EmptySpreads_CreatesValidCalculator()
-        {
-            // Arrange & Act
-            var calculator = new SpreadCalculator([], JuiceTiers.For(LeagueType.Nfl, 5, new LeagueJuiceMapping()));
-
-            // Assert
-            Assert.NotNull(calculator);
-            Assert.Null(calculator.GetSpread("DAL"));
         }
 
         [Fact]

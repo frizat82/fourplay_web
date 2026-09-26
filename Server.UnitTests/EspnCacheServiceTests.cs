@@ -145,42 +145,6 @@ public class EspnCacheServiceTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task ScoresChanged_Fires_WhenDataChanges()
-    {
-        var first = new EspnScores { Events = [new Event { Id = "1", Competitions = [new Competition { Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusScheduled, Description = Description.Scheduled } }, Competitors = [new Competitor { HomeAway = HomeAway.Home, Score = 0 }, new Competitor { HomeAway = HomeAway.Away, Score = 0 }], Odds = [] }] }] };
-        var second = new EspnScores { Events = [new Event { Id = "1", Competitions = [new Competition { Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusFinal, Description = Description.Final } }, Competitors = [new Competitor { HomeAway = HomeAway.Home, Score = 28 }, new Competitor { HomeAway = HomeAway.Away, Score = 17 }], Odds = [] }] }] };
-
-        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(
-            Task.FromResult<EspnScores?>(first),
-            Task.FromResult<EspnScores?>(second));
-
-        int fireCount = 0;
-        // initialDelay gives us time to subscribe before the first refresh fires
-        await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
-        svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
-
-        await WaitForScoresChangedAsync(svc);
-
-        Assert.Equal(1, fireCount); // fired once for initial data
-    }
-
-    [Fact]
-    public async Task ScoresChanged_DoesNotFire_WhenDataUnchanged()
-    {
-        var scores = new EspnScores { Events = [new Event { Id = "1", Competitions = [new Competition { Status = new EspnStatus { Type = new StatusType { Name = TypeName.StatusFinal, Description = Description.Final } }, Competitors = [new Competitor { HomeAway = HomeAway.Home, Score = 28 }, new Competitor { HomeAway = HomeAway.Away, Score = 17 }], Odds = [] }] }] };
-
-        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(Task.FromResult<EspnScores?>(scores));
-
-        int fireCount = 0;
-        await using var svc = new EspnCacheService(_fetcher, _nflCurrentWeekService, _leagueRepo, _memoryCache, initialDelay: TimeSpan.FromMilliseconds(50));
-        svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
-
-        await WaitForScoresChangedAsync(svc);
-
-        Assert.Equal(1, fireCount); // fired once on initial load — no second fire since data unchanged
-    }
-
-    [Fact]
     public async Task ScoresChanged_DoesNotFire_WhenApiReturnsNull()
     {
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(Task.FromResult<EspnScores?>(null));

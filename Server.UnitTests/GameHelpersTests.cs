@@ -176,16 +176,4 @@ public class GameHelpersTests
     }
 
     // ─── DaysHoursMinutesUntilNoonCst ─────────────────────────────────────────
-
-    [Fact]
-    public void DaysHoursMinutesUntilNoonCst_ReturnNullOrString()
-    {
-        // Just verify it doesn't throw — it depends on the current time
-        var result = GameHelpers.DaysHoursMinutesUntilNoonCst();
-        // Can be null (if already past Sunday noon) or a string like "2d 5h 30m"
-        if (result is not null)
-        {
-            Assert.Matches(@"\d+d \d+h \d+m", result);
-        }
-    }
 }

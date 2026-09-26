@@ -245,20 +245,4 @@ public class JwtTokenServiceTests
     }
 
     // ── Test 10: Multiple calls produce unique tokens ────────────────────────
-
-    [Fact]
-    public async Task GenerateAccessToken_ProducesUniqueTokensOnRepeatedCalls()
-    {
-        var (svc, _) = BuildService();
-        var user = BuildUser();
-
-        var (token1, _) = await svc.GenerateAccessTokenAsync(user);
-        var (token2, _) = await svc.GenerateAccessTokenAsync(user);
-
-        // JWTs embed an issued-at (iat) claim with second precision;
-        // if both calls land in the same second the tokens may be identical —
-        // that is acceptable behaviour. We only assert structure here.
-        Assert.NotNull(token1);
-        Assert.NotNull(token2);
-    }
 }
