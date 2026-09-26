@@ -11,7 +11,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using System.Security.Claims;
 
@@ -32,9 +31,7 @@ public class PicksTests
 
     private static UserManager<ApplicationUser> BuildUserManager()
     {
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        return Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        return UserManagerStub.Create();
     }
 
     /// <summary>
@@ -47,16 +44,11 @@ public class PicksTests
         ClaimsPrincipal? principal = null,
         IMemoryCache? cache = null)
     {
-        var controller = new LeagueController(
-            cache ?? new MemoryCache(new MemoryCacheOptions()),
+        var controller = LeagueControllerFactory.Build(
             repo,
-            NullLogger<LeagueController>.Instance,
-            BuildUserManager(),
-            Substitute.For<ISpreadCalculatorProvider>(),
-            espnCacheService,
-            Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+            userManager: BuildUserManager(),
+            espnCacheService: espnCacheService,
+            memoryCache: cache);
 
         var httpContext = new DefaultHttpContext();
         if (principal is not null)

@@ -22,9 +22,7 @@ public class UnconfirmedAccountCleanupJobTests {
             .Options);
 
     private static UserManager<ApplicationUser> BuildUserManager() {
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        return Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        return UserManagerStub.Create();
     }
 
     private static ApplicationUser BuildUser(string id, bool emailConfirmed, DateTimeOffset createdAt) =>

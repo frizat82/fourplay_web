@@ -4,8 +4,6 @@ using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Repositories;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.EntityFrameworkCore;
-using NSubstitute;
-using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -19,53 +17,24 @@ namespace FourPlayWebApp.Server.UnitTests;
 /// Postgres container can demonstrate that concurrent requests racing the same (user, league,
 /// season, week) pick count never both squeeze past the required-pick cap.
 /// </summary>
-public class PostgresPicksFixture : IAsyncLifetime
-{
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
-        .WithCleanUp(true)
-        .Build();
-
-    public string ConnectionString { get; private set; } = "";
-
-    public async Task InitializeAsync()
-    {
-        await _container.StartAsync();
-        ConnectionString = _container.GetConnectionString();
-        await using var db = OpenDb();
-        await db.Database.MigrateAsync();
-    }
-
-    public async Task DisposeAsync() => await _container.DisposeAsync();
-
-    public ApplicationDbContext OpenDb() =>
-        new(new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseNpgsql(ConnectionString)
-            .Options);
-}
-
-public class PickConcurrencyTests : IClassFixture<PostgresPicksFixture>
+[Collection(PostgresCollection.Name)]
+public class PickConcurrencyTests
 {
     private const int Season = 2025;
     private const int Week = 3;
     private const int RequiredPicks = 4;
     private const string TestUserId = "concurrency-test-user";
 
-    private readonly PostgresPicksFixture _fixture;
+    private readonly PostgresFixture _fixture;
 
-    public PickConcurrencyTests(PostgresPicksFixture fixture)
+    public PickConcurrencyTests(PostgresFixture fixture)
     {
         _fixture = fixture;
     }
 
-    // Every call must get its own DbContext instance (EF DbContext is not thread-safe) but all
-    // pointed at the same underlying Postgres container, so the advisory lock is actually shared.
-    private IDbContextFactory<ApplicationDbContext> BuildFactory()
-    {
-        var factory = Substitute.For<IDbContextFactory<ApplicationDbContext>>();
-        factory.CreateDbContextAsync().Returns(_ => _fixture.OpenDb());
-        return factory;
-    }
+    // Every call gets its own DbContext (EF DbContext is not thread-safe), all on the same
+    // Postgres container, so the advisory lock is actually shared.
+    private IDbContextFactory<ApplicationDbContext> BuildFactory() => _fixture.Factory();
 
     private async Task ResetAsync(int leagueId)
     {

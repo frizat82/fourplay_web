@@ -7,8 +7,6 @@ using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -21,21 +19,10 @@ public class LeagueControllerDtoTests
     private static LeagueController BuildController(ILeagueRepository repo, UserManager<ApplicationUser>? userManager = null)
     {
         if (userManager is null) {
-            var store = Substitute.For<IUserStore<ApplicationUser>>();
-            userManager = Substitute.For<UserManager<ApplicationUser>>(
-                store, null, null, null, null, null, null, null, null);
+            userManager = UserManagerStub.Create();
         }
 
-        var controller = new LeagueController(
-            new MemoryCache(new MemoryCacheOptions()),
-            repo,
-            NullLogger<LeagueController>.Instance,
-            userManager,
-            Substitute.For<ISpreadCalculatorProvider>(),
-            Substitute.For<IEspnCacheService>(),
-            Substitute.For<IInvitationService>(),
-            Substitute.For<ILeagueInviteLinkService>(),
-            Substitute.For<ILeagueMembershipInviteService>());
+        var controller = LeagueControllerFactory.Build(repo, userManager);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -154,9 +141,7 @@ public class LeagueControllerDtoTests
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetUsersAsync().Returns([admin, regular]);
 
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create();
         userManager.GetUsersInRoleAsync("Administrator").Returns([admin]);
 
         var result = await BuildController(repo, userManager).GetUsers();

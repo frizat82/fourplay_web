@@ -29,8 +29,7 @@ public class UserManagerJobConfigTests
     private static (UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager) BuildMocks()
     {
         var userStore   = Substitute.For<IUserStore<ApplicationUser>>();
-        var userManager = Substitute.For<UserManager<ApplicationUser>>(
-            userStore, null, null, null, null, null, null, null, null);
+        var userManager = UserManagerStub.Create(userStore);
 
         var roleStore   = Substitute.For<IRoleStore<IdentityRole>>();
         var roleManager = Substitute.For<RoleManager<IdentityRole>>(

@@ -143,10 +143,13 @@ public class PeriodicRefreshCacheTests
             intervalSelector: _ => TimeSpan.FromSeconds(30),
             initialDelay: TimeSpan.FromMilliseconds(20));
 
-        // Long enough to be well past the initial fetch, nowhere near the 30s selected interval.
-        await Task.Delay(500);
+        // Wait for the initial fetch itself (a fixed sleep raced it under full-suite CPU load and
+        // saw 0), then give a second fetch every chance to happen well inside the 30s interval.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (Volatile.Read(ref callCount) == 0 && DateTime.UtcNow < deadline) await Task.Delay(10);
+        await Task.Delay(300);
 
-        Assert.Equal(1, callCount);
+        Assert.Equal(1, Volatile.Read(ref callCount));
     }
 
     [Fact]

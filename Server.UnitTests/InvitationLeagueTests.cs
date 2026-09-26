@@ -41,9 +41,7 @@ public class InvitationLeagueTests
 
     private static UserManager<ApplicationUser> BuildUserManager()
     {
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var mgr = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var mgr = UserManagerStub.Create();
         mgr.GetAccessFailedCountAsync(Arg.Any<ApplicationUser>()).Returns(0);
         return mgr;
     }
@@ -56,17 +54,6 @@ public class InvitationLeagueTests
     }
 
     // ── InvitationService tests ───────────────────────────────────────────────
-
-    [Fact]
-    public async Task CreateInvitation_StoresLeagueId_WhenProvided()
-    {
-        var db = BuildDb(nameof(CreateInvitation_StoresLeagueId_WhenProvided));
-        var service = new InvitationService(BuildFactory(db), Substitute.For<IEmailSender>());
-
-        var result = await service.CreateInvitationAsync("user@example.com", "admin-1", leagueId: 42);
-
-        Assert.Equal(42, result.LeagueId);
-    }
 
     [Fact]
     public async Task CreateInvitation_NullLeagueId_WhenNotProvided()

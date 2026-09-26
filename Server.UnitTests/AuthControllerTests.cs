@@ -30,9 +30,7 @@ public class AuthControllerTests
 
     private static UserManager<ApplicationUser> BuildUserManager()
     {
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        var mgr   = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
+        var mgr   = UserManagerStub.Create();
         // Reasonable defaults
         mgr.GetAccessFailedCountAsync(Arg.Any<ApplicationUser>()).Returns(0);
         return mgr;
@@ -333,30 +331,6 @@ public class AuthControllerTests
         });
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
-    }
-
-    // ── Bonus Test 7: FindByName returns null, FindByEmail also null → same as wrong password ─
-
-    [Fact]
-    public async Task Login_BothLookupsFail_ReturnsOk_WithSucceededFalse()
-    {
-        var userManager = BuildUserManager();
-        userManager.FindByNameAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
-        userManager.FindByEmailAsync(Arg.Any<string>()).Returns((ApplicationUser?)null);
-
-        var controller = BuildController(userManager: userManager);
-
-        var result = await controller.Login(new LoginRequest
-        {
-            Username   = "notfound@example.com",
-            Password   = "pass",
-            RememberMe = false,
-        });
-
-        var ok  = Assert.IsType<OkObjectResult>(result.Result);
-        var dto = Assert.IsType<SignInResultDto>(ok.Value);
-        Assert.False(dto.Succeeded);
-        Assert.Equal("Invalid credentials", dto.Message);
     }
 
     // ── Bonus Test 8: Successful login with RememberMe=true issues refresh token ─

@@ -19,13 +19,9 @@ async function gotoLeaderboard(page: Page): Promise<void> {
 }
 
 test.describe('Leaderboard — demo backend', () => {
-  test('Leaderboard heading is visible', async ({ page }) => {
-    await gotoLeaderboard(page);
-    await expect(page.getByRole('heading', { name: 'Leaderboard' })).toBeVisible();
-  });
-
   test('shows all 5 demo users in the standings', async ({ page }) => {
     await gotoLeaderboard(page);
+    await expect(page.getByRole('heading', { name: 'Leaderboard' })).toBeVisible();
     // At least Alice and Bob should appear in the table
     await expect(page.getByText('alice')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('bob')).toBeVisible({ timeout: 5_000 });

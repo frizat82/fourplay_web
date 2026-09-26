@@ -35,20 +35,11 @@ test.describe('Scores page (authenticated)', () => {
   // used now, no more ESPN week 1-5).
   const postSeasonOptions = { leaguePicks, gameStarted: true, isPostSeason: true, week: 20 };
 
-  test('renders scores page for authenticated user', async ({ page }) => {
-    await mockAuth(page, { navigateTo: '/scores', ...scoresOptions });
-
-    // Wait for loading spinner to clear
-    await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
-
-    // Page header should show "Scores"
-    await expect(page.getByRole('heading', { name: 'Scores' })).toBeVisible({ timeout: 5000 });
-  });
-
   test('shows spread badge count for BUF (2 picks)', async ({ page }) => {
     await mockAuth(page, { navigateTo: '/scores', ...scoresOptions });
 
     await expect(page.getByRole('progressbar')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Scores' })).toBeVisible({ timeout: 5000 });
 
     // The badge wrapper has data-testid="badge-BUF-spread"
     // MUI Badge renders the count in a child <span class="MuiBadge-badge">

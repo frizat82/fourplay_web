@@ -18,15 +18,8 @@ describe('computeHomeCovers / computeAwayCovers', () => {
     // UTEP +53.5, final OU 51 - UTEP 0: 0 + 53.5 = 53.5 > 51 → UTEP covers its own line,
     // even though the home team (OU) ALSO covers its own line — juice can make both sides "win"
     // their pick simultaneously, so away must never be derived by negating home.
+    expect(computeHomeCovers('final', -27.5, 51, 0)).toBe(true);
     expect(computeAwayCovers('final', 53.5, 51, 0)).toBe(true);
-  });
-
-  it('negating homeCovers would give the wrong answer for this exact matchup (regression guard)', () => {
-    const homeCovers = computeHomeCovers('final', -27.5, 51, 0);
-    const awayCovers = computeAwayCovers('final', 53.5, 51, 0);
-    expect(homeCovers).toBe(true);
-    expect(awayCovers).toBe(true);
-    expect(awayCovers).not.toBe(!homeCovers);
   });
 
   it('away team fails to cover when it loses by more than its own spread', () => {

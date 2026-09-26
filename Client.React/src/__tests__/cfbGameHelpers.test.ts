@@ -15,10 +15,6 @@ describe('getCfbWeekName', () => {
     expect(getCfbWeekName(5, true)).toBe('CFP Championship');
   });
 
-  it('does not throw on week 5 postseason (regression guard)', () => {
-    expect(() => getCfbWeekName(5, true)).not.toThrow();
-  });
-
   it('returns fallback string for unknown postseason week instead of throwing', () => {
     expect(getCfbWeekName(6, true)).toMatch(/Postseason Week 6/);
   });

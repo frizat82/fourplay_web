@@ -64,10 +64,6 @@ public static class GameHelpers {
         // Convert target back to UTC so subtraction is safe
         return nextSundayNoon - nowCst;
     }
-    public static string? DaysHoursMinutesUntilNoonCst() {
-        var span = UntilNoonCst();
-        return span is null ? null : $"{span.Value.Days}d {span.Value.Hours}h {span.Value.Minutes}m";
-    }
     // TODO(docs/ESPNProBowl.md): verify against a real ESPN response once the 2026 postseason
     // bracket actually exists (~Jan 2027) — the NFL discontinued the Pro Bowl GAME starting with
     // the 2026 season (announced 2026-08-26), so ESPN's postseason week numbering is expected to
