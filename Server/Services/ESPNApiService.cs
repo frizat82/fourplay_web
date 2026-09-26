@@ -23,7 +23,7 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
         if (rangeResult is not null) return rangeResult;
 
         logger.LogWarning("ESPN Date Range Not Working falling back to Days");
-        return await EspnDateRangeFetcher.FetchRangeAsync(startDate, endDate, date => GetScoresForSingleDayAsync(date, postSeason));
+        return await EspnDateRangeFetcher.FetchRangeAsync(startDate, endDate, date => GetScoresForDayAsync(date, postSeason));
     }
 
     // Deliberately no Error-level logging here — right now every call takes this path and falls
@@ -46,7 +46,7 @@ public class EspnApiService(HttpClient httpClient, ILogger<EspnApiService> logge
     // seasontype still needs to be passed explicitly (2=regular, 3=postseason) since ESPN's date
     // filter alone doesn't disambiguate a rescheduled/rare doubleheader week that straddles both
     // season types.
-    private async Task<EspnScores?> GetScoresForSingleDayAsync(DateOnly date, bool postSeason) {
+    public async Task<EspnScores?> GetScoresForDayAsync(DateOnly date, bool postSeason = false) {
         try {
             var response = await httpClient.GetAsync(
                 $"{_scoreboardEndpoint}?dates={date:yyyyMMdd}&seasontype={(postSeason ? 3 : 2)}&limit=100");

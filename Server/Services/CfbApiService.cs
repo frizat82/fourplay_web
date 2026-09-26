@@ -37,7 +37,7 @@ public class CfbApiService(HttpClient httpClient, ILogger<CfbApiService> logger)
         if (rangeResult is not null) return rangeResult;
 
         logger.LogWarning("ESPN Date Range Not Working falling back to Days");
-        return await EspnDateRangeFetcher.FetchRangeAsync(startDate, endDate, GetScoresForSingleDayAsync);
+        return await EspnDateRangeFetcher.FetchRangeAsync(startDate, endDate, GetScoresForDayAsync);
     }
 
     // Deliberately no Error-level logging here — right now every call takes this path and falls
@@ -56,7 +56,7 @@ public class CfbApiService(HttpClient httpClient, ILogger<CfbApiService> logger)
         }
     }
 
-    private Task<EspnScores?> GetScoresForSingleDayAsync(DateOnly date) =>
+    public Task<EspnScores?> GetScoresForDayAsync(DateOnly date) =>
         FetchAndParseAsync($"/apis/site/v2/sports/football/college-football/scoreboard?dates={date:yyyyMMdd}&seasontype=2&limit=100");
 
     // ESPN week=999 is the explicit CFP-only bucket — returns all CFP playoff games regardless of

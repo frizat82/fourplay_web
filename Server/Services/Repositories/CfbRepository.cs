@@ -3,10 +3,14 @@ using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services.Repositories;
 
-public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : ICfbRepository {
+// cache: the schedule tables (CfbSlates, CfbSeasonWeekConfigs) are cached via ScheduleCache and
+// evicted by the writers below. Optional so tests that don't care can omit it (reads go straight
+// to the database).
+public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IMemoryCache? cache = null) : ICfbRepository {
     public async Task<bool> SlatesExistForSeasonAsync(int season) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbSlates.AnyAsync(s => s.Season == season);
@@ -16,6 +20,7 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
         await using var db = await dbFactory.CreateDbContextAsync();
         db.CfbSlates.AddRange(slates);
         await db.SaveChangesAsync();
+        ScheduleCache.Invalidate(cache, ScheduleCache.CfbSlates);
     }
 
     public async Task<bool> DeleteSlatesAsync(IEnumerable<CfbSlates> slates) {
@@ -35,28 +40,22 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
 
         db.CfbSlates.RemoveRange(slateList);
         await db.SaveChangesAsync();
+        ScheduleCache.Invalidate(cache, ScheduleCache.CfbSlates);
         return true;
     }
 
-    public async Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season) {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSlates
-            .Where(s => s.Season == season)
-            .OrderBy(s => s.SlateNumber)
-            .ToListAsync();
-    }
+    // Per-season and by-id reads filter the cached whole table (ordered Season, SlateNumber).
+    public async Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season) =>
+        (await GetAllSlatesAsync()).Where(s => s.Season == season).ToList();
 
-    public async Task<IEnumerable<CfbSlates>> GetAllSlatesAsync() {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSlates
-            .OrderBy(s => s.Season).ThenBy(s => s.SlateNumber)
-            .ToListAsync();
-    }
+    public async Task<IEnumerable<CfbSlates>> GetAllSlatesAsync() =>
+        await ScheduleCache.GetAsync(cache, ScheduleCache.CfbSlates, async () => {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            return await db.CfbSlates.AsNoTracking().OrderBy(s => s.Season).ThenBy(s => s.SlateNumber).ToListAsync();
+        });
 
-    public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSlates.FirstOrDefaultAsync(s => s.Id == slateId);
-    }
+    public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) =>
+        (await GetAllSlatesAsync()).FirstOrDefault(s => s.Id == slateId);
 
     public async Task UpsertAsync(IEnumerable<CfbSpreads> spreads) {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -156,25 +155,20 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory) : 
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetWeekConfigsForSeasonAsync(int season) {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSeasonWeekConfigs
-            .Where(c => c.Season == season)
-            .OrderBy(c => c.EspnWeekNumber)
-            .ToListAsync();
-    }
+    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetWeekConfigsForSeasonAsync(int season) =>
+        (await GetAllWeekConfigsAsync()).Where(c => c.Season == season).ToList();
 
-    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync() {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSeasonWeekConfigs
-            .OrderBy(c => c.Season).ThenBy(c => c.EspnWeekNumber)
-            .ToListAsync();
-    }
+    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync() =>
+        await ScheduleCache.GetAsync(cache, ScheduleCache.CfbWeekConfigs, async () => {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            return await db.CfbSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.EspnWeekNumber).ToListAsync();
+        });
 
     public async Task AddWeekConfigsAsync(IEnumerable<CfbSeasonWeekConfig> configs) {
         await using var db = await dbFactory.CreateDbContextAsync();
         db.CfbSeasonWeekConfigs.AddRange(configs);
         await db.SaveChangesAsync();
+        ScheduleCache.Invalidate(cache, ScheduleCache.CfbWeekConfigs);
     }
 
     public async Task UpsertCfbScoresAsync(IEnumerable<CfbScores> scores) {

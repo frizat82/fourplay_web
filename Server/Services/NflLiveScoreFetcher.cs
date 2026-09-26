@@ -11,9 +11,16 @@ public class NflLiveScoreFetcher(IEspnApiService espnApi) : INflLiveScoreFetcher
         var startDate = DateOnly.FromDateTime(week.WeekStartDatetime);
         var endDate = DateOnly.FromDateTime(week.WeekEndDatetime);
 
-        var scoreboard = await espnApi.GetScoresByDateRangeAsync(startDate, endDate, isPostSeason);
-        if (scoreboard?.Events is null) return null;
+        return FilterToWeek(await espnApi.GetScoresByDateRangeAsync(startDate, endDate, isPostSeason), week);
+    }
 
+    public async Task<EspnScores?> FetchDaysAsync(NflSeasonWeekConfig week, IReadOnlyCollection<DateOnly> days) {
+        var isPostSeason = week.WeekType == "PostSeason";
+        return FilterToWeek(await EspnDateRangeFetcher.FetchDaysAsync(days, day => espnApi.GetScoresForDayAsync(day, isPostSeason)), week);
+    }
+
+    private static EspnScores? FilterToWeek(EspnScores? scoreboard, NflSeasonWeekConfig week) {
+        if (scoreboard?.Events is null) return null;
         var events = GameHelpers.FilterEventsToDateWindow(scoreboard.Events, week.WeekStartDatetime, week.WeekEndDatetime);
         return events.Length == 0 ? null : GameHelpers.WithEvents(scoreboard, events);
     }

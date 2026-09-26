@@ -106,4 +106,23 @@ public class NflLiveScoreFetcherTests {
 
         Assert.Null(result);
     }
+
+    // Live polls (LiveDayRefresh) ask for just the days with live games: one single-day request
+    // each, never the (ESPN-broken, 400-returning) range query first, and the week's own window
+    // filter still applies.
+    [Fact]
+    public async Task FetchDaysAsync_RequestsOnlyTheGivenDays_AndStillFiltersToTheWeek() {
+        var week = BuildWeek(weekId: 1, season: 2026); // Sep 1 - Sep 8
+        var inWeek = new DateTimeOffset(2026, 9, 6, 17, 0, 0, TimeSpan.Zero);
+        var outsideWeek = BuildEvent(inWeek.AddDays(30));
+        outsideWeek.Id = "2";
+        _espnApi.GetScoresForDayAsync(new DateOnly(2026, 9, 6), false)
+            .Returns(new EspnScores { Events = [BuildEvent(inWeek), outsideWeek] });
+
+        var result = await BuildFetcher().FetchDaysAsync(week, [new DateOnly(2026, 9, 6)]);
+
+        await _espnApi.Received(1).GetScoresForDayAsync(new DateOnly(2026, 9, 6), false);
+        await _espnApi.DidNotReceiveWithAnyArgs().GetScoresByDateRangeAsync(default, default, default);
+        Assert.Equal(["1"], result!.Events!.Select(ev => ev.Id));
+    }
 }

@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-26
+
+- Improved: during games, live scores refresh with 1-2 ESPN requests per update instead of one per day of the whole week, and the current week/slate lookup is cached so the database can idle between uses
+
 ## 2026-09-24
 
 - Changed: the college football national championship slate no longer applies a tease, matching the NFL Super Bowl

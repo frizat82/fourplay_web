@@ -69,15 +69,16 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     }
 
     // NFL Season Week Config
-    public async Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync() {
-        await using var db = await dbContextFactory.CreateDbContextAsync();
-        return await db.NflSeasonWeekConfigs.OrderBy(c => c.Season).ThenBy(c => c.WeekId).ToListAsync();
-    }
+    // Cached (ScheduleCache). Nothing in the app writes these rows — they come from migrations
+    // and the demo seeder, both of which run before the app serves.
+    public Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync() =>
+        ScheduleCache.GetAsync(cache, ScheduleCache.NflWeekConfigs, async () => {
+            await using var db = await dbContextFactory.CreateDbContextAsync();
+            return await db.NflSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.WeekId).ToListAsync();
+        });
 
-    public async Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync(int season) {
-        await using var db = await dbContextFactory.CreateDbContextAsync();
-        return await db.NflSeasonWeekConfigs.Where(c => c.Season == season).OrderBy(c => c.WeekId).ToListAsync();
-    }
+    public async Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync(int season) =>
+        [.. (await GetNflSeasonWeekConfigsAsync()).Where(c => c.Season == season)];
 
     // NFL Weeks
     public async Task UpsertNflWeeksAsync(List<NflWeeks> weeks)

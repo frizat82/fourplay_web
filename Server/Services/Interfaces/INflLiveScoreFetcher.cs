@@ -11,4 +11,6 @@ namespace FourPlayWebApp.Server.Services.Interfaces;
 /// </summary>
 public interface INflLiveScoreFetcher {
     Task<EspnScores?> FetchForWeekAsync(NflSeasonWeekConfig week);
+    // Just these ESPN days of the week (a live poll — see LiveDayRefresh), same window filter.
+    Task<EspnScores?> FetchDaysAsync(NflSeasonWeekConfig week, IReadOnlyCollection<DateOnly> days);
 }

@@ -9,4 +9,7 @@ public interface IEspnApiService {
     // can land in the wrong week's response), so every caller queries by date and buckets the
     // result against its own control-table row instead.
     public Task<EspnScores?> GetScoresByDateRangeAsync(DateOnly startDate, DateOnly endDate, bool postSeason = false);
+
+    // One ESPN day bucket — what a live poll asks for (LiveDayRefresh).
+    public Task<EspnScores?> GetScoresForDayAsync(DateOnly date, bool postSeason = false);
 }

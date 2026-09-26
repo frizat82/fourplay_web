@@ -27,4 +27,7 @@ public interface ICfbLiveScoreFetcher {
     // re-derive a fact the caller already had. Only used here to decide whether to merge in the
     // replay-mode snapshot (see FetchForSlateAsync's own comment).
     Task<EspnScores?> FetchForSlateAsync(CfbSlates slate, bool isCurrentSlate);
+    // Just these ESPN days of the slate (a live poll — see LiveDayRefresh). A CFP slate is a
+    // single request either way.
+    Task<EspnScores?> FetchDaysAsync(CfbSlates slate, IReadOnlyCollection<DateOnly> days);
 }
