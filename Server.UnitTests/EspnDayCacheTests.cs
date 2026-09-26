@@ -112,4 +112,38 @@ public class EspnDayCacheTests {
         Assert.NotSame(first, fresh);
         Assert.Same(fresh, afterwards);
     }
+
+    // ESPN blocking us (403/429) or timing out mid-game must not make the live day vanish from the
+    // scoreboard: a failed refetch serves the last good copy — and reports the failure, so the
+    // poller backs off instead of hammering ESPN every 15s.
+    [Fact]
+    public async Task AFailedRefetch_ServesTheLastGoodCopy_AndReportsTheFailure() {
+        var time = new FakeTimeProvider(Now);
+        var cache = new EspnDayCache(new MemoryCache(new MemoryCacheOptions()), time);
+        var live = Day(Game(Now.AddHours(-1), TypeName.StatusInProgress));
+        await cache.GetOrFetchAsync("cfb/20260927", () => Task.FromResult<EspnScores?>(live));
+        time.Advance(EspnDayCache.LiveTtl + TimeSpan.FromSeconds(1));
+
+        using var failures = EspnDayCache.TrackFailures();
+        Assert.Same(live, await cache.GetOrFetchAsync("cfb/20260927", () => Task.FromResult<EspnScores?>(null)));
+        Assert.Same(live, await cache.GetOrFetchAsync("cfb/20260927", () => throw new HttpRequestException("403 Forbidden")));
+        Assert.True(failures.AnyFailed);
+    }
+
+    [Fact]
+    public async Task ASuccessfulFetch_IsNotReportedAsAFailure() {
+        var cache = new EspnDayCache(new MemoryCache(new MemoryCacheOptions()), new FakeTimeProvider(Now));
+        using var failures = EspnDayCache.TrackFailures();
+        await cache.GetOrFetchAsync("nfl/20260927", () => Task.FromResult<EspnScores?>(Day()));
+        Assert.False(failures.AnyFailed);
+    }
+
+    // The jobs persist what they read, so they never act on a stale copy: a failed fetch stays a failure.
+    [Fact]
+    public async Task InsideAFreshScope_AFailedFetchIsNotPaperedOver() {
+        var cache = new EspnDayCache(new MemoryCache(new MemoryCacheOptions()), new FakeTimeProvider(Now));
+        await cache.GetOrFetchAsync("nfl/20260927", () => Task.FromResult<EspnScores?>(Day(Game(Now.AddHours(-1), TypeName.StatusInProgress))));
+        using (EspnDayCache.Fresh())
+            Assert.Null(await cache.GetOrFetchAsync("nfl/20260927", () => Task.FromResult<EspnScores?>(null)));
+    }
 }

@@ -1,4 +1,7 @@
 using FourPlayWebApp.Server.Services;
+using FourPlayWebApp.Server.Services.Interfaces;
+using Microsoft.Extensions.Caching.Memory;
+using NSubstitute;
 using FourPlayWebApp.Shared.Models;
 using static FourPlayWebApp.Server.UnitTests.EspnDayCacheTests;
 
@@ -48,14 +51,94 @@ public class ScorePollScheduleTests {
     public void OffSeason_SleepsTheIdleCap() =>
         Assert.Equal(ScorePollSchedule.IdleCap, Polled(Now.AddMonths(4)).NextInterval(null, Now));
 
-    // A poll that throws (schedule read failed, scope couldn't be built, ESPN threw) retries at the
-    // slow cadence — never sleeps hours on a stale all-final scoreboard and misses a game.
+    // A poll that throws (schedule read failed, scope couldn't be built, ESPN threw) retries soon —
+    // never sleeps hours on a stale all-final scoreboard and misses a game.
     [Fact]
-    public async Task AFailedPoll_RetriesSlow() {
+    public async Task AFailedPoll_RetriesSoon() {
         var schedule = Polled(Now.AddDays(4));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             schedule.PollAsync(() => throw new InvalidOperationException("db down"), Now));
-        Assert.Equal(EspnPollCadence.SlowPollInterval, schedule.NextInterval(Day(Game(Now.AddHours(-20), TypeName.StatusFinal)), Now));
+        Assert.Equal(2 * EspnPollCadence.FastPollInterval, schedule.NextInterval(Day(Game(Now.AddHours(-20), TypeName.StatusFinal)), Now));
+    }
+
+    // Blocked by ESPN (403/429) or ESPN down: back off exponentially to the slow cadence rather than
+    // hammering it every 15s — even with a game on — and snap back to 15s once it answers again.
+    [Fact]
+    public async Task RepeatedFailures_BackOffToTheSlowCadence_AndASuccessResets() {
+        var schedule = new ScorePollSchedule();
+        var gameOn = Day(Game(Now.AddHours(-1), TypeName.StatusInProgress));
+        var intervals = new List<TimeSpan>();
+        for (var i = 0; i < 6; i++) {
+            await Assert.ThrowsAsync<HttpRequestException>(() => schedule.PollAsync(() => throw new HttpRequestException("429"), Now));
+            intervals.Add(schedule.NextInterval(gameOn, Now));
+        }
+        Assert.Equal(new[] { 30, 60, 120, 240, 300, 300 }, intervals.Select(t => (int)t.TotalSeconds));
+
+        await schedule.PollAsync(() => Task.FromResult(new ScorePollSchedule.Outcome(gameOn, [], ExpectedGames: true)), Now);
+        Assert.Equal(EspnPollCadence.FastPollInterval, schedule.NextInterval(gameOn, Now));
+    }
+
+    // The trap: other days of the week come from the day cache, so a scoreboard still comes back
+    // when the live day's request is blocked. That's still a failed poll.
+    [Fact]
+    public async Task ADayRequestFailing_IsAFailedPoll_EvenWhenAScoreboardCameBack() {
+        var time = new FakeTimeProvider(Now);
+        var days = new EspnDayCache(new MemoryCache(new MemoryCacheOptions()), time);
+        var gameOn = Day(Game(Now.AddHours(-1), TypeName.StatusInProgress));
+        await days.GetOrFetchAsync("today", () => Task.FromResult<EspnScores?>(gameOn));
+        time.Advance(EspnDayCache.LiveTtl + TimeSpan.FromSeconds(1));
+
+        var schedule = new ScorePollSchedule();
+        var scores = await schedule.PollAsync(async () => new ScorePollSchedule.Outcome(
+            await days.GetOrFetchAsync("today", () => Task.FromResult<EspnScores?>(null)), [], ExpectedGames: true), time.GetUtcNow());
+
+        Assert.Same(gameOn, scores); // the last good copy is still served
+        Assert.Equal(2 * EspnPollCadence.FastPollInterval, schedule.NextInterval(scores, time.GetUtcNow()));
+    }
+
+    private static Task FailAt(ScorePollSchedule schedule, TimeSpan at, string error) =>
+        Assert.ThrowsAsync<HttpRequestException>(() => schedule.PollAsync(() => throw new HttpRequestException(error), Now + at));
+
+    // Someone should hear about it: once ESPN has been failing for 10 minutes straight, the outage
+    // goes to the job-failure channel (Discord). Every failed poll after that is handed over under
+    // the same outage key — the notifier's own dedupe turns that into one message, and a send that
+    // failed (webhook down) is retried on the next poll instead of being lost.
+    [Fact]
+    public async Task AnOutage_IsReportedAfterTenMinutes_UnderOneKey() {
+        var notifier = Substitute.For<IJobFailureNotifier>();
+        var schedule = new ScorePollSchedule("CFB live scores", notifier);
+        Task Fail(TimeSpan at) => FailAt(schedule, at, "403 (Forbidden)");
+
+        await Fail(TimeSpan.Zero);
+        await Fail(TimeSpan.FromMinutes(5));
+        await notifier.DidNotReceiveWithAnyArgs().NotifyAsync(default!, default!, default!);
+
+        await Fail(TimeSpan.FromMinutes(10));
+        await Fail(TimeSpan.FromMinutes(15));
+        var reports = notifier.ReceivedCalls().Select(c => c.GetArguments()).ToList();
+        Assert.Equal(2, reports.Count);
+        Assert.Single(reports.Select(a => (string)a[0]!).Distinct());
+        Assert.StartsWith("CFB live scores", (string)reports[0][0]!);
+        Assert.Contains("403", (string)reports[0][2]!);
+    }
+
+    // A recovered outage is over: the next one is a new key, so it isn't swallowed by the
+    // notifier's 6h dedupe of the first.
+    [Fact]
+    public async Task AfterRecovery_ANewOutageIsReportedUnderANewKey() {
+        var notifier = Substitute.For<IJobFailureNotifier>();
+        var schedule = new ScorePollSchedule("NFL live scores", notifier);
+        Task Fail(TimeSpan at) => FailAt(schedule, at, "timeout");
+
+        await Fail(TimeSpan.Zero);
+        await Fail(TimeSpan.FromMinutes(10));
+        await schedule.PollAsync(() => Task.FromResult(new ScorePollSchedule.Outcome(Day(), [], ExpectedGames: true)), Now + TimeSpan.FromMinutes(11));
+        await Fail(TimeSpan.FromMinutes(20));
+        await Fail(TimeSpan.FromMinutes(30));
+
+        var keys = notifier.ReceivedCalls().Select(c => (string)c.GetArguments()[0]!).ToList();
+        Assert.Equal(2, keys.Count);
+        Assert.NotEqual(keys[0], keys[1]);
     }
 
     // A week/slate with no games yet (e.g. a CFP round before matchups post) is a successful poll,
@@ -69,12 +152,12 @@ public class ScorePollScheduleTests {
     }
 
     // ...but no scoreboard for a week that has games means ESPN failed (the API services swallow
-    // HTTP errors into null): retry at the slow cadence, don't sleep through an outage.
+    // HTTP errors into null): retry soon, don't sleep through an outage.
     [Fact]
     public async Task NoScoreboardForAWeekWithGames_IsAFailure() {
         var schedule = new ScorePollSchedule();
         await schedule.PollAsync(() => Task.FromResult(new ScorePollSchedule.Outcome(null, [Now.AddDays(4)], ExpectedGames: true)), Now);
-        Assert.Equal(EspnPollCadence.SlowPollInterval, schedule.NextInterval(Day(Game(Now.AddHours(-20), TypeName.StatusFinal)), Now));
+        Assert.Equal(2 * EspnPollCadence.FastPollInterval, schedule.NextInterval(Day(Game(Now.AddHours(-20), TypeName.StatusFinal)), Now));
     }
 
     // Once every game is final the poller stops: no re-checks for score corrections (ESPN doesn't

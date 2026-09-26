@@ -10,6 +10,10 @@ namespace FourPlayWebApp.Server.Services;
 /// see ScorePollSchedule) and by requests that fall back to their own fetch between polls. With
 /// this cache those only reach ESPN for days that can actually have changed. The ESPN-reading jobs
 /// opt out with <see cref="Fresh"/>.
+/// <para>A failed refetch (ESPN blocking us, down, or timing out) serves the last good copy for up to
+/// <see cref="ServeStaleFor"/> — so a live day doesn't vanish from the scoreboard — and is reported
+/// to any <see cref="TrackFailures"/> scope, so the poller backs off instead of retrying every 15s.
+/// Never inside <see cref="Fresh"/>: the jobs persist what they read.</para>
 /// <para>Cached responses are shared by every reader: treat them as read-only (nothing mutates
 /// them today — the fetchers build new scoreboards via GameHelpers.WithEvents).</para>
 /// </summary>
@@ -21,7 +25,13 @@ public sealed class EspnDayCache(IMemoryCache cache, TimeProvider time) {
     /// <summary>A day whose games are all final (the scores jobs read fresh), or upcoming games far off.</summary>
     public static readonly TimeSpan SettledTtl = TimeSpan.FromHours(6);
 
+    /// <summary>How long past its freshness a day is kept to fall back on when a refetch fails.</summary>
+    public static readonly TimeSpan ServeStaleFor = TimeSpan.FromHours(12);
+
     private static readonly AsyncLocal<bool> Bypass = new();
+    private static readonly AsyncLocal<FailureTracker?> Failures = new();
+
+    private sealed record Entry(EspnScores Day, DateTimeOffset FreshUntil);
 
     /// <summary>
     /// Within this scope every day is fetched from ESPN (and the cache refreshed with it). For the
@@ -38,13 +48,44 @@ public sealed class EspnDayCache(IMemoryCache cache, TimeProvider time) {
         public void Dispose() => Bypass.Value = previous;
     }
 
+    /// <summary>Within this scope, whether any day fetch failed (stale copy served or not).</summary>
+    public static FailureTracker TrackFailures() {
+        var tracker = new FailureTracker(Failures.Value);
+        Failures.Value = tracker;
+        return tracker;
+    }
+
+    public sealed class FailureTracker(FailureTracker? previous) : IDisposable {
+        private volatile bool _anyFailed;
+        public bool AnyFailed => _anyFailed;
+        internal void Report() => _anyFailed = true;
+        public void Dispose() => Failures.Value = previous;
+    }
+
     public async Task<EspnScores?> GetOrFetchAsync(string key, Func<Task<EspnScores?>> fetch) {
-        if (!Bypass.Value && cache.TryGetValue(key, out EspnScores? cached)) return cached;
-        var day = await fetch();
+        var now = time.GetUtcNow();
+        var last = cache.Get<Entry>(key);
+        if (!Bypass.Value && last is not null && now < last.FreshUntil) return last.Day;
+
+        EspnScores? day;
+        try {
+            day = await fetch();
+        } catch {
+            Failures.Value?.Report();
+            if (Stale(last) is { } stale) return stale;
+            throw;
+        }
         // A failed fetch or a malformed ({}-style, no events array) response isn't cached: the next poll retries.
-        if (day?.Events is not null) cache.Set(key, day, TtlFor(day, time.GetUtcNow()));
+        if (day?.Events is null) {
+            Failures.Value?.Report();
+            return Stale(last) ?? day;
+        }
+        var ttl = TtlFor(day, now);
+        cache.Set(key, new Entry(day, now + ttl), ttl + ServeStaleFor);
         return day;
     }
+
+    private static EspnScores? Stale(Entry? last) => Bypass.Value ? null : last?.Day;
 
     public static TimeSpan TtlFor(EspnScores day, DateTimeOffset now) {
         var games = day.Events?.SelectMany(e => e.Competitions).ToList() ?? [];
