@@ -9,9 +9,9 @@ namespace FourPlayWebApp.Server.Services;
 /// most requests ("what week is it?") but change a few times a season; reading them from the DB
 /// every time was ~5k full-table reads a day and kept Neon from ever suspending. Each table is
 /// cached whole; per-season/by-id reads filter the cached rows and copy only what they return.
-/// Writers evict: the CFB repository writers, and DemoDataSeeder (<see cref="InvalidateAll"/>),
-/// which writes the tables directly. The TTL bounds how long an out-of-band change (hand-run SQL)
-/// can go unseen — deploys restart the app, which clears it anyway.
+/// Any save that touches one of these tables evicts it (ScheduleCacheInterceptor), whoever makes it.
+/// The TTL bounds how long an out-of-band change (hand-run SQL) can go unseen — deploys restart the
+/// app, which clears it anyway.
 /// </summary>
 public static class ScheduleCache {
     public const string NflWeekConfigs = "schedule:nfl-week-configs";
@@ -46,11 +46,5 @@ public static class ScheduleCache {
         if (cache is null) return;
         CacheGenerations.Invalidate(cache, key);
         cache.Remove(key);
-    }
-
-    public static void InvalidateAll(IMemoryCache? cache) {
-        Invalidate(cache, NflWeekConfigs);
-        Invalidate(cache, CfbSlates);
-        Invalidate(cache, CfbWeekConfigs);
     }
 }

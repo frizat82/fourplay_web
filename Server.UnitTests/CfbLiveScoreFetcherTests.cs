@@ -236,29 +236,4 @@ public class CfbLiveScoreFetcherTests {
         await _cfbApi.DidNotReceiveWithAnyArgs().GetScoresByDateRangeAsync(default, default);
         await _cfbApi.DidNotReceive().GetCfpGamesAsync();
     }
-
-    // Live polls (LiveDayRefresh): regular season asks ESPN for just the live days; a CFP slate is
-    // already a single request (week=999), so it stays one.
-    [Fact]
-    public async Task FetchDaysAsync_RegularSeason_RequestsOnlyTheGivenDays() {
-        var slate = BuildRegularSeasonSlate(); // 2025-09-27..28
-        _cfbApi.GetScoresForDayAsync(new DateOnly(2025, 9, 27)).Returns(BuildScoreboardWithRanking());
-
-        var result = await BuildFetcher().FetchDaysAsync(slate, [new DateOnly(2025, 9, 27)]);
-
-        await _cfbApi.Received(1).GetScoresForDayAsync(new DateOnly(2025, 9, 27));
-        await _cfbApi.DidNotReceiveWithAnyArgs().GetScoresByDateRangeAsync(default, default);
-        Assert.Single(result!.Events!);
-    }
-
-    [Fact]
-    public async Task FetchDaysAsync_CfpSlate_IsOneCfpRequest() {
-        _cfbApi.GetCfpGamesAsync().Returns(BuildScoreboard());
-
-        var result = await BuildFetcher().FetchDaysAsync(BuildCfpSlate(), [new DateOnly(2025, 12, 19), new DateOnly(2025, 12, 20)]);
-
-        await _cfbApi.Received(1).GetCfpGamesAsync();
-        await _cfbApi.DidNotReceiveWithAnyArgs().GetScoresForDayAsync(default);
-        Assert.Single(result!.Events!);
-    }
 }

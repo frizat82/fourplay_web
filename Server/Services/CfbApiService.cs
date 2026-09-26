@@ -5,7 +5,8 @@ using System.Text.Json;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class CfbApiService(HttpClient httpClient, ILogger<CfbApiService> logger) : ICfbApiService {
+// dayCache: optional so tests that don't care can omit it (every day then goes to the HttpClient).
+public class CfbApiService(HttpClient httpClient, ILogger<CfbApiService> logger, EspnDayCache? dayCache = null) : ICfbApiService {
     // Must deserialize with EspnApiServiceJsonConverter.Settings — its converters handle ESPN's
     // wire values (e.g. "away" for HomeAway, "STATUS_IN_PROGRESS" for TypeName) that don't match
     // PascalCase enum member names under default System.Text.Json enum parsing (see
@@ -24,47 +25,25 @@ public class CfbApiService(HttpClient httpClient, ILogger<CfbApiService> logger)
     // need to duplicate or unify with; adding a postseason branch here that no caller would ever
     // exercise would just be dead code implying an equivalence that doesn't exist.
     //
-    // frizat-4gn: ESPN broke the dates=START-END range query (HTTP 400 for every range, every
-    // date, every ESPN sport we tested — not transient). Tries the range query first (cheap,
-    // single call) and falls back to fetching one day at a time via EspnDateRangeFetcher only if
-    // that fails — if ESPN ever fixes the range endpoint again, the range path resumes taking
-    // over automatically, with zero further changes needed. This also fixes a real, independent
-    // observability gap: the old version silently returned null on any non-success status with
-    // NO logging at all (unlike EspnApiService's NFL equivalent, which always logged) — every
-    // path below now logs.
-    public async Task<EspnScores?> GetScoresByDateRangeAsync(DateOnly startDate, DateOnly endDate) {
-        var rangeResult = await TryGetScoresByRangeAsync(startDate, endDate);
-        if (rangeResult is not null) return rangeResult;
+    // frizat-4gn: ESPN answers only single-day dates= queries (a dates=START-END range is HTTP 400),
+    // so the window is fetched one day at a time — each day through EspnDayCache, so only days that
+    // can still change reach ESPN.
+    public Task<EspnScores?> GetScoresByDateRangeAsync(DateOnly startDate, DateOnly endDate) =>
+        EspnDateRangeFetcher.FetchRangeAsync(startDate, endDate, GetScoresForSingleDayAsync);
 
-        logger.LogWarning("ESPN Date Range Not Working falling back to Days");
-        return await EspnDateRangeFetcher.FetchRangeAsync(startDate, endDate, GetScoresForDayAsync);
-    }
-
-    // Deliberately no Error-level logging here — right now every call takes this path and falls
-    // back (ESPN's range endpoint is confirmed broken), so logging that as an error would just be
-    // permanent noise. FetchAndParseAsync's own error logging (used by every other method below)
-    // covers the case that actually needs attention: the fallback itself failing.
-    private async Task<EspnScores?> TryGetScoresByRangeAsync(DateOnly startDate, DateOnly endDate) {
-        var dates = $"{startDate:yyyyMMdd}-{endDate:yyyyMMdd}";
-        var url = $"/apis/site/v2/sports/football/college-football/scoreboard?dates={dates}&seasontype=2&limit=100";
-        try {
-            var response = await httpClient.GetAsync(url);
-            if (!response.IsSuccessStatusCode) return null;
-            return await ParseAsync(response);
-        } catch (HttpRequestException) {
-            return null;
-        }
-    }
-
-    public Task<EspnScores?> GetScoresForDayAsync(DateOnly date) =>
-        FetchAndParseAsync($"/apis/site/v2/sports/football/college-football/scoreboard?dates={date:yyyyMMdd}&seasontype=2&limit=100");
+    private Task<EspnScores?> GetScoresForSingleDayAsync(DateOnly date) =>
+        GetCachedAsync($"/apis/site/v2/sports/football/college-football/scoreboard?dates={date:yyyyMMdd}&seasontype=2&limit=100");
 
     // ESPN week=999 is the explicit CFP-only bucket — returns all CFP playoff games regardless of
     // round. Use date filtering downstream to isolate the specific round. Not part of frizat-4gn's
     // range-query breakage (week=999 still works), but given the same logging parity fix while
     // touching this class.
-    public Task<EspnScores?> GetCfpGamesAsync() =>
-        FetchAndParseAsync("/apis/site/v2/sports/football/college-football/scoreboard?week=999&seasontype=3&limit=100");
+    public Task<EspnScores?> GetCfpGamesAsync() => GetCachedAsync("/apis/site/v2/sports/football/college-football/scoreboard?week=999&seasontype=3&limit=100");
+
+    // Same EspnDayCache rules whether the response is one day or the CFP bucket: cached until a
+    // game in it can change.
+    private Task<EspnScores?> GetCachedAsync(string url) =>
+        dayCache is null ? FetchAndParseAsync(url) : dayCache.GetOrFetchAsync(url, () => FetchAndParseAsync(url));
 
     private async Task<EspnScores?> FetchAndParseAsync(string url) {
         try {

@@ -15,14 +15,17 @@ public static class LeagueCacheKeys {
 
     /// <summary>Tie a cache entry to the league-season's settings; call before reading them.</summary>
     public static void Track(IMemoryCache cache, ICacheEntry entry, int leagueId, long season) =>
-        CacheGenerations.Track(cache, entry, (leagueId, season));
+        CacheGenerations.Track(cache, entry, new LeagueSeason(leagueId, season));
+
+    // One typed scope, so Track and Invalidate can't disagree on the key's shape ((int,int) vs (int,long)).
+    private readonly record struct LeagueSeason(int LeagueId, long Season);
 
     /// <summary>
     /// Call after a league's settings for <paramref name="season"/> change. LeagueRepository's
     /// juice writers do, so every writer (endpoints, jobs, league creation) is covered.
     /// </summary>
     public static void InvalidateLeagueSeason(IMemoryCache cache, int leagueId, int season) {
-        CacheGenerations.Invalidate(cache, (leagueId, (long)season));
+        CacheGenerations.Invalidate(cache, new LeagueSeason(leagueId, season));
         cache.Remove(Juice(leagueId, season));
         cache.Remove(Leaderboard(leagueId, season));
     }

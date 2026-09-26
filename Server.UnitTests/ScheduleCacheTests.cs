@@ -1,4 +1,6 @@
+using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Repositories;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -7,7 +9,8 @@ namespace FourPlayWebApp.Server.UnitTests;
 // "What week/slate is it" is resolved from the schedule tables (NflSeasonWeekConfigs, CfbSlates,
 // CfbSeasonWeekConfigs) on every poll and most requests — ~5k full-table reads a day that also
 // kept Neon from ever suspending. The rows change a few times a season, so the repositories cache
-// them and their own writers evict.
+// them, and any save that touches one of those tables evicts it (ScheduleCacheInterceptor — covers
+// the repositories, DemoDataSeeder's direct writes, and any future writer).
 public class ScheduleCacheTests {
     private static CfbSlates Slate(int id, int season, int number) =>
         new() { Id = id, Season = season, SlateNumber = number, Label = $"W{number}", SlateType = "RegularSeason" };
@@ -41,9 +44,10 @@ public class ScheduleCacheTests {
     }
 
     [Fact]
-    public async Task CfbSchedule_WritersEvict() {
-        var factory = new DbContextFactoryStub(nameof(CfbSchedule_WritersEvict));
-        var repo = new CfbRepository(factory, new MemoryCache(new MemoryCacheOptions()));
+    public async Task CfbSchedule_WritesThroughTheRepository_Evict() {
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var factory = new DbContextFactoryStub(nameof(CfbSchedule_WritesThroughTheRepository_Evict), new ScheduleCacheInterceptor(cache));
+        var repo = new CfbRepository(factory, cache);
 
         Assert.Empty(await repo.GetAllSlatesAsync());
         var second = Slate(2, 2026, 2); // the stub shares one DbContext, so delete the tracked instance
@@ -92,25 +96,27 @@ public class ScheduleCacheTests {
         Assert.Empty(await repo.GetNflSeasonWeekConfigsAsync());
     }
 
-    // DemoDataSeeder writes these tables directly (and UserManagerJob re-runs it after the app is
-    // serving), so it evicts everything when it's done.
+    // DemoDataSeeder writes these tables straight through its DbContext (and UserManagerJob re-runs
+    // it after the app is serving) — any save touching a schedule table evicts that table, whoever
+    // made it; other tables' saves leave the cache alone.
     [Fact]
-    public async Task InvalidateAll_EvictsEveryScheduleTable() {
-        var factory = new DbContextFactoryStub(nameof(InvalidateAll_EvictsEveryScheduleTable));
+    public async Task AnySaveTouchingAScheduleTable_EvictsThatTable() {
         var cache = new MemoryCache(new MemoryCacheOptions());
+        var factory = new DbContextFactoryStub(nameof(AnySaveTouchingAScheduleTable_EvictsThatTable), new ScheduleCacheInterceptor(cache));
         var cfb = new CfbRepository(factory, cache);
         var nfl = new LeagueRepository(factory, cache);
         await cfb.GetAllSlatesAsync(); await cfb.GetAllWeekConfigsAsync(); await nfl.GetNflSeasonWeekConfigsAsync();
 
         var db = factory.CreateDbContext();
-        db.CfbSlates.Add(Slate(1, 2026, 1));
-        db.CfbSeasonWeekConfigs.Add(WeekConfig(1, 2026, 1));
         db.NflSeasonWeekConfigs.Add(new NflSeasonWeekConfig { Id = 1, Season = 2026, WeekId = 1, WeekLabel = "Week 1", WeekType = "RegularSeason", ScoringFormat = "Standard" });
         await db.SaveChangesAsync();
-        FourPlayWebApp.Server.Services.ScheduleCache.InvalidateAll(cache);
+        Assert.Single(await nfl.GetNflSeasonWeekConfigsAsync());
+        Assert.True(cache.TryGetValue(ScheduleCache.CfbSlates, out _)); // untouched tables stay cached
 
+        db.CfbSlates.Add(Slate(1, 2026, 1));
+        db.CfbSeasonWeekConfigs.Add(WeekConfig(1, 2026, 1));
+        db.SaveChanges(); // the synchronous path too
         Assert.Single(await cfb.GetAllSlatesAsync());
         Assert.Single(await cfb.GetAllWeekConfigsAsync());
-        Assert.Single(await nfl.GetNflSeasonWeekConfigsAsync());
     }
 }

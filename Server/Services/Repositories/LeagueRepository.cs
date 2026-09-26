@@ -69,8 +69,7 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     }
 
     // NFL Season Week Config
-    // Cached (ScheduleCache). The app itself never writes these rows — they come from migrations
-    // (a deploy restarts the app) and DemoDataSeeder (which evicts when it's done).
+    // Cached (ScheduleCache); any save touching the table evicts it (ScheduleCacheInterceptor).
     public async Task<List<NflSeasonWeekConfig>> GetNflSeasonWeekConfigsAsync() =>
         ScheduleCache.Copies(await NflWeekConfigRowsAsync());
 

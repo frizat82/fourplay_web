@@ -7,9 +7,9 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services.Repositories;
 
-// cache: the schedule tables (CfbSlates, CfbSeasonWeekConfigs) are cached via ScheduleCache and
-// evicted by the writers below. Optional so tests that don't care can omit it (reads go straight
-// to the database).
+// cache: the schedule tables (CfbSlates, CfbSeasonWeekConfigs) are cached via ScheduleCache (saves
+// evict it — ScheduleCacheInterceptor). Optional so tests that don't care can omit it (reads go
+// straight to the database).
 public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IMemoryCache? cache = null) : ICfbRepository {
     public async Task<bool> SlatesExistForSeasonAsync(int season) {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -20,7 +20,6 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
         await using var db = await dbFactory.CreateDbContextAsync();
         db.CfbSlates.AddRange(slates);
         await db.SaveChangesAsync();
-        ScheduleCache.Invalidate(cache, ScheduleCache.CfbSlates);
     }
 
     public async Task<bool> DeleteSlatesAsync(IEnumerable<CfbSlates> slates) {
@@ -40,7 +39,6 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
 
         db.CfbSlates.RemoveRange(slateList);
         await db.SaveChangesAsync();
-        ScheduleCache.Invalidate(cache, ScheduleCache.CfbSlates);
         return true;
     }
 
@@ -172,7 +170,6 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
         await using var db = await dbFactory.CreateDbContextAsync();
         db.CfbSeasonWeekConfigs.AddRange(configs);
         await db.SaveChangesAsync();
-        ScheduleCache.Invalidate(cache, ScheduleCache.CfbWeekConfigs);
     }
 
     public async Task UpsertCfbScoresAsync(IEnumerable<CfbScores> scores) {

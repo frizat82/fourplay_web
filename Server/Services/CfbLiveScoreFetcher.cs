@@ -62,18 +62,14 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceProvider service
         return result;
     }
 
-    public async Task<EspnScores?> FetchDaysAsync(CfbSlates slate, IReadOnlyCollection<DateOnly> days) =>
-        CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat)
-            ? await FetchCfpAsync(slate)
-            : FilterToSlate(await EspnDateRangeFetcher.FetchDaysAsync(days, cfbApi.GetScoresForDayAsync), slate);
-
-    // CFP: week=999 ESPN bucket returns all CFP games; filter to this round by date
-    private async Task<EspnScores?> FetchCfpAsync(CfbSlates slate) => FilterToSlate(await cfbApi.GetCfpGamesAsync(), slate);
-
-    private static EspnScores? FilterToSlate(EspnScores? scoreboard, CfbSlates slate) {
+    private async Task<EspnScores?> FetchCfpAsync(CfbSlates slate) {
+        // CFP: week=999 ESPN bucket returns all CFP games; filter to this round by date
+        var scoreboard = await cfbApi.GetCfpGamesAsync();
         if (scoreboard?.Events is null) return null;
+
         var events = GameHelpers.FilterEventsToDateWindow(scoreboard.Events,
             slate.StartDate.ToDateTime(TimeOnly.MinValue), slate.EndDate.ToDateTime(TimeOnly.MaxValue));
+
         return events.Length == 0 ? null : GameHelpers.WithEvents(scoreboard, events);
     }
 
@@ -92,6 +88,12 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceProvider service
         // premise is "don't fully trust ESPN's own bucketing," so don't trust the dates= query param
         // to be honored perfectly either (e.g. a timezone-boundary edge case on a late-night/West
         // Coast kickoff). Same date-window filter FetchCfpAsync already applies above.
-        return FilterToSlate(await cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate), slate);
+        var scoreboard = await cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate);
+        if (scoreboard?.Events is null) return null;
+
+        var events = GameHelpers.FilterEventsToDateWindow(scoreboard.Events,
+            slate.StartDate.ToDateTime(TimeOnly.MinValue), slate.EndDate.ToDateTime(TimeOnly.MaxValue));
+
+        return events.Length == 0 ? null : GameHelpers.WithEvents(scoreboard, events);
     }
 }

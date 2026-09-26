@@ -18,11 +18,7 @@ public static class AdaptivePollInterval
         DateTimeOffset now) where T : class
     {
         if (current is null) return slowInterval;
-        var isActive = activeWindowStarts(current).Any(start => IsInWindow(start, activeWindowDuration, now));
+        var isActive = activeWindowStarts(current).Any(start => start <= now && now <= start + activeWindowDuration);
         return isActive ? fastInterval : slowInterval;
     }
-
-    /// <summary>The one "is this window active" rule — also what LiveDayRefresh calls a live game.</summary>
-    public static bool IsInWindow(DateTimeOffset start, TimeSpan duration, DateTimeOffset now) =>
-        start <= now && now <= start + duration;
 }

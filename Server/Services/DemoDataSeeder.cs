@@ -7,7 +7,6 @@ using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 
 namespace FourPlayWebApp.Server.Services;
@@ -19,8 +18,7 @@ namespace FourPlayWebApp.Server.Services;
 public class DemoDataSeeder(
     ApplicationDbContext db,
     UserManager<ApplicationUser> userManager,
-    IConfiguration configuration,
-    IMemoryCache? cache = null)
+    IConfiguration configuration)
 {
     private const int DemoSeason = 2025;
     private const int DemoWeek = 18;
@@ -126,10 +124,6 @@ public class DemoDataSeeder(
             await SeedReplayCfbSlateAsync();
 
         Log.Information("DemoDataSeeder: seed complete");
-
-        // The schedule tables were just written directly (not through the repositories), and
-        // UserManagerJob re-runs this after the app is already serving — drop the cached copies.
-        ScheduleCache.InvalidateAll(cache);
     }
 
     /// <summary>

@@ -103,16 +103,4 @@ public class EspnDateRangeFetcherTests {
 
         Assert.Equal(1, callCount);
     }
-
-    // An inverted window (bad control-table row) is an empty range, not an exception out of the
-    // scores jobs and pollers.
-    [Fact]
-    public async Task FetchRangeAsync_InvertedWindow_FetchesNothing() {
-        var calls = 0;
-        var result = await EspnDateRangeFetcher.FetchRangeAsync(new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 1),
-            _ => { calls++; return Task.FromResult<EspnScores?>(null); });
-
-        Assert.Null(result);
-        Assert.Equal(0, calls);
-    }
 }
