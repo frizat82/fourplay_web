@@ -1,4 +1,5 @@
 ﻿using FourPlayWebApp.Server.Data;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
@@ -265,7 +266,7 @@ public class AuthController(
         // Reject a ConfirmationUrl on a domain we don't control — otherwise an anonymous caller
         // could register an account for any email with a phishing domain as ConfirmationUrl,
         // and our server would send a real, branded "confirm your email" message pointing there.
-        if (!IsAllowedConfirmationOrigin(user.ConfirmationUrl)) {
+        if (!EmailLinkOrigin.IsAllowed(config, user.ConfirmationUrl)) {
             response.IsSuccess = false;
             response.Errors = new List<string> { "Invalid confirmation URL." };
             return BadRequest(response);
@@ -385,25 +386,6 @@ public class AuthController(
     }
 
     /// <summary>
-    /// True if confirmationUrl is an absolute URL whose origin is in ALLOWED_ORIGINS (the same
-    /// comma-separated allow-list used for CORS). ALLOWED_ORIGINS is only ever empty in
-    /// Development — Program.cs fails startup otherwise — so an empty list allows any origin,
-    /// mirroring the AllowAnyOrigin() CORS fallback for that same case.
-    /// </summary>
-    private bool IsAllowedConfirmationOrigin(string? confirmationUrl) {
-        var allowedOrigins = (config["ALLOWED_ORIGINS"] ?? string.Empty)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (allowedOrigins.Length == 0)
-            return true;
-
-        if (!Uri.TryCreate(confirmationUrl, UriKind.Absolute, out var uri))
-            return false;
-
-        var origin = $"{uri.Scheme}://{uri.Authority}";
-        return allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
     /// frizat-o23: Username and Email are two distinct identifiers (Username is shown everywhere
     /// in the UI — league rosters, picks, leaderboard; Email is private contact info) — a
     /// username must never be email-shaped, regardless of whose email it resembles. Shared by
@@ -422,6 +404,9 @@ public class AuthController(
         {
             return BadRequest("Invalid request.");
         }
+        // Before the user lookup, so the response can't reveal whether the email exists.
+        if (!EmailLinkOrigin.IsAllowed(config, model.ResetUrl))
+            return BadRequest("Invalid reset URL.");
 
         var user = await userManager.FindByEmailAsync(model.Email);
         if (user == null)
@@ -556,6 +541,8 @@ public class AuthController(
     [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("forgot")]
     public async Task<ActionResult<string>> RequestEmailConfirmation([FromBody] RequestEmailConfirmation request)
     {
+        if (!EmailLinkOrigin.IsAllowed(config, request.ConfirmationUrl))
+            return BadRequest("Invalid confirmation URL.");
         var user = await userManager.FindByEmailAsync(request.Email);
         // Always respond the same way
         if (user == null || await userManager.IsEmailConfirmedAsync(user))

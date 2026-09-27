@@ -1,4 +1,5 @@
-﻿using FourPlayWebApp.Server.Models.Identity;
+﻿using FourPlayWebApp.Server.Infrastructure;
+using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Models.Mappers;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -18,7 +19,8 @@ public class InvitationController(
     IEmailSender<ApplicationUser> emailSenderApplication,
     UserManager<ApplicationUser> userManager,
     ILeagueRepository leagueRepo,
-    ILeagueMembershipInviteService membershipInviteService) : ControllerBase {
+    ILeagueMembershipInviteService membershipInviteService,
+    IConfiguration config) : ControllerBase {
     [HttpGet("all")]
     public async Task<ActionResult<List<InvitationDto>>> GetAll()
     {
@@ -36,6 +38,8 @@ public class InvitationController(
     [HttpPost]
     public async Task<ActionResult<LeagueInviteResultDto>> Create([FromQuery] string email, [FromQuery] string invitedByUserId, [FromQuery] int? leagueId = null, [FromQuery] string? baseUrl = null)
     {
+        if (!string.IsNullOrWhiteSpace(baseUrl) && !EmailLinkOrigin.IsAllowed(config, baseUrl))
+            return BadRequest("Invalid invite URL.");
         // Mirrors LeagueController.InviteToLeague's existing-user check: this admin-facing
         // "Manage Invitations" tool used to unconditionally create a registration-style email
         // Invitation, even for an email that already has an account — the invitee never saw an
@@ -79,6 +83,8 @@ public class InvitationController(
     [HttpPost("{id:int}/resend")]
     public async Task<IActionResult> Resend(int id, [FromQuery] string baseUrl)
     {
+        if (!EmailLinkOrigin.IsAllowed(config, baseUrl))
+            return BadRequest("Invalid invite URL.");
         await invitationService.ResendInvitationEmailAsync(id, baseUrl);
         return Ok();
     }

@@ -1,4 +1,5 @@
 ﻿using FourPlayWebApp.Server.Auth;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
@@ -39,7 +40,8 @@ public class LeagueController(
     IEspnCacheService espnCacheService,
     IInvitationService invitationService,
     ILeagueInviteLinkService leagueInviteLinkService,
-    ILeagueMembershipInviteService membershipInviteService) : ControllerBase {
+    ILeagueMembershipInviteService membershipInviteService,
+    IConfiguration config) : ControllerBase {
     // Mirrors CfbPicksController.GetCurrentSlate's role for CFB — exposes NflCurrentWeekService's
     // existing off-season/pre-season fallback (already used internally by NflSpreadJob and
     // EspnCacheService) to the frontend, so nflAdapter.ts no longer falls back to
@@ -1078,6 +1080,10 @@ public class LeagueController(
     public async Task<IActionResult> InviteToLeague(int leagueId, [FromBody] LeagueInviteDto dto) {
         var (_, error) = await LoadOwnedLeagueAsync(leagueId);
         if (error is not null) return error;
+        // Anyone can create a league and own it, so BaseUrl is untrusted: it becomes the link in
+        // a real IV League email to any address. No BaseUrl means no email is sent at all.
+        if (!string.IsNullOrWhiteSpace(dto.BaseUrl) && !EmailLinkOrigin.IsAllowed(config, dto.BaseUrl))
+            return BadRequest("Invalid invite URL.");
         var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
         // Someone who already has an account (owns a league or belongs to one) must be

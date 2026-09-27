@@ -101,7 +101,7 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
              <p>Hello,</p>
              <p>You've been invited to join IV League. Click the button below to create your account and get started.</p>
              <div style="text-align:center;margin:24px 0;">
-               <a href="{registrationUrl}" style="display:inline-block;background-color:#4f46e5;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
+               <a href="{System.Net.WebUtility.HtmlEncode(registrationUrl)}" style="display:inline-block;background-color:#4f46e5;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
                  Create Your Account
                </a>
              </div>

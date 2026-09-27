@@ -415,6 +415,78 @@ public class AuthControllerTests
         Assert.IsType<OkResult>(result.Result);
     }
 
+    // Security: ResetUrl is client-supplied and the emailed link carries a live reset code — an
+    // untrusted origin would let anyone, logged out, have a victim's reset code delivered to
+    // their own site. Checked before the user lookup, so it can't reveal whether the email exists.
+    [Fact]
+    public async Task ForgotPassword_WhenAllowedOriginsConfigured_RejectsResetUrlOnUntrustedDomain()
+    {
+        var config = Substitute.For<IConfiguration>();
+        config["ALLOWED_ORIGINS"].Returns("https://ivleague.xyz,https://cfb.ivleague.xyz");
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("victim@example.com").Returns(BuildUser());
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(userManager: userManager, config: config, emailSenderApplication: emailSender);
+
+        var result = await controller.ForgotPassword(new ForgotPasswordRequest
+        {
+            Email    = "victim@example.com",
+            ResetUrl = "https://evil.example/account/resetpassword",
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await userManager.DidNotReceive().GeneratePasswordResetTokenAsync(Arg.Any<ApplicationUser>());
+        await emailSender.DidNotReceive().SendPasswordResetLinkAsync(
+            Arg.Any<ApplicationUser>(), Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task ForgotPassword_WhenAllowedOriginsConfigured_SendsResetLinkOnTrustedDomain()
+    {
+        var config = Substitute.For<IConfiguration>();
+        config["ALLOWED_ORIGINS"].Returns("https://ivleague.xyz,https://cfb.ivleague.xyz");
+        var user = BuildUser();
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("member@example.com").Returns(user);
+        userManager.GeneratePasswordResetTokenAsync(user).Returns("reset-token");
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(userManager: userManager, config: config, emailSenderApplication: emailSender);
+
+        var result = await controller.ForgotPassword(new ForgotPasswordRequest
+        {
+            Email    = "member@example.com",
+            ResetUrl = "https://cfb.ivleague.xyz/account/resetpassword",
+        });
+
+        Assert.IsType<OkResult>(result.Result);
+        await emailSender.Received(1).SendPasswordResetLinkAsync(user, "member@example.com",
+            Arg.Is<string>(link => link.StartsWith("https://cfb.ivleague.xyz/account/resetpassword?code=")));
+    }
+
+    // Same hole as ForgotPassword, for the resend-confirmation page: anonymous, and the link
+    // carries a live email-confirmation token.
+    [Fact]
+    public async Task RequestEmailConfirmation_WhenAllowedOriginsConfigured_RejectsConfirmationUrlOnUntrustedDomain()
+    {
+        var config = Substitute.For<IConfiguration>();
+        config["ALLOWED_ORIGINS"].Returns("https://ivleague.xyz,https://cfb.ivleague.xyz");
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("victim@example.com").Returns(BuildUser());
+        userManager.IsEmailConfirmedAsync(Arg.Any<ApplicationUser>()).Returns(false);
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(userManager: userManager, config: config, emailSenderApplication: emailSender);
+
+        var result = await controller.RequestEmailConfirmation(new RequestEmailConfirmation
+        {
+            Email           = "victim@example.com",
+            ConfirmationUrl = "https://evil.example/account/confirmemail",
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await emailSender.DidNotReceive().SendConfirmationLinkAsync(
+            Arg.Any<ApplicationUser>(), Arg.Any<string>(), Arg.Any<string>());
+    }
+
     /// <summary>
     /// frizat-8n3: ResetPassword must return 200 OK even when the email is not found.
     /// Returning 400 leaks whether an account exists for that email (user enumeration).

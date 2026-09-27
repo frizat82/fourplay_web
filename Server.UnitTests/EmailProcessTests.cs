@@ -43,7 +43,8 @@ public class EmailProcessTests
         var userManager = UserManagerStub.Create(Substitute.For<IUserStore<ApplicationUser>>());
         return new InvitationController(
             invitationService, emailSenderApp,
-            userManager, Substitute.For<ILeagueRepository>(), Substitute.For<ILeagueMembershipInviteService>());
+            userManager, Substitute.For<ILeagueRepository>(), Substitute.For<ILeagueMembershipInviteService>(),
+            Substitute.For<IConfiguration>());
     }
 
     private static AuthController BuildAuthController(

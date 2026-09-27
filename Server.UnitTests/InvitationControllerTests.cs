@@ -8,6 +8,7 @@ using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using Xunit;
 
@@ -16,7 +17,7 @@ namespace FourPlayWebApp.Server.UnitTests;
 public class InvitationControllerTests
 {
     private static (InvitationController ctrl, IInvitationService invitationService, ILeagueRepository leagueRepo, UserManager<ApplicationUser> userManager, ILeagueMembershipInviteService membershipInviteService)
-        BuildControllerWithDeps(IInvitationService? invitationService = null)
+        BuildControllerWithDeps(IInvitationService? invitationService = null, IConfiguration? config = null)
     {
         invitationService ??= Substitute.For<IInvitationService>();
         var leagueRepo = Substitute.For<ILeagueRepository>();
@@ -24,7 +25,7 @@ public class InvitationControllerTests
         var membershipInviteService = Substitute.For<ILeagueMembershipInviteService>();
         var ctrl = new InvitationController(
             invitationService, Substitute.For<IEmailSender<ApplicationUser>>(),
-            userManager, leagueRepo, membershipInviteService);
+            userManager, leagueRepo, membershipInviteService, config ?? Substitute.For<IConfiguration>());
         return (ctrl, invitationService, leagueRepo, userManager, membershipInviteService);
     }
 
@@ -40,6 +41,35 @@ public class InvitationControllerTests
         await ctrl.Create("target@example.com", "admin-1", baseUrl: "https://ivleague.com");
 
         await invitationService.Received(1).CreateInvitationAsync("target@example.com", "admin-1", null, "https://ivleague.com");
+    }
+
+    private static IConfiguration ProdOrigins()
+    {
+        var config = Substitute.For<IConfiguration>();
+        config["ALLOWED_ORIGINS"].Returns("https://ivleague.xyz,https://cfb.ivleague.xyz");
+        return config;
+    }
+
+    [Fact]
+    public async Task Create_RejectsBaseUrlOnUntrustedDomain()
+    {
+        var (ctrl, invitationService, _, _, _) = BuildControllerWithDeps(config: ProdOrigins());
+
+        var result = await ctrl.Create("target@example.com", "admin-1", baseUrl: "https://evil.example");
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await invitationService.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
+    }
+
+    [Fact]
+    public async Task Resend_RejectsBaseUrlOnUntrustedDomain()
+    {
+        var (ctrl, invitationService, _, _, _) = BuildControllerWithDeps(config: ProdOrigins());
+
+        var result = await ctrl.Resend(7, "https://evil.example");
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await invitationService.DidNotReceiveWithAnyArgs().ResendInvitationEmailAsync(default, default!);
     }
 
     // ── Existing-user detection when a league is specified ──────────────────
