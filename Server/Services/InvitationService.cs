@@ -1,13 +1,15 @@
 using FourPlayWebApp.Server.Data;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Services.Interfaces;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using System.Net;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContextFactory, IEmailSender emailSender) : IInvitationService {
+public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContextFactory, IEmailSender emailSender, EmailLinkOrigins emailLinks) : IInvitationService {
     public async Task DeleteInvitationAsync(int id) {
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
@@ -24,6 +26,11 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
 
     public async Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null, string? baseUrl = null)
     {
+        // Checked here, where the emailed link is built, so no caller can skip it — and before the
+        // row is written. No baseUrl means no email is sent, so there's nothing to check.
+        var registerLink = string.IsNullOrWhiteSpace(baseUrl)
+            ? null
+            : emailLinks.LinkTo(baseUrl, AccountLinkPaths.Register) ?? throw new UntrustedEmailLinkException();
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
         // frizat-9vm: Invitations is unique on (Email, LeagueId), not just Email — the same
@@ -69,9 +76,9 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(baseUrl)) {
+        if (registerLink is not null) {
             try {
-                await SendInvitationEmailAsync(invitation, baseUrl);
+                await SendInvitationEmailAsync(invitation, registerLink);
             } catch (Exception ex) {
                 // Invitation was created/refreshed successfully; a failed email send must not undo it.
                 Log.Error(ex, "Failed to send invitation email to {Email}", email);
@@ -82,26 +89,27 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
     }
 
     public async Task ResendInvitationEmailAsync(int invitationId, string baseUrl) {
+        var registerLink = emailLinks.LinkTo(baseUrl, AccountLinkPaths.Register) ?? throw new UntrustedEmailLinkException();
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         var invitation = await dbContext.Invitations.FindAsync(invitationId);
         if (invitation == null) {
             Log.Warning("Cannot resend invitation {Id} - not found", invitationId);
             return;
         }
-        await SendInvitationEmailAsync(invitation, baseUrl);
+        await SendInvitationEmailAsync(invitation, registerLink);
     }
 
-    private Task SendInvitationEmailAsync(Invitation invitation, string baseUrl) {
+    private Task SendInvitationEmailAsync(Invitation invitation, string registerLink) {
         // Path must match InvitationsPage.tsx's getInviteUrl (the "copy link" button) — nothing
         // enforces the two staying in sync, so update both if this route ever changes.
-        var registrationUrl = $"{baseUrl.TrimEnd('/')}/account/register?inviteCode={Uri.EscapeDataString(invitation.InvitationCode)}&returnUrl=%2F";
+        var registrationUrl = $"{registerLink}?inviteCode={Uri.EscapeDataString(invitation.InvitationCode)}&returnUrl=%2F";
         var body = GoogleEmailSender.CreateTemplatedBody(
             "You're Invited to Join!",
             $"""
              <p>Hello,</p>
              <p>You've been invited to join IV League. Click the button below to create your account and get started.</p>
              <div style="text-align:center;margin:24px 0;">
-               <a href="{registrationUrl}" style="display:inline-block;background-color:#4f46e5;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
+               <a href="{WebUtility.HtmlEncode(registrationUrl)}" style="display:inline-block;background-color:#4f46e5;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
                  Create Your Account
                </a>
              </div>

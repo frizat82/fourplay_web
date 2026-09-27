@@ -1,10 +1,15 @@
+using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FourPlayWebApp.Server.Controllers;
 
-[AllowAnonymous]
+// Admin-only while the jersey feature is off (PicksPage, frizat-d2h). A cache miss scrapes
+// gridiron-uniforms.com and image-processes every game, empty results aren't cached and
+// concurrent misses aren't collapsed — so before opening this to users again, cache negative
+// results and single-flight RefreshAsync, or anyone can make us hammer the upstream.
+[Authorize(Roles = AppRoles.Administrator)]
 [ApiController]
 [Route("api/[controller]")]
 public class JerseysController(IJerseyCacheService jerseyCacheService) : ControllerBase {
@@ -43,7 +48,6 @@ public class JerseysController(IJerseyCacheService jerseyCacheService) : Control
     }
 
     [HttpPost("{season}/{week}/refresh")]
-    [Authorize]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<ActionResult> RefreshCache(int season, int week)
     {

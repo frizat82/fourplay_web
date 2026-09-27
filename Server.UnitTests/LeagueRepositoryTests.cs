@@ -120,6 +120,49 @@ public class LeagueRepositoryTests
         Assert.True(await db.LeagueUserMapping.AnyAsync(m => m.LeagueId == otherLeague.Id));
     }
 
+    // GetLeagueInfoAsync backs every owner check and the leaderboard's sport lookup, and none of
+    // its callers read the collections — Including both multiplied the row count (members ×
+    // juice seasons) for nothing and tripped EF's MultipleCollectionIncludeWarning in prod.
+    // SqliteTestDb, not DbContextFactoryStub: the stub shares one context, whose change tracker
+    // would fix up the collections from the seeded entities and hide what the query loaded.
+    [Fact]
+    public Task GetLeagueInfoAsync_ReturnsLeagueRowOnly_WithoutLoadingCollections() =>
+        SqliteTestDb.WithDb(nameof(GetLeagueInfoAsync_ReturnsLeagueRowOnly_WithoutLoadingCollections), async factory =>
+        {
+            int leagueId;
+            await using (var seedDb = await factory.CreateDbContextAsync())
+            {
+                await SqliteTestDb.SeedUser(seedDb, "owner-1");
+                await SqliteTestDb.SeedUser(seedDb, "user-2");
+                var league = new LeagueInfo { LeagueName = "L", OwnerUserId = "owner-1", LeagueType = LeagueType.Cfb };
+                seedDb.LeagueInfo.Add(league);
+                await seedDb.SaveChangesAsync();
+                leagueId = league.Id;
+                seedDb.LeagueUserMapping.AddRange(
+                    new LeagueUserMapping { LeagueId = leagueId, UserId = "owner-1" },
+                    new LeagueUserMapping { LeagueId = leagueId, UserId = "user-2" });
+                seedDb.LeagueJuiceMapping.AddRange(
+                    new LeagueJuiceMapping { LeagueId = leagueId, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 },
+                    new LeagueJuiceMapping { LeagueId = leagueId, Season = 2026, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
+                await seedDb.SaveChangesAsync();
+            }
+
+            var result = await new LeagueRepository(factory).GetLeagueInfoAsync(leagueId);
+
+            Assert.Equal("owner-1", result.OwnerUserId);
+            Assert.Equal(LeagueType.Cfb, result.LeagueType);
+            Assert.Empty(result.LeagueUserMappings);
+            Assert.Empty(result.LeagueJuiceMappings);
+        });
+
+    // Callers map this to a 404 (LoadOwnedLeagueAsync, CfbPicksController.GetPickCounts, …).
+    [Fact]
+    public async Task GetLeagueInfoAsync_UnknownLeague_Throws()
+    {
+        var repo = new LeagueRepository(new DbContextFactoryStub(nameof(GetLeagueInfoAsync_UnknownLeague_Throws)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => repo.GetLeagueInfoAsync(999));
+    }
+
     // ── Soft-delete league membership ───────────────────────────────────────────
     // frizat: removing a member must keep their pick history for audit purposes — flip IsActive
     // instead of hard-deleting the LeagueUserMapping row.
