@@ -371,14 +371,15 @@ public class AuthController(
     /// from treating account creation as successful.
     /// </summary>
     private async Task SendEmailConfirmationLinkAsync(ApplicationUser newlyCreatedUser, string confirmationUrl, string context) {
-        if (string.IsNullOrWhiteSpace(confirmationUrl)) {
-            logger.LogError("Cannot send confirmation email to {Email} after {Context}: no ConfirmationUrl was supplied", newlyCreatedUser.Email, context);
+        var confirmLink = emailLinks.LinkTo(confirmationUrl, AccountLinkPaths.ConfirmEmail);
+        if (confirmLink is null) {
+            logger.LogError("Cannot send confirmation email to {Email} after {Context}: no usable ConfirmationUrl was supplied", newlyCreatedUser.Email, context);
             return;
         }
         try {
             var token = await userManager.GenerateEmailConfirmationTokenAsync(newlyCreatedUser);
             var code = WebEncoders.Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(token));
-            var callbackUrl = $"{confirmationUrl}?userId={newlyCreatedUser.Id}&code={code}";
+            var callbackUrl = $"{confirmLink}?userId={newlyCreatedUser.Id}&code={code}";
             await emailSenderApplication.SendConfirmationLinkAsync(newlyCreatedUser, newlyCreatedUser.Email!, HtmlEncoder.Default.Encode(callbackUrl));
         } catch (Exception ex) {
             logger.LogError(ex, "Failed to send confirmation email to {Email} after {Context}", newlyCreatedUser.Email, context);
@@ -405,7 +406,8 @@ public class AuthController(
             return BadRequest("Invalid request.");
         }
         // Before the user lookup, so the response can't reveal whether the email exists.
-        if (!emailLinks.IsAllowed(model.ResetUrl))
+        var resetLink = emailLinks.LinkTo(model.ResetUrl, AccountLinkPaths.ResetPassword);
+        if (resetLink is null)
             return BadRequest("Invalid reset URL.");
 
         var user = await userManager.FindByEmailAsync(model.Email);
@@ -414,7 +416,7 @@ public class AuthController(
 
         var token = await userManager.GeneratePasswordResetTokenAsync(user);
         var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
-        var callbackUrl = $"{model.ResetUrl}?code={code}";
+        var callbackUrl = $"{resetLink}?code={code}";
 
         await emailSenderApplication.SendPasswordResetLinkAsync(user, model.Email, HtmlEncoder.Default.Encode(callbackUrl));
         return Ok();
@@ -541,7 +543,8 @@ public class AuthController(
     [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("forgot")]
     public async Task<ActionResult<string>> RequestEmailConfirmation([FromBody] RequestEmailConfirmation request)
     {
-        if (!emailLinks.IsAllowed(request.ConfirmationUrl))
+        var confirmLink = emailLinks.LinkTo(request.ConfirmationUrl, AccountLinkPaths.ConfirmEmail);
+        if (confirmLink is null)
             return BadRequest("Invalid confirmation URL.");
         var user = await userManager.FindByEmailAsync(request.Email);
         // Always respond the same way
@@ -549,7 +552,7 @@ public class AuthController(
             return Ok("If your email is registered, you will receive a confirmation link.");
         var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
         var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
-        var callbackUrl = $"{request.ConfirmationUrl}?userId={user.Id}&code={code}";
+        var callbackUrl = $"{confirmLink}?userId={user.Id}&code={code}";
         await emailSenderApplication.SendConfirmationLinkAsync(user, request.Email, HtmlEncoder.Default.Encode(callbackUrl));
         return Ok("If your email is registered, you will receive a confirmation link." );
     }

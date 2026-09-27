@@ -462,6 +462,26 @@ public class AuthControllerTests
             Arg.Is<string>(link => link.StartsWith("https://cfb.ivleague.xyz/account/resetpassword?code=")));
     }
 
+    [Fact]
+    public async Task ForgotPassword_EmailedLinkUsesServerOwnedPath_NotTheClientsPathOrQuery()
+    {
+        var user = BuildUser();
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("member@example.com").Returns(user);
+        userManager.GeneratePasswordResetTokenAsync(user).Returns("reset-token");
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(userManager: userManager, emailLinks: TestEmailLinks.Prod, emailSenderApplication: emailSender);
+
+        await controller.ForgotPassword(new ForgotPasswordRequest
+        {
+            Email    = "member@example.com",
+            ResetUrl = "https://ivleague.xyz/some/page?next=x#",
+        });
+
+        await emailSender.Received(1).SendPasswordResetLinkAsync(user, "member@example.com",
+            Arg.Is<string>(link => link.StartsWith("https://ivleague.xyz/account/resetpassword?code=")));
+    }
+
     // Same hole as ForgotPassword, for the resend-confirmation page: anonymous, and the link
     // carries a live email-confirmation token.
     [Fact]

@@ -38,4 +38,30 @@ public class EmailLinkOriginsTests
     [Fact]
     public void IsAllowed_Unconfigured_AllowsAnything() =>
         Assert.True(TestEmailLinks.AllowAny.IsAllowed("https://anything.example/x"));
+
+    // LinkTo keeps only the (checked) origin and appends a server-owned path, so the client can't
+    // steer the emailed link to another page on our site or smuggle the code into a fragment.
+    [Theory]
+    [InlineData("https://ivleague.xyz/account/resetpassword")]
+    [InlineData("https://ivleague.xyz/some/other/page?next=https://evil.example")]
+    [InlineData("https://ivleague.xyz/x#")]
+    public void LinkTo_TrustedOrigin_ReplacesPathQueryAndFragment(string clientUrl) =>
+        Assert.Equal("https://ivleague.xyz/account/resetpassword",
+            Prod.LinkTo(clientUrl, AccountLinkPaths.ResetPassword));
+
+    [Theory]
+    [InlineData("https://evil.example/account/resetpassword")]
+    [InlineData("/account/resetpassword")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void LinkTo_UntrustedOrNotAbsolute_ReturnsNull(string? clientUrl) =>
+        Assert.Null(Prod.LinkTo(clientUrl, AccountLinkPaths.ResetPassword));
+
+    [Fact]
+    public void LinkTo_Unconfigured_StillNeedsAnAbsoluteUrl()
+    {
+        Assert.Equal("http://localhost:5173/account/confirmemail",
+            TestEmailLinks.AllowAny.LinkTo("http://localhost:5173/whatever", AccountLinkPaths.ConfirmEmail));
+        Assert.Null(TestEmailLinks.AllowAny.LinkTo("", AccountLinkPaths.ConfirmEmail));
+    }
 }

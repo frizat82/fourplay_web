@@ -13,7 +13,7 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     /// <summary>
     /// The league row only — navigation collections (members, juice mappings) are not loaded and
     /// read as empty; use GetLeagueUserMappingsAsync / GetLeagueJuiceMappingAsync for those.
-    /// Throws InvalidOperationException for an unknown league (callers map it to 404).
+    /// Throws InvalidOperationException for an unknown league — catch it where a 404 is wanted.
     /// </summary>
     Task<LeagueInfo> GetLeagueInfoAsync(int leagueId);
     Task<List<ApplicationUser>> GetUsersAsync();

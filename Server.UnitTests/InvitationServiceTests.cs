@@ -93,17 +93,18 @@ namespace FourPlayWebApp.Server.UnitTests
             await emailSender.DidNotReceiveWithAnyArgs().SendEmailAsync(default!, default!, default!);
         }
 
-        // The link is interpolated into an href attribute, so it's HTML-encoded — a quote can't
-        // break out of the attribute even where every origin is allowed (Development).
+        // Only baseUrl's origin is kept — the register path is server-owned — so nothing the client
+        // puts after the host (a path, a quote breaking out of the href) reaches the email.
         [Fact]
-        public async Task CreateInvitationAsync_HtmlEncodesTheRegistrationLink()
+        public async Task CreateInvitationAsync_UsesOnlyTheBaseUrlsOrigin()
         {
-            var (service, emailSender) = BuildService(nameof(CreateInvitationAsync_HtmlEncodesTheRegistrationLink));
+            var (service, emailSender) = BuildService(nameof(CreateInvitationAsync_UsesOnlyTheBaseUrlsOrigin), TestEmailLinks.Prod);
 
-            await service.CreateInvitationAsync("friend@example.com", "owner-1", baseUrl: "https://dev.local/\"><b>x</b>");
+            await service.CreateInvitationAsync("friend@example.com", "owner-1", baseUrl: "https://cfb.ivleague.xyz/other/\"><b>x</b>");
 
             await emailSender.Received(1).SendEmailAsync("friend@example.com", Arg.Any<string>(),
-                Arg.Is<string>(body => !body.Contains("\"><b>x</b>") && body.Contains("&quot;&gt;&lt;b&gt;x&lt;/b&gt;")));
+                Arg.Is<string>(body => body.Contains("https://cfb.ivleague.xyz/account/register?inviteCode=")
+                    && !body.Contains("other") && !body.Contains("<b>x</b>")));
         }
 
         [Fact]

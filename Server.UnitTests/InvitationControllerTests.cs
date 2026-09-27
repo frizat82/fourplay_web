@@ -99,6 +99,34 @@ public class InvitationControllerTests
         await emailSender.DidNotReceiveWithAnyArgs().SendPasswordResetLinkAsync(default!, default!, default!);
     }
 
+    // Same-origin but carrying a quote: must still be HTML-encoded before it's put in the href,
+    // as AuthController's own link builders do.
+    [Fact]
+    public async Task SendConfirmation_HtmlEncodesTheLink()
+    {
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var ctrl = new InvitationController(Substitute.For<IInvitationService>(), emailSender, UserManagerStub.Create(),
+            Substitute.For<ILeagueRepository>(), Substitute.For<ILeagueMembershipInviteService>(), TestEmailLinks.Prod);
+
+        await ctrl.SendConfirmation(new ConfirmationRequest("u", "member@example.com", "https://ivleague.xyz/x\"><b>y</b>"));
+
+        await emailSender.Received(1).SendConfirmationLinkAsync(Arg.Any<ApplicationUser>(), "member@example.com",
+            Arg.Is<string>(link => !link.Contains("\"") && !link.Contains("<b>")));
+    }
+
+    [Fact]
+    public async Task SendPasswordResetLink_HtmlEncodesTheLink()
+    {
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var ctrl = new InvitationController(Substitute.For<IInvitationService>(), emailSender, UserManagerStub.Create(),
+            Substitute.For<ILeagueRepository>(), Substitute.For<ILeagueMembershipInviteService>(), TestEmailLinks.Prod);
+
+        await ctrl.SendPasswordResetLink(new PasswordResetLinkRequest("u", "member@example.com", "https://ivleague.xyz/x\"><b>y</b>"));
+
+        await emailSender.Received(1).SendPasswordResetLinkAsync(Arg.Any<ApplicationUser>(), "member@example.com",
+            Arg.Is<string>(link => !link.Contains("\"") && !link.Contains("<b>")));
+    }
+
     // ── Existing-user detection when a league is specified ──────────────────
     // Mirrors LeagueController.InviteToLeague: an admin using the global "Manage Invitations"
     // page to invite someone to a specific league must get the same existing-user treatment a

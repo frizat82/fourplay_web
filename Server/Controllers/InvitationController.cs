@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Encodings.Web;
 
 namespace FourPlayWebApp.Server.Controllers;
 [Authorize(Roles = "Administrator")]
@@ -129,7 +130,7 @@ public class InvitationController(
         if (!emailLinks.IsAllowed(request.ConfirmationLink))
             return BadRequest("Invalid confirmation link.");
         var user = new ApplicationUser { UserName = request.UserName };
-        await emailSenderApplication.SendConfirmationLinkAsync(user, request.Email, request.ConfirmationLink);
+        await emailSenderApplication.SendConfirmationLinkAsync(user, request.Email, HtmlEncoder.Default.Encode(request.ConfirmationLink));
         return Ok("Confirmation email sent.");
     }
 
@@ -139,7 +140,7 @@ public class InvitationController(
         if (!emailLinks.IsAllowed(request.ResetLink))
             return BadRequest("Invalid reset link.");
         var user = new ApplicationUser { UserName = request.UserName };
-        await emailSenderApplication.SendPasswordResetLinkAsync(user, request.Email, request.ResetLink);
+        await emailSenderApplication.SendPasswordResetLinkAsync(user, request.Email, HtmlEncoder.Default.Encode(request.ResetLink));
         return Ok("Password reset link sent.");
     }
 
