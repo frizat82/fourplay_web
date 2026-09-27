@@ -50,10 +50,9 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
 
     public async Task<LeagueInfo> GetLeagueInfoAsync(int leagueId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        return await db.LeagueInfo.Where(x => x.Id == leagueId)
-            .Include(li => li.LeagueJuiceMappings)
-            .Include(li => li.LeagueUserMappings)
-            .FirstAsync();
+        // Row only: callers need owner/type/name, and Including both collections here returned
+        // members × juice-seasons rows for every owner check and leaderboard build.
+        return await db.LeagueInfo.FirstAsync(x => x.Id == leagueId);
     }
 
     public async Task<List<ApplicationUser>> GetUsersAsync() {

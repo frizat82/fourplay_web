@@ -14,7 +14,7 @@ public class LeagueInfo {
     public LeagueType LeagueType { get; set; } = LeagueType.Nfl;
     public ICollection<LeagueJuiceMapping> LeagueJuiceMappings { get; set; } = new List<LeagueJuiceMapping>();
 
-    public ICollection<LeagueUserMapping> LeagueUserMappings { get; set; }
+    public ICollection<LeagueUserMapping> LeagueUserMappings { get; set; } = new List<LeagueUserMapping>();
     public ICollection<NflPicks> NflPicks { get; set; }
 
     // The earliest season this league has ever been configured to play (via LeagueJuiceMapping) —
