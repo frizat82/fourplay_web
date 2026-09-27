@@ -54,7 +54,8 @@ public class ChangePasswordTests
             Substitute.For<IJwtTokenService>(),
             Substitute.For<IWebHostEnvironment>(),
             db,
-            Substitute.For<ILeagueInviteLinkService>()
+            Substitute.For<ILeagueInviteLinkService>(),
+            TestEmailLinks.AllowAny
         );
 
         controller.ControllerContext = new ControllerContext

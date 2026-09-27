@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Controllers;
 using Microsoft.AspNetCore.Authorization;
 using System.Reflection;
@@ -74,7 +75,7 @@ public class JerseysControllerAuthorizationTests
     {
         var attr = typeof(JerseysController).GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(attr);
-        Assert.Equal("Administrator", attr.Roles);
+        Assert.Equal(AppRoles.Administrator, attr.Roles);
 
         Assert.Null(typeof(JerseysController).GetCustomAttribute<AllowAnonymousAttribute>());
         foreach (var method in typeof(JerseysController).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))

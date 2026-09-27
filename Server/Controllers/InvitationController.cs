@@ -1,4 +1,5 @@
 ﻿using FourPlayWebApp.Server.Infrastructure;
+using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Models.Mappers;
 using FourPlayWebApp.Server.Services.Interfaces;
@@ -20,7 +21,7 @@ public class InvitationController(
     UserManager<ApplicationUser> userManager,
     ILeagueRepository leagueRepo,
     ILeagueMembershipInviteService membershipInviteService,
-    IConfiguration config) : ControllerBase {
+    EmailLinkOrigins emailLinks) : ControllerBase {
     [HttpGet("all")]
     public async Task<ActionResult<List<InvitationDto>>> GetAll()
     {
@@ -38,8 +39,6 @@ public class InvitationController(
     [HttpPost]
     public async Task<ActionResult<LeagueInviteResultDto>> Create([FromQuery] string email, [FromQuery] string invitedByUserId, [FromQuery] int? leagueId = null, [FromQuery] string? baseUrl = null)
     {
-        if (!string.IsNullOrWhiteSpace(baseUrl) && !EmailLinkOrigin.IsAllowed(config, baseUrl))
-            return BadRequest("Invalid invite URL.");
         // Mirrors LeagueController.InviteToLeague's existing-user check: this admin-facing
         // "Manage Invitations" tool used to unconditionally create a registration-style email
         // Invitation, even for an email that already has an account — the invitee never saw an
@@ -76,16 +75,23 @@ public class InvitationController(
             }
         }
 
-        var invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId, leagueId, baseUrl);
+        Invitation invitation;
+        try {
+            invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId, leagueId, baseUrl);
+        } catch (UntrustedEmailLinkException ex) {
+            return BadRequest(ex.Message);
+        }
         return Ok(new LeagueInviteResultDto(invitation.Email, LeagueInviteOutcome.NewUserInvitationSent));
     }
 
     [HttpPost("{id:int}/resend")]
     public async Task<IActionResult> Resend(int id, [FromQuery] string baseUrl)
     {
-        if (!EmailLinkOrigin.IsAllowed(config, baseUrl))
-            return BadRequest("Invalid invite URL.");
-        await invitationService.ResendInvitationEmailAsync(id, baseUrl);
+        try {
+            await invitationService.ResendInvitationEmailAsync(id, baseUrl);
+        } catch (UntrustedEmailLinkException ex) {
+            return BadRequest(ex.Message);
+        }
         return Ok();
     }
 
@@ -120,6 +126,8 @@ public class InvitationController(
     [HttpPost("send-confirmation")]
     public async Task<IActionResult> SendConfirmation([FromBody] ConfirmationRequest request)
     {
+        if (!emailLinks.IsAllowed(request.ConfirmationLink))
+            return BadRequest("Invalid confirmation link.");
         var user = new ApplicationUser { UserName = request.UserName };
         await emailSenderApplication.SendConfirmationLinkAsync(user, request.Email, request.ConfirmationLink);
         return Ok("Confirmation email sent.");
@@ -128,6 +136,8 @@ public class InvitationController(
     [HttpPost("send-reset-link")]
     public async Task<IActionResult> SendPasswordResetLink([FromBody] PasswordResetLinkRequest request)
     {
+        if (!emailLinks.IsAllowed(request.ResetLink))
+            return BadRequest("Invalid reset link.");
         var user = new ApplicationUser { UserName = request.UserName };
         await emailSenderApplication.SendPasswordResetLinkAsync(user, request.Email, request.ResetLink);
         return Ok("Password reset link sent.");

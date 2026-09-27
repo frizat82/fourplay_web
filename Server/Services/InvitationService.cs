@@ -1,13 +1,15 @@
 using FourPlayWebApp.Server.Data;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Services.Interfaces;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using System.Net;
 
 namespace FourPlayWebApp.Server.Services;
 
-public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContextFactory, IEmailSender emailSender) : IInvitationService {
+public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContextFactory, IEmailSender emailSender, EmailLinkOrigins emailLinks) : IInvitationService {
     public async Task DeleteInvitationAsync(int id) {
 
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
@@ -24,6 +26,10 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
 
     public async Task<Invitation> CreateInvitationAsync(string email, string invitedByUserId, int? leagueId = null, string? baseUrl = null)
     {
+        // Checked here, where the emailed link is built, so no caller can skip it — and before the
+        // row is written. No baseUrl means no email is sent, so there's nothing to check.
+        if (!string.IsNullOrWhiteSpace(baseUrl) && !emailLinks.IsAllowed(baseUrl))
+            throw new UntrustedEmailLinkException();
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
         // frizat-9vm: Invitations is unique on (Email, LeagueId), not just Email — the same
@@ -82,6 +88,8 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
     }
 
     public async Task ResendInvitationEmailAsync(int invitationId, string baseUrl) {
+        if (!emailLinks.IsAllowed(baseUrl))
+            throw new UntrustedEmailLinkException();
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         var invitation = await dbContext.Invitations.FindAsync(invitationId);
         if (invitation == null) {
@@ -101,7 +109,7 @@ public class InvitationService(IDbContextFactory<ApplicationDbContext> dbContext
              <p>Hello,</p>
              <p>You've been invited to join IV League. Click the button below to create your account and get started.</p>
              <div style="text-align:center;margin:24px 0;">
-               <a href="{System.Net.WebUtility.HtmlEncode(registrationUrl)}" style="display:inline-block;background-color:#4f46e5;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
+               <a href="{WebUtility.HtmlEncode(registrationUrl)}" style="display:inline-block;background-color:#4f46e5;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:bold;">
                  Create Your Account
                </a>
              </div>

@@ -4,7 +4,6 @@ using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -23,8 +22,7 @@ internal static class LeagueControllerFactory {
         IInvitationService? invitationService = null,
         ILeagueInviteLinkService? leagueInviteLinkService = null,
         ILeagueMembershipInviteService? membershipInviteService = null,
-        IMemoryCache? memoryCache = null,
-        IConfiguration? config = null) =>
+        IMemoryCache? memoryCache = null) =>
         new(
             memoryCache ?? new MemoryCache(new MemoryCacheOptions()),
             repo ?? Substitute.For<ILeagueRepository>(),
@@ -34,6 +32,5 @@ internal static class LeagueControllerFactory {
             espnCacheService ?? Substitute.For<IEspnCacheService>(),
             invitationService ?? Substitute.For<IInvitationService>(),
             leagueInviteLinkService ?? Substitute.For<ILeagueInviteLinkService>(),
-            membershipInviteService ?? Substitute.For<ILeagueMembershipInviteService>(),
-            config ?? Substitute.For<IConfiguration>());
+            membershipInviteService ?? Substitute.For<ILeagueMembershipInviteService>());
 }

@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Controllers;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
@@ -13,8 +14,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using System.Reflection;
 using System.Security.Claims;
 
@@ -1093,17 +1094,17 @@ public class LeagueOwnershipTests
     }
 
     // Security: any registered user can create a league and become its owner, so BaseUrl is
-    // effectively untrusted input — unchecked, it put an arbitrary link in a real IV League
-    // invite email sent to any address.
+    // untrusted. InvitationService owns the origin check (see InvitationServiceTests); this pins
+    // that its rejection reaches the owner as a 400, not a 500.
     [Fact]
-    public async Task InviteToLeague_RejectsBaseUrlOnUntrustedDomain_WithoutCreatingAnInvitation()
+    public async Task InviteToLeague_UntrustedBaseUrl_ReturnsBadRequest()
     {
-        var config = Substitute.For<IConfiguration>();
-        config["ALLOWED_ORIGINS"].Returns("https://ivleague.xyz,https://cfb.ivleague.xyz");
         var invSvc = Substitute.For<IInvitationService>();
+        invSvc.CreateInvitationAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), "https://evil.example")
+              .ThrowsAsync(new UntrustedEmailLinkException());
         var repo = Substitute.For<ILeagueRepository>();
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L" });
-        var ctrl = LeagueControllerFactory.Build(repo, UserManagerStub.Create(), invitationService: invSvc, config: config);
+        var ctrl = LeagueControllerFactory.Build(repo, UserManagerStub.Create(), invitationService: invSvc);
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = BuildPrincipal(OwnerId) }
@@ -1112,7 +1113,6 @@ public class LeagueOwnershipTests
         var result = await ctrl.InviteToLeague(1, new LeagueInviteDto("target@example.com", "https://evil.example"));
 
         Assert.IsType<BadRequestObjectResult>(result);
-        await invSvc.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
     }
 
     [Fact]

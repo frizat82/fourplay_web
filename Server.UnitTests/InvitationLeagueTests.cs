@@ -59,7 +59,7 @@ public class InvitationLeagueTests
     public async Task CreateInvitation_NullLeagueId_WhenNotProvided()
     {
         var db = BuildDb(nameof(CreateInvitation_NullLeagueId_WhenNotProvided));
-        var service = new InvitationService(BuildFactory(db), Substitute.For<IEmailSender>());
+        var service = new InvitationService(BuildFactory(db), Substitute.For<IEmailSender>(), TestEmailLinks.AllowAny);
 
         var result = await service.CreateInvitationAsync("user@example.com", "admin-1");
 
@@ -79,7 +79,7 @@ public class InvitationLeagueTests
         });
         await db.SaveChangesAsync();
 
-        var service = new InvitationService(BuildFactory(db), Substitute.For<IEmailSender>());
+        var service = new InvitationService(BuildFactory(db), Substitute.For<IEmailSender>(), TestEmailLinks.AllowAny);
         var result = await service.ValidateInvitationAsync("test-code-123");
 
         Assert.NotNull(result);
@@ -201,7 +201,8 @@ public class InvitationLeagueTests
             Substitute.For<IJwtTokenService>(),
             BuildDevEnv(),
             db,
-            Substitute.For<ILeagueInviteLinkService>()
+            Substitute.For<ILeagueInviteLinkService>(),
+            TestEmailLinks.AllowAny
         );
 
         controller.ControllerContext = new ControllerContext

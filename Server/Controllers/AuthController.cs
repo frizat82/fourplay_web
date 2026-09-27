@@ -29,7 +29,7 @@ public class AuthController(
     IInvitationService invitationService, ILogger<AuthController> logger,
     IConfiguration config, IRefreshTokenService refreshTokenService, IJwtTokenService jwtTokenService,
     IWebHostEnvironment environment, ApplicationDbContext db,
-    ILeagueInviteLinkService leagueInviteLinkService)
+    ILeagueInviteLinkService leagueInviteLinkService, EmailLinkOrigins emailLinks)
     : ControllerBase {
     private readonly TimeSpan _refreshTokenLifetime = TimeSpan.FromDays(14); // 14 days
     private bool UseSecureCookies => !environment.IsDevelopment() || Request.IsHttps;
@@ -266,7 +266,7 @@ public class AuthController(
         // Reject a ConfirmationUrl on a domain we don't control — otherwise an anonymous caller
         // could register an account for any email with a phishing domain as ConfirmationUrl,
         // and our server would send a real, branded "confirm your email" message pointing there.
-        if (!EmailLinkOrigin.IsAllowed(config, user.ConfirmationUrl)) {
+        if (!emailLinks.IsAllowed(user.ConfirmationUrl)) {
             response.IsSuccess = false;
             response.Errors = new List<string> { "Invalid confirmation URL." };
             return BadRequest(response);
@@ -405,7 +405,7 @@ public class AuthController(
             return BadRequest("Invalid request.");
         }
         // Before the user lookup, so the response can't reveal whether the email exists.
-        if (!EmailLinkOrigin.IsAllowed(config, model.ResetUrl))
+        if (!emailLinks.IsAllowed(model.ResetUrl))
             return BadRequest("Invalid reset URL.");
 
         var user = await userManager.FindByEmailAsync(model.Email);
@@ -541,7 +541,7 @@ public class AuthController(
     [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("forgot")]
     public async Task<ActionResult<string>> RequestEmailConfirmation([FromBody] RequestEmailConfirmation request)
     {
-        if (!EmailLinkOrigin.IsAllowed(config, request.ConfirmationUrl))
+        if (!emailLinks.IsAllowed(request.ConfirmationUrl))
             return BadRequest("Invalid confirmation URL.");
         var user = await userManager.FindByEmailAsync(request.Email);
         // Always respond the same way

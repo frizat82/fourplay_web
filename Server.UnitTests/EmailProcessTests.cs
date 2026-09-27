@@ -44,7 +44,7 @@ public class EmailProcessTests
         return new InvitationController(
             invitationService, emailSenderApp,
             userManager, Substitute.For<ILeagueRepository>(), Substitute.For<ILeagueMembershipInviteService>(),
-            Substitute.For<IConfiguration>());
+            TestEmailLinks.AllowAny);
     }
 
     private static AuthController BuildAuthController(
@@ -75,7 +75,8 @@ public class EmailProcessTests
             Substitute.For<IJwtTokenService>(),
             Substitute.For<IWebHostEnvironment>(),
             db,
-            Substitute.For<ILeagueInviteLinkService>()
+            Substitute.For<ILeagueInviteLinkService>(),
+            TestEmailLinks.AllowAny
         );
 
         controller.ControllerContext = new ControllerContext

@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Data;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
@@ -12,7 +13,7 @@ namespace FourPlayWebApp.Server.UnitTests
 {
     public class InvitationServiceTests
     {
-        private static (InvitationService service, IEmailSender emailSender) BuildService(string dbName)
+        private static (InvitationService service, IEmailSender emailSender) BuildService(string dbName, EmailLinkOrigins? emailLinks = null)
         {
             var options = new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase(databaseName: dbName)
@@ -23,7 +24,7 @@ namespace FourPlayWebApp.Server.UnitTests
             // in-memory database name keeps the data shared across instances).
             dbContextFactory.CreateDbContextAsync().Returns(_ => new ApplicationDbContext(options));
             var emailSender = Substitute.For<IEmailSender>();
-            return (new InvitationService(dbContextFactory, emailSender), emailSender);
+            return (new InvitationService(dbContextFactory, emailSender, emailLinks ?? TestEmailLinks.AllowAny), emailSender);
         }
 
         [Fact]
@@ -48,6 +49,61 @@ namespace FourPlayWebApp.Server.UnitTests
                 "test@example.com",
                 Arg.Any<string>(),
                 Arg.Is<string>(body => body.Contains($"inviteCode={result.InvitationCode}")));
+        }
+
+        // Security: this is where the emailed link is built, so the origin check lives here and no
+        // caller (commissioner invite, admin invite, resend) can skip it. Rejected before the row
+        // is written, so a refused invite leaves nothing behind.
+        [Fact]
+        public async Task CreateInvitationAsync_UntrustedBaseUrl_Throws_WithoutCreatingOrSending()
+        {
+            var name = nameof(CreateInvitationAsync_UntrustedBaseUrl_Throws_WithoutCreatingOrSending);
+            var (service, emailSender) = BuildService(name, TestEmailLinks.Prod);
+
+            await Assert.ThrowsAsync<UntrustedEmailLinkException>(() =>
+                service.CreateInvitationAsync("victim@example.com", "owner-1", leagueId: 5, baseUrl: "https://evil.example"));
+
+            await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(name).Options);
+            Assert.False(await db.Invitations.AnyAsync());
+            await emailSender.DidNotReceiveWithAnyArgs().SendEmailAsync(default!, default!, default!);
+        }
+
+        [Fact]
+        public async Task CreateInvitationAsync_TrustedBaseUrl_SendsEmail()
+        {
+            var (service, emailSender) = BuildService(nameof(CreateInvitationAsync_TrustedBaseUrl_SendsEmail), TestEmailLinks.Prod);
+
+            await service.CreateInvitationAsync("friend@example.com", "owner-1", leagueId: 5, baseUrl: "https://cfb.ivleague.xyz");
+
+            await emailSender.Received(1).SendEmailAsync("friend@example.com", Arg.Any<string>(),
+                Arg.Is<string>(body => body.Contains("https://cfb.ivleague.xyz/account/register?inviteCode=")));
+        }
+
+        [Fact]
+        public async Task ResendInvitationEmailAsync_UntrustedBaseUrl_Throws_WithoutSending()
+        {
+            var name = nameof(ResendInvitationEmailAsync_UntrustedBaseUrl_Throws_WithoutSending);
+            var (seed, _) = BuildService(name);
+            var created = await seed.CreateInvitationAsync("friend@example.com", "owner-1");
+            var (service, emailSender) = BuildService(name, TestEmailLinks.Prod);
+
+            await Assert.ThrowsAsync<UntrustedEmailLinkException>(() =>
+                service.ResendInvitationEmailAsync(created.Id, "https://evil.example"));
+
+            await emailSender.DidNotReceiveWithAnyArgs().SendEmailAsync(default!, default!, default!);
+        }
+
+        // The link is interpolated into an href attribute, so it's HTML-encoded — a quote can't
+        // break out of the attribute even where every origin is allowed (Development).
+        [Fact]
+        public async Task CreateInvitationAsync_HtmlEncodesTheRegistrationLink()
+        {
+            var (service, emailSender) = BuildService(nameof(CreateInvitationAsync_HtmlEncodesTheRegistrationLink));
+
+            await service.CreateInvitationAsync("friend@example.com", "owner-1", baseUrl: "https://dev.local/\"><b>x</b>");
+
+            await emailSender.Received(1).SendEmailAsync("friend@example.com", Arg.Any<string>(),
+                Arg.Is<string>(body => !body.Contains("\"><b>x</b>") && body.Contains("&quot;&gt;&lt;b&gt;x&lt;/b&gt;")));
         }
 
         [Fact]
@@ -218,8 +274,8 @@ namespace FourPlayWebApp.Server.UnitTests
                     await seed.SaveChangesAsync();
                 }
                 var emailSender = Substitute.For<IEmailSender>();
-                var serviceA = new InvitationService(factory, emailSender);
-                var serviceB = new InvitationService(factory, emailSender);
+                var serviceA = new InvitationService(factory, emailSender, TestEmailLinks.AllowAny);
+                var serviceB = new InvitationService(factory, emailSender, TestEmailLinks.AllowAny);
 
                 await Task.WhenAll(
                     serviceA.CreateInvitationAsync("race@example.com", "owner", leagueId: 1),

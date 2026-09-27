@@ -1,15 +1,17 @@
 using FourPlayWebApp.Server.Controllers;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
+using FourPlayWebApp.Shared.Models.Email;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace FourPlayWebApp.Server.UnitTests;
@@ -17,7 +19,7 @@ namespace FourPlayWebApp.Server.UnitTests;
 public class InvitationControllerTests
 {
     private static (InvitationController ctrl, IInvitationService invitationService, ILeagueRepository leagueRepo, UserManager<ApplicationUser> userManager, ILeagueMembershipInviteService membershipInviteService)
-        BuildControllerWithDeps(IInvitationService? invitationService = null, IConfiguration? config = null)
+        BuildControllerWithDeps(IInvitationService? invitationService = null)
     {
         invitationService ??= Substitute.For<IInvitationService>();
         var leagueRepo = Substitute.For<ILeagueRepository>();
@@ -25,7 +27,7 @@ public class InvitationControllerTests
         var membershipInviteService = Substitute.For<ILeagueMembershipInviteService>();
         var ctrl = new InvitationController(
             invitationService, Substitute.For<IEmailSender<ApplicationUser>>(),
-            userManager, leagueRepo, membershipInviteService, config ?? Substitute.For<IConfiguration>());
+            userManager, leagueRepo, membershipInviteService, TestEmailLinks.Prod);
         return (ctrl, invitationService, leagueRepo, userManager, membershipInviteService);
     }
 
@@ -43,33 +45,58 @@ public class InvitationControllerTests
         await invitationService.Received(1).CreateInvitationAsync("target@example.com", "admin-1", null, "https://ivleague.com");
     }
 
-    private static IConfiguration ProdOrigins()
-    {
-        var config = Substitute.For<IConfiguration>();
-        config["ALLOWED_ORIGINS"].Returns("https://ivleague.xyz,https://cfb.ivleague.xyz");
-        return config;
-    }
-
+    // The origin check itself lives in InvitationService (see InvitationServiceTests); the
+    // controller's job is only to turn its rejection into a 400.
     [Fact]
-    public async Task Create_RejectsBaseUrlOnUntrustedDomain()
+    public async Task Create_UntrustedBaseUrl_ReturnsBadRequest()
     {
-        var (ctrl, invitationService, _, _, _) = BuildControllerWithDeps(config: ProdOrigins());
+        var invitationService = Substitute.For<IInvitationService>();
+        invitationService.CreateInvitationAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int?>(), "https://evil.example")
+            .ThrowsAsync(new UntrustedEmailLinkException());
+        var (ctrl, _, _, _, _) = BuildControllerWithDeps(invitationService);
 
         var result = await ctrl.Create("target@example.com", "admin-1", baseUrl: "https://evil.example");
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
-        await invitationService.DidNotReceiveWithAnyArgs().CreateInvitationAsync(default!, default!, default, default);
     }
 
     [Fact]
-    public async Task Resend_RejectsBaseUrlOnUntrustedDomain()
+    public async Task Resend_UntrustedBaseUrl_ReturnsBadRequest()
     {
-        var (ctrl, invitationService, _, _, _) = BuildControllerWithDeps(config: ProdOrigins());
+        var invitationService = Substitute.For<IInvitationService>();
+        invitationService.ResendInvitationEmailAsync(7, "https://evil.example").ThrowsAsync(new UntrustedEmailLinkException());
+        var (ctrl, _, _, _, _) = BuildControllerWithDeps(invitationService);
 
         var result = await ctrl.Resend(7, "https://evil.example");
 
         Assert.IsType<BadRequestObjectResult>(result);
-        await invitationService.DidNotReceiveWithAnyArgs().ResendInvitationEmailAsync(default, default!);
+    }
+
+    // The admin raw-link senders take a full link, not a base URL — same allow-list.
+    [Fact]
+    public async Task SendConfirmation_UntrustedLink_ReturnsBadRequest_WithoutSending()
+    {
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var ctrl = new InvitationController(Substitute.For<IInvitationService>(), emailSender, UserManagerStub.Create(),
+            Substitute.For<ILeagueRepository>(), Substitute.For<ILeagueMembershipInviteService>(), TestEmailLinks.Prod);
+
+        var result = await ctrl.SendConfirmation(new ConfirmationRequest("u", "victim@example.com", "https://evil.example/confirm"));
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await emailSender.DidNotReceiveWithAnyArgs().SendConfirmationLinkAsync(default!, default!, default!);
+    }
+
+    [Fact]
+    public async Task SendPasswordResetLink_UntrustedLink_ReturnsBadRequest_WithoutSending()
+    {
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var ctrl = new InvitationController(Substitute.For<IInvitationService>(), emailSender, UserManagerStub.Create(),
+            Substitute.For<ILeagueRepository>(), Substitute.For<ILeagueMembershipInviteService>(), TestEmailLinks.Prod);
+
+        var result = await ctrl.SendPasswordResetLink(new PasswordResetLinkRequest("u", "victim@example.com", "https://evil.example/reset"));
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await emailSender.DidNotReceiveWithAnyArgs().SendPasswordResetLinkAsync(default!, default!, default!);
     }
 
     // ── Existing-user detection when a league is specified ──────────────────

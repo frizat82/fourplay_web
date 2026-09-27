@@ -259,6 +259,8 @@ builder.Services.AddMemoryCache();
 var allowedOrigins = FourPlayWebApp.Server.Infrastructure.StartupValidation.ParseAndValidateCorsOrigins(
     Environment.GetEnvironmentVariable("ALLOWED_ORIGINS"),
     builder.Environment.IsDevelopment());
+// Email links (reset, confirm, invite) are checked against this same parsed list — see EmailLinkOrigins.
+builder.Services.AddSingleton(new FourPlayWebApp.Server.Infrastructure.EmailLinkOrigins(allowedOrigins));
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
