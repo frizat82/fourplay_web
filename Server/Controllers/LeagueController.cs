@@ -1,4 +1,5 @@
 ﻿using FourPlayWebApp.Server.Auth;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
@@ -1097,7 +1098,13 @@ public class LeagueController(
             return Ok(new LeagueInviteResultDto(dto.Email, LeagueInviteOutcome.ExistingUserInvitePending));
         }
 
-        await invitationService.CreateInvitationAsync(dto.Email, callerId, leagueId, baseUrl: dto.BaseUrl);
+        // Anyone can create a league and own it, so BaseUrl is untrusted input — the service
+        // rejects one that isn't ours before creating anything.
+        try {
+            await invitationService.CreateInvitationAsync(dto.Email, callerId, leagueId, baseUrl: dto.BaseUrl);
+        } catch (UntrustedEmailLinkException ex) {
+            return BadRequest(ex.Message);
+        }
         return Ok(new LeagueInviteResultDto(dto.Email, LeagueInviteOutcome.NewUserInvitationSent));
     }
 

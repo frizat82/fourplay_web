@@ -1,4 +1,5 @@
 ﻿using FourPlayWebApp.Server.Data;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Services.Interfaces;
@@ -28,7 +29,7 @@ public class AuthController(
     IInvitationService invitationService, ILogger<AuthController> logger,
     IConfiguration config, IRefreshTokenService refreshTokenService, IJwtTokenService jwtTokenService,
     IWebHostEnvironment environment, ApplicationDbContext db,
-    ILeagueInviteLinkService leagueInviteLinkService)
+    ILeagueInviteLinkService leagueInviteLinkService, EmailLinkOrigins emailLinks)
     : ControllerBase {
     private readonly TimeSpan _refreshTokenLifetime = TimeSpan.FromDays(14); // 14 days
     private bool UseSecureCookies => !environment.IsDevelopment() || Request.IsHttps;
@@ -265,7 +266,7 @@ public class AuthController(
         // Reject a ConfirmationUrl on a domain we don't control — otherwise an anonymous caller
         // could register an account for any email with a phishing domain as ConfirmationUrl,
         // and our server would send a real, branded "confirm your email" message pointing there.
-        if (!IsAllowedConfirmationOrigin(user.ConfirmationUrl)) {
+        if (!emailLinks.IsAllowed(user.ConfirmationUrl)) {
             response.IsSuccess = false;
             response.Errors = new List<string> { "Invalid confirmation URL." };
             return BadRequest(response);
@@ -370,37 +371,19 @@ public class AuthController(
     /// from treating account creation as successful.
     /// </summary>
     private async Task SendEmailConfirmationLinkAsync(ApplicationUser newlyCreatedUser, string confirmationUrl, string context) {
-        if (string.IsNullOrWhiteSpace(confirmationUrl)) {
-            logger.LogError("Cannot send confirmation email to {Email} after {Context}: no ConfirmationUrl was supplied", newlyCreatedUser.Email, context);
+        var confirmLink = emailLinks.LinkTo(confirmationUrl, AccountLinkPaths.ConfirmEmail);
+        if (confirmLink is null) {
+            logger.LogError("Cannot send confirmation email to {Email} after {Context}: no usable ConfirmationUrl was supplied", newlyCreatedUser.Email, context);
             return;
         }
         try {
             var token = await userManager.GenerateEmailConfirmationTokenAsync(newlyCreatedUser);
             var code = WebEncoders.Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(token));
-            var callbackUrl = $"{confirmationUrl}?userId={newlyCreatedUser.Id}&code={code}";
+            var callbackUrl = $"{confirmLink}?userId={newlyCreatedUser.Id}&code={code}";
             await emailSenderApplication.SendConfirmationLinkAsync(newlyCreatedUser, newlyCreatedUser.Email!, HtmlEncoder.Default.Encode(callbackUrl));
         } catch (Exception ex) {
             logger.LogError(ex, "Failed to send confirmation email to {Email} after {Context}", newlyCreatedUser.Email, context);
         }
-    }
-
-    /// <summary>
-    /// True if confirmationUrl is an absolute URL whose origin is in ALLOWED_ORIGINS (the same
-    /// comma-separated allow-list used for CORS). ALLOWED_ORIGINS is only ever empty in
-    /// Development — Program.cs fails startup otherwise — so an empty list allows any origin,
-    /// mirroring the AllowAnyOrigin() CORS fallback for that same case.
-    /// </summary>
-    private bool IsAllowedConfirmationOrigin(string? confirmationUrl) {
-        var allowedOrigins = (config["ALLOWED_ORIGINS"] ?? string.Empty)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (allowedOrigins.Length == 0)
-            return true;
-
-        if (!Uri.TryCreate(confirmationUrl, UriKind.Absolute, out var uri))
-            return false;
-
-        var origin = $"{uri.Scheme}://{uri.Authority}";
-        return allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -422,6 +405,10 @@ public class AuthController(
         {
             return BadRequest("Invalid request.");
         }
+        // Before the user lookup, so the response can't reveal whether the email exists.
+        var resetLink = emailLinks.LinkTo(model.ResetUrl, AccountLinkPaths.ResetPassword);
+        if (resetLink is null)
+            return BadRequest("Invalid reset URL.");
 
         var user = await userManager.FindByEmailAsync(model.Email);
         if (user == null)
@@ -429,7 +416,7 @@ public class AuthController(
 
         var token = await userManager.GeneratePasswordResetTokenAsync(user);
         var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
-        var callbackUrl = $"{model.ResetUrl}?code={code}";
+        var callbackUrl = $"{resetLink}?code={code}";
 
         await emailSenderApplication.SendPasswordResetLinkAsync(user, model.Email, HtmlEncoder.Default.Encode(callbackUrl));
         return Ok();
@@ -556,13 +543,16 @@ public class AuthController(
     [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("forgot")]
     public async Task<ActionResult<string>> RequestEmailConfirmation([FromBody] RequestEmailConfirmation request)
     {
+        var confirmLink = emailLinks.LinkTo(request.ConfirmationUrl, AccountLinkPaths.ConfirmEmail);
+        if (confirmLink is null)
+            return BadRequest("Invalid confirmation URL.");
         var user = await userManager.FindByEmailAsync(request.Email);
         // Always respond the same way
         if (user == null || await userManager.IsEmailConfirmedAsync(user))
             return Ok("If your email is registered, you will receive a confirmation link.");
         var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
         var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
-        var callbackUrl = $"{request.ConfirmationUrl}?userId={user.Id}&code={code}";
+        var callbackUrl = $"{confirmLink}?userId={user.Id}&code={code}";
         await emailSenderApplication.SendConfirmationLinkAsync(user, request.Email, HtmlEncoder.Default.Encode(callbackUrl));
         return Ok("If your email is registered, you will receive a confirmation link." );
     }

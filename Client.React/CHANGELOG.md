@@ -4,6 +4,11 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-09-27
+
+- Fixed (security): password-reset, email-confirmation and league-invite emails now only ever link to IV League's own sites — previously a crafted request could make them link elsewhere, and for password reset that link carried a live reset code
+- Improved: league pages, owner tools and the leaderboard load league details with one small query instead of pulling every member and juice row each time
+
 ## 2026-09-26
 
 - Improved: the unconfirmed-account cleanup runs once a day (3:25am CT) instead of every hour, so the database can sleep overnight — an unconfirmed signup is now removed 24–48h after registering

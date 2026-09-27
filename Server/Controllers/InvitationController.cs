@@ -1,4 +1,6 @@
-﻿using FourPlayWebApp.Server.Models.Identity;
+﻿using FourPlayWebApp.Server.Infrastructure;
+using FourPlayWebApp.Server.Models;
+using FourPlayWebApp.Server.Models.Identity;
 using FourPlayWebApp.Server.Models.Mappers;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -8,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Encodings.Web;
 
 namespace FourPlayWebApp.Server.Controllers;
 [Authorize(Roles = "Administrator")]
@@ -18,7 +21,8 @@ public class InvitationController(
     IEmailSender<ApplicationUser> emailSenderApplication,
     UserManager<ApplicationUser> userManager,
     ILeagueRepository leagueRepo,
-    ILeagueMembershipInviteService membershipInviteService) : ControllerBase {
+    ILeagueMembershipInviteService membershipInviteService,
+    EmailLinkOrigins emailLinks) : ControllerBase {
     [HttpGet("all")]
     public async Task<ActionResult<List<InvitationDto>>> GetAll()
     {
@@ -72,14 +76,23 @@ public class InvitationController(
             }
         }
 
-        var invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId, leagueId, baseUrl);
+        Invitation invitation;
+        try {
+            invitation = await invitationService.CreateInvitationAsync(email, invitedByUserId, leagueId, baseUrl);
+        } catch (UntrustedEmailLinkException ex) {
+            return BadRequest(ex.Message);
+        }
         return Ok(new LeagueInviteResultDto(invitation.Email, LeagueInviteOutcome.NewUserInvitationSent));
     }
 
     [HttpPost("{id:int}/resend")]
     public async Task<IActionResult> Resend(int id, [FromQuery] string baseUrl)
     {
-        await invitationService.ResendInvitationEmailAsync(id, baseUrl);
+        try {
+            await invitationService.ResendInvitationEmailAsync(id, baseUrl);
+        } catch (UntrustedEmailLinkException ex) {
+            return BadRequest(ex.Message);
+        }
         return Ok();
     }
 
@@ -114,16 +127,20 @@ public class InvitationController(
     [HttpPost("send-confirmation")]
     public async Task<IActionResult> SendConfirmation([FromBody] ConfirmationRequest request)
     {
+        if (!emailLinks.IsAllowed(request.ConfirmationLink))
+            return BadRequest("Invalid confirmation link.");
         var user = new ApplicationUser { UserName = request.UserName };
-        await emailSenderApplication.SendConfirmationLinkAsync(user, request.Email, request.ConfirmationLink);
+        await emailSenderApplication.SendConfirmationLinkAsync(user, request.Email, HtmlEncoder.Default.Encode(request.ConfirmationLink));
         return Ok("Confirmation email sent.");
     }
 
     [HttpPost("send-reset-link")]
     public async Task<IActionResult> SendPasswordResetLink([FromBody] PasswordResetLinkRequest request)
     {
+        if (!emailLinks.IsAllowed(request.ResetLink))
+            return BadRequest("Invalid reset link.");
         var user = new ApplicationUser { UserName = request.UserName };
-        await emailSenderApplication.SendPasswordResetLinkAsync(user, request.Email, request.ResetLink);
+        await emailSenderApplication.SendPasswordResetLinkAsync(user, request.Email, HtmlEncoder.Default.Encode(request.ResetLink));
         return Ok("Password reset link sent.");
     }
 

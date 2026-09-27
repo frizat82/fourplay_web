@@ -1,5 +1,6 @@
 using FourPlayWebApp.Server.Controllers;
 using FourPlayWebApp.Server.Data;
+using FourPlayWebApp.Server.Infrastructure;
 using FourPlayWebApp.Server.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
@@ -70,7 +71,8 @@ public class AuthControllerTests
         ILeagueInviteLinkService? leagueInviteLinkService = null,
         ApplicationDbContext? db                        = null,
         IEmailSender<ApplicationUser>? emailSenderApplication = null,
-        IConfiguration? config                          = null)
+        IConfiguration? config                          = null,
+        EmailLinkOrigins? emailLinks                    = null)
     {
         userManager     ??= BuildUserManager();
         signInManager   ??= BuildSignInManager(userManager);
@@ -99,7 +101,8 @@ public class AuthControllerTests
             jwtTokenService,
             environment,
             db,
-            leagueInviteLinkService
+            leagueInviteLinkService,
+            emailLinks ?? TestEmailLinks.AllowAny
         );
 
         var httpContext = new DefaultHttpContext();
@@ -413,6 +416,92 @@ public class AuthControllerTests
 
         // Must return 200, not 400 — leaking user existence is a security issue
         Assert.IsType<OkResult>(result.Result);
+    }
+
+    // Security: ResetUrl is client-supplied and the emailed link carries a live reset code — an
+    // untrusted origin would let anyone, logged out, have a victim's reset code delivered to
+    // their own site. Checked before the user lookup, so it can't reveal whether the email exists.
+    [Fact]
+    public async Task ForgotPassword_WhenAllowedOriginsConfigured_RejectsResetUrlOnUntrustedDomain()
+    {
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("victim@example.com").Returns(BuildUser());
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(userManager: userManager, emailLinks: TestEmailLinks.Prod, emailSenderApplication: emailSender);
+
+        var result = await controller.ForgotPassword(new ForgotPasswordRequest
+        {
+            Email    = "victim@example.com",
+            ResetUrl = "https://evil.example/account/resetpassword",
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await userManager.DidNotReceive().GeneratePasswordResetTokenAsync(Arg.Any<ApplicationUser>());
+        await emailSender.DidNotReceive().SendPasswordResetLinkAsync(
+            Arg.Any<ApplicationUser>(), Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task ForgotPassword_WhenAllowedOriginsConfigured_SendsResetLinkOnTrustedDomain()
+    {
+        var user = BuildUser();
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("member@example.com").Returns(user);
+        userManager.GeneratePasswordResetTokenAsync(user).Returns("reset-token");
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(userManager: userManager, emailLinks: TestEmailLinks.Prod, emailSenderApplication: emailSender);
+
+        var result = await controller.ForgotPassword(new ForgotPasswordRequest
+        {
+            Email    = "member@example.com",
+            ResetUrl = "https://cfb.ivleague.xyz/account/resetpassword",
+        });
+
+        Assert.IsType<OkResult>(result.Result);
+        await emailSender.Received(1).SendPasswordResetLinkAsync(user, "member@example.com",
+            Arg.Is<string>(link => link.StartsWith("https://cfb.ivleague.xyz/account/resetpassword?code=")));
+    }
+
+    [Fact]
+    public async Task ForgotPassword_EmailedLinkUsesServerOwnedPath_NotTheClientsPathOrQuery()
+    {
+        var user = BuildUser();
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("member@example.com").Returns(user);
+        userManager.GeneratePasswordResetTokenAsync(user).Returns("reset-token");
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(userManager: userManager, emailLinks: TestEmailLinks.Prod, emailSenderApplication: emailSender);
+
+        await controller.ForgotPassword(new ForgotPasswordRequest
+        {
+            Email    = "member@example.com",
+            ResetUrl = "https://ivleague.xyz/some/page?next=x#",
+        });
+
+        await emailSender.Received(1).SendPasswordResetLinkAsync(user, "member@example.com",
+            Arg.Is<string>(link => link.StartsWith("https://ivleague.xyz/account/resetpassword?code=")));
+    }
+
+    // Same hole as ForgotPassword, for the resend-confirmation page: anonymous, and the link
+    // carries a live email-confirmation token.
+    [Fact]
+    public async Task RequestEmailConfirmation_WhenAllowedOriginsConfigured_RejectsConfirmationUrlOnUntrustedDomain()
+    {
+        var userManager = BuildUserManager();
+        userManager.FindByEmailAsync("victim@example.com").Returns(BuildUser());
+        userManager.IsEmailConfirmedAsync(Arg.Any<ApplicationUser>()).Returns(false);
+        var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
+        var controller = BuildController(userManager: userManager, emailLinks: TestEmailLinks.Prod, emailSenderApplication: emailSender);
+
+        var result = await controller.RequestEmailConfirmation(new RequestEmailConfirmation
+        {
+            Email           = "victim@example.com",
+            ConfirmationUrl = "https://evil.example/account/confirmemail",
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await emailSender.DidNotReceive().SendConfirmationLinkAsync(
+            Arg.Any<ApplicationUser>(), Arg.Any<string>(), Arg.Any<string>());
     }
 
     /// <summary>
@@ -1149,7 +1238,7 @@ public class AuthControllerTests
     public async Task CreateUser_WhenAllowedOriginsUnconfigured_MissingConfirmationUrl_DoesNotSendConfirmationEmail_ButStillCreatesAccount()
     {
         // This exercises the ALLOWED_ORIGINS-unset case only (Development/local — Program.cs
-        // fails startup otherwise), where IsAllowedConfirmationOrigin lets everything through
+        // fails startup otherwise), where EmailLinkOrigins lets everything through
         // and SendEmailConfirmationLinkAsync's own guard is what catches the empty URL: skip
         // the send and log, but the account itself must still be created successfully. In any
         // environment where ALLOWED_ORIGINS *is* configured (i.e. every real deploy), an empty
@@ -1188,8 +1277,7 @@ public class AuthControllerTests
         // Security: without this check, an anonymous caller can register an account for
         // ANY email address with an attacker-controlled ConfirmationUrl, and our server will
         // send a real, branded "confirm your email" message pointing at a phishing domain.
-        var config = Substitute.For<IConfiguration>();
-        config["ALLOWED_ORIGINS"].Returns("https://dev.ivleague.xyz,https://ivleague.com");
+        var emailLinks = new EmailLinkOrigins(["https://dev.ivleague.xyz", "https://ivleague.com"]);
 
         var invitation = new Invitation { InvitationCode = "good-code", Email = "victim@test.com" };
         var invSvc = Substitute.For<IInvitationService>();
@@ -1198,7 +1286,7 @@ public class AuthControllerTests
         var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
         var userManager = BuildUserManager();
         var controller = BuildController(
-            userManager: userManager, invitationService: invSvc, config: config,
+            userManager: userManager, invitationService: invSvc, emailLinks: emailLinks,
             db: BuildDb("CreateUser_UntrustedOrigin"), emailSenderApplication: emailSender);
 
         var result = await controller.CreateUser(new CreateUserRequest
@@ -1217,8 +1305,7 @@ public class AuthControllerTests
     [Fact]
     public async Task CreateUser_WhenAllowedOriginsConfigured_AcceptsConfirmationUrlOnTrustedDomain()
     {
-        var config = Substitute.For<IConfiguration>();
-        config["ALLOWED_ORIGINS"].Returns("https://dev.ivleague.xyz,https://ivleague.com");
+        var emailLinks = new EmailLinkOrigins(["https://dev.ivleague.xyz", "https://ivleague.com"]);
 
         var userManager = BuildUserManager();
         userManager.FindByEmailAsync("invited@test.com").Returns((ApplicationUser?)null);
@@ -1232,7 +1319,7 @@ public class AuthControllerTests
 
         var emailSender = Substitute.For<IEmailSender<ApplicationUser>>();
         var controller = BuildController(
-            userManager: userManager, invitationService: invSvc, config: config,
+            userManager: userManager, invitationService: invSvc, emailLinks: emailLinks,
             db: BuildDb("CreateUser_TrustedOrigin"), emailSenderApplication: emailSender);
 
         var result = await controller.CreateUser(new CreateUserRequest

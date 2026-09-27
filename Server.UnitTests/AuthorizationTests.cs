@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Controllers;
 using Microsoft.AspNetCore.Authorization;
 using System.Reflection;
@@ -58,35 +59,26 @@ public class AuthorizationTests
         var attr = typeof(LeagueController).GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(attr);
     }
+}
 
-    /// <summary>
-    /// frizat-uvi: JerseyController.RefreshCache must require authentication to prevent
-    /// unauthenticated callers from triggering backend HTTP fan-out.
-    /// </summary>
+/// <summary>
+/// The jersey endpoints scrape an outside site and image-process every game on a cache miss, with
+/// no negative caching or single-flight — anonymous access let anyone make the server do that on
+/// demand (and risk the upstream blocking us). The feature is switched off in the UI pending a
+/// copyright review, so the controller is admin-only until it's re-enabled. Supersedes frizat-uvi,
+/// which locked only RefreshCache and kept the GETs anonymous — but a GET miss runs the same scrape.
+/// </summary>
+public class JerseysControllerAuthorizationTests
+{
     [Fact]
-    public void JerseyController_RefreshCache_HasAuthorizeAttribute()
+    public void JerseysController_IsAdminOnly_AndNoActionAllowsAnonymous()
     {
-        var method = typeof(JerseysController).GetMethod(nameof(JerseysController.RefreshCache));
-        Assert.NotNull(method);
-
-        // Method must have [Authorize] — class is [AllowAnonymous] so method-level is required
-        var attr = method.GetCustomAttribute<AuthorizeAttribute>();
+        var attr = typeof(JerseysController).GetCustomAttribute<AuthorizeAttribute>();
         Assert.NotNull(attr);
-    }
+        Assert.Equal(AppRoles.Administrator, attr.Roles);
 
-    /// <summary>
-    /// frizat-uvi: JerseyController GET endpoints must remain anonymous (public jersey images).
-    /// </summary>
-    [Theory]
-    [InlineData(nameof(JerseysController.GetAll))]
-    [InlineData(nameof(JerseysController.GetByTeam))]
-    public void JerseyController_GetEndpoints_RemainAnonymous(string methodName)
-    {
-        var method = typeof(JerseysController).GetMethod(methodName);
-        Assert.NotNull(method);
-
-        // Must NOT have [Authorize] — these are public read endpoints
-        var attr = method!.GetCustomAttribute<AuthorizeAttribute>();
-        Assert.Null(attr);
+        Assert.Null(typeof(JerseysController).GetCustomAttribute<AllowAnonymousAttribute>());
+        foreach (var method in typeof(JerseysController).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            Assert.Null(method.GetCustomAttribute<AllowAnonymousAttribute>());
     }
 }

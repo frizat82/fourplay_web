@@ -103,7 +103,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
 
   // frizat-d2h: Show Jerseys toggle removed for now (likely permanent removal pending a
   // copyright review of the jersey images). adapter.loadJerseys and the underlying
-  // /api/jersey endpoint are left intact for a future re-enable.
+  // /api/jerseys endpoints are left intact (admin-only, see #432) for a future re-enable.
   const handleWeekChange = useCallback((newWeek: number, meta?: { isPostSeason?: boolean }) => {
     setWeekState(routeToCurrentIfMatches({ season, week: newWeek, isPostSeason: meta?.isPostSeason ?? isPostSeason }));
   }, [season, isPostSeason, routeToCurrentIfMatches]);
