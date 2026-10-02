@@ -23,6 +23,7 @@ public class NflScoresJobTests
     private readonly ILeagueRepository _repo;
     private readonly INflCurrentWeekService _currentWeekService;
     private readonly IEspnCacheService _espnCacheService;
+    private readonly IWeekResultNotificationService _weekResultNotificationService;
     private readonly IJobExecutionContext _context;
     private readonly int _year = DateTime.UtcNow.Year;
 
@@ -32,6 +33,7 @@ public class NflScoresJobTests
         _repo = Substitute.For<ILeagueRepository>();
         _currentWeekService = Substitute.For<INflCurrentWeekService>();
         _espnCacheService = Substitute.For<IEspnCacheService>();
+        _weekResultNotificationService = Substitute.For<IWeekResultNotificationService>();
         _context = Substitute.For<IJobExecutionContext>();
 
         // Default: all week fetches return null so loops terminate cleanly
@@ -49,7 +51,7 @@ public class NflScoresJobTests
         _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> { BuildConfig(1, _year) });
     }
 
-    private NflScoresJob BuildJob() => new(_fetcher, _repo, _currentWeekService, _espnCacheService);
+    private NflScoresJob BuildJob() => new(_fetcher, _repo, _currentWeekService, _espnCacheService, _weekResultNotificationService);
 
     private static NflSeasonWeekConfig BuildConfig(int weekId, int season, bool isPostSeason = false) =>
         new() {
@@ -334,5 +336,47 @@ public class NflScoresJobTests
         await BuildJob().Execute(_context);
 
         await _repo.Received(1).UpsertNflWeeksAsync(Arg.Is<List<NflWeeks>>(l => l.Count == 1));
+    }
+
+    // -----------------------------------------------------------------------
+    // Week-result notification check (frizat-tgk Phase 2) — driven by real new scores, not a
+    // separately-guessed schedule.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Execute_WhenNewFinalScoresPersisted_ChecksWeekResultsForTheCurrentSeason()
+    {
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(BuildWeekScores(_year, isFinal: true));
+
+        await BuildJob().Execute(_context);
+
+        await _weekResultNotificationService.Received(1).CheckNflWeekResultsAsync(_year);
+    }
+
+    [Fact]
+    public async Task Execute_WhenNoNewFinalScores_NeverChecksWeekResults()
+    {
+        // Default fetcher setup (in the constructor) returns null for every week — nothing new.
+        await BuildJob().Execute(_context);
+
+        await _weekResultNotificationService.DidNotReceiveWithAnyArgs().CheckNflWeekResultsAsync(default!);
+    }
+
+    [Fact]
+    public async Task Execute_WhenWeekResultCheckThrows_StillPersistsScores_ButRethrowsAfterward()
+    {
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(BuildWeekScores(_year, isFinal: true));
+        var boom = new InvalidOperationException("notification pipeline bug");
+        _weekResultNotificationService.CheckNflWeekResultsAsync(Arg.Any<int>())
+            .Returns<Task<int>>(_ => throw boom);
+
+        // Score persistence (the thing that matters most) must have already happened before the
+        // exception surfaces — but it must still surface, deferred, so JobFailureAlertListener's
+        // Discord alert sees it, same as NflScoresJob's own allWeeksFailed check.
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        Assert.Same(boom, thrown);
+        await _repo.Received(1).UpsertNflScoresAsync(Arg.Any<List<NflScores>>());
+        await _repo.Received(1).UpsertNflWeeksAsync(Arg.Any<List<NflWeeks>>());
     }
 }

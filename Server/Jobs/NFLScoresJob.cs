@@ -8,6 +8,7 @@ using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data;
 using Quartz;
 using Serilog;
+using System.Runtime.ExceptionServices;
 
 namespace FourPlayWebApp.Server.Jobs;
 
@@ -21,12 +22,14 @@ public class NflScoresJob(
     INflLiveScoreFetcher fetcher,
     ILeagueRepository leagueRepository,
     INflCurrentWeekService currentWeekService,
-    IEspnCacheService espnCacheService) : IJob {
+    IEspnCacheService espnCacheService,
+    IWeekResultNotificationService weekResultNotificationService) : IJob {
     public async Task Execute(IJobExecutionContext context) {
         // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
         using var freshEspn = EspnDayCache.Fresh();
         Log.Information("Grabbing NFL scores at {Time}", DateTime.UtcNow);
         var allWeeksFailed = false;
+        ExceptionDispatchInfo? weekResultNotificationError = null;
 
         // Seed NflWeeks from NflSeasonWeekConfig (our control table) instead of ESPN calendar —
         // every season on record, not just the currently active one; a cheap DB-only sync, no
@@ -104,6 +107,20 @@ public class NflScoresJob(
                 foreach (var (season, week) in scoreList.Select(s => (s.Season, s.NflWeek)).Distinct()) {
                     espnCacheService.InvalidateWeekCache(season, week);
                 }
+
+                // Driven by real new data (new final scores just persisted), not a separately
+                // guessed schedule — see IWeekResultNotificationService's own doc comment. Caught
+                // and deferred rather than thrown immediately (mirrors allWeeksFailed above) so
+                // the unrelated NflWeeks control-table sync below still runs regardless — but
+                // still surfaced at the end so the global JobFailureAlertListener (registered with
+                // no matcher, fires for every job) sees it: a notification bug deserves the same
+                // Discord alert any other job failure gets, not a silent log line.
+                try {
+                    await weekResultNotificationService.CheckNflWeekResultsAsync(currentWeek.Season);
+                } catch (Exception ex) {
+                    Log.Error(ex, "NflScoresJob: week-result notification check failed for season {Season}", currentWeek.Season);
+                    weekResultNotificationError = ExceptionDispatchInfo.Capture(ex);
+                }
             }
         }
 
@@ -119,5 +136,6 @@ public class NflScoresJob(
         // NEW final games this run" case (most runs, most weeks) which is not an error.
         if (allWeeksFailed)
             throw new InvalidOperationException("NflScoresJob: every week's ESPN fetch failed this run — see prior warnings for individual errors.");
+        weekResultNotificationError?.Throw();
     }
 }

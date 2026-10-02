@@ -47,6 +47,7 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     // Commissioner portal methods
     Task<List<LeagueInfo>> GetLeaguesByOwnerAsync(string ownerId);
     Task<List<LeagueInfo>> GetAllLeaguesAsync();
+    Task<List<LeagueInfo>> GetLeaguesByTypeAsync(LeagueType leagueType);
     Task UpdateLeagueOwnerAsync(int leagueId, string newOwnerUserId);
     Task UpdateLeagueJuiceMappingAsync(LeagueJuiceMapping mapping);
     Task RemoveLeagueUserMappingAsync(int leagueId, string userId);
@@ -57,12 +58,14 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     Task<Dictionary<int, int>> GetLeagueMemberCountsAsync(int season);
     Task DeleteLeagueAsync(int leagueId);
     Task<HashSet<(int LeagueId, int Season)>> GetJuiceRemindersSentAsync();
+    Task<HashSet<(string UserId, int Week)>> GetWeekResultNotificationsSentAsync(int leagueId, int season);
 
     // Add operations
     Task AddLeagueUserMappingAsync(LeagueUserMapping mapping);
     Task<LeagueInfo> AddLeagueInfoAsync(LeagueInfo leagueInfo);
     Task AddLeagueJuiceMappingAsync(LeagueJuiceMapping mapping);
     Task RecordJuiceReminderSentAsync(int leagueId, int season);
+    Task RecordWeekResultNotificationsSentAsync(IEnumerable<(string UserId, int Week)> entries, int leagueId, int season);
     Task AddNflScoresAsync(IEnumerable<NflScores> scores);
     Task AddNflSpreadsAsync(IEnumerable<NflSpreads> spreads);
     Task AddNflPicksAsync(IEnumerable<NflPicks> picks);

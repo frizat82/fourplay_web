@@ -20,24 +20,10 @@ public class GoogleEmailSender(ILogger<GoogleEmailSender> logger, IHttpClientFac
 
     // frizat: an unattended cron (LeagueJuiceReminderJob) was emailing a real inbox from the demo
     // league seeded on dev, and local /full-test-local real-mode runs send real email too — the
-    // owner decided neither is wanted.
-    //
-    // /code-review caught a real gap in an earlier version of this check: it suppressed only when
-    // environment.IsDevelopment() was true OR RAILWAY_ENVIRONMENT_NAME=="development" — but this
-    // repo's own documented local-run command (`dotnet run --no-launch-profile ...`, used in
-    // CLAUDE.md/start-demo.sh) deliberately skips launchSettings.json, so ASPNETCORE_ENVIRONMENT
-    // is never set locally and .NET defaults IsDevelopment() to false. That earlier version would
-    // have sent real email on every ordinary local run — the exact incident this fix exists to
-    // prevent. Fixed by inverting to a fail-safe allow-list instead of a fail-open deny-list: this
-    // app is ONLY ever deployed via Railway (dev + prod, both in the same project/service — see
-    // CLAUDE.md's Hosting section), so RAILWAY_ENVIRONMENT_NAME is always present when actually
-    // deployed and always absent when running on a developer's own machine. Real email now
-    // requires an explicit "production" value; every other case (missing entirely, "development",
-    // or anything unexpected) suppresses. environment.IsDevelopment() is kept as an extra guard in
-    // case RAILWAY_ENVIRONMENT_NAME is ever misconfigured while genuinely running locally.
-    private bool IsProductionEnvironment =>
-        string.Equals(Environment.GetEnvironmentVariable("RAILWAY_ENVIRONMENT_NAME"), "production", StringComparison.OrdinalIgnoreCase)
-        && !environment.IsDevelopment();
+    // owner decided neither is wanted. See DeploymentEnvironment.IsProduction's own doc comment
+    // for the full incident history behind this exact check — extracted there (frizat-tgk Phase 2)
+    // once a second call site (NotificationDispatcher) needed the identical gate.
+    private bool IsProductionEnvironment => DeploymentEnvironment.IsProduction(environment);
 
     #region Public Email Sender Methods
 

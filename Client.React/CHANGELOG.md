@@ -7,6 +7,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 ## 2026-10-02
 
 - Added: a Notifications page under Manage Account lets you enable push notifications on this device and choose what to be notified about — nothing fires yet, this just turns on the plumbing ahead of real alerts in a follow-up release
+- Added: if you opted in on the Notifications page, you now get a push the moment your week (or CFB slate) is fully decided and every pick covered
 
 ## 2026-09-27
 

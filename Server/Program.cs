@@ -283,6 +283,10 @@ builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
 // configured, so both read this single instance instead of independently re-reading env vars.
 builder.Services.AddSingleton(VapidOptions.FromEnvironment());
 builder.Services.AddHttpClient<IPushSender, WebPushSender>();
+// Phase 2: shared dispatch call site (preferences check + non-prod suppression) for every real
+// trigger — WeekResultNotificationService now, the live-pick watcher later.
+builder.Services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+builder.Services.AddScoped<IWeekResultNotificationService, WeekResultNotificationService>();
 
 builder.Services.AddScoped<ISpreadCalculatorProvider, SpreadCalculatorProvider>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
@@ -472,6 +476,11 @@ builder.Services.AddQuartz(q => {
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 7:40pm", "Fetches CFB scores at Sunday evening kickoff window", "0 40 19 ? * SUN");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Mon 6am", "Fetches CFB final scores that finished late Sunday night/Monday", "0 0 6 ? * MON");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Tue 1am", "Fetches CFB scores that finished late Monday night, mirrors NFL's post-MNF fetch", "0 0 1 ? * TUE");
+
+        // Week-result push notifications (frizat-tgk Phase 2): no separate guessed-time cron here
+        // — NflScoresJob/CfbScoresJob already call IWeekResultNotificationService directly, right
+        // after persisting new final scores, so the check is driven by real new data rather than
+        // a hand-maintained schedule that would drift out of sync with the scores crons above.
 
         // League Juice reminder + auto-lock (frizat-ugs) — mirrors the spread schedulers above:
         // LeagueJuiceScheduleSource reads NflSeasonWeekConfig/CfbSeasonWeekConfig (never a

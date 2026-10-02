@@ -16,6 +16,11 @@ namespace FourPlayWebApp.Server.UnitTests;
 /// ASPNETCORE_ENVIRONMENT=Development and would otherwise report IsDevelopment()=false) and logs
 /// what would have been sent instead of calling the Gmail API.
 /// </summary>
+// Shares RailwayEnvironmentNameCollection with NotificationDispatcherTests (frizat-tgk Phase 2) —
+// both independently mutate the process-global RAILWAY_ENVIRONMENT_NAME env var via the same
+// IsProductionEnvironment pattern, which otherwise races under xUnit's default per-class
+// parallelism.
+[Collection(RailwayEnvironmentNameCollection.Name)]
 public class GoogleEmailSenderTests
 {
     private sealed class CapturingHandler : HttpMessageHandler
