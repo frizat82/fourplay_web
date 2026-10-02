@@ -276,6 +276,14 @@ builder.Services.AddScoped<IInvitationService, InvitationService>();
 builder.Services.AddScoped<ILeagueInviteLinkService, LeagueInviteLinkService>();
 builder.Services.AddScoped<ILeagueMembershipInviteService, LeagueMembershipInviteService>();
 
+// Push notifications (frizat-tgk Phase 1): preferences/subscription CRUD + VAPID-signed Web Push
+builder.Services.AddScoped<INotificationPreferencesService, NotificationPreferencesService>();
+builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
+// Read once at startup — WebPushSender and NotificationsController must agree on whether VAPID is
+// configured, so both read this single instance instead of independently re-reading env vars.
+builder.Services.AddSingleton(VapidOptions.FromEnvironment());
+builder.Services.AddHttpClient<IPushSender, WebPushSender>();
+
 builder.Services.AddScoped<ISpreadCalculatorProvider, SpreadCalculatorProvider>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
 builder.Services.AddScoped<ICfbLeaderboardService, CfbLeaderboardService>();
