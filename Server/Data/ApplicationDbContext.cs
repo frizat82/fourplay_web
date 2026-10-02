@@ -28,6 +28,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<CfbRanking> CfbRankings { get; set; }
     public DbSet<LeagueInviteLink> LeagueInviteLinks { get; set; }
     public DbSet<LeagueMembershipInvite> LeagueMembershipInvites { get; set; }
+    public DbSet<PushSubscription> PushSubscriptions { get; set; }
+    public DbSet<NotificationPreferences> NotificationPreferences { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         base.OnModelCreating(modelBuilder);

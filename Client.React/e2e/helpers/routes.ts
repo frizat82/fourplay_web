@@ -123,6 +123,36 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
       return;
     }
 
+    // ── Notifications settings (frizat-tgk Phase 1) ─────────────────────────
+    if (url.includes('/api/notifications/preferences') && method === 'GET') {
+      void route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          notifyMineBloodyDuringGame: false,
+          notifyMineBloodyAtFinal: false,
+          notifyMineCoveringDuringGame: false,
+          notifyMineCoveringAtFinal: false,
+          notifyOthersBloodyDuringGame: false,
+          notifyOthersBloodyAtFinal: false,
+          notifyOthersCoveringDuringGame: false,
+          notifyOthersCoveringAtFinal: false,
+          notifyWeekResult: false,
+        }),
+      });
+      return;
+    }
+
+    if (url.includes('/api/notifications/preferences') && method === 'PUT') {
+      void route.fulfill({ status: 200, contentType: 'application/json', body: route.request().postData() ?? '{}' });
+      return;
+    }
+
+    if (url.includes('/api/notifications/vapid-public-key') && method === 'GET') {
+      void route.fulfill({ status: 404 });
+      return;
+    }
+
     // ── League user mappings ─────────────────────────────────────────────────
     if (url.includes('/api/league/user-mappings/by-user/') && method === 'GET') {
       void route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([league]) });
