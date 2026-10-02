@@ -40,6 +40,7 @@ const LockoutPage = lazy(() => import('./pages/account/LockoutPage'));
 const ManageAccountPage = lazy(() => import('./pages/account/ManageAccountPage'));
 const ChangePasswordPage = lazy(() => import('./pages/account/ChangePasswordPage'));
 const ChangeUsernamePage = lazy(() => import('./pages/account/ChangeUsernamePage'));
+const NotificationsSettingsPage = lazy(() => import('./pages/account/NotificationsSettingsPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const AdminJobManagerPage = lazy(() => import('./pages/admin/JobManagerPage'));
 const AdminUserManagementPage = lazy(() => import('./pages/admin/UserManagementPage'));
@@ -171,6 +172,7 @@ export default function App() {
             <Route path="/account/manage" element={<ManageAccountPage />} />
             <Route path="/account/manage/changepassword" caseSensitive={false} element={<ChangePasswordPage />} />
             <Route path="/account/manage/changeusername" caseSensitive={false} element={<ChangeUsernamePage />} />
+            <Route path="/account/manage/notifications" caseSensitive={false} element={<NotificationsSettingsPage />} />
             <Route path="/rules" caseSensitive={false} element={<RulesPage />} />
             <Route path="/league/manage" element={<AdapterRoute page={LeaguePortalPage} />} />
           </Route>

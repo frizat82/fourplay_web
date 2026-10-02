@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-10-02
+
+- Added: a Notifications page under Manage Account lets you enable push notifications on this device and choose what to be notified about — nothing fires yet, this just turns on the plumbing ahead of real alerts in a follow-up release
+
 ## 2026-09-27
 
 - Fixed (security): password-reset, email-confirmation and league-invite emails now only ever link to IV League's own sites — previously a crafted request could make them link elsewhere, and for password reset that link carried a live reset code
