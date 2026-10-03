@@ -293,6 +293,7 @@ builder.Services.AddScoped<IWeekResultNotificationService, WeekResultNotificatio
 // (including ILivePickTransitionService itself) is ordinary Scoped so tests can inject plain mocks.
 builder.Services.AddSingleton<LiveScoreSnapshotStore>();
 builder.Services.AddScoped<IPickLiveNotificationStateService, PickLiveNotificationStateService>();
+builder.Services.AddScoped<ITeamLiveNotificationStateService, TeamLiveNotificationStateService>();
 builder.Services.AddScoped<ILivePickTransitionService, LivePickTransitionService>();
 builder.Services.AddHostedService<LivePickNotificationWatcher>();
 
