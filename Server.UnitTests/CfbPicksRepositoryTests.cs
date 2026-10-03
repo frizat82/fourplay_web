@@ -61,4 +61,24 @@ public class CfbPicksRepositoryTests
 
         Assert.Equal(["ALA", "UGA"], picks.Select(p => p.Team).Order());
     }
+
+    // LivePickTransitionService's entry point: a live score tick doesn't know in advance which
+    // leagues care about a just-changed game, so this must span every league, not one.
+    [Fact]
+    public async Task GetCfbPicksForTeamsAsync_ReturnsPicksOnThoseTeams_AcrossAllLeagues_ScopedToSeasonAndSlate()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetCfbPicksForTeamsAsync_ReturnsPicksOnThoseTeams_AcrossAllLeagues_ScopedToSeasonAndSlate));
+        var repo = new CfbPicksRepository(factory);
+        await repo.AddPicksAsync([
+            new CfbPicks { UserId = "u1", LeagueId = 1, CfbSlateId = 9, Team = "OSU", Season = 2026 },
+            new CfbPicks { UserId = "u2", LeagueId = 2, CfbSlateId = 9, Team = "MICH", Season = 2026 }, // different league, same slate
+            new CfbPicks { UserId = "u3", LeagueId = 1, CfbSlateId = 9, Team = "ALA", Season = 2026 },  // not one of the requested teams
+            new CfbPicks { UserId = "u4", LeagueId = 1, CfbSlateId = 8, Team = "OSU", Season = 2026 },  // other slate
+            new CfbPicks { UserId = "u5", LeagueId = 1, CfbSlateId = 9, Team = "OSU", Season = 2025 },  // other season
+        ]);
+
+        var picks = await repo.GetCfbPicksForTeamsAsync(2026, 9, ["OSU", "MICH"]);
+
+        Assert.Equal(["u1", "u2"], picks.Select(p => p.UserId).Order());
+    }
 }

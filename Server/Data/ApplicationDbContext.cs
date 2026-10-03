@@ -31,6 +31,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<WeekResultNotificationSent> WeekResultNotificationSent { get; set; }
     public DbSet<PushSubscription> PushSubscriptions { get; set; }
     public DbSet<NotificationPreferences> NotificationPreferences { get; set; }
+    public DbSet<PickLiveNotificationState> PickLiveNotificationStates { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         base.OnModelCreating(modelBuilder);
