@@ -6,12 +6,13 @@ using FourPlayWebApp.Shared.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
 using Quartz;
 using Serilog;
+using System.Runtime.ExceptionServices;
 
 namespace FourPlayWebApp.Server.Jobs;
 
 [DisallowConcurrentExecution]
 public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICfbCacheService cfbCacheService,
-    ICfbCurrentSlateService currentSlateService) : IJob {
+    ICfbCurrentSlateService currentSlateService, IWeekResultNotificationService weekResultNotificationService) : IJob {
     // CFB seasons run Aug–Jan; the season year is the calendar year the fall games start.
     private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;
 
@@ -38,6 +39,7 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
         }
 
         var scores = new List<CfbScores>();
+        ExceptionDispatchInfo? weekResultNotificationError = null;
 
         // Resolved once for the whole loop, not once per slate — isCurrentSlate only matters to
         // the fetcher for the replay-mode snapshot merge (see ICfbLiveScoreFetcher's own doc
@@ -80,6 +82,19 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
             foreach (var slateId in scores.Select(s => s.CfbSlateId).Distinct()) {
                 cfbCacheService.InvalidateSlateCache(slateId);
             }
+
+            // Driven by real new data (new final scores just persisted), not a separately guessed
+            // schedule — see IWeekResultNotificationService's own doc comment, and NflScoresJob's
+            // identical call site. Caught and deferred rather than thrown immediately (mirrors the
+            // failedSlates check below) so the rest of this run's own health check still happens
+            // regardless — but still surfaced at the end so the global JobFailureAlertListener
+            // (registered with no matcher, fires for every job) sees it.
+            try {
+                await weekResultNotificationService.CheckCfbWeekResultsAsync(Season);
+            } catch (Exception ex) {
+                Log.Error(ex, "CfbScoresJob: week-result notification check failed for season {Season}", Season);
+                weekResultNotificationError = ExceptionDispatchInfo.Capture(ex);
+            }
         }
         Log.Information("CfbScoresJob: complete at {Time}", DateTime.UtcNow);
 
@@ -89,6 +104,7 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
         // NflScoresJob's identical distinction.
         if (failedSlates == slates.Count)
             throw new InvalidOperationException("CfbScoresJob: every slate's ESPN fetch failed this run — see prior warnings for individual errors.");
+        weekResultNotificationError?.Throw();
     }
 
     private static void AppendScores(List<CfbScores> scores, FourPlayWebApp.Server.Models.Data.CfbSlates slate, IEnumerable<FourPlayWebApp.Shared.Models.Event> events) {
