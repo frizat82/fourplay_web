@@ -288,6 +288,14 @@ builder.Services.AddHttpClient<IPushSender, WebPushSender>();
 builder.Services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
 builder.Services.AddScoped<IWeekResultNotificationService, WeekResultNotificationService>();
 
+// Phase 3: live per-pick transitions. LiveScoreSnapshotStore is the one piece of state that must
+// survive across the per-recompute DI scope LivePickNotificationWatcher creates; everything else
+// (including ILivePickTransitionService itself) is ordinary Scoped so tests can inject plain mocks.
+builder.Services.AddSingleton<LiveScoreSnapshotStore>();
+builder.Services.AddScoped<IPickLiveNotificationStateService, PickLiveNotificationStateService>();
+builder.Services.AddScoped<ILivePickTransitionService, LivePickTransitionService>();
+builder.Services.AddHostedService<LivePickNotificationWatcher>();
+
 builder.Services.AddScoped<ISpreadCalculatorProvider, SpreadCalculatorProvider>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
 builder.Services.AddScoped<ICfbLeaderboardService, CfbLeaderboardService>();

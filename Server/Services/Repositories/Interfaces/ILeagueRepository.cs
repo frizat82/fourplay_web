@@ -43,6 +43,12 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     Task<List<NflPicks>> GetUserNflPicksAsync(string userId, int leagueId, int season, int week);
     /// <summary>Every member's picks for a league's whole season in one query — the leaderboard's source, instead of one query per member × week.</summary>
     Task<List<NflPicks>> GetLeagueNflPicksForSeasonAsync(int leagueId, int season);
+    /// <summary>
+    /// Every pick on any of the given teams for one week, across ALL leagues — not scoped to one
+    /// league, since a live score tick doesn't know in advance which leagues care. Used by
+    /// LivePickTransitionService to find who to notify about a just-changed game.
+    /// </summary>
+    Task<List<NflPicks>> GetNflPicksForTeamsAsync(int season, int week, IReadOnlyCollection<string> teams);
 
     // Commissioner portal methods
     Task<List<LeagueInfo>> GetLeaguesByOwnerAsync(string ownerId);

@@ -95,4 +95,38 @@ public class NotificationPreferencesServiceTests
             Assert.False(bobsPrefs.NotifyWeekResult);
         });
     }
+
+    // LivePickTransitionService's cost-control short-circuit: must stay false until at least one
+    // of the 8 LIVE toggles is on — NotifyWeekResult alone (Phase 2's toggle) must not count.
+    [Fact]
+    public async Task AnyLiveNotificationPreferenceEnabledAsync_IsFalse_WhenOnlyWeekResultIsEnabled()
+    {
+        var db = nameof(AnyLiveNotificationPreferenceEnabledAsync_IsFalse_WhenOnlyWeekResultIsEnabled);
+        await SqliteTestDb.WithDb(db, async factory =>
+        {
+            await using (var seed = SqliteTestDb.Open(db))
+                await SqliteTestDb.SeedUser(seed, "alice");
+
+            var service = new NotificationPreferencesService(factory);
+            await service.UpsertAsync("alice", new NotificationPreferencesDto { NotifyWeekResult = true });
+
+            Assert.False(await service.AnyLiveNotificationPreferenceEnabledAsync());
+        });
+    }
+
+    [Fact]
+    public async Task AnyLiveNotificationPreferenceEnabledAsync_IsTrue_WhenAnyOneLiveToggleIsOn()
+    {
+        var db = nameof(AnyLiveNotificationPreferenceEnabledAsync_IsTrue_WhenAnyOneLiveToggleIsOn);
+        await SqliteTestDb.WithDb(db, async factory =>
+        {
+            await using (var seed = SqliteTestDb.Open(db))
+                await SqliteTestDb.SeedUser(seed, "alice");
+
+            var service = new NotificationPreferencesService(factory);
+            await service.UpsertAsync("alice", new NotificationPreferencesDto { NotifyOthersCoveringAtFinal = true });
+
+            Assert.True(await service.AnyLiveNotificationPreferenceEnabledAsync());
+        });
+    }
 }
