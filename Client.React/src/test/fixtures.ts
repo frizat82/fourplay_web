@@ -214,7 +214,7 @@ export function createSpreadCalculationResponse(
 import type { LeaderboardDto, LeaderboardWeekResults, WeekResult } from '../types/leaderboard';
 
 export function createLeaderboardWeekResult(overrides?: Partial<LeaderboardWeekResults>): LeaderboardWeekResults {
-  return { week: 1, weekResult: 'Won' as WeekResult, score: 10, ...overrides };
+  return { week: 1, weekResult: 'Won' as WeekResult, score: 10, losingTeams: [], hadScoringError: false, ...overrides };
 }
 
 export function createLeaderboardEntry(overrides?: Partial<LeaderboardDto>): LeaderboardDto {
@@ -227,5 +227,3 @@ export function createLeaderboardEntry(overrides?: Partial<LeaderboardDto>): Lea
     ...overrides,
   };
 }
-
-

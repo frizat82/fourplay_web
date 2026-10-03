@@ -36,12 +36,17 @@ public static class LeaderboardEngine {
 
         var leaderboard = users.Select(user => new LeaderboardModel {
             User = user.User,
-            WeekResults = periods.Select((period, i) => new LeaderboardWeekResults {
-                Week = period.Number,
-                WeekResult = inputs[i] is { } week
-                    ? WeekOutcome.Evaluate(picksFor(user.UserId, period.Number).ToList(), week.Scores, week.Calculator,
-                        week.RequiredPicks, week.AllGamesStarted, (pick, ex) => onPickError(pick, period.Number, ex))
-                    : WeekResult.Excluded,
+            WeekResults = periods.Select((period, i) => {
+                if (inputs[i] is not { } week)
+                    return new LeaderboardWeekResults { Week = period.Number, WeekResult = WeekResult.Excluded };
+                var evaluation = WeekOutcome.Evaluate(picksFor(user.UserId, period.Number).ToList(), week.Scores,
+                    week.Calculator, week.RequiredPicks, week.AllGamesStarted, (pick, ex) => onPickError(pick, period.Number, ex));
+                return new LeaderboardWeekResults {
+                    Week = period.Number,
+                    WeekResult = evaluation.WeekResult,
+                    LosingTeams = evaluation.LosingPicks.Select(p => p.Team).ToList(),
+                    HadScoringError = evaluation.HadScoringError,
+                };
             }).ToArray(),
         }).ToList();
 

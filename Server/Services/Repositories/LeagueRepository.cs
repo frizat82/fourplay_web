@@ -274,6 +274,16 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             .ToListAsync();
     }
 
+    public async Task<List<LeagueInfo>> GetLeaguesByTypeAsync(LeagueType leagueType) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        // Filtered in SQL, no Include — callers that only need "which leagues of this sport
+        // exist" (e.g. WeekResultNotificationService) have no use for juice-mapping rows, unlike
+        // GetAllLeaguesAsync's existing cross-sport callers.
+        return await db.LeagueInfo
+            .Where(l => l.LeagueType == leagueType)
+            .ToListAsync();
+    }
+
     public async Task UpdateLeagueOwnerAsync(int leagueId, string newOwnerUserId) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         var league = await db.LeagueInfo.FirstAsync(l => l.Id == leagueId);
@@ -427,6 +437,22 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
     public async Task RecordJuiceReminderSentAsync(int leagueId, int season) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         await db.LeagueJuiceReminderSent.AddAsync(new LeagueJuiceReminderSent { LeagueId = leagueId, Season = season });
+        await db.SaveChangesAsync();
+    }
+
+    public async Task<HashSet<(string UserId, int Week)>> GetWeekResultNotificationsSentAsync(int leagueId, int season) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        var pairs = await db.WeekResultNotificationSent
+            .Where(r => r.LeagueId == leagueId && r.Season == season)
+            .Select(r => new { r.UserId, r.Week })
+            .ToListAsync();
+        return pairs.Select(p => (p.UserId, p.Week)).ToHashSet();
+    }
+
+    public async Task RecordWeekResultNotificationsSentAsync(IEnumerable<(string UserId, int Week)> entries, int leagueId, int season) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        await db.WeekResultNotificationSent.AddRangeAsync(entries.Select(e =>
+            new WeekResultNotificationSent { UserId = e.UserId, LeagueId = leagueId, Season = season, Week = e.Week }));
         await db.SaveChangesAsync();
     }
 

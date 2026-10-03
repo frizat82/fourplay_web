@@ -48,35 +48,35 @@ public class SharedScoringTests {
 
     [Fact]
     public void WeekOutcome_Won_WhenEveryRequiredPickCovers() =>
-        Assert.Equal(WeekResult.Won, WeekOutcome.Evaluate([new PickRow("KC", PickType.Spread)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true));
+        Assert.Equal(WeekResult.Won, WeekOutcome.Evaluate([new PickRow("KC", PickType.Spread)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true).WeekResult);
 
     [Fact]
     public void WeekOutcome_Lost_AsSoonAsAnyPickLoses_EvenWithPicksMissing() =>
-        Assert.Equal(WeekResult.Lost, WeekOutcome.Evaluate([new PickRow("BAL", PickType.Spread)], KcWins, Calc(), requiredPicks: 4, allGamesStarted: false));
+        Assert.Equal(WeekResult.Lost, WeekOutcome.Evaluate([new PickRow("BAL", PickType.Spread)], KcWins, Calc(), requiredPicks: 4, allGamesStarted: false).WeekResult);
 
     [Fact]
     public void WeekOutcome_IncompletePicks_AreMissingGameResults_UntilEveryGameHasStarted() {
-        Assert.Equal(WeekResult.MissingGameResults, WeekOutcome.Evaluate([], KcWins, Calc(), requiredPicks: 4, allGamesStarted: false));
-        Assert.Equal(WeekResult.MissingPicks, WeekOutcome.Evaluate([], KcWins, Calc(), requiredPicks: 4, allGamesStarted: true));
+        Assert.Equal(WeekResult.MissingGameResults, WeekOutcome.Evaluate([], KcWins, Calc(), requiredPicks: 4, allGamesStarted: false).WeekResult);
+        Assert.Equal(WeekResult.MissingPicks, WeekOutcome.Evaluate([], KcWins, Calc(), requiredPicks: 4, allGamesStarted: true).WeekResult);
     }
 
     [Fact]
     public void WeekOutcome_PendingGame_IsMissingGameResults_NotAWin() =>
-        Assert.Equal(WeekResult.MissingGameResults, WeekOutcome.Evaluate([new PickRow("SF", PickType.Spread)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true));
+        Assert.Equal(WeekResult.MissingGameResults, WeekOutcome.Evaluate([new PickRow("SF", PickType.Spread)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true).WeekResult);
 
     // frizat-xtn: a pick with no matching spread row (bad data, a spread deleted/renamed after the
     // pick, an ESPN cache gap) is a LOSS, never a silent win — it was never evaluated against anything.
     [Fact]
     public void WeekOutcome_PickWithNoSpreadRow_FailsClosed() {
         IScoreRow[] scores = [new CfbScores { HomeTeam = "OSU", AwayTeam = "MICH", HomeTeamScore = 30, AwayTeamScore = 10 }];
-        Assert.Equal(WeekResult.Lost, WeekOutcome.Evaluate([new PickRow("OSU", PickType.Spread)], scores, Calc(), requiredPicks: 1, allGamesStarted: true));
+        Assert.Equal(WeekResult.Lost, WeekOutcome.Evaluate([new PickRow("OSU", PickType.Spread)], scores, Calc(), requiredPicks: 1, allGamesStarted: true).WeekResult);
     }
 
     [Fact]
     public void WeekOutcome_OverUnder_UsesTheCombinedScore() {
         // 27 + 20 = 47 > 45
-        Assert.Equal(WeekResult.Won, WeekOutcome.Evaluate([new PickRow("KC", PickType.Over)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true));
-        Assert.Equal(WeekResult.Lost, WeekOutcome.Evaluate([new PickRow("KC", PickType.Under)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true));
+        Assert.Equal(WeekResult.Won, WeekOutcome.Evaluate([new PickRow("KC", PickType.Over)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true).WeekResult);
+        Assert.Equal(WeekResult.Lost, WeekOutcome.Evaluate([new PickRow("KC", PickType.Under)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true).WeekResult);
     }
 
     // Both leaderboards used to catch a failure scoring one pick (logging it, counting that pick as
@@ -91,8 +91,76 @@ public class SharedScoringTests {
         var result = WeekOutcome.Evaluate([new PickRow("KC", PickType.Spread)], KcWins, calc, requiredPicks: 1,
             allGamesStarted: true, onPickError: (pick, _) => reported.Add(pick));
 
-        Assert.Equal(WeekResult.Lost, result);
+        Assert.Equal(WeekResult.Lost, result.WeekResult);
         Assert.Equal([new PickRow("KC", PickType.Spread)], reported);
+    }
+
+    // ── WeekOutcome.Evaluate's LosingPicks (frizat-tgk Phase 2: "you lost the week" push needs to
+    // name the specific pick that decided it) ──────────────────────────────────
+
+    [Fact]
+    public void WeekOutcome_LosingPicks_IncludesTheLosingPick_WhenWeekIsLost() {
+        var result = WeekOutcome.Evaluate([new PickRow("BAL", PickType.Spread)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true);
+
+        Assert.Equal(WeekResult.Lost, result.WeekResult);
+        Assert.Equal([new PickRow("BAL", PickType.Spread)], result.LosingPicks);
+    }
+
+    [Fact]
+    public void WeekOutcome_LosingPicks_IsEmpty_WhenWeekIsWon() {
+        var result = WeekOutcome.Evaluate([new PickRow("KC", PickType.Spread)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true);
+
+        Assert.Empty(result.LosingPicks);
+    }
+
+    [Fact]
+    public void WeekOutcome_LosingPicks_IsEmpty_WhenGameIsStillPending() {
+        var result = WeekOutcome.Evaluate([new PickRow("SF", PickType.Spread)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true);
+
+        Assert.Empty(result.LosingPicks);
+    }
+
+    [Fact]
+    public void WeekOutcome_LosingPicks_IncludesEveryLosingPick_WhenMultipleLose() {
+        var calc = new SpreadCalculator([
+            new NflSpreads { HomeTeam = "KC", AwayTeam = "BAL", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 45 },
+            new NflSpreads { HomeTeam = "SF", AwayTeam = "LAR", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 45 },
+        ], juice: 0);
+        IScoreRow[] scores = [
+            new NflScores { HomeTeam = "KC", AwayTeam = "BAL", HomeTeamScore = 27, AwayTeamScore = 20 },
+            new NflScores { HomeTeam = "SF", AwayTeam = "LAR", HomeTeamScore = 10, AwayTeamScore = 24 }, // LAR covers, SF doesn't
+        ];
+
+        var result = WeekOutcome.Evaluate(
+            [new PickRow("BAL", PickType.Spread), new PickRow("SF", PickType.Spread)], scores, calc,
+            requiredPicks: 2, allGamesStarted: true);
+
+        Assert.Equal(WeekResult.Lost, result.WeekResult);
+        Assert.Equal(2, result.LosingPicks.Count);
+        Assert.Contains(new PickRow("BAL", PickType.Spread), result.LosingPicks);
+        Assert.Contains(new PickRow("SF", PickType.Spread), result.LosingPicks);
+    }
+
+    [Fact]
+    public void WeekOutcome_LosingPicks_IncludesAPickThatFailedToScore() {
+        var calc = Substitute.For<ISpreadCalculator>();
+        calc.DidUserWinPick(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<PickType>())
+            .Throws(new InvalidOperationException("bad row"));
+
+        var result = WeekOutcome.Evaluate([new PickRow("KC", PickType.Spread)], KcWins, calc, requiredPicks: 1, allGamesStarted: true);
+
+        Assert.Equal([new PickRow("KC", PickType.Spread)], result.LosingPicks);
+        Assert.True(result.HadScoringError);
+    }
+
+    // A pick that legitimately loses against the spread (no exception, no bad data) must not be
+    // flagged as a scoring error — only an actual thrown exception should set this.
+    [Fact]
+    public void WeekOutcome_HadScoringError_IsFalse_ForALegitimateLoss() {
+        var result = WeekOutcome.Evaluate([new PickRow("BAL", PickType.Spread)], KcWins, Calc(), requiredPicks: 1, allGamesStarted: true);
+
+        Assert.Equal(WeekResult.Lost, result.WeekResult);
+        Assert.False(result.HadScoringError);
     }
 
     // The old linear scans compared x.HomeTeam == null and simply found nothing; the team index
@@ -103,4 +171,3 @@ public class SharedScoringTests {
         Assert.Null(Calc().GetOverUnder(null!, PickType.Over));
     }
 }
-

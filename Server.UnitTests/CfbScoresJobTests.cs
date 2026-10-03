@@ -23,6 +23,7 @@ public class CfbScoresJobTests
     private readonly ICfbRepository _repo;
     private readonly ICfbCacheService _cfbCacheService;
     private readonly ICfbCurrentSlateService _currentSlateService;
+    private readonly IWeekResultNotificationService _weekResultNotificationService;
     private readonly IJobExecutionContext _context;
 
     public CfbScoresJobTests()
@@ -31,6 +32,7 @@ public class CfbScoresJobTests
         _repo = Substitute.For<ICfbRepository>();
         _cfbCacheService = Substitute.For<ICfbCacheService>();
         _currentSlateService = Substitute.For<ICfbCurrentSlateService>();
+        _weekResultNotificationService = Substitute.For<IWeekResultNotificationService>();
         _context = Substitute.For<IJobExecutionContext>();
         // Default: no resolved current slate, so existing tests (which never set this up) keep
         // exercising isCurrentSlate: false for every slate, unchanged by this dependency's
@@ -38,7 +40,7 @@ public class CfbScoresJobTests
         _currentSlateService.GetCurrentSlateAsync().Returns((CfbSlateInfo?)null);
     }
 
-    private CfbScoresJob BuildJob() => new(_fetcher, _repo, _cfbCacheService, _currentSlateService);
+    private CfbScoresJob BuildJob() => new(_fetcher, _repo, _cfbCacheService, _currentSlateService, _weekResultNotificationService);
 
     // Dates relative to "now" (not a fixed calendar date) so this slate is always "currently
     // active" for the SeasonWindowResolver-based gate CfbScoresJob now checks before fetching —
@@ -294,5 +296,50 @@ public class CfbScoresJobTests
         Assert.Null(score.WeatherDisplayValue);
         Assert.Null(score.WeatherConditionId);
         Assert.Null(score.WeatherTemperatureF);
+    }
+
+    // -----------------------------------------------------------------------
+    // Week-result notification check (frizat-tgk Phase 2) — driven by real new scores, not a
+    // separately-guessed schedule. Mirrors NflScoresJobTests' identical section.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Execute_WhenNewFinalScoresPersisted_ChecksWeekResultsForTheCurrentSeason()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
+
+        await BuildJob().Execute(_context);
+
+        await _weekResultNotificationService.Received(1).CheckCfbWeekResultsAsync(Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task Execute_WhenNoNewFinalScores_NeverChecksWeekResults()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns((EspnScores?)null);
+
+        await BuildJob().Execute(_context);
+
+        await _weekResultNotificationService.DidNotReceiveWithAnyArgs().CheckCfbWeekResultsAsync(default!);
+    }
+
+    [Fact]
+    public async Task Execute_WhenWeekResultCheckThrows_StillPersistsScores_ButRethrowsAfterward()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([BuildSlate()]);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
+        var boom = new InvalidOperationException("notification pipeline bug");
+        _weekResultNotificationService.CheckCfbWeekResultsAsync(Arg.Any<int>())
+            .Returns<Task<int>>(_ => throw boom);
+
+        // Score persistence (the thing that matters most) must have already happened before the
+        // exception surfaces — but it must still surface, deferred, so JobFailureAlertListener's
+        // Discord alert sees it, same as CfbScoresJob's own failedSlates check.
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        Assert.Same(boom, thrown);
+        await _repo.Received(1).UpsertCfbScoresAsync(Arg.Any<IEnumerable<CfbScores>>());
     }
 }
