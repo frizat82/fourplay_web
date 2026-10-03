@@ -8,6 +8,12 @@ public interface ICfbPicksRepository {
     Task<IEnumerable<CfbPicks>> GetUserPicksAsync(int leagueId, int cfbSlateId, string userId);
     /// <summary>Every member's picks for a league's whole season in one query — the leaderboard's source, instead of one query per member × slate.</summary>
     Task<List<CfbPicks>> GetLeaguePicksForSeasonAsync(int leagueId, int season);
+    /// <summary>
+    /// Every pick on any of the given teams for one slate, across ALL leagues — mirrors
+    /// ILeagueRepository.GetNflPicksForTeamsAsync. Used by LivePickTransitionService to find who to
+    /// notify about a just-changed game.
+    /// </summary>
+    Task<List<CfbPicks>> GetCfbPicksForTeamsAsync(int season, int cfbSlateId, IReadOnlyCollection<string> teams);
     Task<IEnumerable<CfbPickDto>> GetAllPicksForSlateAsync(int leagueId, int cfbSlateId);
     /// <summary>One user id per SUBMITTED pick — selects nothing else (no team), so pick secrecy holds by construction (frizat-xbq).</summary>
     Task<List<string>> GetCfbPickUserIdsAsync(int leagueId, int cfbSlateId);

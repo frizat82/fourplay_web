@@ -621,4 +621,25 @@ public class LeagueRepositoryTests
 
         Assert.Equal(["BUF", "KC"], picks.Select(p => p.Team).Order());
     }
+
+    // LivePickTransitionService's entry point: a live score tick doesn't know in advance which
+    // leagues care about a just-changed game, so this must span every league, not one.
+    [Fact]
+    public async Task GetNflPicksForTeamsAsync_ReturnsPicksOnThoseTeams_AcrossAllLeagues_ScopedToSeasonAndWeek()
+    {
+        var factory = new DbContextFactoryStub(nameof(GetNflPicksForTeamsAsync_ReturnsPicksOnThoseTeams_AcrossAllLeagues_ScopedToSeasonAndWeek));
+        var db = factory.CreateDbContext();
+        db.NflPicks.AddRange(
+            new NflPicks { UserId = "u1", LeagueId = 1, Season = 2026, NflWeek = 5, Team = "KC" },
+            new NflPicks { UserId = "u2", LeagueId = 2, Season = 2026, NflWeek = 5, Team = "BAL" }, // different league, same week
+            new NflPicks { UserId = "u3", LeagueId = 1, Season = 2026, NflWeek = 5, Team = "DAL" }, // not one of the requested teams
+            new NflPicks { UserId = "u4", LeagueId = 1, Season = 2026, NflWeek = 6, Team = "KC" },  // other week
+            new NflPicks { UserId = "u5", LeagueId = 1, Season = 2025, NflWeek = 5, Team = "KC" });  // other season
+        await db.SaveChangesAsync();
+        var repo = new LeagueRepository(factory);
+
+        var picks = await repo.GetNflPicksForTeamsAsync(2026, 5, ["KC", "BAL"]);
+
+        Assert.Equal(["u1", "u2"], picks.Select(p => p.UserId).Order());
+    }
 }

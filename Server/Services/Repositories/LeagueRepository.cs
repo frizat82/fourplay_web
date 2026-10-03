@@ -248,6 +248,14 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
             .ToListAsync();
     }
 
+    public async Task<List<NflPicks>> GetNflPicksForTeamsAsync(int season, int week, IReadOnlyCollection<string> teams) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.NflPicks
+            .AsNoTracking()
+            .Where(pick => pick.Season == season && pick.NflWeek == week && teams.Contains(pick.Team))
+            .ToListAsync();
+    }
+
     public async Task<List<NflPicks>> GetUserNflPicksAsync(string userId, int leagueId, int season, int week) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.NflPicks

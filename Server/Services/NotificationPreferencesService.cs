@@ -46,6 +46,16 @@ public class NotificationPreferencesService(IDbContextFactory<ApplicationDbConte
         return ToDto(existing);
     }
 
+    public async Task<bool> AnyLiveNotificationPreferenceEnabledAsync()
+    {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.NotificationPreferences.AsNoTracking().AnyAsync(p =>
+            p.NotifyMineBloodyDuringGame || p.NotifyMineBloodyAtFinal ||
+            p.NotifyMineCoveringDuringGame || p.NotifyMineCoveringAtFinal ||
+            p.NotifyOthersBloodyDuringGame || p.NotifyOthersBloodyAtFinal ||
+            p.NotifyOthersCoveringDuringGame || p.NotifyOthersCoveringAtFinal);
+    }
+
     private static NotificationPreferencesDto ToDto(NotificationPreferences p) => new()
     {
         NotifyMineBloodyDuringGame = p.NotifyMineBloodyDuringGame,
