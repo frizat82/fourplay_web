@@ -11,6 +11,19 @@ public sealed record PickRow(string Team, PickType PickType);
 /// How one user's week (NFL) or slate (CFB) resolves — one implementation for both leaderboards.
 /// </summary>
 public static class WeekOutcome {
+    /// <summary>
+    /// A week's/slate's result plus which picks (if any) already lost — e.g. a "you lost the week"
+    /// push notification can name the losing pick straight off this, without re-deriving the same
+    /// win/loss arithmetic itself. LosingPicks is empty unless WeekResult is Lost.
+    /// </summary>
+    /// <param name="HadScoringError">
+    /// True if any pick's scoring threw (bad data) rather than the pick legitimately losing against
+    /// the spread. A page render self-corrects once the data is fixed, but a push notification
+    /// doesn't get a second chance — a caller that permanently records "notified" should skip doing
+    /// so here, so the week gets re-evaluated (and the right push sent) once the bug is fixed.
+    /// </param>
+    public readonly record struct Evaluation(WeekResult WeekResult, IReadOnlyList<PickRow> LosingPicks, bool HadScoringError);
+
     /// <param name="scores">This week's/slate's scores only.</param>
     /// <param name="allGamesStarted">
     /// A pick can be made or changed until its own game kicks off, so an incomplete pick set is only
@@ -21,22 +34,26 @@ public static class WeekOutcome {
     /// A pick that fails to score (bad data) counts as a loss and is reported here — one bad row must
     /// never take down the whole leaderboard build (both sports' scorers always isolated this).
     /// </param>
-    public static WeekResult Evaluate(IReadOnlyCollection<PickRow> picks, IReadOnlyCollection<IScoreRow> scores,
+    public static Evaluation Evaluate(IReadOnlyCollection<PickRow> picks, IReadOnlyCollection<IScoreRow> scores,
         ISpreadCalculator calculator, int requiredPicks, bool allGamesStarted,
         Action<PickRow, Exception>? onPickError = null) {
+        var hadScoringError = false;
         var results = picks.Select(p => {
             try {
-                return PickResult(p, scores, calculator);
+                return (pick: p, result: PickResult(p, scores, calculator));
             } catch (Exception ex) {
+                hadScoringError = true;
                 onPickError?.Invoke(p, ex);
-                return false;
+                return (pick: p, result: (bool?)false);
             }
         }).ToList();
-        if (results.Any(r => r == false)) return WeekResult.Lost; // any loss decides the week
+        var losingPicks = results.Where(r => r.result == false).Select(r => r.pick).ToList();
+        if (losingPicks.Count > 0)
+            return new Evaluation(WeekResult.Lost, losingPicks, hadScoringError); // any loss decides the week
         if (picks.Count < requiredPicks)
-            return allGamesStarted ? WeekResult.MissingPicks : WeekResult.MissingGameResults;
-        if (results.Any(r => r is null)) return WeekResult.MissingGameResults;
-        return WeekResult.Won;
+            return new Evaluation(allGamesStarted ? WeekResult.MissingPicks : WeekResult.MissingGameResults, [], false);
+        if (results.Any(r => r.result is null)) return new Evaluation(WeekResult.MissingGameResults, [], false);
+        return new Evaluation(WeekResult.Won, [], false);
     }
 
     /// <summary>true/false once the pick's game has a score; null while it doesn't.</summary>

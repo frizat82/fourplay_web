@@ -4,6 +4,8 @@ export interface LeaderboardWeekResults {
   week: number;
   weekResult: WeekResult;
   score: number;
+  losingTeams: string[];
+  hadScoringError: boolean;
 }
 
 export interface LeaderboardDto {
