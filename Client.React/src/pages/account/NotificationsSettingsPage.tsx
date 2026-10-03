@@ -229,6 +229,10 @@ export default function NotificationsSettingsPage() {
 
       <Card>
         <CardContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Choose what sends a push straight to this device — your own picks, what's happening
+            elsewhere in the league, or just your week's final result.
+          </Typography>
           <form onSubmit={handleSubmit(onSubmit)}>
             <Stack spacing={1}>
               <FormControlLabel
@@ -256,6 +260,12 @@ export default function NotificationsSettingsPage() {
                 </AccordionSummary>
                 <AccordionDetails>
                   <Stack spacing={2}>
+                    <Typography variant="body2" color="text.secondary">
+                      Fine-tune exactly when you hear about each pick. "Covering" means it's
+                      currently winning against the spread; "Bloody" means it's currently losing.
+                      "During game" sends a push the moment that changes; "At final" sends one push
+                      once the game ends.
+                    </Typography>
                     <div>
                       <Typography variant="subtitle2" gutterBottom>
                         My picks
@@ -285,7 +295,7 @@ export default function NotificationsSettingsPage() {
                 </AccordionDetails>
               </Accordion>
 
-              <Button variant="contained" type="submit" disabled={isLoading || isSubmitting} sx={{ mt: 2 }}>
+              <Button variant="contained" type="submit" disabled={isLoading || isSubmitting} sx={{ mt: 2, alignSelf: 'flex-start' }}>
                 Save preferences
               </Button>
             </Stack>
