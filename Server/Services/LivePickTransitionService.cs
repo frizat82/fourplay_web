@@ -18,6 +18,7 @@ public class LivePickTransitionService(
     ICfbPicksRepository cfbPicksRepository,
     ICfbRepository cfbRepository,
     IPickLiveNotificationStateService stateService,
+    ITeamLiveNotificationStateService teamStateService,
     INotificationPreferencesService preferencesService,
     INotificationDispatcher dispatcher,
     LiveScoreSnapshotStore snapshotStore,
@@ -25,6 +26,55 @@ public class LivePickTransitionService(
     ILogger<LivePickTransitionService> logger) : ILivePickTransitionService
 {
     private sealed record LivePick(int PickId, string UserId, int LeagueId, PickRow Pick);
+
+    // One (team, pickType) group's shared result for this tick — every picker making the SAME bet
+    // (same team, same PickType: an Over and a Spread pick anchored on the same team are different
+    // bets with different win conditions) computes an identical cover state, so "others" is
+    // aggregated and deduped once per bet, not once per picker (frizat-cov).
+    // A class, not a record — PickerUserIds is mutated in place as more pickers are found, which
+    // would be misleading on a type that signals value semantics.
+    private sealed class BetResult(bool covering, bool isFinal, string firstPickerUserId)
+    {
+        public bool Covering { get; } = covering;
+        public bool IsFinal { get; } = isFinal;
+        public List<string> PickerUserIds { get; } = [firstPickerUserId];
+    }
+
+    // Shared by both the per-pick "mine" state machine and the per-bet "others" one — baseline on
+    // the first read after the quiet window (silent, never a push), a flip from that baseline
+    // notifies once, and the final ping is tracked and notified independently of the above.
+    private readonly record struct Transition(bool Changed, bool? Covering, DateTimeOffset? LastNotifiedAt,
+        bool NotifyTransition, DateTimeOffset? FinalNotifiedAt, bool NotifyFinal);
+
+    private static Transition ComputeTransition(bool? priorCovering, DateTimeOffset? priorLastNotifiedAt,
+        DateTimeOffset? priorFinalNotifiedAt, bool covering, bool isFinal, DateTimeOffset now)
+    {
+        var covering_ = priorCovering;
+        var lastNotifiedAt = priorLastNotifiedAt;
+        var coveringChanged = false;
+        var notifyTransition = false;
+        if (priorCovering is null) {
+            covering_ = covering;
+            lastNotifiedAt = now;
+            coveringChanged = true;
+        } else if (priorCovering != covering) {
+            covering_ = covering;
+            lastNotifiedAt = now;
+            coveringChanged = true;
+            notifyTransition = true;
+        }
+
+        var finalNotifiedAt = priorFinalNotifiedAt;
+        var notifyFinal = false;
+        var finalChanged = false;
+        if (isFinal && priorFinalNotifiedAt is null) {
+            finalNotifiedAt = now;
+            notifyFinal = true;
+            finalChanged = true;
+        }
+
+        return new Transition(coveringChanged || finalChanged, covering_, lastNotifiedAt, notifyTransition, finalNotifiedAt, notifyFinal);
+    }
 
     public async Task RecomputeAsync(LeagueType sport, CancellationToken cancellationToken = default)
     {
@@ -60,6 +110,11 @@ public class LivePickTransitionService(
         var now = timeProvider.GetUtcNow();
         var existingStates = await stateService.GetStatesAsync(sport, picks.Select(p => p.PickId).ToList());
         var newStates = new List<PickLiveNotificationState>();
+        // Accumulated across every league, not persisted until the end — must share the same
+        // all-or-nothing write boundary as newStates below, or a later league throwing mid-loop
+        // could leave "others" state committed for an earlier league while "mine" state for that
+        // same earlier league is lost, letting the two channels silently diverge.
+        var newTeamStates = new List<TeamLiveNotificationState>();
 
         // Grouped by league so each league's own tease (JuiceTiers) is applied — "covering" is a
         // league-specific answer, not a single global one, exactly like LeaderboardEngine.Build.
@@ -71,6 +126,7 @@ public class LivePickTransitionService(
             // — those are two distinct identifiers for the same slate (see ResolveCfbPeriodAsync).
             var calculator = new SpreadCalculator(spreads, JuiceTiers.For(sport, period.JuiceTierNumber, juiceMapping));
             var members = await leagueRepository.GetLeagueUserMappingsAsync(byLeague.Key);
+            var betResults = new Dictionary<(string Team, PickType PickType), BetResult>();
 
             foreach (var pick in byLeague)
             {
@@ -90,53 +146,82 @@ public class LivePickTransitionService(
                     continue;
                 }
 
+                var isFinal = competition.Status.Type.Name == TypeName.StatusFinal;
+
+                // "Mine" — one push to the pick's own owner, unaffected by how many other members
+                // made the same bet.
                 existingStates.TryGetValue(pick.PickId, out var prior);
-                var newState = new PickLiveNotificationState {
-                    Sport = sport, PickId = pick.PickId, LeagueId = pick.LeagueId,
-                    LastNotifiedCovering = prior?.LastNotifiedCovering,
-                    LastNotifiedAt = prior?.LastNotifiedAt,
-                    FinalNotifiedAt = prior?.FinalNotifiedAt,
-                };
-
-                var stateChanged = false;
-                if (prior?.LastNotifiedCovering is null) {
-                    // First read at/after the quiet window — silent baseline, never a push.
-                    newState.LastNotifiedCovering = covering;
-                    newState.LastNotifiedAt = now;
-                    stateChanged = true;
-                } else if (prior.LastNotifiedCovering != covering) {
-                    newState.LastNotifiedCovering = covering;
-                    newState.LastNotifiedAt = now;
-                    stateChanged = true;
-                    await NotifyAsync(pick, members, covering, atFinal: false);
+                var mineTransition = ComputeTransition(prior?.LastNotifiedCovering, prior?.LastNotifiedAt, prior?.FinalNotifiedAt, covering, isFinal, now);
+                if (mineTransition.Changed) {
+                    newStates.Add(new PickLiveNotificationState {
+                        Sport = sport, PickId = pick.PickId, LeagueId = pick.LeagueId,
+                        LastNotifiedCovering = mineTransition.Covering,
+                        LastNotifiedAt = mineTransition.LastNotifiedAt,
+                        FinalNotifiedAt = mineTransition.FinalNotifiedAt,
+                    });
                 }
-
+                if (mineTransition.NotifyTransition)
+                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, false), MinePayload(pick.Pick.Team, covering, atFinal: false));
                 // Independent of the above — fires once at final regardless of recent transition
                 // history, even if this tick's status flip happens to also be a cover-state flip.
-                var isFinal = competition.Status.Type.Name == TypeName.StatusFinal;
-                if (isFinal && prior?.FinalNotifiedAt is null) {
-                    newState.FinalNotifiedAt = now;
-                    stateChanged = true;
-                    await NotifyAsync(pick, members, covering, atFinal: true);
+                if (mineTransition.NotifyFinal)
+                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, true), MinePayload(pick.Pick.Team, covering, atFinal: true));
+
+                // Record for the per-bet "others" pass below — every picker on the same
+                // (team, pickType) computes this exact same covering/isFinal, so only the picker
+                // list differs across rows.
+                var key = (pick.Pick.Team, pick.Pick.PickType);
+                if (betResults.TryGetValue(key, out var bet)) bet.PickerUserIds.Add(pick.UserId);
+                else betResults[key] = new BetResult(covering, isFinal, pick.UserId);
+            }
+
+            if (betResults.Count == 0) continue;
+
+            // "Others" — exactly one aggregated push per (team, pickType) bet that actually
+            // transitioned, naming how many members made it, not one push per picker (frizat-cov).
+            var priorTeamStates = await teamStateService.GetStatesAsync(sport, byLeague.Key, period.Id, betResults.Keys.ToList());
+            foreach (var (bet, result) in betResults)
+            {
+                priorTeamStates.TryGetValue(bet, out var priorTeam);
+                var teamTransition = ComputeTransition(priorTeam?.LastNotifiedCovering, priorTeam?.LastNotifiedAt, priorTeam?.FinalNotifiedAt, result.Covering, result.IsFinal, now);
+                if (teamTransition.Changed) {
+                    newTeamStates.Add(new TeamLiveNotificationState {
+                        Sport = sport, LeagueId = byLeague.Key, Team = bet.Team, PickType = bet.PickType, Period = period.Id,
+                        LastNotifiedCovering = teamTransition.Covering,
+                        LastNotifiedAt = teamTransition.LastNotifiedAt,
+                        FinalNotifiedAt = teamTransition.FinalNotifiedAt,
+                    });
                 }
 
-                if (stateChanged) newStates.Add(newState);
+                var otherMembers = members.Where(m => !result.PickerUserIds.Contains(m.UserId)).ToList();
+                if (teamTransition.NotifyTransition)
+                    await NotifyOthersAsync(otherMembers, bet.Team, result.Covering, result.PickerUserIds.Count, atFinal: false);
+                if (teamTransition.NotifyFinal)
+                    await NotifyOthersAsync(otherMembers, bet.Team, result.Covering, result.PickerUserIds.Count, atFinal: true);
             }
         }
 
         if (newStates.Count > 0) await stateService.UpsertStatesAsync(newStates);
+        if (newTeamStates.Count > 0) await teamStateService.UpsertStatesAsync(newTeamStates);
     }
 
-    private async Task NotifyAsync(LivePick pick, List<LeagueUserMapping> members, bool covering, bool atFinal)
+    private async Task NotifyOthersAsync(List<LeagueUserMapping> otherMembers, string team, bool covering, int pickerCount, bool atFinal)
     {
-        var payload = atFinal
-            ? new PushPayload("IV League", covering ? $"{pick.Pick.Team} covered! Final. 🏆" : $"{pick.Pick.Team} didn't cover. Final. 💀")
-            : new PushPayload("IV League", covering ? $"{pick.Pick.Team} is covering! 🟢" : $"{pick.Pick.Team} is bloody right now 🔴");
+        if (otherMembers.Count == 0) return;
+        var payload = OthersPayload(team, covering, pickerCount, atFinal);
+        await Task.WhenAll(otherMembers.Select(m => SafeDispatchAsync(m.UserId, OthersPreference(covering, atFinal), payload)));
+    }
 
-        var mine = SafeDispatchAsync(pick.UserId, MinePreference(covering, atFinal), payload);
-        var others = members.Where(m => m.UserId != pick.UserId)
-            .Select(m => SafeDispatchAsync(m.UserId, OthersPreference(covering, atFinal), payload));
-        await Task.WhenAll([mine, .. others]);
+    private static PushPayload MinePayload(string team, bool covering, bool atFinal) => atFinal
+        ? new PushPayload("IV League", covering ? $"{team} covered! Final. 🏆" : $"{team} didn't cover. Final. 💀")
+        : new PushPayload("IV League", covering ? $"{team} is covering! 🟢" : $"{team} is bloody right now 🔴");
+
+    private static PushPayload OthersPayload(string team, bool covering, int pickerCount, bool atFinal)
+    {
+        var usersLabel = pickerCount == 1 ? "1 user picked" : $"{pickerCount} users picked";
+        return atFinal
+            ? new PushPayload("IV League", covering ? $"{team} covered! Final — {usersLabel} 🏆" : $"{team} didn't cover! Final — {usersLabel} 💀")
+            : new PushPayload("IV League", covering ? $"{team} is Covering — {usersLabel} 🟢" : $"{team} is Bloody — {usersLabel} 🔴");
     }
 
     private static Func<NotificationPreferencesDto, bool> MinePreference(bool covering, bool atFinal) => atFinal

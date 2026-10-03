@@ -7,6 +7,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 ## 2026-10-03
 
 - Added: if you opted in on the Notifications page's Advanced section, you now get a live push when one of your picks (or a picked opponent's game, if you opted into "others") flips between covering and not covering during the game, plus one final push once that game ends
+- Fixed: the "others" live push now sends one combined notification per team ("Browns are Bloody - 3 users picked") instead of a separate near-identical push for every league member who picked that team
 
 ## 2026-10-02
 
