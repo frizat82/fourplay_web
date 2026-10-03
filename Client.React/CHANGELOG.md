@@ -8,7 +8,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 - Added: if you opted in on the Notifications page's Advanced section, you now get a live push when one of your picks (or a picked opponent's game, if you opted into "others") flips between covering and not covering during the game, plus one final push once that game ends
 - Fixed: the "others" live push now sends one combined notification per team ("Browns are Bloody - 3 users picked") instead of a separate near-identical push for every league member who picked that team
-- Fixed: the Save/Enable buttons on the Notifications settings page no longer stretch edge to edge on mobile — they're sized to their label like every other button in the app
+- Fixed: the Save preferences button on the Notifications settings page no longer stretches edge to edge on mobile — it's sized to its label like every other button in the app
 - Added: plain-language explanations on the Notifications settings page for non-technical users, including what "Covering"/"Bloody" and "During game"/"At final" mean in the Advanced section
 
 ## 2026-10-02
