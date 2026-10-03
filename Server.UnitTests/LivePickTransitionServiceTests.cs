@@ -17,7 +17,9 @@ namespace FourPlayWebApp.Server.UnitTests;
 /// LivePickNotificationWatcher call sites (NFL via IEspnCacheService, CFB via ICfbCacheService)
 /// route through — see the canary test at the bottom. Covers the bead's acceptance criteria:
 /// quiet-window suppression, exactly one push per direction change, final-ping dedup independent
-/// of during-game dedup, and restart-recovery from a persisted row (no in-memory history needed).
+/// of during-game dedup, restart-recovery from a persisted row, and (frizat-cov) that "others"
+/// notifications are aggregated ONE push per (team, pickType) bet regardless of how many league
+/// members made that exact bet — never one push per picker.
 /// </summary>
 public class LivePickTransitionServiceTests
 {
@@ -29,6 +31,7 @@ public class LivePickTransitionServiceTests
     private readonly ICfbPicksRepository _cfbPicksRepository = Substitute.For<ICfbPicksRepository>();
     private readonly ICfbRepository _cfbRepository = Substitute.For<ICfbRepository>();
     private readonly IPickLiveNotificationStateService _stateService = Substitute.For<IPickLiveNotificationStateService>();
+    private readonly ITeamLiveNotificationStateService _teamStateService = Substitute.For<ITeamLiveNotificationStateService>();
     private readonly INotificationPreferencesService _preferencesService = Substitute.For<INotificationPreferencesService>();
     private readonly INotificationDispatcher _dispatcher = Substitute.For<INotificationDispatcher>();
 
@@ -44,7 +47,7 @@ public class LivePickTransitionServiceTests
     private LivePickTransitionService BuildService(LiveScoreSnapshotStore? store = null) => new(
         _espnCache, _cfbCache, _nflCurrentWeek, _cfbCurrentSlate,
         _leagueRepository, _cfbPicksRepository, _cfbRepository,
-        _stateService, _preferencesService, _dispatcher,
+        _stateService, _teamStateService, _preferencesService, _dispatcher,
         store ?? new LiveScoreSnapshotStore(), _timeProvider, NullLogger<LivePickTransitionService>.Instance);
 
     private static EspnScores NflScores(long kcScore, long balScore, TypeName status, DateTimeOffset kickoff) => new() {
@@ -93,15 +96,17 @@ public class LivePickTransitionServiceTests
     private static bool PredicateMatches(Func<NotificationPreferencesDto, bool> predicate, NotificationPreferencesDto whenTrue) =>
         predicate(whenTrue) && !predicate(new NotificationPreferencesDto());
 
-    private void SetUpNflHappyPath(Dictionary<int, PickLiveNotificationState>? priorStates = null)
+    private void SetUpNflHappyPath(Dictionary<int, PickLiveNotificationState>? priorStates = null, List<NflPicks>? picks = null)
     {
         _preferencesService.AnyLiveNotificationPreferenceEnabledAsync().Returns(true);
         _nflCurrentWeek.GetCurrentWeekAsync().Returns(new NflWeekInfo(5, 2026, false, "Week 5", "Standard", default));
-        _leagueRepository.GetNflPicksForTeamsAsync(2026, 5, Arg.Any<IReadOnlyCollection<string>>()).Returns([KcPick]);
+        _leagueRepository.GetNflPicksForTeamsAsync(2026, 5, Arg.Any<IReadOnlyCollection<string>>()).Returns(picks ?? [KcPick]);
         _leagueRepository.GetNflSpreadsAsync(2026, 5).Returns([KcSpread]);
         _leagueRepository.GetLeagueJuiceMappingAsync(1, 2026).Returns(NoJuice);
         _leagueRepository.GetLeagueUserMappingsAsync(1).Returns(Members);
         _stateService.GetStatesAsync(LeagueType.Nfl, Arg.Any<IReadOnlyCollection<int>>()).Returns(priorStates ?? []);
+        _teamStateService.GetStatesAsync(LeagueType.Nfl, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<IReadOnlyCollection<(string, PickType)>>())
+            .Returns([]);
     }
 
     [Fact]
@@ -154,6 +159,9 @@ public class LivePickTransitionServiceTests
         await _dispatcher.DidNotReceive().DispatchAsync(Arg.Any<string>(), Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
         await _stateService.Received(1).UpsertStatesAsync(Arg.Is<IReadOnlyCollection<PickLiveNotificationState>>(
             list => list.Any(s => s.PickId == 101 && s.LastNotifiedCovering == true && s.LeagueId == 1)));
+        // "Others" also starts its own silent baseline on the first read — no push on that channel either.
+        await _teamStateService.Received(1).UpsertStatesAsync(Arg.Is<IReadOnlyCollection<TeamLiveNotificationState>>(
+            list => list.Any(s => s.Team == "KC" && s.PickType == PickType.Spread && s.LastNotifiedCovering == true)));
     }
 
     [Fact]
@@ -162,6 +170,10 @@ public class LivePickTransitionServiceTests
         SetUpNflHappyPath(new Dictionary<int, PickLiveNotificationState> {
             [101] = new() { Sport = LeagueType.Nfl, PickId = 101, LeagueId = 1, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10) },
         });
+        _teamStateService.GetStatesAsync(LeagueType.Nfl, 1, 5, Arg.Any<IReadOnlyCollection<(string, PickType)>>()).Returns(
+            new Dictionary<(string, PickType), TeamLiveNotificationState> {
+                [("KC", PickType.Spread)] = new() { Sport = LeagueType.Nfl, LeagueId = 1, Team = "KC", PickType = PickType.Spread, Period = 5, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10) },
+            });
         // KC 20-20: margin 0, does not cover (-3 spread needs >3 margin) — a flip from the prior "covering" baseline.
         _espnCache.GetScoresAsync().Returns(NflScores(20, 20, TypeName.StatusInProgress, KickoffLongAgo));
 
@@ -172,8 +184,137 @@ public class LivePickTransitionServiceTests
             Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
         await _dispatcher.Received(1).DispatchAsync("user-2",
             Arg.Is<Func<NotificationPreferencesDto, bool>>(f => PredicateMatches(f, new NotificationPreferencesDto { NotifyOthersBloodyDuringGame = true })),
-            Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+            Arg.Is<PushPayload>(p => p.Body.Contains("KC") && p.Body.Contains("1 user picked")),
+            Arg.Any<CancellationToken>());
         await _dispatcher.Received(2).DispatchAsync(Arg.Any<string>(), Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+    }
+
+    // frizat-cov: the actual bug — 3 members of the same league pick the same team. Every OTHER
+    // member must get exactly ONE aggregated push naming the picker count, not 3 near-identical ones.
+    [Fact]
+    public async Task RecomputeAsync_MultiplePickersOnSameTeam_FiresExactlyOneAggregatedOthersPush()
+    {
+        var threeMembers = new List<LeagueUserMapping> {
+            new() { UserId = "user-1" }, new() { UserId = "user-2" }, new() { UserId = "user-3" }, new() { UserId = "user-4" },
+        };
+        var threePicks = new List<NflPicks> {
+            new() { Id = 101, UserId = "user-1", LeagueId = 1, Team = "KC", Pick = PickType.Spread, NflWeek = 5, Season = 2026 },
+            new() { Id = 102, UserId = "user-2", LeagueId = 1, Team = "KC", Pick = PickType.Spread, NflWeek = 5, Season = 2026 },
+            new() { Id = 103, UserId = "user-3", LeagueId = 1, Team = "KC", Pick = PickType.Spread, NflWeek = 5, Season = 2026 },
+        };
+        SetUpNflHappyPath(
+            priorStates: threePicks.ToDictionary(p => p.Id, p => new PickLiveNotificationState {
+                Sport = LeagueType.Nfl, PickId = p.Id, LeagueId = 1, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10),
+            }),
+            picks: threePicks);
+        _leagueRepository.GetLeagueUserMappingsAsync(1).Returns(threeMembers);
+        _teamStateService.GetStatesAsync(LeagueType.Nfl, 1, 5, Arg.Any<IReadOnlyCollection<(string, PickType)>>()).Returns(
+            new Dictionary<(string, PickType), TeamLiveNotificationState> {
+                [("KC", PickType.Spread)] = new() { Sport = LeagueType.Nfl, LeagueId = 1, Team = "KC", PickType = PickType.Spread, Period = 5, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10) },
+            });
+        _espnCache.GetScoresAsync().Returns(NflScores(20, 20, TypeName.StatusInProgress, KickoffLongAgo)); // flips to not-covering
+
+        await BuildService().RecomputeAsync(LeagueType.Nfl);
+
+        // Each of the 3 pickers gets their own "mine" push (unaffected by aggregation).
+        await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).DispatchAsync("user-2", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).DispatchAsync("user-3", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        // user-4 (the only non-picker) gets exactly ONE push, naming all 3 pickers, not 3 separate ones.
+        await _dispatcher.Received(1).DispatchAsync("user-4", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
+            Arg.Is<PushPayload>(p => p.Body.Contains("KC") && p.Body.Contains("3 users picked")), Arg.Any<CancellationToken>());
+    }
+
+    // /code-review: newTeamStates used to be written once PER LEAGUE, inside the per-league loop,
+    // while newStates (mine) only ever wrote once at the very end across every league — a later
+    // league throwing mid-cycle could leave "others" state committed for an earlier league while
+    // "mine" state for that same league was lost, letting the two channels silently diverge.
+    // Both must share one all-or-nothing write boundary: exactly one UpsertStatesAsync call per
+    // recompute for each state service, even with picks spread across multiple leagues.
+    [Fact]
+    public async Task RecomputeAsync_MultipleLeagues_WritesStateExactlyOncePerService_NotOncePerLeague()
+    {
+        // KC (home) and BAL (away) are the two teams in the one changed game — one league picked
+        // each side, so both leagues' picks come back from the same single cross-league repo call.
+        var league1Pick = new NflPicks { Id = 101, UserId = "user-1", LeagueId = 1, Team = "KC", Pick = PickType.Spread, NflWeek = 5, Season = 2026 };
+        var league2Pick = new NflPicks { Id = 201, UserId = "user-5", LeagueId = 2, Team = "BAL", Pick = PickType.Spread, NflWeek = 5, Season = 2026 };
+        SetUpNflHappyPath(picks: [league1Pick, league2Pick]);
+        _leagueRepository.GetLeagueJuiceMappingAsync(2, 2026).Returns(NoJuice);
+        _leagueRepository.GetLeagueUserMappingsAsync(2).Returns(new List<LeagueUserMapping> { new() { UserId = "user-5" }, new() { UserId = "user-6" } });
+        _stateService.GetStatesAsync(LeagueType.Nfl, Arg.Any<IReadOnlyCollection<int>>()).Returns(new Dictionary<int, PickLiveNotificationState> {
+            [101] = new() { Sport = LeagueType.Nfl, PickId = 101, LeagueId = 1, LastNotifiedCovering = false, LastNotifiedAt = FakeNow.AddMinutes(-10) },
+            [201] = new() { Sport = LeagueType.Nfl, PickId = 201, LeagueId = 2, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10) },
+        });
+        _espnCache.GetScoresAsync().Returns(NflScores(27, 20, TypeName.StatusInProgress, KickoffLongAgo)); // KC covers, BAL doesn't
+
+        await BuildService().RecomputeAsync(LeagueType.Nfl);
+
+        await _stateService.Received(1).UpsertStatesAsync(Arg.Is<IReadOnlyCollection<PickLiveNotificationState>>(
+            list => list.Any(s => s.PickId == 101) && list.Any(s => s.PickId == 201)));
+        await _teamStateService.Received(1).UpsertStatesAsync(Arg.Any<IReadOnlyCollection<TeamLiveNotificationState>>());
+    }
+
+    [Fact]
+    public async Task RecomputeAsync_Others_FirstReadAfterQuietWindow_EstablishesSilentBaseline_NoPush()
+    {
+        SetUpNflHappyPath(new Dictionary<int, PickLiveNotificationState> {
+            // "Mine" already has history (so only "others" baseline is under test)...
+            [101] = new() { Sport = LeagueType.Nfl, PickId = 101, LeagueId = 1, LastNotifiedCovering = false, LastNotifiedAt = FakeNow.AddMinutes(-10) },
+        });
+        // ...but "others" has never been recomputed for this team before (teamStateService returns empty, per SetUpNflHappyPath).
+        _espnCache.GetScoresAsync().Returns(NflScores(27, 20, TypeName.StatusInProgress, KickoffLongAgo)); // covers — a "mine" transition
+
+        await BuildService().RecomputeAsync(LeagueType.Nfl);
+
+        // "Mine" does transition (false -> true)...
+        await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        // ...but "others" has no prior baseline yet, so it silently establishes one instead of pushing.
+        await _dispatcher.DidNotReceive().DispatchAsync("user-2", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _teamStateService.Received(1).UpsertStatesAsync(Arg.Is<IReadOnlyCollection<TeamLiveNotificationState>>(
+            list => list.Any(s => s.Team == "KC" && s.LastNotifiedCovering == true)));
+    }
+
+    [Fact]
+    public async Task RecomputeAsync_Others_FinalPing_FiresIndependentlyOfDuringGameDedup()
+    {
+        SetUpNflHappyPath(new Dictionary<int, PickLiveNotificationState> {
+            [101] = new() { Sport = LeagueType.Nfl, PickId = 101, LeagueId = 1, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10), FinalNotifiedAt = FakeNow.AddMinutes(-10) },
+        });
+        _teamStateService.GetStatesAsync(LeagueType.Nfl, 1, 5, Arg.Any<IReadOnlyCollection<(string, PickType)>>()).Returns(
+            new Dictionary<(string, PickType), TeamLiveNotificationState> {
+                // Same covering state as before (no during-game transition on the "others" side either) but FinalNotifiedAt not yet set.
+                [("KC", PickType.Spread)] = new() { Sport = LeagueType.Nfl, LeagueId = 1, Team = "KC", PickType = PickType.Spread, Period = 5, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10), FinalNotifiedAt = null },
+            });
+        _espnCache.GetScoresAsync().Returns(NflScores(27, 20, TypeName.StatusFinal, KickoffLongAgo));
+
+        await BuildService().RecomputeAsync(LeagueType.Nfl);
+
+        await _dispatcher.Received(1).DispatchAsync("user-2",
+            Arg.Is<Func<NotificationPreferencesDto, bool>>(f => PredicateMatches(f, new NotificationPreferencesDto { NotifyOthersCoveringAtFinal = true })),
+            Arg.Is<PushPayload>(p => p.Body.Contains("KC") && p.Body.Contains("Final")), Arg.Any<CancellationToken>());
+        await _dispatcher.DidNotReceive().DispatchAsync("user-2",
+            Arg.Is<Func<NotificationPreferencesDto, bool>>(f => PredicateMatches(f, new NotificationPreferencesDto { NotifyOthersCoveringDuringGame = true })),
+            Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RecomputeAsync_NoOtherMembers_NeverCallsDispatchForOthers()
+    {
+        var soloMember = new List<LeagueUserMapping> { new() { UserId = "user-1" } };
+        SetUpNflHappyPath(new Dictionary<int, PickLiveNotificationState> {
+            [101] = new() { Sport = LeagueType.Nfl, PickId = 101, LeagueId = 1, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10) },
+        });
+        _teamStateService.GetStatesAsync(LeagueType.Nfl, 1, 5, Arg.Any<IReadOnlyCollection<(string, PickType)>>()).Returns(
+            new Dictionary<(string, PickType), TeamLiveNotificationState> {
+                [("KC", PickType.Spread)] = new() { Sport = LeagueType.Nfl, LeagueId = 1, Team = "KC", PickType = PickType.Spread, Period = 5, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10) },
+            });
+        _leagueRepository.GetLeagueUserMappingsAsync(1).Returns(soloMember); // the picker is the ONLY league member
+        _espnCache.GetScoresAsync().Returns(NflScores(20, 20, TypeName.StatusInProgress, KickoffLongAgo));
+
+        await BuildService().RecomputeAsync(LeagueType.Nfl);
+
+        await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).DispatchAsync(Arg.Any<string>(), Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -182,6 +323,10 @@ public class LivePickTransitionServiceTests
         SetUpNflHappyPath(new Dictionary<int, PickLiveNotificationState> {
             [101] = new() { Sport = LeagueType.Nfl, PickId = 101, LeagueId = 1, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10) },
         });
+        _teamStateService.GetStatesAsync(LeagueType.Nfl, 1, 5, Arg.Any<IReadOnlyCollection<(string, PickType)>>()).Returns(
+            new Dictionary<(string, PickType), TeamLiveNotificationState> {
+                [("KC", PickType.Spread)] = new() { Sport = LeagueType.Nfl, LeagueId = 1, Team = "KC", PickType = PickType.Spread, Period = 5, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10) },
+            });
         // Still covering (margin 7 > 3) — same as the prior baseline, no transition.
         _espnCache.GetScoresAsync().Returns(NflScores(27, 20, TypeName.StatusInProgress, KickoffLongAgo));
 
@@ -189,6 +334,7 @@ public class LivePickTransitionServiceTests
 
         await _dispatcher.DidNotReceive().DispatchAsync(Arg.Any<string>(), Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
         await _stateService.DidNotReceive().UpsertStatesAsync(Arg.Any<IReadOnlyCollection<PickLiveNotificationState>>());
+        await _teamStateService.DidNotReceive().UpsertStatesAsync(Arg.Any<IReadOnlyCollection<TeamLiveNotificationState>>());
     }
 
     [Fact]
@@ -198,6 +344,10 @@ public class LivePickTransitionServiceTests
             // Same covering state as before (no during-game transition) but FinalNotifiedAt not yet set.
             [101] = new() { Sport = LeagueType.Nfl, PickId = 101, LeagueId = 1, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10), FinalNotifiedAt = null },
         });
+        _teamStateService.GetStatesAsync(LeagueType.Nfl, 1, 5, Arg.Any<IReadOnlyCollection<(string, PickType)>>()).Returns(
+            new Dictionary<(string, PickType), TeamLiveNotificationState> {
+                [("KC", PickType.Spread)] = new() { Sport = LeagueType.Nfl, LeagueId = 1, Team = "KC", PickType = PickType.Spread, Period = 5, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10), FinalNotifiedAt = FakeNow.AddMinutes(-10) },
+            }); // others already final-notified, so only "mine" should fire here
         _espnCache.GetScoresAsync().Returns(NflScores(27, 20, TypeName.StatusFinal, KickoffLongAgo));
 
         await BuildService().RecomputeAsync(LeagueType.Nfl);
@@ -217,29 +367,42 @@ public class LivePickTransitionServiceTests
         SetUpNflHappyPath(new Dictionary<int, PickLiveNotificationState> {
             [101] = new() { Sport = LeagueType.Nfl, PickId = 101, LeagueId = 1, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10), FinalNotifiedAt = FakeNow.AddMinutes(-2) },
         });
+        _teamStateService.GetStatesAsync(LeagueType.Nfl, 1, 5, Arg.Any<IReadOnlyCollection<(string, PickType)>>()).Returns(
+            new Dictionary<(string, PickType), TeamLiveNotificationState> {
+                [("KC", PickType.Spread)] = new() { Sport = LeagueType.Nfl, LeagueId = 1, Team = "KC", PickType = PickType.Spread, Period = 5, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-2), FinalNotifiedAt = FakeNow.AddMinutes(-2) },
+            });
         _espnCache.GetScoresAsync().Returns(NflScores(27, 20, TypeName.StatusFinal, KickoffLongAgo));
 
         await BuildService().RecomputeAsync(LeagueType.Nfl);
 
         await _dispatcher.DidNotReceive().DispatchAsync(Arg.Any<string>(), Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
         await _stateService.DidNotReceive().UpsertStatesAsync(Arg.Any<IReadOnlyCollection<PickLiveNotificationState>>());
+        await _teamStateService.DidNotReceive().UpsertStatesAsync(Arg.Any<IReadOnlyCollection<TeamLiveNotificationState>>());
     }
 
     // A mid-Sunday Railway restart loses LiveScoreSnapshotStore's in-memory snapshot entirely (a
-    // fresh instance, previous=null) — dedup correctness must come purely from the persisted row,
-    // not from in-memory tick history.
+    // fresh instance, previous=null) — dedup correctness must come purely from the persisted rows
+    // (both PickLiveNotificationState for "mine" and TeamLiveNotificationState for "others"), not
+    // from in-memory tick history.
     [Fact]
     public async Task RecomputeAsync_RestartRecovery_UsesPersistedState_NotInMemoryHistory()
     {
         SetUpNflHappyPath(new Dictionary<int, PickLiveNotificationState> {
             [101] = new() { Sport = LeagueType.Nfl, PickId = 101, LeagueId = 1, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddHours(-1) },
         });
+        _teamStateService.GetStatesAsync(LeagueType.Nfl, 1, 5, Arg.Any<IReadOnlyCollection<(string, PickType)>>()).Returns(
+            new Dictionary<(string, PickType), TeamLiveNotificationState> {
+                [("KC", PickType.Spread)] = new() { Sport = LeagueType.Nfl, LeagueId = 1, Team = "KC", PickType = PickType.Spread, Period = 5, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddHours(-1) },
+            });
         _espnCache.GetScoresAsync().Returns(NflScores(20, 20, TypeName.StatusInProgress, KickoffLongAgo)); // flips to not-covering
 
         await BuildService(new LiveScoreSnapshotStore()).RecomputeAsync(LeagueType.Nfl); // fresh store = simulated restart
 
         await _dispatcher.Received(1).DispatchAsync("user-1",
             Arg.Is<Func<NotificationPreferencesDto, bool>>(f => PredicateMatches(f, new NotificationPreferencesDto { NotifyMineBloodyDuringGame = true })),
+            Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).DispatchAsync("user-2",
+            Arg.Is<Func<NotificationPreferencesDto, bool>>(f => PredicateMatches(f, new NotificationPreferencesDto { NotifyOthersBloodyDuringGame = true })),
             Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
     }
 
@@ -268,6 +431,7 @@ public class LivePickTransitionServiceTests
         _leagueRepository.GetLeagueJuiceMappingAsync(2, 2026).Returns(juiced);
         _leagueRepository.GetLeagueUserMappingsAsync(2).Returns(Members);
         _stateService.GetStatesAsync(LeagueType.Cfb, Arg.Any<IReadOnlyCollection<int>>()).Returns([]);
+        _teamStateService.GetStatesAsync(LeagueType.Cfb, 2, 119, Arg.Any<IReadOnlyCollection<(string, PickType)>>()).Returns([]);
 
         await BuildService().RecomputeAsync(LeagueType.Cfb);
 
