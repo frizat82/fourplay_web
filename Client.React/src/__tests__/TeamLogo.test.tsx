@@ -1,5 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import { ThemeProvider } from '@mui/material/styles';
 import TeamLogo from '../components/sports/TeamLogo';
+import { createAppTheme } from '../app/theme';
+
+const inDarkMode = (ui: React.ReactElement) => render(<ThemeProvider theme={createAppTheme('dark')}>{ui}</ThemeProvider>);
 
 describe('TeamLogo', () => {
   it('uses the downloaded ESPN logo PNG from the sport-scoped folder as the primary source', () => {
@@ -32,5 +36,28 @@ describe('TeamLogo', () => {
   it('hides the abbreviation label when showLabel is false', () => {
     render(<TeamLogo abbr="kc" sport="nfl" showLabel={false} />);
     expect(screen.queryByText('KC')).not.toBeInTheDocument();
+  });
+
+  // ESPN's dark-background variant (e.g. Ohio State's black lettering lightened) — same file
+  // name, sport-scoped "-dark" folder.
+  it('uses the dark-mode logo in dark mode', () => {
+    inDarkMode(<TeamLogo abbr="osu" sport="cfb" />);
+    expect(screen.getByRole('img', { name: 'osu' })).toHaveAttribute('src', '/Icons/Logos/cfb-dark/osu.png');
+  });
+
+  it('uses the dark-mode logo for NFL too', () => {
+    inDarkMode(<TeamLogo abbr="pit" sport="nfl" />);
+    expect(screen.getByRole('img', { name: 'pit' })).toHaveAttribute('src', '/Icons/Logos/nfl-dark/pit.png');
+  });
+
+  it('falls back to the regular logo when a dark one is missing, before the text badge', () => {
+    const { container } = inDarkMode(<TeamLogo abbr="osu" sport="cfb" showLabel={false} />);
+
+    fireEvent.error(screen.getByRole('img', { name: 'osu' }));
+    expect(screen.getByRole('img', { name: 'osu' })).toHaveAttribute('src', '/Icons/Logos/cfb/osu.png');
+
+    fireEvent.error(screen.getByRole('img', { name: 'osu' }));
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(screen.getByText('OSU')).toBeInTheDocument();
   });
 });

@@ -58,23 +58,35 @@ async function loadEspnTeams(sportPath, { includeScoreboardAbbrs = false } = {})
   // scoreboard code, so save each logo under that too, or those teams silently get no logo.
   if (includeScoreboardAbbrs) {
     for (let i = 0; i < teams.length; i += CONCURRENCY) {
-      await Promise.all(teams.slice(i, i + CONCURRENCY).map(async (t) => {
+      // Resolved in list order after each batch (not inside the async callbacks), so a code two
+      // schools share always goes to the same one — whichever request finished first used to win.
+      const codes = await Promise.all(teams.slice(i, i + CONCURRENCY).map(async (t) => {
         // One flaky request must not abort the whole run — that team keeps its list code.
         try {
           const detail = await fetchJson(`${base}/${t.id}`);
-          const abbr = detail.team.abbreviation.toUpperCase();
-          if (!byAbbr.has(abbr)) byAbbr.set(abbr, t.logos[0].href);
+          return [detail.team.abbreviation.toUpperCase(), t.logos[0].href];
         } catch (err) {
           console.warn(`  ! could not fetch scoreboard code for ${t.abbreviation} (${t.id}): ${err.message}`);
+          return null;
         }
       }));
+      for (const entry of codes) if (entry && !byAbbr.has(entry[0])) byAbbr.set(entry[0], entry[1]);
     }
   }
   return byAbbr;
 }
 
+// ESPN serves a few logos as 4096px originals (Jets, Davidson…); its image combiner returns every
+// logo at a consistent 500x500, which also keeps files under the repo's 500 KB pre-commit limit.
+function sized(url) {
+  const u = new URL(url);
+  return u.hostname === 'a.espncdn.com' && u.pathname.startsWith('/i/')
+    ? `https://a.espncdn.com/combiner/i?img=${u.pathname}&w=500&h=500`
+    : url;
+}
+
 async function downloadTo(url, filePath) {
-  const res = await fetch(url);
+  const res = await fetch(sized(url));
   if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   fs.writeFileSync(filePath, buf);
@@ -87,7 +99,9 @@ const CONCURRENCY = 20;
 
 async function downloadSport(sportKey, abbrs, espnTeams, aliases = {}) {
   const outDir = path.join(OUT_DIR, sportKey);
+  const darkDir = path.join(OUT_DIR, `${sportKey}-dark`);
   fs.mkdirSync(outDir, { recursive: true });
+  fs.mkdirSync(darkDir, { recursive: true });
 
   const results = [];
   for (let i = 0; i < abbrs.length; i += CONCURRENCY) {
@@ -101,6 +115,16 @@ async function downloadSport(sportKey, abbrs, espnTeams, aliases = {}) {
       } catch (err) {
         console.warn(`  ! [${sportKey}] ${abbr}: ${err.message}`);
         return { abbr, ok: false };
+      }
+      // ESPN's dark-background variant (lightened lettering) for dark mode, same URL with
+      // /500-dark/. Optional — TeamLogo falls back to the regular logo if it's missing.
+      const darkUrl = logoUrl.replace('/500/', '/500-dark/');
+      if (darkUrl !== logoUrl) {
+        try {
+          await downloadTo(darkUrl, path.join(darkDir, `${abbr.toLowerCase()}.png`));
+        } catch {
+          // no dark variant for this team
+        }
       }
       process.stdout.write(`  [${sportKey}] ${abbr.padEnd(6)} ✓\n`);
       return { abbr, ok: true };
