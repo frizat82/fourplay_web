@@ -103,7 +103,7 @@ describe('NotificationsSettingsPage', () => {
     expect(toastState.push).toHaveBeenCalledWith('Notification preferences saved', 'success');
   });
 
-  it('advanced round trip: toggling one advanced field saves it independently of the others', async () => {
+  it('advanced: turning off "Bloody" for my games turns off both bloody pushes, leaves covering on', async () => {
     const allOn: NotificationPreferencesDto = {
       notifyMineBloodyDuringGame: true,
       notifyMineBloodyAtFinal: true,
@@ -121,12 +121,9 @@ describe('NotificationsSettingsPage', () => {
     render(<NotificationsSettingsPage />);
     await waitFor(() => expect(screen.getByRole('button', { name: /save preferences/i })).not.toBeDisabled());
 
-    // Two independent "Advanced" accordions now, one under "My games" and one under "League
-    // activity" (frizat: moved so Advanced detail sits next to the simple toggle it refines,
-    // instead of one shared accordion covering both). Expand the first ("My games") one.
-    const [mineAdvanced] = screen.getAllByText(/advanced: when exactly/i);
+    const [mineAdvanced] = screen.getAllByText(/^advanced$/i);
     await userEvent.click(mineAdvanced);
-    await userEvent.click(screen.getByLabelText(/my games: bloody during game/i));
+    await userEvent.click(screen.getByLabelText(/^my games: bloody$/i));
 
     await userEvent.click(screen.getByRole('button', { name: /save preferences/i }));
 
@@ -134,33 +131,34 @@ describe('NotificationsSettingsPage', () => {
       expect(mockedPutPreferences).toHaveBeenCalledWith(
         expect.objectContaining({
           notifyMineBloodyDuringGame: false,
+          notifyMineBloodyAtFinal: false,
           notifyMineCoveringDuringGame: true,
+          notifyMineCoveringAtFinal: true,
           notifyOthersBloodyDuringGame: true,
+          notifyOthersBloodyAtFinal: true,
         })
       );
     });
   });
 
-  it('labels each advanced toggle uniquely by section, outcome, and timing — never color alone', async () => {
-    // Four switches per section share the visible "During game"/"At final" label and are only
-    // visually distinguished by color (green=Covering, red=Bloody) — the accessible name must
-    // still disambiguate all 8 so screen-reader users (and tests) aren't relying on color.
+  it('advanced shows exactly one Covering and one Bloody switch per section — no during/final split', async () => {
     mockedGetPreferences.mockResolvedValue(ALL_OFF);
 
     render(<NotificationsSettingsPage />);
     await waitFor(() => expect(screen.getByRole('button', { name: /save preferences/i })).not.toBeDisabled());
 
-    const [mineAdvanced, othersAdvanced] = screen.getAllByText(/advanced: when exactly/i);
-    await userEvent.click(mineAdvanced);
-    await userEvent.click(othersAdvanced);
+    for (const advanced of screen.getAllByText(/^advanced$/i)) {
+      await userEvent.click(advanced);
+    }
 
     for (const section of ['My games', 'League activity']) {
       for (const outcome of ['Covering', 'Bloody']) {
-        for (const timing of ['During game', 'At final']) {
-          expect(screen.getByLabelText(new RegExp(`${section}: ${outcome} ${timing}`, 'i'))).toBeInTheDocument();
-        }
+        expect(screen.getAllByLabelText(new RegExp(`^${section}: ${outcome}$`, 'i'))).toHaveLength(1);
       }
     }
+    expect(screen.queryAllByLabelText(/during game|at final/i)).toHaveLength(0);
+    // 3 top-level toggles + 2 per section's Advanced = 7 switches total.
+    expect(screen.getAllByRole('switch', { hidden: true })).toHaveLength(7);
   });
 
   it('shows an error toast when saving fails', async () => {
