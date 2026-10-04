@@ -59,9 +59,14 @@ async function loadEspnTeams(sportPath, { includeScoreboardAbbrs = false } = {})
   if (includeScoreboardAbbrs) {
     for (let i = 0; i < teams.length; i += CONCURRENCY) {
       await Promise.all(teams.slice(i, i + CONCURRENCY).map(async (t) => {
-        const detail = await fetchJson(`${base}/${t.id}`);
-        const abbr = detail.team.abbreviation.toUpperCase();
-        if (!byAbbr.has(abbr)) byAbbr.set(abbr, t.logos[0].href);
+        // One flaky request must not abort the whole run — that team keeps its list code.
+        try {
+          const detail = await fetchJson(`${base}/${t.id}`);
+          const abbr = detail.team.abbreviation.toUpperCase();
+          if (!byAbbr.has(abbr)) byAbbr.set(abbr, t.logos[0].href);
+        } catch (err) {
+          console.warn(`  ! could not fetch scoreboard code for ${t.abbreviation} (${t.id}): ${err.message}`);
+        }
       }));
     }
   }
@@ -91,7 +96,12 @@ async function downloadSport(sportKey, abbrs, espnTeams, aliases = {}) {
       const lookupAbbr = aliases[abbr] || abbr;
       const logoUrl = espnTeams.get(lookupAbbr);
       if (!logoUrl) return { abbr, ok: false };
-      await downloadTo(logoUrl, path.join(outDir, `${abbr.toLowerCase()}.png`));
+      try {
+        await downloadTo(logoUrl, path.join(outDir, `${abbr.toLowerCase()}.png`));
+      } catch (err) {
+        console.warn(`  ! [${sportKey}] ${abbr}: ${err.message}`);
+        return { abbr, ok: false };
+      }
       process.stdout.write(`  [${sportKey}] ${abbr.padEnd(6)} ✓\n`);
       return { abbr, ok: true };
     }));
@@ -109,6 +119,44 @@ async function downloadSport(sportKey, abbrs, espnTeams, aliases = {}) {
   }
 }
 
+// ESPN abbreviations are not unique across ~900 schools (e.g. ARK is both Arkansas and Arkansas
+// Tech; WASH is both Washington and Washburn). Our games only ever involve FBS/FCS teams, as
+// reported on the scoreboard, so those teams' scoreboard codes must always own their file — FBS
+// first, then FCS. Pulled one day at a time because ESPN's scoreboard returns nothing for ranges.
+async function loadScoreboardTeams(sportPath, groups, from, to) {
+  const days = [];
+  for (let d = new Date(from); d <= to; d.setUTCDate(d.getUTCDate() + 1)) days.push(d.toISOString().slice(0, 10).replace(/-/g, ''));
+  const byAbbr = new Map();
+  const ownerId = new Map();
+  const collisions = new Set();
+  for (const group of groups) {
+    for (let i = 0; i < days.length; i += CONCURRENCY) {
+      const pages = await Promise.all(days.slice(i, i + CONCURRENCY).map((day) =>
+        fetchJson(`https://site.api.espn.com/apis/site/v2/sports/football/${sportPath}/scoreboard?dates=${day}&groups=${group}&limit=300`)
+          .catch((err) => { console.warn(`  ! scoreboard ${group}/${day}: ${err.message}`); return { events: [] }; })));
+      for (const page of pages) {
+        for (const e of page.events ?? []) {
+          for (const c of e.competitions[0].competitors) {
+            const abbr = c.team.abbreviation?.toUpperCase();
+            if (!abbr || !c.team.logo) continue;
+            const owner = ownerId.get(abbr);
+            if (owner === undefined) {
+              ownerId.set(abbr, c.team.id);
+              byAbbr.set(abbr, c.team.logo);
+            } else if (owner !== c.team.id) {
+              collisions.add(`${abbr}: kept team ${owner}, skipped ${c.team.displayName} (${c.team.id})`);
+            }
+          }
+        }
+      }
+    }
+  }
+  // Two scoreboard schools sharing one code means one of them shows the other's logo — flag it
+  // for a human to check rather than silently picking one.
+  for (const c of collisions) console.warn(`  ! scoreboard code collision — ${c}`);
+  return byAbbr;
+}
+
 async function main() {
   console.log('Fetching ESPN NFL + CFB team lists...');
   const [nflTeams, cfbTeams] = await Promise.all([
@@ -116,9 +164,21 @@ async function main() {
     loadEspnTeams('college-football', { includeScoreboardAbbrs: true }),
   ]);
 
+  // Season window covering both the current/most recent season (Aug through the CFP title game).
+  const now = new Date();
+  const thisYearStart = Date.UTC(now.getUTCFullYear(), 7, 15);
+  const seasonYear = now.getTime() >= thisYearStart ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+  const seasonStart = new Date(Date.UTC(seasonYear, 7, 15));
+  const seasonEnd = new Date(Math.min(Date.UTC(seasonYear + 1, 0, 25), now.getTime()));
+  console.log(`Fetching FBS/FCS scoreboard teams ${seasonStart.toISOString().slice(0, 10)}..${seasonEnd.toISOString().slice(0, 10)}...`);
+  const scoreboardTeams = await loadScoreboardTeams('college-football', [80, 81], seasonStart, seasonEnd);
+  console.log(`  ${scoreboardTeams.size} FBS/FCS scoreboard codes`);
+  // Scoreboard teams win any code collision; the rest only fill codes nobody on the scoreboard uses.
+  const cfbAll = new Map([...cfbTeams, ...scoreboardTeams]);
+
   await Promise.all([
     downloadSport('nfl', Object.keys(NFL_TEAMS), nflTeams, NFL_ESPN_ABBR_ALIASES),
-    downloadSport('cfb', [...cfbTeams.keys()], cfbTeams),
+    downloadSport('cfb', [...cfbAll.keys()], cfbAll),
   ]);
 }
 
@@ -129,4 +189,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { loadEspnTeams };
+module.exports = { loadEspnTeams, loadScoreboardTeams };

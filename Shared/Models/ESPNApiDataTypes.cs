@@ -138,6 +138,8 @@ public class EspnTeam
 {
     [JsonPropertyName("abbreviation")]
     public string Abbreviation { get; set; }
+    [JsonPropertyName("displayName")]
+    public string? DisplayName { get; set; }
     [JsonPropertyName("logo")]
     public Uri Logo { get; set; }
 }

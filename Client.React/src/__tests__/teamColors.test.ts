@@ -20,4 +20,17 @@ describe('CFB logo files exist under the scoreboard abbreviation', () => {
       expect(files).toContain(`${abbr}.png`);
     });
   }
+
+  it('Buffalo and Colorado have different logos (they were once swapped)', () => {
+    const logos = import.meta.glob<string>('../../public/Icons/Logos/cfb/{buff,colo}.png', { query: '?inline', import: 'default', eager: true });
+    const [buff, colo] = ['buff', 'colo'].map((a) => Object.entries(logos).find(([k]) => k.endsWith(`/${a}.png`))?.[1]);
+    expect(buff).toBeTruthy();
+    expect(buff).not.toEqual(colo);
+  });
+
+  it("Colorado's helmet badge lives under COLO", () => {
+    const helmets = Object.keys(import.meta.glob('../../public/Icons/Helmets/*.svg')).map((f) => f.split('/').pop());
+    expect(helmets).toContain('colo.svg');
+    expect(helmets).not.toContain('buff.svg');
+  });
 });

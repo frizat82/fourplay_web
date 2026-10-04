@@ -6,7 +6,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-10-04
 
-- Fixed: Buffalo games showed Colorado's logo and colors, and Colorado, Air Force and Jacksonville State showed a text badge instead of their logo
+- Fixed: Buffalo games showed Colorado's logo and colors, and some college teams (Colorado, Air Force, Jacksonville State among them) showed a text badge instead of their logo — every college team in our games now has its logo
+- Improved: push notifications name teams in full ("Buffalo Bulls are covering!" instead of "BUFF") and say the sport and week the way the app does ("CFB Week 5", "NFL Wild Card") instead of "Slate 5"
 - Fixed: on a phone, buttons no longer squeeze their text against (or past) their edges — Manage Account's Change Password, Change Username and Notifications buttons now stack full width, and page-header buttons like Leaderboard's Share drop below the title when there isn't room
 - Improved: each Advanced section on the Notifications page now has just one Covering and one Bloody switch, instead of two unlabeled switches for each
 - Improved: the Notifications settings page's Advanced sections now live directly under "Notify me about my games" and "Notify me about league activity" instead of one shared Advanced section covering both, and the Covering/Bloody toggle rows now have visible text labels instead of relying on color (green/red) alone
