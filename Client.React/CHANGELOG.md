@@ -6,6 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-10-04
 
+- Fixed: the first week-result notification run of the season sent a push for every already-finished week (Weeks 1-4) — a week's result can now only be pushed within 48 hours of that week ending, never later
 - Improved: in dark mode, team logos switch to ESPN's dark-background versions (NFL and college), so logos with dark lettering like Ohio State's stay readable
 - Fixed: Buffalo games showed Colorado's logo and colors, and some college teams (Colorado, Air Force, Jacksonville State among them) showed a text badge instead of their logo — every college team in our games now has its logo
 - Improved: push notifications name teams in full ("Buffalo Bulls are covering!" instead of "BUFF") and say the sport and week the way the app does ("CFB Week 5", "NFL Wild Card") instead of "Slate 5"
