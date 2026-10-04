@@ -25,13 +25,15 @@ public class WeekResultNotificationServiceTests
     private readonly ILeaderboardService _nflLeaderboard = Substitute.For<ILeaderboardService>();
     private readonly ICfbLeaderboardService _cfbLeaderboard = Substitute.For<ICfbLeaderboardService>();
     private readonly INotificationDispatcher _dispatcher = Substitute.For<INotificationDispatcher>();
+    private readonly IEspnCacheService _espnCache = Substitute.For<IEspnCacheService>();
+    private readonly ICfbCacheService _cfbCache = Substitute.For<ICfbCacheService>();
 
     public WeekResultNotificationServiceTests()
     {
         _repo.GetLeaguesByTypeAsync(Arg.Any<LeagueType>()).Returns(new List<LeagueInfo>());
     }
 
-    private WeekResultNotificationService BuildService() => new(_repo, _nflLeaderboard, _cfbLeaderboard, _dispatcher);
+    private WeekResultNotificationService BuildService() => new(_repo, _nflLeaderboard, _cfbLeaderboard, _dispatcher, _espnCache, _cfbCache);
 
     private static ApplicationUser User(string id) => new() { Id = id, UserName = id };
 
@@ -185,7 +187,7 @@ public class WeekResultNotificationServiceTests
 
         Assert.Equal(1, sent);
         await _dispatcher.Received(1).DispatchAsync("cfb-user", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
-            Arg.Is<PushPayload>(p => p.Body.Contains("Slate 9") && p.Body.Contains("You Won the Week")), Arg.Any<CancellationToken>());
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("CFB Week 9:") && p.Body.Contains("You Won the Week") && !p.Body.Contains("Slate")), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -201,7 +203,7 @@ public class WeekResultNotificationServiceTests
         await BuildService().CheckCfbWeekResultsAsync(2026);
 
         await _dispatcher.Received(1).DispatchAsync("cfb-user", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
-            Arg.Is<PushPayload>(p => p.Body.Contains("Slate 9") && p.Body.Contains("You Lost OSU")), Arg.Any<CancellationToken>());
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("CFB Week 9:") && p.Body.Contains("You Lost OSU")), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -217,7 +219,44 @@ public class WeekResultNotificationServiceTests
         await BuildService().CheckNflWeekResultsAsync(2026);
 
         await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
-            Arg.Is<PushPayload>(p => p.Body.Contains("Week 5")), Arg.Any<CancellationToken>());
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("NFL Week 5:")), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckCfbWeekResultsAsync_PostseasonSlate_UsesTheRoundName()
+    {
+        var league = League(2, LeagueType.Cfb);
+        _repo.GetLeaguesByTypeAsync(LeagueType.Cfb).Returns(new List<LeagueInfo> { league });
+        _repo.GetWeekResultNotificationsSentAsync(2, 2026).Returns(new HashSet<(string, int)>());
+        _cfbLeaderboard.BuildLeaderboard(2, 2026).Returns(new List<LeaderboardModel> {
+            Row(User("cfb-user"), new LeaderboardWeekResults { Week = 17, WeekResult = WeekResult.Won, Score = 100 })
+        });
+
+        await BuildService().CheckCfbWeekResultsAsync(2026);
+
+        await _dispatcher.Received(1).DispatchAsync("cfb-user", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("CFB CFP Semifinals:")), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckCfbWeekResultsAsync_LostSlate_NamesTheLosingTeamInFull_WhenTheScoreboardHasIt()
+    {
+        var league = League(2, LeagueType.Cfb);
+        _repo.GetLeaguesByTypeAsync(LeagueType.Cfb).Returns(new List<LeagueInfo> { league });
+        _repo.GetWeekResultNotificationsSentAsync(2, 2026).Returns(new HashSet<(string, int)>());
+        _cfbLeaderboard.BuildLeaderboard(2, 2026).Returns(new List<LeaderboardModel> {
+            Row(User("cfb-user"), new LeaderboardWeekResults { Week = 9, WeekResult = WeekResult.Lost, Score = 0, LosingTeams = ["BUFF"] })
+        });
+        _cfbCache.GetScoresAsync().Returns(new EspnScores { Events = [new Event { Competitions = [new Competition {
+            Competitors = [
+                new Competitor { Team = new EspnTeam { Abbreviation = "BUFF", DisplayName = "Buffalo Bulls" }, Records = [] },
+                new Competitor { Team = new EspnTeam { Abbreviation = "WMU", DisplayName = "Western Michigan Broncos" }, Records = [] },
+            ], Odds = [] }] }] });
+
+        await BuildService().CheckCfbWeekResultsAsync(2026);
+
+        await _dispatcher.Received(1).DispatchAsync("cfb-user", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
+            Arg.Is<PushPayload>(p => p.Body.Contains("You Lost Buffalo Bulls") && !p.Body.Contains("BUFF")), Arg.Any<CancellationToken>());
     }
 
     [Fact]

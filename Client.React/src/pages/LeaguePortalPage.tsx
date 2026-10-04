@@ -473,7 +473,7 @@ export default function LeaguePortalPage({ adapter }: { adapter: SportAdapter })
           title="My Leagues"
           subtitle={selectedLeague ? selectedLeague.leagueName : 'Commissioner portal'}
         />
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+        <Stack direction="row" spacing={2} useFlexGap alignItems="center" flexWrap="wrap">
           <OwnerCostSummary />
           <Button startIcon={<AddCircleIcon />} variant="outlined" onClick={openCreateLeague}>
             Create League
