@@ -93,6 +93,11 @@ public class LivePickTransitionServiceTests
 
     // Takes the already-built "only this flag true" DTO rather than a setter lambda — a setter
     // lambda's assignment expression can't appear inside the Arg.Is expression tree at the call site.
+    public LivePickTransitionServiceTests()
+    {
+        _leagueRepository.GetLeaguesByTypeAsync(Arg.Any<LeagueType>()).Returns(new List<LeagueInfo>());
+    }
+
     private static bool PredicateMatches(Func<NotificationPreferencesDto, bool> predicate, NotificationPreferencesDto whenTrue) =>
         predicate(whenTrue) && !predicate(new NotificationPreferencesDto());
 
@@ -104,6 +109,10 @@ public class LivePickTransitionServiceTests
         _leagueRepository.GetNflSpreadsAsync(2026, 5).Returns([KcSpread]);
         _leagueRepository.GetLeagueJuiceMappingAsync(1, 2026).Returns(NoJuice);
         _leagueRepository.GetLeagueUserMappingsAsync(1).Returns(Members);
+        _leagueRepository.GetLeaguesByTypeAsync(LeagueType.Nfl).Returns([
+            new LeagueInfo { Id = 1, LeagueName = "Alpha", OwnerUserId = "o", LeagueType = LeagueType.Nfl },
+            new LeagueInfo { Id = 2, LeagueName = "Beta", OwnerUserId = "o", LeagueType = LeagueType.Nfl },
+        ]);
         _stateService.GetStatesAsync(LeagueType.Nfl, Arg.Any<IReadOnlyCollection<int>>()).Returns(priorStates ?? []);
         _teamStateService.GetStatesAsync(LeagueType.Nfl, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<IReadOnlyCollection<(string, PickType)>>())
             .Returns([]);
@@ -252,6 +261,58 @@ public class LivePickTransitionServiceTests
         await _stateService.Received(1).UpsertStatesAsync(Arg.Is<IReadOnlyCollection<PickLiveNotificationState>>(
             list => list.Any(s => s.PickId == 101) && list.Any(s => s.PickId == 201)));
         await _teamStateService.Received(1).UpsertStatesAsync(Arg.Any<IReadOnlyCollection<TeamLiveNotificationState>>());
+    }
+
+    // A member of two leagues gets ONE push per team, listing each league and how many picked it
+    // there — not one push per league with different counts (owner report, 2026-10-04).
+    private void SetUpTwoLeaguesKcBloodyTransition(List<NflPicks> picks, List<LeagueUserMapping> league1, List<LeagueUserMapping> league2)
+    {
+        SetUpNflHappyPath(picks: picks);
+        _leagueRepository.GetLeagueJuiceMappingAsync(2, 2026).Returns(NoJuice);
+        _leagueRepository.GetLeagueUserMappingsAsync(1).Returns(league1);
+        _leagueRepository.GetLeagueUserMappingsAsync(2).Returns(league2);
+        _stateService.GetStatesAsync(LeagueType.Nfl, Arg.Any<IReadOnlyCollection<int>>()).Returns(
+            picks.ToDictionary(p => p.Id, p => new PickLiveNotificationState { Sport = LeagueType.Nfl, PickId = p.Id, LeagueId = p.LeagueId, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10) }));
+        foreach (var league in new[] { 1, 2 })
+            _teamStateService.GetStatesAsync(LeagueType.Nfl, league, 5, Arg.Any<IReadOnlyCollection<(string, PickType)>>()).Returns(
+                new Dictionary<(string, PickType), TeamLiveNotificationState> {
+                    [("KC", PickType.Spread)] = new() { Sport = LeagueType.Nfl, LeagueId = league, Team = "KC", PickType = PickType.Spread, Period = 5, LastNotifiedCovering = true, LastNotifiedAt = FakeNow.AddMinutes(-10) },
+                });
+        _espnCache.GetScoresAsync().Returns(NflScores(20, 20, TypeName.StatusInProgress, KickoffLongAgo)); // KC stops covering
+    }
+
+    private static NflPicks Kc(int id, string userId, int leagueId) => new() { Id = id, UserId = userId, LeagueId = leagueId, Team = "KC", Pick = PickType.Spread, NflWeek = 5, Season = 2026 };
+
+    [Fact]
+    public async Task RecomputeAsync_MemberOfTwoLeagues_GetsOnePushListingEachLeaguesPickCount()
+    {
+        SetUpTwoLeaguesKcBloodyTransition(
+            [Kc(101, "user-2", 1), Kc(201, "user-4", 2), Kc(202, "user-5", 2)],
+            [new() { UserId = "user-1" }, new() { UserId = "user-2" }],
+            [new() { UserId = "user-1" }, new() { UserId = "user-4" }, new() { UserId = "user-5" }]);
+
+        await BuildService().RecomputeAsync(LeagueType.Nfl);
+
+        await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
+            Arg.Is<PushPayload>(p => p.Body.Contains("Kansas City Chiefs are bloody") && p.Body.Contains("Alpha: 1 user picked") && p.Body.Contains("Beta: 2 users picked")),
+            Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RecomputeAsync_OwnPickInOneLeague_AndOthersInAnother_MergeIntoOnePush()
+    {
+        SetUpTwoLeaguesKcBloodyTransition(
+            [Kc(101, "user-1", 1), Kc(102, "user-2", 1), Kc(201, "user-4", 2)],
+            [new() { UserId = "user-1" }, new() { UserId = "user-2" }],
+            [new() { UserId = "user-1" }, new() { UserId = "user-4" }]);
+
+        await BuildService().RecomputeAsync(LeagueType.Nfl);
+
+        await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
+            Arg.Is<PushPayload>(p => p.Body.Contains("Alpha: your pick + 1 other") && p.Body.Contains("Beta: 1 user picked")),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

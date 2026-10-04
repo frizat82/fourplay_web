@@ -119,6 +119,11 @@ public class LivePickTransitionService(
         // could leave "others" state committed for an earlier league while "mine" state for that
         // same earlier league is lost, letting the two channels silently diverge.
         var newTeamStates = new List<TeamLiveNotificationState>();
+        // Collected across every league and sent once at the end, so someone in two leagues gets
+        // ONE push per team listing each league ("Alpha: your pick + 1 other / Beta: 3 users
+        // picked") instead of a separate push per league.
+        var outbox = new List<PushLine>();
+        var leagueNames = (await leagueRepository.GetLeaguesByTypeAsync(sport)).ToDictionary(l => l.Id, l => l.LeagueName);
 
         // Grouped by league so each league's own tease (JuiceTiers) is applied — "covering" is a
         // league-specific answer, not a single global one, exactly like LeaderboardEngine.Build.
@@ -131,6 +136,7 @@ public class LivePickTransitionService(
             var calculator = new SpreadCalculator(spreads, JuiceTiers.For(sport, period.JuiceTierNumber, juiceMapping));
             var members = await leagueRepository.GetLeagueUserMappingsAsync(byLeague.Key);
             var betResults = new Dictionary<(string Team, PickType PickType), BetResult>();
+            var mineEvents = new List<(string UserId, (string Team, PickType PickType) Bet, bool Covering, bool AtFinal)>();
 
             foreach (var pick in byLeague)
             {
@@ -165,11 +171,11 @@ public class LivePickTransitionService(
                     });
                 }
                 if (mineTransition.NotifyTransition)
-                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, false), MinePayload(sport, NameOf(pick.Pick.Team), covering, atFinal: false));
+                    mineEvents.Add((pick.UserId, (pick.Pick.Team, pick.Pick.PickType), covering, false));
                 // Independent of the above — fires once at final regardless of recent transition
                 // history, even if this tick's status flip happens to also be a cover-state flip.
                 if (mineTransition.NotifyFinal)
-                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, true), MinePayload(sport, NameOf(pick.Pick.Team), covering, atFinal: true));
+                    mineEvents.Add((pick.UserId, (pick.Pick.Team, pick.Pick.PickType), covering, true));
 
                 // Record for the per-bet "others" pass below — every picker on the same
                 // (team, pickType) computes this exact same covering/isFinal, so only the picker
@@ -178,6 +184,10 @@ public class LivePickTransitionService(
                 if (betResults.TryGetValue(key, out var bet)) bet.PickerUserIds.Add(pick.UserId);
                 else betResults[key] = new BetResult(covering, isFinal, pick.UserId);
             }
+
+            // Picker counts are only known once every pick in this league is tallied.
+            foreach (var e in mineEvents)
+                outbox.Add(new PushLine(e.UserId, e.Bet.Team, e.Covering, e.AtFinal, byLeague.Key, Mine: true, OtherPickers: betResults[e.Bet].PickerUserIds.Count - 1));
 
             if (betResults.Count == 0) continue;
 
@@ -198,34 +208,55 @@ public class LivePickTransitionService(
                 }
 
                 var otherMembers = members.Where(m => !result.PickerUserIds.Contains(m.UserId)).ToList();
-                if (teamTransition.NotifyTransition)
-                    await NotifyOthersAsync(sport, otherMembers, NameOf(bet.Team), result.Covering, result.PickerUserIds.Count, atFinal: false);
-                if (teamTransition.NotifyFinal)
-                    await NotifyOthersAsync(sport, otherMembers, NameOf(bet.Team), result.Covering, result.PickerUserIds.Count, atFinal: true);
+                foreach (var atFinal in new[] { false, true })
+                {
+                    if (atFinal ? !teamTransition.NotifyFinal : !teamTransition.NotifyTransition) continue;
+                    outbox.AddRange(otherMembers.Select(m =>
+                        new PushLine(m.UserId, bet.Team, result.Covering, atFinal, byLeague.Key, Mine: false, OtherPickers: result.PickerUserIds.Count)));
+                }
             }
         }
+
+        foreach (var push in outbox.GroupBy(l => (l.UserId, l.Team, l.Covering, l.AtFinal)))
+            await SafeDispatchAsync(push.Key.UserId, PreferenceFor(push), BuildPayload(sport, NameOf(push.Key.Team), push, leagueNames));
 
         if (newStates.Count > 0) await stateService.UpsertStatesAsync(newStates);
         if (newTeamStates.Count > 0) await teamStateService.UpsertStatesAsync(newTeamStates);
     }
 
-    private async Task NotifyOthersAsync(LeagueType sport, List<LeagueUserMapping> otherMembers, string team, bool covering, int pickerCount, bool atFinal)
+    // One line per league for a single (recipient, team, covering, final) push. Mine = the recipient
+    // picked it in that league; OtherPickers = how many others in that league did.
+    private sealed record PushLine(string UserId, string Team, bool Covering, bool AtFinal, int LeagueId, bool Mine, int OtherPickers);
+
+    private static PushPayload BuildPayload(LeagueType sport, string team, IEnumerable<PushLine> lines, IReadOnlyDictionary<int, string> leagueNames)
     {
-        if (otherMembers.Count == 0) return;
-        var payload = OthersPayload(team, covering, pickerCount, atFinal) with { Sport = sport };
-        await Task.WhenAll(otherMembers.Select(m => SafeDispatchAsync(m.UserId, OthersPreference(covering, atFinal), payload)));
+        var first = lines.First();
+        var headline = first.AtFinal
+            ? (first.Covering ? $"{team} covered! Final 🏆" : $"{team} didn't cover. Final 💀")
+            : (first.Covering ? $"{team} are covering 🟢" : $"{team} are bloody 🔴");
+        var leagueLines = lines
+            .GroupBy(l => l.LeagueId)
+            .Select(g => {
+                var name = leagueNames.GetValueOrDefault(g.Key, "Your league");
+                var others = g.Max(l => l.OtherPickers);
+                var mine = g.Any(l => l.Mine);
+                var detail = mine
+                    ? (others == 0 ? "your pick" : $"your pick + {others} other{(others == 1 ? "" : "s")}")
+                    : $"{others} user{(others == 1 ? "" : "s")} picked";
+                return $"{name}: {detail}";
+            })
+            .OrderBy(l => l);
+        return new PushPayload("IV League", $"{headline}\n{string.Join("\n", leagueLines)}", Sport: sport);
     }
 
-    private static PushPayload MinePayload(LeagueType sport, string team, bool covering, bool atFinal) => (atFinal
-        ? new PushPayload("IV League", covering ? $"{team} covered! Final. 🏆" : $"{team} didn't cover. Final. 💀")
-        : new PushPayload("IV League", covering ? $"{team} are covering! 🟢" : $"{team} are bloody right now 🔴")) with { Sport = sport };
-
-    private static PushPayload OthersPayload(string team, bool covering, int pickerCount, bool atFinal)
+    // The push goes out if the recipient wants any kind of line it contains ("my games" for their
+    // own picks, "league activity" for others').
+    private static Func<NotificationPreferencesDto, bool> PreferenceFor(IGrouping<(string UserId, string Team, bool Covering, bool AtFinal), PushLine> push)
     {
-        var usersLabel = pickerCount == 1 ? "1 user picked" : $"{pickerCount} users picked";
-        return atFinal
-            ? new PushPayload("IV League", covering ? $"{team} covered! Final — {usersLabel} 🏆" : $"{team} didn't cover! Final — {usersLabel} 💀")
-            : new PushPayload("IV League", covering ? $"{team} are Covering — {usersLabel} 🟢" : $"{team} are Bloody — {usersLabel} 🔴");
+        var (_, _, covering, atFinal) = push.Key;
+        var mine = push.Any(l => l.Mine) ? MinePreference(covering, atFinal) : null;
+        var others = push.Any(l => !l.Mine) ? OthersPreference(covering, atFinal) : null;
+        return p => (mine?.Invoke(p) ?? false) || (others?.Invoke(p) ?? false);
     }
 
     private static Func<NotificationPreferencesDto, bool> MinePreference(bool covering, bool atFinal) => atFinal
