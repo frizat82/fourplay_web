@@ -27,13 +27,25 @@ public class WeekResultNotificationServiceTests
     private readonly INotificationDispatcher _dispatcher = Substitute.For<INotificationDispatcher>();
     private readonly IEspnCacheService _espnCache = Substitute.For<IEspnCacheService>();
     private readonly ICfbCacheService _cfbCache = Substitute.For<ICfbCacheService>();
+    private readonly ICfbRepository _cfbRepo = Substitute.For<ICfbRepository>();
+    private static readonly DateTimeOffset Now = new(2026, 10, 4, 18, 0, 0, TimeSpan.Zero);
 
     public WeekResultNotificationServiceTests()
     {
         _repo.GetLeaguesByTypeAsync(Arg.Any<LeagueType>()).Returns(new List<LeagueInfo>());
+        // Default: every week/slate ends in the future, i.e. is current — existing tests exercise
+        // the send logic itself; the staleness tests below override these.
+        SetNflWeekEnds(Enumerable.Range(1, 22).Select(w => (w, Now.UtcDateTime.AddDays(3))).ToArray());
+        SetCfbSlateEnds(Enumerable.Range(1, 18).Select(s => (s, DateOnly.FromDateTime(Now.UtcDateTime.AddDays(3)))).ToArray());
     }
 
-    private WeekResultNotificationService BuildService() => new(_repo, _nflLeaderboard, _cfbLeaderboard, _dispatcher, _espnCache, _cfbCache);
+    private void SetNflWeekEnds(params (int Week, DateTime End)[] weeks) =>
+        _repo.GetNflSeasonWeekConfigsAsync(2026).Returns(weeks.Select(w => new NflSeasonWeekConfig { Season = 2026, WeekId = w.Week, WeekEndDatetime = w.End }).ToList());
+
+    private void SetCfbSlateEnds(params (int Slate, DateOnly End)[] slates) =>
+        _cfbRepo.GetAllSlatesAsync().Returns(slates.Select(s => new CfbSlates { Season = 2026, SlateNumber = s.Slate, EndDate = s.End }).ToList());
+
+    private WeekResultNotificationService BuildService() => new(_repo, _cfbRepo, _nflLeaderboard, _cfbLeaderboard, _dispatcher, _espnCache, _cfbCache, new FakeTimeProvider(Now));
 
     private static ApplicationUser User(string id) => new() { Id = id, UserName = id };
 
@@ -257,6 +269,111 @@ public class WeekResultNotificationServiceTests
 
         await _dispatcher.Received(1).DispatchAsync("cfb-user", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
             Arg.Is<PushPayload>(p => p.Body.Contains("You Lost Buffalo Bulls") && !p.Body.Contains("BUFF")), Arg.Any<CancellationToken>());
+    }
+
+    // ─── Never send stale ("back") notifications ──────────────────────────────────────────
+    // A week's result may only be pushed until 48h after that week's scheduled end. Anything
+    // older — e.g. weeks decided before this feature shipped, on its first run mid-season — is
+    // recorded as sent silently so it can never be pushed later either.
+
+    [Fact]
+    public async Task CheckNflWeekResultsAsync_FirstRunMidSeason_PushesOnlyTheCurrentWeek_AndSilentlyRecordsOldOnes()
+    {
+        var league = League(1, LeagueType.Nfl);
+        _repo.GetLeaguesByTypeAsync(LeagueType.Nfl).Returns(new List<LeagueInfo> { league });
+        _repo.GetWeekResultNotificationsSentAsync(1, 2026).Returns(new HashSet<(string, int)>());
+        SetNflWeekEnds((1, Now.UtcDateTime.AddDays(-21)), (2, Now.UtcDateTime.AddDays(-14)), (3, Now.UtcDateTime.AddDays(-7)), (4, Now.UtcDateTime.AddDays(2)));
+        _nflLeaderboard.BuildLeaderboard(1, 2026L).Returns(new List<LeaderboardModel> {
+            Row(User("user-1"),
+                new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Won, Score = 100 },
+                new LeaderboardWeekResults { Week = 2, WeekResult = WeekResult.Lost, Score = 0, LosingTeams = ["BAL"] },
+                new LeaderboardWeekResults { Week = 3, WeekResult = WeekResult.Won, Score = 100 },
+                new LeaderboardWeekResults { Week = 4, WeekResult = WeekResult.Won, Score = 100 })
+        });
+
+        await BuildService().CheckNflWeekResultsAsync(2026);
+
+        await _dispatcher.Received(1).DispatchAsync(Arg.Any<string>(), Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("NFL Week 4:")), Arg.Any<CancellationToken>());
+        await _repo.Received(1).RecordWeekResultNotificationsSentAsync(
+            Arg.Is<IEnumerable<(string UserId, int Week)>>(e => e.Select(x => x.Week).OrderBy(w => w).SequenceEqual(new[] { 1, 2, 3, 4 })), 1, 2026);
+    }
+
+    [Fact]
+    public async Task CheckNflWeekResultsAsync_WeekEndedWithinTheLast48Hours_StillPushes_ForALateMondayNightFinal()
+    {
+        var league = League(1, LeagueType.Nfl);
+        _repo.GetLeaguesByTypeAsync(LeagueType.Nfl).Returns(new List<LeagueInfo> { league });
+        _repo.GetWeekResultNotificationsSentAsync(1, 2026).Returns(new HashSet<(string, int)>());
+        SetNflWeekEnds((4, Now.UtcDateTime.AddHours(-24)));
+        _nflLeaderboard.BuildLeaderboard(1, 2026L).Returns(new List<LeaderboardModel> {
+            Row(User("user-1"), new LeaderboardWeekResults { Week = 4, WeekResult = WeekResult.Won, Score = 100 })
+        });
+
+        await BuildService().CheckNflWeekResultsAsync(2026);
+
+        await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(-47.9, true)]
+    [InlineData(-48.1, false)]
+    public async Task CheckNflWeekResultsAsync_PushWindowBoundary_IsExactly48HoursAfterTheWeekEnds(double weekEndHoursFromNow, bool expectPush)
+    {
+        var league = League(1, LeagueType.Nfl);
+        _repo.GetLeaguesByTypeAsync(LeagueType.Nfl).Returns(new List<LeagueInfo> { league });
+        _repo.GetWeekResultNotificationsSentAsync(1, 2026).Returns(new HashSet<(string, int)>());
+        SetNflWeekEnds((4, Now.UtcDateTime.AddHours(weekEndHoursFromNow)));
+        _nflLeaderboard.BuildLeaderboard(1, 2026L).Returns(new List<LeaderboardModel> {
+            Row(User("user-1"), new LeaderboardWeekResults { Week = 4, WeekResult = WeekResult.Won, Score = 100 })
+        });
+
+        var pushed = await BuildService().CheckNflWeekResultsAsync(2026);
+
+        Assert.Equal(expectPush ? 1 : 0, pushed);
+        await _repo.Received(1).RecordWeekResultNotificationsSentAsync(
+            Arg.Is<IEnumerable<(string UserId, int Week)>>(e => e.Single().Week == 4), 1, 2026);
+    }
+
+    [Fact]
+    public async Task CheckNflWeekResultsAsync_WeekWithNoScheduleRow_IsNeverPushed()
+    {
+        var league = League(1, LeagueType.Nfl);
+        _repo.GetLeaguesByTypeAsync(LeagueType.Nfl).Returns(new List<LeagueInfo> { league });
+        _repo.GetWeekResultNotificationsSentAsync(1, 2026).Returns(new HashSet<(string, int)>());
+        SetNflWeekEnds();
+        _nflLeaderboard.BuildLeaderboard(1, 2026L).Returns(new List<LeaderboardModel> {
+            Row(User("user-1"), new LeaderboardWeekResults { Week = 4, WeekResult = WeekResult.Won, Score = 100 })
+        });
+
+        await BuildService().CheckNflWeekResultsAsync(2026);
+
+        await _dispatcher.DidNotReceive().DispatchAsync(Arg.Any<string>(), Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckCfbWeekResultsAsync_FirstRunMidSeason_PushesOnlyTheCurrentSlate()
+    {
+        var league = League(2, LeagueType.Cfb);
+        _repo.GetLeaguesByTypeAsync(LeagueType.Cfb).Returns(new List<LeagueInfo> { league });
+        _repo.GetWeekResultNotificationsSentAsync(2, 2026).Returns(new HashSet<(string, int)>());
+        var today = DateOnly.FromDateTime(Now.UtcDateTime);
+        SetCfbSlateEnds((1, today.AddDays(-28)), (4, today.AddDays(-7)), (5, today.AddDays(1)));
+        _cfbLeaderboard.BuildLeaderboard(2, 2026).Returns(new List<LeaderboardModel> {
+            Row(User("cfb-user"),
+                new LeaderboardWeekResults { Week = 1, WeekResult = WeekResult.Won, Score = 100 },
+                new LeaderboardWeekResults { Week = 4, WeekResult = WeekResult.Lost, Score = 0, LosingTeams = ["OSU"] },
+                new LeaderboardWeekResults { Week = 5, WeekResult = WeekResult.Won, Score = 100 })
+        });
+
+        await BuildService().CheckCfbWeekResultsAsync(2026);
+
+        await _dispatcher.Received(1).DispatchAsync(Arg.Any<string>(), Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).DispatchAsync("cfb-user", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("CFB Week 5:")), Arg.Any<CancellationToken>());
+        await _repo.Received(1).RecordWeekResultNotificationsSentAsync(
+            Arg.Is<IEnumerable<(string UserId, int Week)>>(e => e.Select(x => x.Week).OrderBy(w => w).SequenceEqual(new[] { 1, 4, 5 })), 2, 2026);
     }
 
     [Fact]

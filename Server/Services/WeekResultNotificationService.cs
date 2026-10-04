@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Server.Models.Data;
@@ -10,25 +11,45 @@ namespace FourPlayWebApp.Server.Services;
 
 public class WeekResultNotificationService(
     ILeagueRepository leagueRepository,
+    ICfbRepository cfbRepository,
     ILeaderboardService nflLeaderboardService,
     ICfbLeaderboardService cfbLeaderboardService,
     INotificationDispatcher dispatcher,
     IEspnCacheService nflScores,
-    ICfbCacheService cfbScores) : IWeekResultNotificationService
+    ICfbCacheService cfbScores,
+    [FromKeyedServices(CurrentWeekClock.Key)] TimeProvider clock) : IWeekResultNotificationService
 {
+    // A week's result may only be pushed until this long after the week's scheduled end — long
+    // enough for a late Monday-night / late-slate final, never long enough to replay history.
+    // Anything older (e.g. every week decided before this feature first ran mid-season) is
+    // recorded as sent silently, so it can never be pushed later either.
+    public static readonly TimeSpan PushWindowAfterPeriodEnd = TimeSpan.FromHours(48);
+
     public Task<int> CheckNflWeekResultsAsync(int season) =>
         CheckWeekResultsAsync(LeagueType.Nfl, season, week => $"NFL {GameHelpers.GetNflWeekLabel(week)}",
+            async () => (await leagueRepository.GetNflSeasonWeekConfigsAsync(season))
+                .GroupBy(c => c.WeekId)
+                .ToDictionary(g => g.Key, g => new DateTimeOffset(DateTime.SpecifyKind(g.Max(c => c.WeekEndDatetime), DateTimeKind.Utc))),
             nflScores.GetScoresAsync, league => nflLeaderboardService.BuildLeaderboard(league.Id, season));
 
     public Task<int> CheckCfbWeekResultsAsync(int season) =>
         CheckWeekResultsAsync(LeagueType.Cfb, season, slate => $"CFB {GameHelpers.GetCfbSlateLabel(slate)}",
+            async () => (await cfbRepository.GetAllSlatesAsync())
+                .Where(s => s.Season == season)
+                .GroupBy(s => s.SlateNumber)
+                .ToDictionary(g => g.Key, g => new DateTimeOffset(g.Max(s => s.EndDate).ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero)),
             cfbScores.GetScoresAsync, league => cfbLeaderboardService.BuildLeaderboard(league.Id, season));
 
     private async Task<int> CheckWeekResultsAsync(LeagueType sport, int season, Func<int, string> periodLabel,
+        Func<Task<Dictionary<int, DateTimeOffset>>> getPeriodEnds,
         Func<Task<EspnScores?>> getScores, Func<LeagueInfo, Task<List<LeaderboardModel>>> buildLeaderboard)
     {
         var leagues = await leagueRepository.GetLeaguesByTypeAsync(sport);
         if (leagues.Count == 0) return 0;
+        var periodEnds = await getPeriodEnds();
+        var now = clock.GetUtcNow();
+        // A week with no schedule row is treated as stale — never pushed.
+        bool IsPushable(int week) => periodEnds.TryGetValue(week, out var end) && now <= end + PushWindowAfterPeriodEnd;
         // The just-decided week is the one the live scoreboard holds; any team missing from it
         // (an older week catching up) falls back to its abbreviation.
         var teamNames = GameHelpers.GetTeamDisplayNames(await getScores());
@@ -36,13 +57,13 @@ public class WeekResultNotificationService(
         foreach (var league in leagues)
         {
             var leaderboard = await buildLeaderboard(league);
-            sentCount += await NotifyDecidedWeeksAsync(league.Id, league.LeagueName, season, periodLabel, teamNames, leaderboard);
+            sentCount += await NotifyDecidedWeeksAsync(league.Id, league.LeagueName, season, periodLabel, IsPushable, teamNames, leaderboard);
         }
         return sentCount;
     }
 
     private async Task<int> NotifyDecidedWeeksAsync(int leagueId, string leagueName, int season, Func<int, string> periodLabel,
-        IReadOnlyDictionary<string, string> teamNames, List<LeaderboardModel> leaderboard)
+        Func<int, bool> isPushable, IReadOnlyDictionary<string, string> teamNames, List<LeaderboardModel> leaderboard)
     {
         if (leaderboard.Count == 0) return 0;
 
@@ -52,6 +73,7 @@ public class WeekResultNotificationService(
         // never flip, so one dedup flag per (user, week) covers both cases with no schema change.
         var alreadySent = await leagueRepository.GetWeekResultNotificationsSentAsync(leagueId, season);
         var newlySent = new List<(string UserId, int Week)>();
+        var pushed = 0;
 
         foreach (var row in leaderboard)
         {
@@ -68,6 +90,10 @@ public class WeekResultNotificationService(
                 // corrected after the fact. Skip silently; once the data bug is fixed, the next
                 // score-ingestion run re-evaluates this week from scratch and can still notify.
                 if (weekResult.HadScoringError) continue;
+                if (!isPushable(weekResult.Week)) {
+                    newlySent.Add((row.User.Id, weekResult.Week));
+                    continue;
+                }
 
                 var label = periodLabel(weekResult.Week);
                 var payload = weekResult.WeekResult == WeekResult.Won
@@ -85,6 +111,7 @@ public class WeekResultNotificationService(
                 try {
                     await dispatcher.DispatchAsync(row.User.Id, p => p.NotifyWeekResult, payload);
                     newlySent.Add((row.User.Id, weekResult.Week));
+                    pushed++;
                 } catch (Exception ex) {
                     Log.Error(ex, "WeekResultNotificationService: dispatch failed for user {UserId}, league {LeagueId}, week {Week}",
                         row.User.Id, leagueId, weekResult.Week);
@@ -95,7 +122,7 @@ public class WeekResultNotificationService(
         if (newlySent.Count > 0)
             await leagueRepository.RecordWeekResultNotificationsSentAsync(newlySent, leagueId, season);
 
-        return newlySent.Count;
+        return pushed;
     }
 
     private static PushPayload BuildLostPayload(string leagueName, string label, IReadOnlyList<string> losingTeams) =>
