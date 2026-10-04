@@ -165,11 +165,11 @@ public class LivePickTransitionService(
                     });
                 }
                 if (mineTransition.NotifyTransition)
-                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, false), MinePayload(NameOf(pick.Pick.Team), covering, atFinal: false));
+                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, false), MinePayload(sport, NameOf(pick.Pick.Team), covering, atFinal: false));
                 // Independent of the above — fires once at final regardless of recent transition
                 // history, even if this tick's status flip happens to also be a cover-state flip.
                 if (mineTransition.NotifyFinal)
-                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, true), MinePayload(NameOf(pick.Pick.Team), covering, atFinal: true));
+                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, true), MinePayload(sport, NameOf(pick.Pick.Team), covering, atFinal: true));
 
                 // Record for the per-bet "others" pass below — every picker on the same
                 // (team, pickType) computes this exact same covering/isFinal, so only the picker
@@ -199,9 +199,9 @@ public class LivePickTransitionService(
 
                 var otherMembers = members.Where(m => !result.PickerUserIds.Contains(m.UserId)).ToList();
                 if (teamTransition.NotifyTransition)
-                    await NotifyOthersAsync(otherMembers, NameOf(bet.Team), result.Covering, result.PickerUserIds.Count, atFinal: false);
+                    await NotifyOthersAsync(sport, otherMembers, NameOf(bet.Team), result.Covering, result.PickerUserIds.Count, atFinal: false);
                 if (teamTransition.NotifyFinal)
-                    await NotifyOthersAsync(otherMembers, NameOf(bet.Team), result.Covering, result.PickerUserIds.Count, atFinal: true);
+                    await NotifyOthersAsync(sport, otherMembers, NameOf(bet.Team), result.Covering, result.PickerUserIds.Count, atFinal: true);
             }
         }
 
@@ -209,16 +209,16 @@ public class LivePickTransitionService(
         if (newTeamStates.Count > 0) await teamStateService.UpsertStatesAsync(newTeamStates);
     }
 
-    private async Task NotifyOthersAsync(List<LeagueUserMapping> otherMembers, string team, bool covering, int pickerCount, bool atFinal)
+    private async Task NotifyOthersAsync(LeagueType sport, List<LeagueUserMapping> otherMembers, string team, bool covering, int pickerCount, bool atFinal)
     {
         if (otherMembers.Count == 0) return;
-        var payload = OthersPayload(team, covering, pickerCount, atFinal);
+        var payload = OthersPayload(team, covering, pickerCount, atFinal) with { Sport = sport };
         await Task.WhenAll(otherMembers.Select(m => SafeDispatchAsync(m.UserId, OthersPreference(covering, atFinal), payload)));
     }
 
-    private static PushPayload MinePayload(string team, bool covering, bool atFinal) => atFinal
+    private static PushPayload MinePayload(LeagueType sport, string team, bool covering, bool atFinal) => (atFinal
         ? new PushPayload("IV League", covering ? $"{team} covered! Final. 🏆" : $"{team} didn't cover. Final. 💀")
-        : new PushPayload("IV League", covering ? $"{team} are covering! 🟢" : $"{team} are bloody right now 🔴");
+        : new PushPayload("IV League", covering ? $"{team} are covering! 🟢" : $"{team} are bloody right now 🔴")) with { Sport = sport };
 
     private static PushPayload OthersPayload(string team, bool covering, int pickerCount, bool atFinal)
     {

@@ -2,6 +2,7 @@ using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -86,5 +87,30 @@ public class NotificationDispatcherTests : IDisposable
             .DispatchAsync("user-1", p => p.NotifyWeekResult, new PushPayload("T", "B"));
 
         await _pushSender.DidNotReceive().SendAsync(Arg.Any<PushSubscription>(), Arg.Any<PushPayload>());
+    }
+
+    // Each installed app (NFL at ivleague.xyz, CFB at cfb.ivleague.xyz) registers its own
+    // subscription — an NFL alert must only reach the NFL app. A subscription saved before sport
+    // was tracked (null) keeps getting every sport, so nobody who enabled push loses anything.
+    private static List<PushSubscription> NflCfbAndUnlabeled() => [
+        new() { Id = 1, UserId = "user-1", Endpoint = "https://push.example/nfl", P256dh = "p", Auth = "a", Sport = LeagueType.Nfl },
+        new() { Id = 2, UserId = "user-1", Endpoint = "https://push.example/cfb", P256dh = "p", Auth = "a", Sport = LeagueType.Cfb },
+        new() { Id = 3, UserId = "user-1", Endpoint = "https://push.example/old", P256dh = "p", Auth = "a", Sport = null },
+    ];
+
+    [Theory]
+    [InlineData(LeagueType.Nfl, "https://push.example/nfl", "https://push.example/cfb")]
+    [InlineData(LeagueType.Cfb, "https://push.example/cfb", "https://push.example/nfl")]
+    public async Task DispatchAsync_SendsOnlyToThatSportsApp_PlusUnlabeledSubscriptions(LeagueType sport, string expected, string excluded)
+    {
+        _preferencesService.GetAsync("user-1").Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
+        _subscriptionService.GetForUserAsync("user-1").Returns(NflCfbAndUnlabeled());
+
+        await BuildDispatcher(isDevelopment: false, railwayEnvironmentName: "production")
+            .DispatchAsync("user-1", p => p.NotifyWeekResult, new PushPayload("T", "B", Sport: sport));
+
+        await _pushSender.Received(1).SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == expected), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _pushSender.Received(1).SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == "https://push.example/old"), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _pushSender.DidNotReceive().SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == excluded), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
     }
 }

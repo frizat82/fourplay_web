@@ -22,7 +22,11 @@ public class NotificationDispatcher(
         var preferences = await preferencesService.GetAsync(userId);
         if (!isEnabled(preferences)) return;
 
-        var subscriptions = await subscriptionService.GetForUserAsync(userId);
+        // Only the app for this push's sport (NFL vs CFB host) — plus devices saved before sport was
+        // tracked, which keep getting everything until their app re-registers.
+        var subscriptions = (await subscriptionService.GetForUserAsync(userId))
+            .Where(s => payload.Sport is null || s.Sport is null || s.Sport == payload.Sport)
+            .ToList();
         if (subscriptions.Count == 0) return;
 
         if (!DeploymentEnvironment.IsProduction(environment))

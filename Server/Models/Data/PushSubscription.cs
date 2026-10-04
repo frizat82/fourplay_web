@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 namespace FourPlayWebApp.Server.Models.Data;
 
 // One row per browser/device install that has granted Notification permission and subscribed via
@@ -11,6 +12,9 @@ public class PushSubscription {
     public string P256dh { get; set; } = string.Empty;
     public string Auth { get; set; } = string.Empty;
     public string? UserAgent { get; set; }
+    // Which app registered this device (NFL or CFB host). Null = saved before this was tracked —
+    // receives every sport the user is in until the app re-registers.
+    public LeagueType? Sport { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastSeenAt { get; set; }
 }

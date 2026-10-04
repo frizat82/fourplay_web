@@ -1,4 +1,5 @@
 using FourPlayWebApp.Server.Services;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -120,6 +121,27 @@ public class PushSubscriptionServiceTests
         await SqliteTestDb.WithDb(nameof(UnsubscribeAsync_NonExistentEndpoint_DoesNotThrow), async factory =>
         {
             await new PushSubscriptionService(factory).UnsubscribeAsync("alice", "https://push.example/does-not-exist");
+        });
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_StoresTheSportTheAppRegisteredFrom_AndAnOlderClientOmittingItDoesNotWipeIt()
+    {
+        var db = nameof(SubscribeAsync_StoresTheSportTheAppRegisteredFrom_AndAnOlderClientOmittingItDoesNotWipeIt);
+        await SqliteTestDb.WithDb(db, async factory =>
+        {
+            await using (var seed = SqliteTestDb.Open(db))
+                await SqliteTestDb.SeedUser(seed, "alice");
+
+            var service = new PushSubscriptionService(factory);
+            await service.SubscribeAsync("alice", "https://push.example/ep1", "p", "a", null, LeagueType.Cfb);
+            await using (var afterFirst = SqliteTestDb.Open(db))
+                Assert.Equal(LeagueType.Cfb, (await afterFirst.PushSubscriptions.SingleAsync()).Sport);
+
+            await service.SubscribeAsync("alice", "https://push.example/ep1", "p", "a", null, sport: null);
+
+            await using var verify = SqliteTestDb.Open(db);
+            Assert.Equal(LeagueType.Cfb, (await verify.PushSubscriptions.SingleAsync()).Sport);
         });
     }
 }

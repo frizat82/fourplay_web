@@ -4,6 +4,7 @@ using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
@@ -99,12 +100,12 @@ public class NotificationsControllerTests
     [Fact]
     public async Task Subscribe_ValidRequest_CallsServiceForTheCaller()
     {
-        var request = new PushSubscriptionRequestDto { Endpoint = "https://push.example/ep1", P256dh = "p", Auth = "a", UserAgent = "ua" };
+        var request = new PushSubscriptionRequestDto { Endpoint = "https://push.example/ep1", P256dh = "p", Auth = "a", UserAgent = "ua", Sport = LeagueType.Cfb };
 
         var result = await BuildController("user-1").Subscribe(request);
 
         Assert.IsType<NoContentResult>(result);
-        await _subscriptionService.Received(1).SubscribeAsync("user-1", "https://push.example/ep1", "p", "a", "ua");
+        await _subscriptionService.Received(1).SubscribeAsync("user-1", "https://push.example/ep1", "p", "a", "ua", LeagueType.Cfb);
     }
 
     [Theory]

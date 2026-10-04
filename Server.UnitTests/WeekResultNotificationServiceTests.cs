@@ -199,7 +199,7 @@ public class WeekResultNotificationServiceTests
 
         Assert.Equal(1, sent);
         await _dispatcher.Received(1).DispatchAsync("cfb-user", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
-            Arg.Is<PushPayload>(p => p.Body.StartsWith("CFB Week 9:") && p.Body.Contains("You Won the Week") && !p.Body.Contains("Slate")), Arg.Any<CancellationToken>());
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("CFB Week 9:") && p.Body.Contains("You Won the Week") && !p.Body.Contains("Slate") && p.Sport == LeagueType.Cfb), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -231,7 +231,7 @@ public class WeekResultNotificationServiceTests
         await BuildService().CheckNflWeekResultsAsync(2026);
 
         await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
-            Arg.Is<PushPayload>(p => p.Body.StartsWith("NFL Week 5:")), Arg.Any<CancellationToken>());
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("NFL Week 5:") && p.Sport == LeagueType.Nfl), Arg.Any<CancellationToken>());
     }
 
     [Fact]
