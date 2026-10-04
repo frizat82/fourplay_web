@@ -48,7 +48,7 @@ public class NotificationsController(
         if (string.IsNullOrWhiteSpace(request.Endpoint) || string.IsNullOrWhiteSpace(request.P256dh) || string.IsNullOrWhiteSpace(request.Auth))
             return BadRequest("Endpoint, P256dh, and Auth are required.");
 
-        await subscriptionService.SubscribeAsync(CurrentUserId, request.Endpoint, request.P256dh, request.Auth, request.UserAgent);
+        await subscriptionService.SubscribeAsync(CurrentUserId, request.Endpoint, request.P256dh, request.Auth, request.UserAgent, request.Sport);
         return NoContent();
     }
 

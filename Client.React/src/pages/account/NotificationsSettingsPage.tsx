@@ -29,6 +29,7 @@ import {
   toSubscriptionRequest,
 } from '../../services/push';
 import { useToast } from '../../services/toast';
+import { useSportContext } from '../../services/sport';
 
 const schema = z.object({
   notifyMineBloodyDuringGame: z.boolean(),
@@ -93,6 +94,7 @@ const SECTIONS: {
 
 export default function NotificationsSettingsPage() {
   const toast = useToast();
+  const { sport } = useSportContext();
   const [pushStatus, setPushStatus] = useState<PushStatus>('checking');
   const [pushBusy, setPushBusy] = useState(false);
 
@@ -132,7 +134,7 @@ export default function NotificationsSettingsPage() {
         // PushSubscriptionService.SubscribeAsync's re-home comment), so "enabled" here always
         // means "enabled for the current user," not just "a subscription object exists."
         try {
-          await subscribeToPush(toSubscriptionRequest(existing));
+          await subscribeToPush(toSubscriptionRequest(existing, sport));
         } catch {
           // Best-effort — a transient network failure here shouldn't block showing the toggle.
         }
@@ -142,7 +144,7 @@ export default function NotificationsSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sport]);
 
   const handleEnablePush = async () => {
     setPushBusy(true);
@@ -155,7 +157,7 @@ export default function NotificationsSettingsPage() {
       const registration = await registerServiceWorker();
       const { publicKey } = await getVapidPublicKey();
       const subscription = await subscribeBrowserToPush(registration, publicKey);
-      await subscribeToPush(toSubscriptionRequest(subscription));
+      await subscribeToPush(toSubscriptionRequest(subscription, sport));
       setPushStatus('enabled');
       toast.push('Push notifications enabled', 'success');
     } catch {

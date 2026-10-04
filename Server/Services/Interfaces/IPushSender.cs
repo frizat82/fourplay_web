@@ -1,8 +1,10 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Models.Data;
 
 namespace FourPlayWebApp.Server.Services.Interfaces;
 
-public record PushPayload(string Title, string Body, string? Url = null);
+// Sport routes the push to that sport's app only (null = every app, e.g. the admin test push).
+public record PushPayload(string Title, string Body, string? Url = null, LeagueType? Sport = null);
 
 public interface IPushSender
 {

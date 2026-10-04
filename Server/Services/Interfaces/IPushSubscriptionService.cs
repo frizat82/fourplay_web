@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Models.Data;
 
 namespace FourPlayWebApp.Server.Services.Interfaces;
@@ -10,7 +11,7 @@ public interface IPushSubscriptionService
     /// Creates or updates (by Endpoint, which is unique per browser install) the caller's
     /// subscription row. Re-subscribing the same device is an upsert, never a duplicate.
     /// </summary>
-    Task SubscribeAsync(string userId, string endpoint, string p256dh, string auth, string? userAgent);
+    Task SubscribeAsync(string userId, string endpoint, string p256dh, string auth, string? userAgent, LeagueType? sport = null);
 
     /// <summary>
     /// Deletes the subscription for this endpoint, scoped to the caller — a non-matching or

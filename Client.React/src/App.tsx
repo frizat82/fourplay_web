@@ -15,6 +15,7 @@ import { useSportContext } from './services/sport';
 import { createNflAdapter } from './services/nflAdapter';
 import { createCfbAdapter } from './services/cfbAdapter';
 import type { SportAdapter } from './services/sportAdapter';
+import { usePushSubscriptionSync } from './services/usePushSubscriptionSync';
 
 // Route-level code splitting. Home, Picks, Scores and Rules (the pages people cold-load most, on phones)
 // stay in the entry chunk; everything else — account/auth forms (which pull in zod and
@@ -70,6 +71,10 @@ function AdapterRoute({ page: Page }: { page: ComponentType<{ adapter: SportAdap
 }
 
 export default function App() {
+  const { user } = useAuth();
+  const { sport } = useSportContext();
+  usePushSubscriptionSync(!!user, sport);
+
   // Warm the Leaderboard chunk after first paint so tapping its nav tab doesn't wait on a fetch.
   useEffect(() => {
     const id = setTimeout(() => void loadLeaderboardPage().catch(() => {}), 3000);

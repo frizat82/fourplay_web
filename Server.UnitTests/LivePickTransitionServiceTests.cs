@@ -181,10 +181,10 @@ public class LivePickTransitionServiceTests
 
         await _dispatcher.Received(1).DispatchAsync("user-1",
             Arg.Is<Func<NotificationPreferencesDto, bool>>(f => PredicateMatches(f, new NotificationPreferencesDto { NotifyMineBloodyDuringGame = true })),
-            Arg.Is<PushPayload>(p => p.Body.StartsWith("Kansas City Chiefs ")), Arg.Any<CancellationToken>());
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("Kansas City Chiefs ") && p.Sport == LeagueType.Nfl), Arg.Any<CancellationToken>());
         await _dispatcher.Received(1).DispatchAsync("user-2",
             Arg.Is<Func<NotificationPreferencesDto, bool>>(f => PredicateMatches(f, new NotificationPreferencesDto { NotifyOthersBloodyDuringGame = true })),
-            Arg.Is<PushPayload>(p => p.Body.Contains("Kansas City Chiefs") && !p.Body.Contains("KC ") && p.Body.Contains("1 user picked")),
+            Arg.Is<PushPayload>(p => p.Body.Contains("Kansas City Chiefs") && !p.Body.Contains("KC ") && p.Body.Contains("1 user picked") && p.Sport == LeagueType.Nfl),
             Arg.Any<CancellationToken>());
         await _dispatcher.Received(2).DispatchAsync(Arg.Any<string>(), Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
     }

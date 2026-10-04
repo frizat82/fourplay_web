@@ -15,6 +15,8 @@ export interface PushSubscriptionRequestDto {
   p256dh: string;
   auth: string;
   userAgent?: string | null;
+  /** LeagueType of the app this was made from: 0 = NFL, 1 = CFB. Routes each sport's pushes to its own app. */
+  sport?: 0 | 1 | null;
 }
 
 export interface UnsubscribeRequestDto {

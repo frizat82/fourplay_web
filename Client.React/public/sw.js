@@ -83,6 +83,8 @@ self.addEventListener('pushsubscriptionchange', (event) => {
             endpoint: newSubscription.endpoint,
             p256dh: (json.keys && json.keys.p256dh) || '',
             auth: (json.keys && json.keys.auth) || '',
+            // Same host-based sport detection as services/sport.tsx — 0 = NFL, 1 = CFB.
+            sport: self.location.hostname.startsWith('cfb.') ? 1 : 0,
           }),
         }),
       ];
