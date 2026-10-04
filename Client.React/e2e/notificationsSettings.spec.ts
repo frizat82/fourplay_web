@@ -23,11 +23,9 @@ test.describe('Notifications settings page (authenticated)', () => {
     await page.getByLabel(/notify me about my games/i).click();
     await expect(page.getByLabel(/notify me about my games/i)).toBeChecked();
 
-    // Two independent "Advanced" accordions now, one under each simple toggle — expand "My
-    // games"'s (the first one in the DOM).
-    await page.getByText(/advanced: when exactly/i).first().click();
-    await expect(page.getByLabel(/my games: covering during game/i)).toBeVisible();
-    await expect(page.getByLabel(/my games: bloody at final/i)).toBeVisible();
+    await page.getByText(/^advanced$/i).first().click();
+    await expect(page.getByLabel(/^my games: covering$/i)).toBeVisible();
+    await expect(page.getByLabel(/^my games: bloody$/i)).toBeVisible();
 
     await page.getByRole('button', { name: /save preferences/i }).click();
     await expect(page.getByText(/notification preferences saved/i)).toBeVisible({ timeout: 5000 });

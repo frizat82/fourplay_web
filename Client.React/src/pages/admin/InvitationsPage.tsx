@@ -200,7 +200,7 @@ export default function AdminInvitationsPage() {
         <Typography variant="h6" sx={{ mb: 2 }}>
           All Invitations
         </Typography>
-        <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+        <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap" sx={{ mb: 2 }}>
           <Button variant="outlined" onClick={() => setShowUsed((prev) => !prev)}>
             {showUsed ? 'Hide Used' : 'Show Used'}
           </Button>

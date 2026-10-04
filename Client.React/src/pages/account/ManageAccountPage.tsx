@@ -37,7 +37,7 @@ export default function ManageAccountPage() {
           )}
         </Grid>
         <Divider sx={{ my: 3 }} />
-        <Stack direction="row" spacing={2}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           <Button variant="contained" onClick={() => navigate('/account/manage/changepassword')}>
             Change Password
           </Button>
