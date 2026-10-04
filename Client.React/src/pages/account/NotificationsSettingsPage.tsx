@@ -75,9 +75,8 @@ const OTHERS_FIELDS: ToggleFieldName[] = [
 ];
 
 // A small labeled table instead of 4 identically-captioned "During game"/"At final" switches
-// distinguished only by color — row labels ("Covering"/"Bloody") make the color a reinforcement,
-// never the only signal, and column headers ("During game"/"At final") are stated once instead of
-// repeated on every row.
+// distinguished only by color — the row label ("Covering"/"Bloody") makes the color a
+// reinforcement, never the only signal.
 function OutcomeToggleGrid({ control, sectionLabel, duringField, duringLabel, finalField, finalLabel, color }: {
   control: Control<FormValues>;
   sectionLabel: string;
