@@ -6,14 +6,16 @@ import type {
   UnsubscribeRequestDto,
   VapidPublicKeyDto,
 } from '../types/notifications';
+import { toLeagueType, type SportType } from '../services/sport';
 
-export async function getNotificationPreferences() {
-  const { data } = await http.get<NotificationPreferencesDto>('/api/notifications/preferences');
+// Each app (NFL / CFB host) has its own notification settings.
+export async function getNotificationPreferences(sport: SportType) {
+  const { data } = await http.get<NotificationPreferencesDto>('/api/notifications/preferences', { params: { sport: toLeagueType(sport) } });
   return data;
 }
 
-export async function putNotificationPreferences(payload: NotificationPreferencesDto) {
-  const { data } = await http.put<NotificationPreferencesDto>('/api/notifications/preferences', payload);
+export async function putNotificationPreferences(sport: SportType, payload: NotificationPreferencesDto) {
+  const { data } = await http.put<NotificationPreferencesDto>('/api/notifications/preferences', payload, { params: { sport: toLeagueType(sport) } });
   return data;
 }
 

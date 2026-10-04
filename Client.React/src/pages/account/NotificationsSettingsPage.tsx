@@ -108,7 +108,7 @@ export default function NotificationsSettingsPage() {
     resolver: zodResolver(schema),
     defaultValues: async () => {
       try {
-        return { ...DEFAULT_VALUES, ...(await getNotificationPreferences()) };
+        return { ...DEFAULT_VALUES, ...(await getNotificationPreferences(sport)) };
       } catch {
         return DEFAULT_VALUES;
       }
@@ -186,7 +186,7 @@ export default function NotificationsSettingsPage() {
 
   const onSubmit = async (values: FormValues) => {
     try {
-      await putNotificationPreferences(values);
+      await putNotificationPreferences(sport, values);
       toast.push('Notification preferences saved', 'success');
     } catch {
       toast.push('Error saving notification preferences', 'error');
@@ -229,7 +229,12 @@ export default function NotificationsSettingsPage() {
 
   return (
     <Stack spacing={3} sx={{ maxWidth: 640, margin: '0 auto', paddingTop: 6 }}>
-      <Typography variant="h5">Notifications</Typography>
+      <div>
+        <Typography variant="h5">Notifications</Typography>
+        <Typography variant="body2" color="text.secondary">
+          These settings only apply to the {sport === 'CFB' ? 'college football' : 'NFL'} app — each IV League app has its own.
+        </Typography>
+      </div>
 
       <Card>
         <CardContent>

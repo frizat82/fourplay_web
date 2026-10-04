@@ -2,6 +2,9 @@ import { createContext, useContext, useMemo } from 'react';
 
 export type SportType = 'NFL' | 'CFB';
 
+/** The server's LeagueType enum value for a sport: 0 = NFL, 1 = CFB. */
+export const toLeagueType = (sport: SportType): 0 | 1 => (sport === 'CFB' ? 1 : 0);
+
 interface SportsContextValue {
   sport: SportType;
   isCfb: boolean;

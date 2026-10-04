@@ -13,6 +13,6 @@ public class NotificationPreferencesConfiguration : IEntityTypeConfiguration<Not
             .HasColumnType("timestamptz")
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-        entity.HasIndex(e => e.UserId).IsUnique();
+        entity.HasIndex(e => new { e.UserId, e.Sport }).IsUnique();
     }
 }
