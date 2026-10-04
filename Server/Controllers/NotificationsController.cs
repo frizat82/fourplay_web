@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using System.Security.Claims;
 using FourPlayWebApp.Server.Auth;
 using FourPlayWebApp.Server.Services;
@@ -20,15 +21,15 @@ public class NotificationsController(
     private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
     [HttpGet("preferences")]
-    public async Task<ActionResult<NotificationPreferencesDto>> GetPreferences()
+    public async Task<ActionResult<NotificationPreferencesDto>> GetPreferences([FromQuery] LeagueType sport = LeagueType.Nfl)
     {
-        return Ok(await preferencesService.GetAsync(CurrentUserId));
+        return Ok(await preferencesService.GetAsync(CurrentUserId, sport));
     }
 
     [HttpPut("preferences")]
-    public async Task<ActionResult<NotificationPreferencesDto>> PutPreferences([FromBody] NotificationPreferencesDto preferences)
+    public async Task<ActionResult<NotificationPreferencesDto>> PutPreferences([FromQuery] LeagueType sport, [FromBody] NotificationPreferencesDto preferences)
     {
-        return Ok(await preferencesService.UpsertAsync(CurrentUserId, preferences));
+        return Ok(await preferencesService.UpsertAsync(CurrentUserId, sport, preferences));
     }
 
     [HttpGet("vapid-public-key")]

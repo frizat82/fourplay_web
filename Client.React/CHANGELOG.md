@@ -6,7 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-10-04
 
-- Fixed: if you only have one IV League app installed (NFL or college), you now get alerts for both sports there instead of missing the other sport's alerts
+- Changed: the NFL and college apps now each have their own notification settings, and each app only gets its own sport's alerts — turn on push in the NFL app for NFL alerts and in the college app for college alerts (your existing settings were copied to both)
 - Fixed: NFL notifications also arrived on the college app (and vice versa) when both were installed — each app now only gets its own sport's alerts
 - Fixed: the first week-result notification run of the season sent a push for every already-finished week (Weeks 1-4) — a week's result can now only be pushed within 48 hours of that week ending, never later
 - Improved: in dark mode, team logos switch to ESPN's dark-background versions (NFL and college), so logos with dark lettering like Ohio State's stay readable

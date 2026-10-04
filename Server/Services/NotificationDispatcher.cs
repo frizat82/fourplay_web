@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 using Microsoft.AspNetCore.Hosting;
@@ -19,17 +20,15 @@ public class NotificationDispatcher(
     // the pipe in any environment, not a real trigger this gate needs to protect against.
     public async Task DispatchAsync(string userId, Func<NotificationPreferencesDto, bool> isEnabled, PushPayload payload, CancellationToken cancellationToken = default)
     {
-        var preferences = await preferencesService.GetAsync(userId);
+        // Each sport has its own settings; every real trigger sets the payload's sport.
+        var preferences = await preferencesService.GetAsync(userId, payload.Sport ?? LeagueType.Nfl);
         if (!isEnabled(preferences)) return;
 
-        // Prefer the app for this push's sport (NFL vs CFB host), plus untagged devices, so a user
-        // with both apps gets it once, in the right one. A user with only the other sport's app
-        // still gets it there — a push is never dropped for lack of a matching app.
-        var allSubscriptions = await subscriptionService.GetForUserAsync(userId);
-        var matching = allSubscriptions
-            .Where(s => payload.Sport is null || s.Sport is null || s.Sport == payload.Sport)
+        // Only the app for this push's sport (NFL vs CFB host) — each app has its own settings and
+        // its own push permission, so an NFL alert never shows up in the college app or vice versa.
+        var subscriptions = (await subscriptionService.GetForUserAsync(userId))
+            .Where(s => payload.Sport is null || s.Sport == payload.Sport)
             .ToList();
-        var subscriptions = matching.Count > 0 ? matching : allSubscriptions;
         if (subscriptions.Count == 0) return;
 
         if (!DeploymentEnvironment.IsProduction(environment))

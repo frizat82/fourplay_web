@@ -1,7 +1,7 @@
 import type { PushSubscriptionRequestDto } from '../types/notifications';
 import { isStandalonePwa } from '../utils/pwa';
 import { decodeBase64Url } from '../utils/base64';
-import type { SportType } from './sport';
+import { toLeagueType, type SportType } from './sport';
 
 export function isPushSupported(): boolean {
   return (
@@ -63,7 +63,7 @@ export async function subscribeBrowserToPush(
 export function toSubscriptionRequest(subscription: PushSubscription, sport: SportType): PushSubscriptionRequestDto {
   const json = subscription.toJSON();
   return {
-    sport: sport === 'CFB' ? 1 : 0,
+    sport: toLeagueType(sport),
     endpoint: subscription.endpoint,
     p256dh: json.keys?.p256dh ?? '',
     auth: json.keys?.auth ?? '',

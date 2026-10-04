@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 
 namespace FourPlayWebApp.Server.Services.Interfaces;
@@ -5,9 +6,9 @@ namespace FourPlayWebApp.Server.Services.Interfaces;
 public interface INotificationPreferencesService
 {
     /// <summary>Returns the user's saved preferences, or all-off defaults if no row exists yet.</summary>
-    Task<NotificationPreferencesDto> GetAsync(string userId);
+    Task<NotificationPreferencesDto> GetAsync(string userId, LeagueType sport);
 
-    Task<NotificationPreferencesDto> UpsertAsync(string userId, NotificationPreferencesDto preferences);
+    Task<NotificationPreferencesDto> UpsertAsync(string userId, LeagueType sport, NotificationPreferencesDto preferences);
 
     /// <summary>
     /// Cheap short-circuit for LivePickTransitionService: true if ANY user has ANY of the 8 live

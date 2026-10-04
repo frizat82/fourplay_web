@@ -40,7 +40,7 @@ public class NotificationDispatcherTests : IDisposable
     [Fact]
     public async Task DispatchAsync_WhenToggleDisabled_NeverLoadsSubscriptions_NeverSends()
     {
-        _preferencesService.GetAsync("user-1").Returns(new NotificationPreferencesDto { NotifyWeekResult = false });
+        _preferencesService.GetAsync("user-1", Arg.Any<LeagueType>()).Returns(new NotificationPreferencesDto { NotifyWeekResult = false });
 
         await BuildDispatcher(isDevelopment: false, railwayEnvironmentName: "production")
             .DispatchAsync("user-1", p => p.NotifyWeekResult, new PushPayload("T", "B"));
@@ -52,7 +52,7 @@ public class NotificationDispatcherTests : IDisposable
     [Fact]
     public async Task DispatchAsync_WhenToggleEnabled_ButNoSubscribedDevices_DoesNotSend()
     {
-        _preferencesService.GetAsync("user-1").Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
+        _preferencesService.GetAsync("user-1", Arg.Any<LeagueType>()).Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
         _subscriptionService.GetForUserAsync("user-1").Returns([]);
 
         await BuildDispatcher(isDevelopment: false, railwayEnvironmentName: "production")
@@ -64,7 +64,7 @@ public class NotificationDispatcherTests : IDisposable
     [Fact]
     public async Task DispatchAsync_InProduction_SendsToEveryDevice()
     {
-        _preferencesService.GetAsync("user-1").Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
+        _preferencesService.GetAsync("user-1", Arg.Any<LeagueType>()).Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
         var subscriptions = OneSubscription();
         _subscriptionService.GetForUserAsync("user-1").Returns(subscriptions);
 
@@ -80,7 +80,7 @@ public class NotificationDispatcherTests : IDisposable
     [InlineData(true, null)]           // local dev run: IsDevelopment()=true, no Railway var at all
     public async Task DispatchAsync_OutsideProduction_SuppressesSend_ButStillConsumesTheToggleCheck(bool isDevelopment, string? railwayEnvironmentName)
     {
-        _preferencesService.GetAsync("user-1").Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
+        _preferencesService.GetAsync("user-1", Arg.Any<LeagueType>()).Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
         _subscriptionService.GetForUserAsync("user-1").Returns(OneSubscription());
 
         await BuildDispatcher(isDevelopment, railwayEnvironmentName)
@@ -90,8 +90,7 @@ public class NotificationDispatcherTests : IDisposable
     }
 
     // Each installed app (NFL at ivleague.xyz, CFB at cfb.ivleague.xyz) registers its own
-    // subscription — an NFL alert must only reach the NFL app. A subscription saved before sport
-    // was tracked (null) keeps getting every sport, so nobody who enabled push loses anything.
+    // subscription — an NFL alert must only ever reach the NFL app.
     private static List<PushSubscription> NflCfbAndUnlabeled() => [
         new() { Id = 1, UserId = "user-1", Endpoint = "https://push.example/nfl", P256dh = "p", Auth = "a", Sport = LeagueType.Nfl },
         new() { Id = 2, UserId = "user-1", Endpoint = "https://push.example/cfb", P256dh = "p", Auth = "a", Sport = LeagueType.Cfb },
@@ -101,25 +100,25 @@ public class NotificationDispatcherTests : IDisposable
     [Theory]
     [InlineData(LeagueType.Nfl, "https://push.example/nfl", "https://push.example/cfb")]
     [InlineData(LeagueType.Cfb, "https://push.example/cfb", "https://push.example/nfl")]
-    public async Task DispatchAsync_SendsOnlyToThatSportsApp_PlusUnlabeledSubscriptions(LeagueType sport, string expected, string excluded)
+    public async Task DispatchAsync_SendsOnlyToThatSportsApp(LeagueType sport, string expected, string excluded)
     {
-        _preferencesService.GetAsync("user-1").Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
+        _preferencesService.GetAsync("user-1", Arg.Any<LeagueType>()).Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
         _subscriptionService.GetForUserAsync("user-1").Returns(NflCfbAndUnlabeled());
 
         await BuildDispatcher(isDevelopment: false, railwayEnvironmentName: "production")
             .DispatchAsync("user-1", p => p.NotifyWeekResult, new PushPayload("T", "B", Sport: sport));
 
         await _pushSender.Received(1).SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == expected), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
-        await _pushSender.Received(1).SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == "https://push.example/old"), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _pushSender.DidNotReceive().SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == "https://push.example/old"), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
         await _pushSender.DidNotReceive().SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == excluded), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
     }
 
-    // Many users install only one app but are in both sports' leagues — a push must never be
-    // dropped just because the user has no app for that sport (a real NFL alert was, 2026-10-04).
+    // Owner's rule: notifications only go to the proper app for that sport — a user who only
+    // enabled push in the college app gets no NFL alerts there.
     [Fact]
-    public async Task DispatchAsync_UserWithOnlyTheOtherSportsApp_StillGetsThePush()
+    public async Task DispatchAsync_UserWithOnlyTheOtherSportsApp_DoesNotGetThePush()
     {
-        _preferencesService.GetAsync("user-1").Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
+        _preferencesService.GetAsync("user-1", Arg.Any<LeagueType>()).Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
         _subscriptionService.GetForUserAsync("user-1").Returns([
             new PushSubscription { Id = 1, UserId = "user-1", Endpoint = "https://push.example/cfb", P256dh = "p", Auth = "a", Sport = LeagueType.Cfb },
         ]);
@@ -127,6 +126,21 @@ public class NotificationDispatcherTests : IDisposable
         await BuildDispatcher(isDevelopment: false, railwayEnvironmentName: "production")
             .DispatchAsync("user-1", p => p.NotifyWeekResult, new PushPayload("T", "B", Sport: LeagueType.Nfl));
 
-        await _pushSender.Received(1).SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == "https://push.example/cfb"), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+        await _pushSender.DidNotReceive().SendAsync(Arg.Any<PushSubscription>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DispatchAsync_UsesTheSettingsForTheAlertsSport()
+    {
+        _preferencesService.GetAsync("user-1", LeagueType.Nfl).Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
+        _preferencesService.GetAsync("user-1", LeagueType.Cfb).Returns(new NotificationPreferencesDto { NotifyWeekResult = false });
+        _subscriptionService.GetForUserAsync("user-1").Returns(NflCfbAndUnlabeled());
+        var dispatcher = BuildDispatcher(isDevelopment: false, railwayEnvironmentName: "production");
+
+        await dispatcher.DispatchAsync("user-1", p => p.NotifyWeekResult, new PushPayload("T", "college", Sport: LeagueType.Cfb));
+        await dispatcher.DispatchAsync("user-1", p => p.NotifyWeekResult, new PushPayload("T", "nfl", Sport: LeagueType.Nfl));
+
+        await _pushSender.Received(1).SendAsync(Arg.Any<PushSubscription>(), Arg.Is<PushPayload>(p => p.Body == "nfl"), Arg.Any<CancellationToken>());
+        await _pushSender.DidNotReceive().SendAsync(Arg.Any<PushSubscription>(), Arg.Is<PushPayload>(p => p.Body == "college"), Arg.Any<CancellationToken>());
     }
 }

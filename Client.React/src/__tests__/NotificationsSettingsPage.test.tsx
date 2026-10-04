@@ -93,6 +93,7 @@ describe('NotificationsSettingsPage', () => {
 
     await waitFor(() => {
       expect(mockedPutPreferences).toHaveBeenCalledWith(
+        'CFB',
         expect.objectContaining({
           notifyMineBloodyDuringGame: true,
           notifyMineBloodyAtFinal: true,
@@ -131,6 +132,7 @@ describe('NotificationsSettingsPage', () => {
 
     await waitFor(() => {
       expect(mockedPutPreferences).toHaveBeenCalledWith(
+        'CFB',
         expect.objectContaining({
           notifyMineBloodyDuringGame: false,
           notifyMineBloodyAtFinal: false,
@@ -161,6 +163,15 @@ describe('NotificationsSettingsPage', () => {
     expect(screen.queryAllByLabelText(/during game|at final/i)).toHaveLength(0);
     // 3 top-level toggles + 2 per section's Advanced = 7 switches total.
     expect(screen.getAllByRole('switch', { hidden: true })).toHaveLength(7);
+  });
+
+  it("loads this app's sport's own settings and says which sport they apply to", async () => {
+    mockedGetPreferences.mockResolvedValue(ALL_OFF);
+
+    render(<NotificationsSettingsPage />);
+
+    await waitFor(() => expect(mockedGetPreferences).toHaveBeenCalledWith('CFB'));
+    expect(screen.getByText(/only apply to the college football app/i)).toBeInTheDocument();
   });
 
   it('shows an error toast when saving fails', async () => {
