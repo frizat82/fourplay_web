@@ -113,4 +113,20 @@ public class NotificationDispatcherTests : IDisposable
         await _pushSender.Received(1).SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == "https://push.example/old"), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
         await _pushSender.DidNotReceive().SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == excluded), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
     }
+
+    // Many users install only one app but are in both sports' leagues — a push must never be
+    // dropped just because the user has no app for that sport (a real NFL alert was, 2026-10-04).
+    [Fact]
+    public async Task DispatchAsync_UserWithOnlyTheOtherSportsApp_StillGetsThePush()
+    {
+        _preferencesService.GetAsync("user-1").Returns(new NotificationPreferencesDto { NotifyWeekResult = true });
+        _subscriptionService.GetForUserAsync("user-1").Returns([
+            new PushSubscription { Id = 1, UserId = "user-1", Endpoint = "https://push.example/cfb", P256dh = "p", Auth = "a", Sport = LeagueType.Cfb },
+        ]);
+
+        await BuildDispatcher(isDevelopment: false, railwayEnvironmentName: "production")
+            .DispatchAsync("user-1", p => p.NotifyWeekResult, new PushPayload("T", "B", Sport: LeagueType.Nfl));
+
+        await _pushSender.Received(1).SendAsync(Arg.Is<PushSubscription>(s => s.Endpoint == "https://push.example/cfb"), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
+    }
 }
