@@ -46,13 +46,24 @@ async function fetchJson(url) {
   return res.json();
 }
 
-async function loadEspnTeams(sportPath) {
-  const data = await fetchJson(`https://site.api.espn.com/apis/site/v2/sports/football/${sportPath}/teams?limit=1000`);
-  const teams = data.sports[0].leagues[0].teams.map((t) => t.team);
+async function loadEspnTeams(sportPath, { includeScoreboardAbbrs = false } = {}) {
+  const base = `https://site.api.espn.com/apis/site/v2/sports/football/${sportPath}/teams`;
+  const data = await fetchJson(`${base}?limit=1000`);
+  const teams = data.sports[0].leagues[0].teams.map((t) => t.team).filter((t) => t.logos?.[0]?.href);
   const byAbbr = new Map();
-  for (const t of teams) {
-    const logo = t.logos?.[0]?.href;
-    if (logo) byAbbr.set(t.abbreviation.toUpperCase(), logo);
+  for (const t of teams) byAbbr.set(t.abbreviation.toUpperCase(), t.logos[0].href);
+
+  // The /teams list and the scoreboard (what our games store) disagree for some schools — e.g.
+  // Air Force is AF in the list but AFA on the scoreboard. The per-team endpoint returns the
+  // scoreboard code, so save each logo under that too, or those teams silently get no logo.
+  if (includeScoreboardAbbrs) {
+    for (let i = 0; i < teams.length; i += CONCURRENCY) {
+      await Promise.all(teams.slice(i, i + CONCURRENCY).map(async (t) => {
+        const detail = await fetchJson(`${base}/${t.id}`);
+        const abbr = detail.team.abbreviation.toUpperCase();
+        if (!byAbbr.has(abbr)) byAbbr.set(abbr, t.logos[0].href);
+      }));
+    }
   }
   return byAbbr;
 }
@@ -102,7 +113,7 @@ async function main() {
   console.log('Fetching ESPN NFL + CFB team lists...');
   const [nflTeams, cfbTeams] = await Promise.all([
     loadEspnTeams('nfl'),
-    loadEspnTeams('college-football'),
+    loadEspnTeams('college-football', { includeScoreboardAbbrs: true }),
   ]);
 
   await Promise.all([
@@ -111,7 +122,11 @@ async function main() {
   ]);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+module.exports = { loadEspnTeams };
