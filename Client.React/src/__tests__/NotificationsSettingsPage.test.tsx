@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import NotificationsSettingsPage from '../pages/account/NotificationsSettingsPage';
@@ -121,10 +121,12 @@ describe('NotificationsSettingsPage', () => {
     render(<NotificationsSettingsPage />);
     await waitFor(() => expect(screen.getByRole('button', { name: /save preferences/i })).not.toBeDisabled());
 
-    await userEvent.click(screen.getByText(/advanced/i));
-    const mineSection = screen.getByText(/my picks/i).closest('div') as HTMLElement;
-    const firstDuringGameToggle = within(mineSection).getAllByLabelText(/during game/i)[0];
-    await userEvent.click(firstDuringGameToggle);
+    // Two independent "Advanced" accordions now, one under "My games" and one under "League
+    // activity" (frizat: moved so Advanced detail sits next to the simple toggle it refines,
+    // instead of one shared accordion covering both). Expand the first ("My games") one.
+    const [mineAdvanced] = screen.getAllByText(/advanced: when exactly/i);
+    await userEvent.click(mineAdvanced);
+    await userEvent.click(screen.getByLabelText(/my games: bloody during game/i));
 
     await userEvent.click(screen.getByRole('button', { name: /save preferences/i }));
 
@@ -137,6 +139,28 @@ describe('NotificationsSettingsPage', () => {
         })
       );
     });
+  });
+
+  it('labels each advanced toggle uniquely by section, outcome, and timing — never color alone', async () => {
+    // Four switches per section share the visible "During game"/"At final" label and are only
+    // visually distinguished by color (green=Covering, red=Bloody) — the accessible name must
+    // still disambiguate all 8 so screen-reader users (and tests) aren't relying on color.
+    mockedGetPreferences.mockResolvedValue(ALL_OFF);
+
+    render(<NotificationsSettingsPage />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /save preferences/i })).not.toBeDisabled());
+
+    const [mineAdvanced, othersAdvanced] = screen.getAllByText(/advanced: when exactly/i);
+    await userEvent.click(mineAdvanced);
+    await userEvent.click(othersAdvanced);
+
+    for (const section of ['My games', 'League activity']) {
+      for (const outcome of ['Covering', 'Bloody']) {
+        for (const timing of ['During game', 'At final']) {
+          expect(screen.getByLabelText(new RegExp(`${section}: ${outcome} ${timing}`, 'i'))).toBeInTheDocument();
+        }
+      }
+    }
   });
 
   it('shows an error toast when saving fails', async () => {

@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-10-04
+
+- Improved: the Notifications settings page's Advanced sections now live directly under "Notify me about my games" and "Notify me about league activity" instead of one shared Advanced section covering both, and the Covering/Bloody toggle rows now have visible text labels instead of relying on color (green/red) alone
+
 ## 2026-10-03
 
 - Added: if you opted in on the Notifications page's Advanced section, you now get a live push when one of your picks (or a picked opponent's game, if you opted into "others") flips between covering and not covering during the game, plus one final push once that game ends
