@@ -101,13 +101,20 @@ describe('push.ts', () => {
   });
 
   describe('toSubscriptionRequest', () => {
+    // The server only sends an NFL alert to the NFL app's subscription and a CFB alert to the CFB
+    // app's — so each app must say which sport it is (LeagueType: 0 = NFL, 1 = CFB).
+    it.each([['NFL', 0], ['CFB', 1]] as const)('tags the subscription with the %s app\'s sport', (sport, expected) => {
+      const subscription = { endpoint: 'https://push.example/ep', toJSON: () => ({}) } as unknown as PushSubscription;
+      expect(toSubscriptionRequest(subscription, sport).sport).toBe(expected);
+    });
+
     it('maps endpoint and keys from the browser subscription', () => {
       const subscription = {
         endpoint: 'https://push.example/ep1',
         toJSON: () => ({ keys: { p256dh: 'p-key', auth: 'a-key' } }),
       } as unknown as PushSubscription;
 
-      const result = toSubscriptionRequest(subscription);
+      const result = toSubscriptionRequest(subscription, 'NFL');
 
       expect(result.endpoint).toBe('https://push.example/ep1');
       expect(result.p256dh).toBe('p-key');
@@ -120,7 +127,7 @@ describe('push.ts', () => {
         toJSON: () => ({}),
       } as unknown as PushSubscription;
 
-      const result = toSubscriptionRequest(subscription);
+      const result = toSubscriptionRequest(subscription, 'NFL');
 
       expect(result.p256dh).toBe('');
       expect(result.auth).toBe('');

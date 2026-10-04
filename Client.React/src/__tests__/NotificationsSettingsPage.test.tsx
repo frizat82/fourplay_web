@@ -15,6 +15,8 @@ vi.mock('../api/notifications', () => ({
   unsubscribeFromPush: vi.fn(),
 }));
 
+vi.mock('../services/sport', () => ({ useSportContext: () => ({ sport: 'CFB', isCfb: true, isNfl: false }) }));
+
 vi.mock('../services/push', () => ({
   isPushSupported: vi.fn(() => true),
   isInstalledPwa: vi.fn(() => true),
@@ -200,6 +202,7 @@ describe('NotificationsSettingsPage', () => {
     await waitFor(() => {
       expect(mockedSubscribeToPush).toHaveBeenCalledWith(request);
     });
+    expect(mockedToSubscriptionRequest).toHaveBeenCalledWith(existingSubscription, 'CFB');
     expect(screen.getByText(/push notifications are enabled on this device/i)).toBeInTheDocument();
   });
 });

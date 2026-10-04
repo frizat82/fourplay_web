@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 namespace FourPlayWebApp.Shared.Models.Data.Dtos;
 
 // What the browser's PushSubscription (returned by pushManager.subscribe()) serializes to —
@@ -8,4 +9,6 @@ public class PushSubscriptionRequestDto
     public string P256dh { get; set; } = string.Empty;
     public string Auth { get; set; } = string.Empty;
     public string? UserAgent { get; set; }
+    // The sport of the app (host) this subscription was made from.
+    public LeagueType? Sport { get; set; }
 }

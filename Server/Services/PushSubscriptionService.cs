@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
@@ -16,7 +17,7 @@ public class PushSubscriptionService(IDbContextFactory<ApplicationDbContext> dbC
             .ToListAsync();
     }
 
-    public async Task SubscribeAsync(string userId, string endpoint, string p256dh, string auth, string? userAgent)
+    public async Task SubscribeAsync(string userId, string endpoint, string p256dh, string auth, string? userAgent, LeagueType? sport = null)
     {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         var existing = await db.PushSubscriptions.FirstOrDefaultAsync(s => s.Endpoint == endpoint);
@@ -30,6 +31,7 @@ public class PushSubscriptionService(IDbContextFactory<ApplicationDbContext> dbC
                 P256dh = p256dh,
                 Auth = auth,
                 UserAgent = userAgent,
+                Sport = sport,
                 LastSeenAt = DateTimeOffset.UtcNow,
             };
             db.PushSubscriptions.Add(newSubscription);
@@ -59,6 +61,8 @@ public class PushSubscriptionService(IDbContextFactory<ApplicationDbContext> dbC
         existing.P256dh = p256dh;
         existing.Auth = auth;
         existing.UserAgent = userAgent;
+        // An older client that doesn't send a sport must not wipe one already recorded.
+        if (sport is not null) existing.Sport = sport;
         existing.LastSeenAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
     }
