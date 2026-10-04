@@ -15,7 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, type Control } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { getNotificationPreferences, getVapidPublicKey, putNotificationPreferences, subscribeToPush, unsubscribeFromPush } from '../../api/notifications';
@@ -73,6 +73,73 @@ const OTHERS_FIELDS: ToggleFieldName[] = [
   'notifyOthersCoveringDuringGame',
   'notifyOthersCoveringAtFinal',
 ];
+
+// A small labeled table instead of 4 identically-captioned "During game"/"At final" switches
+// distinguished only by color — row labels ("Covering"/"Bloody") make the color a reinforcement,
+// never the only signal, and column headers ("During game"/"At final") are stated once instead of
+// repeated on every row.
+function OutcomeToggleGrid({ control, sectionLabel, duringField, duringLabel, finalField, finalLabel, color }: {
+  control: Control<FormValues>;
+  sectionLabel: string;
+  duringField: ToggleFieldName;
+  finalField: ToggleFieldName;
+  duringLabel: string;
+  finalLabel: string;
+  color: 'success' | 'error';
+}) {
+  const rowLabel = color === 'success' ? 'Covering' : 'Bloody';
+  return (
+    <Grid container spacing={1} alignItems="center">
+      <Grid size={4}>
+        <Typography variant="body2" sx={{ color: `${color}.main`, fontWeight: 600 }}>
+          {rowLabel}
+        </Typography>
+      </Grid>
+      <Grid size={4}>
+        <Controller
+          name={duringField}
+          control={control}
+          render={({ field }) => (
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={field.value ?? false}
+                  onChange={(e) => field.onChange(e.target.checked)}
+                  color={color}
+                  size="small"
+                  slotProps={{ input: { 'aria-label': `${sectionLabel}: ${rowLabel} ${duringLabel}` } }}
+                />
+              }
+              label={duringLabel}
+              slotProps={{ typography: { variant: 'caption', sx: { display: { xs: 'none', sm: 'inline' } } } }}
+            />
+          )}
+        />
+      </Grid>
+      <Grid size={4}>
+        <Controller
+          name={finalField}
+          control={control}
+          render={({ field }) => (
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={field.value ?? false}
+                  onChange={(e) => field.onChange(e.target.checked)}
+                  color={color}
+                  size="small"
+                  slotProps={{ input: { 'aria-label': `${sectionLabel}: ${rowLabel} ${finalLabel}` } }}
+                />
+              }
+              label={finalLabel}
+              slotProps={{ typography: { variant: 'caption', sx: { display: { xs: 'none', sm: 'inline' } } } }}
+            />
+          )}
+        />
+      </Grid>
+    </Grid>
+  );
+}
 
 export default function NotificationsSettingsPage() {
   const toast = useToast();
@@ -181,19 +248,6 @@ export default function NotificationsSettingsPage() {
     fields.forEach((name) => setValue(name, checked, { shouldDirty: true }));
   };
 
-  const toggleField = (name: ToggleFieldName) => (
-    <Controller
-      name={name}
-      control={control}
-      render={({ field }) => (
-        <FormControlLabel
-          control={<Switch checked={field.value ?? false} onChange={(e) => field.onChange(e.target.checked)} color={name.includes('Bloody') ? 'error' : 'success'} />}
-          label={name.includes('During') ? 'During game' : 'At final'}
-        />
-      )}
-    />
-  );
-
   return (
     <Stack spacing={3} sx={{ maxWidth: 640, margin: '0 auto', paddingTop: 6 }}>
       <Typography variant="h5">Notifications</Typography>
@@ -229,76 +283,72 @@ export default function NotificationsSettingsPage() {
 
       <Card>
         <CardContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Choose what sends a push straight to this device — your own picks, what's happening
-            elsewhere in the league, or just your week's final result.
-          </Typography>
           <form onSubmit={handleSubmit(onSubmit)}>
-            <Stack spacing={1}>
-              <FormControlLabel
-                control={<Switch checked={mineOn} onChange={(e) => setGroup(MINE_FIELDS, e.target.checked)} />}
-                label="Notify me about my games"
-              />
-              <FormControlLabel
-                control={<Switch checked={othersOn} onChange={(e) => setGroup(OTHERS_FIELDS, e.target.checked)} />}
-                label="Notify me about league activity"
-              />
-              <Controller
-                name="notifyWeekResult"
-                control={control}
-                render={({ field }) => (
-                  <FormControlLabel
-                    control={<Switch checked={field.value ?? false} onChange={(e) => field.onChange(e.target.checked)} />}
-                    label="Notify me when my week is final"
-                  />
-                )}
-              />
+            <Stack spacing={1} divider={<Divider />}>
+              <div>
+                <FormControlLabel
+                  control={<Switch checked={mineOn} onChange={(e) => setGroup(MINE_FIELDS, e.target.checked)} />}
+                  label="Notify me about my games"
+                />
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  A push when one of your picks starts winning or losing against the spread, or once that game ends.
+                </Typography>
+                <Accordion disableGutters elevation={0} sx={{ '&:before': { display: 'none' } }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 0, minHeight: 36 }}>
+                    <Typography variant="body2">Advanced: when exactly</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 0 }}>
+                    <Stack spacing={1}>
+                      <OutcomeToggleGrid control={control} sectionLabel="My games" color="success" duringField="notifyMineCoveringDuringGame" duringLabel="During game" finalField="notifyMineCoveringAtFinal" finalLabel="At final" />
+                      <OutcomeToggleGrid control={control} sectionLabel="My games" color="error" duringField="notifyMineBloodyDuringGame" duringLabel="During game" finalField="notifyMineBloodyAtFinal" finalLabel="At final" />
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
+              </div>
 
-              <Accordion sx={{ mt: 1 }}>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography>Advanced</Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <Stack spacing={2}>
-                    <Typography variant="body2" color="text.secondary">
-                      Fine-tune exactly when you hear about each pick. "Covering" means it's
-                      currently winning against the spread; "Bloody" means it's currently losing.
-                      "During game" sends a push the moment that changes; "At final" sends one push
-                      once the game ends.
-                    </Typography>
-                    <div>
-                      <Typography variant="subtitle2" gutterBottom>
-                        My picks
-                      </Typography>
-                      <Grid container spacing={1}>
-                        {MINE_FIELDS.map((name) => (
-                          <Grid size={6} key={name}>
-                            {toggleField(name)}
-                          </Grid>
-                        ))}
-                      </Grid>
-                    </div>
-                    <Divider />
-                    <div>
-                      <Typography variant="subtitle2" gutterBottom>
-                        Other league members
-                      </Typography>
-                      <Grid container spacing={1}>
-                        {OTHERS_FIELDS.map((name) => (
-                          <Grid size={6} key={name}>
-                            {toggleField(name)}
-                          </Grid>
-                        ))}
-                      </Grid>
-                    </div>
-                  </Stack>
-                </AccordionDetails>
-              </Accordion>
+              <div>
+                <FormControlLabel
+                  control={<Switch checked={othersOn} onChange={(e) => setGroup(OTHERS_FIELDS, e.target.checked)} />}
+                  label="Notify me about league activity"
+                />
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  A push when another league member's pick starts winning or losing, or once that game ends — this
+                  affects what everyone owes or collects once the week settles.
+                </Typography>
+                <Accordion disableGutters elevation={0} sx={{ '&:before': { display: 'none' } }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 0, minHeight: 36 }}>
+                    <Typography variant="body2">Advanced: when exactly</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 0 }}>
+                    <Stack spacing={1}>
+                      <OutcomeToggleGrid control={control} sectionLabel="League activity" color="success" duringField="notifyOthersCoveringDuringGame" duringLabel="During game" finalField="notifyOthersCoveringAtFinal" finalLabel="At final" />
+                      <OutcomeToggleGrid control={control} sectionLabel="League activity" color="error" duringField="notifyOthersBloodyDuringGame" duringLabel="During game" finalField="notifyOthersBloodyAtFinal" finalLabel="At final" />
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
+              </div>
 
-              <Button variant="contained" type="submit" disabled={isLoading || isSubmitting} sx={{ mt: 2, alignSelf: 'flex-start' }}>
-                Save preferences
-              </Button>
+              <div>
+                <Controller
+                  name="notifyWeekResult"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControlLabel
+                      control={<Switch checked={field.value ?? false} onChange={(e) => field.onChange(e.target.checked)} />}
+                      label="Notify me when my week is final"
+                    />
+                  )}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  One push once every game in your week is decided — "You Won the Week!" or naming the pick that
+                  lost it. No Advanced setting for this one; it only ever fires once.
+                </Typography>
+              </div>
             </Stack>
+
+            <Button variant="contained" type="submit" disabled={isLoading || isSubmitting} sx={{ mt: 3 }}>
+              Save preferences
+            </Button>
           </form>
         </CardContent>
       </Card>
