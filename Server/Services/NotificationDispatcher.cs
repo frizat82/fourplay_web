@@ -22,11 +22,14 @@ public class NotificationDispatcher(
         var preferences = await preferencesService.GetAsync(userId);
         if (!isEnabled(preferences)) return;
 
-        // Only the app for this push's sport (NFL vs CFB host) — plus devices saved before sport was
-        // tracked, which keep getting everything until their app re-registers.
-        var subscriptions = (await subscriptionService.GetForUserAsync(userId))
+        // Prefer the app for this push's sport (NFL vs CFB host), plus untagged devices, so a user
+        // with both apps gets it once, in the right one. A user with only the other sport's app
+        // still gets it there — a push is never dropped for lack of a matching app.
+        var allSubscriptions = await subscriptionService.GetForUserAsync(userId);
+        var matching = allSubscriptions
             .Where(s => payload.Sport is null || s.Sport is null || s.Sport == payload.Sport)
             .ToList();
+        var subscriptions = matching.Count > 0 ? matching : allSubscriptions;
         if (subscriptions.Count == 0) return;
 
         if (!DeploymentEnvironment.IsProduction(environment))
