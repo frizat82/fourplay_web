@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
@@ -9,25 +10,25 @@ namespace FourPlayWebApp.Server.Services;
 public class NotificationPreferencesService(IDbContextFactory<ApplicationDbContext> dbContextFactory)
     : INotificationPreferencesService
 {
-    public async Task<NotificationPreferencesDto> GetAsync(string userId)
+    public async Task<NotificationPreferencesDto> GetAsync(string userId, LeagueType sport)
     {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         var prefs = await db.NotificationPreferences.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.UserId == userId);
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.Sport == sport);
 
         // No row yet == every toggle defaults to off (pure opt-in) — not an error, the common
         // case for every user who has never visited the notifications settings page.
         return prefs is null ? new NotificationPreferencesDto() : ToDto(prefs);
     }
 
-    public async Task<NotificationPreferencesDto> UpsertAsync(string userId, NotificationPreferencesDto preferences)
+    public async Task<NotificationPreferencesDto> UpsertAsync(string userId, LeagueType sport, NotificationPreferencesDto preferences)
     {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        var existing = await db.NotificationPreferences.FirstOrDefaultAsync(p => p.UserId == userId);
+        var existing = await db.NotificationPreferences.FirstOrDefaultAsync(p => p.UserId == userId && p.Sport == sport);
 
         if (existing is null)
         {
-            existing = new NotificationPreferences { UserId = userId };
+            existing = new NotificationPreferences { UserId = userId, Sport = sport };
             db.NotificationPreferences.Add(existing);
         }
 

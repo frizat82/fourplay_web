@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 namespace FourPlayWebApp.Server.Models.Data;
 
 // One row per user, lazily created on first write (GetPreferencesAsync returns in-code all-off
@@ -6,6 +7,8 @@ namespace FourPlayWebApp.Server.Models.Data;
 public class NotificationPreferences {
     public int Id { get; set; }
     public string UserId { get; set; } = string.Empty;
+    // One row per user per sport — each app (NFL / CFB host) has its own settings.
+    public LeagueType Sport { get; set; }
 
     public bool NotifyMineBloodyDuringGame { get; set; }
     public bool NotifyMineBloodyAtFinal { get; set; }

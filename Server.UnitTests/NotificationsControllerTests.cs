@@ -35,12 +35,27 @@ public class NotificationsControllerTests
     // ── Preferences ───────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task Preferences_AreReadAndSavedForTheRequestedSport()
+    {
+        var dto = new NotificationPreferencesDto { NotifyWeekResult = true };
+        _preferencesService.GetAsync("user-1", LeagueType.Cfb).Returns(dto);
+        _preferencesService.UpsertAsync("user-1", LeagueType.Cfb, dto).Returns(dto);
+
+        await BuildController("user-1").GetPreferences(LeagueType.Cfb);
+        await BuildController("user-1").PutPreferences(LeagueType.Cfb, dto);
+
+        await _preferencesService.Received(1).GetAsync("user-1", LeagueType.Cfb);
+        await _preferencesService.Received(1).UpsertAsync("user-1", LeagueType.Cfb, dto);
+    }
+
+
+    [Fact]
     public async Task GetPreferences_ReturnsTheCallersPreferences()
     {
         var dto = new NotificationPreferencesDto { NotifyWeekResult = true };
-        _preferencesService.GetAsync("user-1").Returns(dto);
+        _preferencesService.GetAsync("user-1", LeagueType.Nfl).Returns(dto);
 
-        var result = await BuildController("user-1").GetPreferences();
+        var result = await BuildController("user-1").GetPreferences(LeagueType.Nfl);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(dto, ok.Value);
@@ -50,12 +65,12 @@ public class NotificationsControllerTests
     public async Task PutPreferences_SavesForTheCaller_NeverAForeignUser()
     {
         var request = new NotificationPreferencesDto { NotifyMineCoveringAtFinal = true };
-        _preferencesService.UpsertAsync("user-1", request).Returns(request);
+        _preferencesService.UpsertAsync("user-1", LeagueType.Nfl, request).Returns(request);
 
-        var result = await BuildController("user-1").PutPreferences(request);
+        var result = await BuildController("user-1").PutPreferences(LeagueType.Nfl, request);
 
         Assert.IsType<OkObjectResult>(result.Result);
-        await _preferencesService.Received(1).UpsertAsync("user-1", request);
+        await _preferencesService.Received(1).UpsertAsync("user-1", LeagueType.Nfl, request);
         // No overload of UpsertAsync accepts a caller-supplied userId from the request body at
         // all — the only userId that can ever reach the service is CurrentUserId.
     }
