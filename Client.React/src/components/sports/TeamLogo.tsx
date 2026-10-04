@@ -1,3 +1,4 @@
+import { useTheme } from '@mui/material/styles';
 import TeamArtImage from './TeamArtImage';
 
 interface TeamLogoProps {
@@ -14,11 +15,17 @@ interface TeamLogoProps {
 // and a CFB team (MIA: Dolphins/Hurricanes, CIN: Bengals/Bearcats, TEN: Titans/Volunteers). A
 // team with no downloaded logo (a rare opponent outside the curated TEAMS lists in
 // generate-helmets.js) falls back to the same plain text badge TeamHelmet falls back to.
+// In dark mode, ESPN's dark-background variant ({sport}-dark/) is preferred — e.g. Ohio State's
+// black lettering is unreadable on a dark card — falling back to the regular logo if missing.
 export default function TeamLogo({ abbr, sport, size = 56, showLabel = true }: TeamLogoProps) {
+  const isDark = useTheme().palette.mode === 'dark';
+  const file = `${abbr.toLowerCase()}.png`;
+  const regular = `/Icons/Logos/${sport}/${file}`;
   return (
     <TeamArtImage
       abbr={abbr}
-      src={`/Icons/Logos/${sport}/${abbr.toLowerCase()}.png`}
+      src={isDark ? `/Icons/Logos/${sport}-dark/${file}` : regular}
+      fallbackSrc={isDark ? regular : undefined}
       size={size}
       showLabel={showLabel}
       cacheKey={`${sport}-${abbr}`}
