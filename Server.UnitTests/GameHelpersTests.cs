@@ -174,4 +174,28 @@ public class GameHelpersTests
         var gameTimes = new[] { now.AddHours(-2), now.AddHours(1) };
         Assert.False(GameHelpers.AllGamesStarted(gameTimes, now));
     }
+
+    // ─── Period labels (match what the app shows, so notifications read the same) ───
+
+    [Theory]
+    [InlineData(1, "Week 1")]
+    [InlineData(18, "Week 18")]
+    [InlineData(19, "Wild Card")]
+    [InlineData(20, "Divisional Round")]
+    [InlineData(21, "Conference Championship")]
+    [InlineData(22, "Super Bowl")]
+    public void GetNflWeekLabel_MatchesAppLabels(int nflWeek, string expected) =>
+        Assert.Equal(expected, GameHelpers.GetNflWeekLabel(nflWeek));
+
+    [Theory]
+    [InlineData(1, "Week 1")]
+    [InlineData(5, "Week 5")]
+    [InlineData(13, "Week 13")]
+    [InlineData(14, "Conf. Championships")]
+    [InlineData(15, "CFP First Round")]
+    [InlineData(16, "CFP Quarterfinals")]
+    [InlineData(17, "CFP Semifinals")]
+    [InlineData(18, "CFP Championship")]
+    public void GetCfbSlateLabel_MatchesAppLabels(int slateNumber, string expected) =>
+        Assert.Equal(expected, GameHelpers.GetCfbSlateLabel(slateNumber));
 }

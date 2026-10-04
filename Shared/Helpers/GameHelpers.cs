@@ -97,6 +97,30 @@ public static class GameHelpers {
             _ => throw new ArgumentException("Invalid week number")
         };
     }
+    // User-facing period labels, matching the app's own (gameHelpers.ts) — notifications must read
+    // the same as the screen, never an internal "Slate N".
+    public static string GetNflWeekLabel(int nflWeek) =>
+        nflWeek <= 18 ? $"Week {nflWeek}" : GetWeekName(nflWeek - 18, isPostSeason: true);
+
+    public static string GetCfbSlateLabel(int slateNumber) => slateNumber switch {
+        <= 13 => $"Week {slateNumber}",
+        14 => "Conf. Championships",
+        15 => "CFP First Round",
+        16 => "CFP Quarterfinals",
+        17 => "CFP Semifinals",
+        18 => "CFP Championship",
+        _ => throw new ArgumentOutOfRangeException(nameof(slateNumber), slateNumber, "CFB slates run 1-18"),
+    };
+
+    // Abbreviation -> ESPN's full team name ("BUFF" -> "Buffalo Bulls") from a scoreboard.
+    public static Dictionary<string, string> GetTeamDisplayNames(EspnScores? scores) =>
+        (scores?.Events ?? [])
+            .SelectMany(e => e.Competitions ?? [])
+            .SelectMany(c => c.Competitors ?? [])
+            .Where(c => c.Team?.Abbreviation is not null && !string.IsNullOrWhiteSpace(c.Team.DisplayName))
+            .GroupBy(c => c.Team.Abbreviation)
+            .ToDictionary(g => g.Key, g => g.First().Team.DisplayName!);
+
     public static int GetWeekFromName(string weekName, bool isPostSeason = false) {
         if (!isPostSeason) {
             return int.Parse(weekName.Replace("Week ", ""));

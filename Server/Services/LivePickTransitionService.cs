@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -94,6 +95,9 @@ public class LivePickTransitionService(
 
         var teams = changed.SelectMany(c => c.Competitors.Select(x => x.Team.Abbreviation)).Distinct().ToList();
         if (teams.Count == 0) return;
+        // Pushes show the full name ("Buffalo Bulls"); dedup state stays keyed by abbreviation.
+        var teamNames = GameHelpers.GetTeamDisplayNames(current);
+        string NameOf(string abbr) => teamNames.GetValueOrDefault(abbr, abbr);
 
         var picks = sport == LeagueType.Nfl
             ? (await leagueRepository.GetNflPicksForTeamsAsync(period.Season, period.Id, teams))
@@ -161,11 +165,11 @@ public class LivePickTransitionService(
                     });
                 }
                 if (mineTransition.NotifyTransition)
-                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, false), MinePayload(pick.Pick.Team, covering, atFinal: false));
+                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, false), MinePayload(NameOf(pick.Pick.Team), covering, atFinal: false));
                 // Independent of the above — fires once at final regardless of recent transition
                 // history, even if this tick's status flip happens to also be a cover-state flip.
                 if (mineTransition.NotifyFinal)
-                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, true), MinePayload(pick.Pick.Team, covering, atFinal: true));
+                    await SafeDispatchAsync(pick.UserId, MinePreference(covering, true), MinePayload(NameOf(pick.Pick.Team), covering, atFinal: true));
 
                 // Record for the per-bet "others" pass below — every picker on the same
                 // (team, pickType) computes this exact same covering/isFinal, so only the picker
@@ -195,9 +199,9 @@ public class LivePickTransitionService(
 
                 var otherMembers = members.Where(m => !result.PickerUserIds.Contains(m.UserId)).ToList();
                 if (teamTransition.NotifyTransition)
-                    await NotifyOthersAsync(otherMembers, bet.Team, result.Covering, result.PickerUserIds.Count, atFinal: false);
+                    await NotifyOthersAsync(otherMembers, NameOf(bet.Team), result.Covering, result.PickerUserIds.Count, atFinal: false);
                 if (teamTransition.NotifyFinal)
-                    await NotifyOthersAsync(otherMembers, bet.Team, result.Covering, result.PickerUserIds.Count, atFinal: true);
+                    await NotifyOthersAsync(otherMembers, NameOf(bet.Team), result.Covering, result.PickerUserIds.Count, atFinal: true);
             }
         }
 
@@ -214,14 +218,14 @@ public class LivePickTransitionService(
 
     private static PushPayload MinePayload(string team, bool covering, bool atFinal) => atFinal
         ? new PushPayload("IV League", covering ? $"{team} covered! Final. 🏆" : $"{team} didn't cover. Final. 💀")
-        : new PushPayload("IV League", covering ? $"{team} is covering! 🟢" : $"{team} is bloody right now 🔴");
+        : new PushPayload("IV League", covering ? $"{team} are covering! 🟢" : $"{team} are bloody right now 🔴");
 
     private static PushPayload OthersPayload(string team, bool covering, int pickerCount, bool atFinal)
     {
         var usersLabel = pickerCount == 1 ? "1 user picked" : $"{pickerCount} users picked";
         return atFinal
             ? new PushPayload("IV League", covering ? $"{team} covered! Final — {usersLabel} 🏆" : $"{team} didn't cover! Final — {usersLabel} 💀")
-            : new PushPayload("IV League", covering ? $"{team} is Covering — {usersLabel} 🟢" : $"{team} is Bloody — {usersLabel} 🔴");
+            : new PushPayload("IV League", covering ? $"{team} are Covering — {usersLabel} 🟢" : $"{team} are Bloody — {usersLabel} 🔴");
     }
 
     private static Func<NotificationPreferencesDto, bool> MinePreference(bool covering, bool atFinal) => atFinal
