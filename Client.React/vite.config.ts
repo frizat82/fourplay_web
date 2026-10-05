@@ -34,6 +34,9 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
+      // CI gate (npm run test -- --run --coverage): fails the build if frontend coverage drops.
+      // Set a few points under the 2026-10-04 baseline (79.8/80.5/73.9/82.3) — raise as it grows.
+      thresholds: { statements: 75, branches: 75, functions: 70, lines: 78 },
       exclude: [
         'node_modules/',
         'src/setupTests.ts',
