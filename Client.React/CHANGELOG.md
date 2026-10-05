@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-10-05
+
+- Added: tapping a live game notification opens the Scores page scrolled to that game, briefly outlined; a week-result notification opens the Leaderboard
+
 ## 2026-10-04
 
 - Fixed: right after a score or during a timeout, live game cards showed the ball at a stale spot with a possession arrow even though nobody had the ball — the field graphic now hides until the next play

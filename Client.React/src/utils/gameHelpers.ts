@@ -367,3 +367,13 @@ function isRecordType(value: EspnRecordType, expected: 'total' | 'road' | 'home'
   }
   return value === expected;
 }
+
+/** Push notification deep links (/scores?team=KC) name a team; returns the id of its game card. */
+export function findGameIdForTeam<T extends { id: string; homeTeam: string; awayTeam: string }>(
+  games: readonly T[],
+  team: string | null | undefined,
+): string | null {
+  if (!team) return null;
+  const t = team.toUpperCase();
+  return games.find((g) => g.homeTeam.toUpperCase() === t || g.awayTeam.toUpperCase() === t)?.id ?? null;
+}
