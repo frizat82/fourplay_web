@@ -71,7 +71,8 @@ jobs:
           comment-title: 'Backend Unit Test Results'
           results-path: 'coverage/*.trx'
           coverage-path: 'coverage/**/coverage.cobertura.xml'
-          coverage-threshold: 30
+          # A few points under the 2026-10-04 baseline (72.2% lines) — raise as coverage grows.
+          coverage-threshold: 68
           coverage-type: cobertura
 
   frontend:
