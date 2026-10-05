@@ -231,7 +231,7 @@ public class WeekResultNotificationServiceTests
         await BuildService().CheckNflWeekResultsAsync(2026);
 
         await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
-            Arg.Is<PushPayload>(p => p.Body.StartsWith("NFL Week 5:") && p.Sport == LeagueType.Nfl), Arg.Any<CancellationToken>());
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("NFL Week 5:") && p.Sport == LeagueType.Nfl && p.Url == "/leaderboard"), Arg.Any<CancellationToken>());
     }
 
     [Fact]
