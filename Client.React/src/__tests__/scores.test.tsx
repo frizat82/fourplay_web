@@ -106,13 +106,13 @@ const setupDefaults = async (options?: {
   mockLeagueJuiceEmpty(mockedGetLeagueJuice);
 };
 
-const renderWithClient = (ui: React.ReactElement, client?: QueryClient) => {
+const renderWithClient = (ui: React.ReactElement, client?: QueryClient, route = '/scores') => {
   const queryClient = client ?? new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
   // MemoryRouter — useCurrentWeekNav (shared by PicksPage/ScoresPage) reads useLocation() to
   // reset back to the current week when AppLayout's nav-link click passes resetToCurrent state.
-  return { ...render(<QueryClientProvider client={queryClient}><MemoryRouter>{ui}</MemoryRouter></QueryClientProvider>), queryClient };
+  return { ...render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter></QueryClientProvider>), queryClient };
 };
 
 const renderPage = async () => {
@@ -149,6 +149,23 @@ describe('ScoresPage', () => {
     renderWithClient(<ScoresPage adapter={createNflAdapter()} />);
     await screen.findByText(/Odds Not Posted/i);
     expect(screen.getByTestId('week-year-selector-container')).toBeInTheDocument();
+  });
+
+  // Tapping a live push opens /scores?team=XXX (issue #461): the page scrolls to that team's game
+  // and briefly highlights it, whether the team is home or away.
+  it('scrolls to and highlights the game for ?team= from a notification tap', async () => {
+    await setupDefaults();
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    renderWithClient(<ScoresPage adapter={createNflAdapter()} />, undefined, '/scores?team=MIA');
+
+    // Generous timeout: under a full parallel run the page's data + rAF scroll can exceed 1s.
+    await waitFor(() => expect(document.querySelector('[data-focused="true"]')).not.toBeNull(), { timeout: 5000 });
+    const focused = document.querySelector('[data-focused="true"]') as HTMLElement;
+    expect(within(focused).getAllByText('MIA').length).toBeGreaterThan(0);
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled(), { timeout: 5000 });
+    expect(document.querySelectorAll('[data-focused="true"]')).toHaveLength(1);
   });
 
   // frizat-u66: a league with StartWeek > 1 excludes weeks before it from scoring — the Scores

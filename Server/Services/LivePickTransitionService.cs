@@ -218,7 +218,7 @@ public class LivePickTransitionService(
         }
 
         foreach (var push in outbox.GroupBy(l => (l.UserId, l.Team, l.Covering, l.AtFinal)))
-            await SafeDispatchAsync(push.Key.UserId, PreferenceFor(push), BuildPayload(sport, NameOf(push.Key.Team), push, leagueNames));
+            await SafeDispatchAsync(push.Key.UserId, PreferenceFor(push), BuildPayload(sport, push.Key.Team, NameOf(push.Key.Team), push, leagueNames));
 
         if (newStates.Count > 0) await stateService.UpsertStatesAsync(newStates);
         if (newTeamStates.Count > 0) await teamStateService.UpsertStatesAsync(newTeamStates);
@@ -228,7 +228,7 @@ public class LivePickTransitionService(
     // picked it in that league; OtherPickers = how many others in that league did.
     private sealed record PushLine(string UserId, string Team, bool Covering, bool AtFinal, int LeagueId, bool Mine, int OtherPickers);
 
-    private static PushPayload BuildPayload(LeagueType sport, string team, IEnumerable<PushLine> lines, IReadOnlyDictionary<int, string> leagueNames)
+    private static PushPayload BuildPayload(LeagueType sport, string teamAbbr, string team, IEnumerable<PushLine> lines, IReadOnlyDictionary<int, string> leagueNames)
     {
         var first = lines.First();
         var headline = first.AtFinal
@@ -246,7 +246,10 @@ public class LivePickTransitionService(
                 return $"{name}: {detail}";
             })
             .OrderBy(l => l);
-        return new PushPayload("IV League", $"{headline}\n{string.Join("\n", leagueLines)}", Sport: sport);
+        // Tapping it opens the Scores page scrolled to this team's game (sport-correct host: the push
+        // only ever reaches that sport's app).
+        return new PushPayload("IV League", $"{headline}\n{string.Join("\n", leagueLines)}",
+            Url: $"/scores?team={Uri.EscapeDataString(teamAbbr)}", Sport: sport);
     }
 
     // The push goes out if the recipient wants any kind of line it contains ("my games" for their
