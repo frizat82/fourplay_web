@@ -104,13 +104,6 @@ jobs:
         # instead so tests run once per PR, not twice.
         run: npm run test -- --run --coverage
 
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./Client.React/coverage/coverage-final.json
-          flags: frontend
-          fail_ci_if_error: false
-
       - name: Build
         run: npm run build
         env:
