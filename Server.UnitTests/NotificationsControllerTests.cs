@@ -112,6 +112,19 @@ public class NotificationsControllerTests
 
     // ── Subscribe / Unsubscribe ───────────────────────────────────────────────
 
+    // #462: only 0 (NFL) and 1 (CFB) are real sports — anything else would be stored and then never
+    // match a push, silently cutting that device off.
+    [Fact]
+    public async Task Subscribe_UndefinedSport_IsRejected_AndNothingIsSaved()
+    {
+        var request = new PushSubscriptionRequestDto { Endpoint = "https://push.example/ep1", P256dh = "p", Auth = "a", Sport = (LeagueType)5 };
+
+        var result = await BuildController("user-1").Subscribe(request);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await _subscriptionService.DidNotReceive().SubscribeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<LeagueType?>());
+    }
+
     [Fact]
     public async Task Subscribe_ValidRequest_CallsServiceForTheCaller()
     {

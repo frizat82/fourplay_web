@@ -48,6 +48,9 @@ public class NotificationsController(
     {
         if (string.IsNullOrWhiteSpace(request.Endpoint) || string.IsNullOrWhiteSpace(request.P256dh) || string.IsNullOrWhiteSpace(request.Auth))
             return BadRequest("Endpoint, P256dh, and Auth are required.");
+        // Only real sports (0 = NFL, 1 = CFB) — any other value would never match a push.
+        if (request.Sport is { } sport && !Enum.IsDefined(sport))
+            return BadRequest("Sport must be 0 (NFL) or 1 (CFB).");
 
         await subscriptionService.SubscribeAsync(CurrentUserId, request.Endpoint, request.P256dh, request.Auth, request.UserAgent, request.Sport);
         return NoContent();

@@ -97,7 +97,7 @@ public class WeekResultNotificationService(
 
                 var label = periodLabel(weekResult.Week);
                 var payload = weekResult.WeekResult == WeekResult.Won
-                    ? new PushPayload("IV League", $"{label}: You Won the Week in {leagueName}! 🏆", Sport: sport)
+                    ? new PushPayload("IV League", $"{label}: You Won the Week in {leagueName}! 🏆", Url: "/leaderboard", Sport: sport)
                     : BuildLostPayload(sport, leagueName, label, weekResult.LosingTeams.Select(t => teamNames.GetValueOrDefault(t, t)).ToList());
 
                 // /code-review: dedup rows used to be recorded in one batch after this whole
@@ -127,6 +127,6 @@ public class WeekResultNotificationService(
 
     private static PushPayload BuildLostPayload(LeagueType sport, string leagueName, string label, IReadOnlyList<string> losingTeams) =>
         losingTeams.Count > 0
-            ? new PushPayload("IV League", $"{label}: You Lost {losingTeams[0]} — You Lost the Week in {leagueName}! 💀", Sport: sport)
-            : new PushPayload("IV League", $"{label}: You Lost the Week in {leagueName}! 💀", Sport: sport);
+            ? new PushPayload("IV League", $"{label}: You Lost {losingTeams[0]} — You Lost the Week in {leagueName}! 💀", Url: "/leaderboard", Sport: sport)
+            : new PushPayload("IV League", $"{label}: You Lost the Week in {leagueName}! 💀", Url: "/leaderboard", Sport: sport);
 }

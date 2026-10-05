@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Badge, Box, Button, Grid,
   IconButton, Paper, Stack, Typography,
@@ -21,7 +22,7 @@ import PickDialog from '../components/PickDialog';
 import FieldPosition from '../components/FieldPosition';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { isGameDecided, isGameFinal, isGameLive, isConsistentRedZone, spreadLabel, isWeekExcludedFromSeason } from '../utils/gameHelpers';
+import { isGameDecided, isGameFinal, isGameLive, isConsistentRedZone, spreadLabel, isWeekExcludedFromSeason, findGameIdForTeam } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
@@ -173,6 +174,25 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   // that don't actually change data.games — memoized like matrixSpreads below.
   const sortedGames = useMemo(() => sortGamesByTimeThenRank(data?.games ?? []), [data?.games]);
 
+  // Push notification deep link (/scores?team=KC, issue #461): once that team's game is on the
+  // page, scroll to it and outline it briefly. Only once per link, not on every live poll.
+  const [searchParams] = useSearchParams();
+  const focusTeam = searchParams.get('team');
+  const [focusedGameId, setFocusedGameId] = useState<string | null>(null);
+  const focusedForTeam = useRef<string | null>(null);
+  useEffect(() => {
+    const id = findGameIdForTeam(sortedGames, focusTeam);
+    if (!id || focusedForTeam.current === focusTeam) return;
+    focusedForTeam.current = focusTeam;
+    setFocusedGameId(id);
+    requestAnimationFrame(() => document.getElementById(`game-card-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  }, [sortedGames, focusTeam]);
+  useEffect(() => {
+    if (!focusedGameId) return;
+    const t = setTimeout(() => setFocusedGameId(null), 4000);
+    return () => clearTimeout(t);
+  }, [focusedGameId]);
+
   /** Build spread result map for UserPicksMatrix from GameView cover data */
   const matrixSpreads = useMemo(() => {
     const result: Record<string, { isWinner: boolean; isOverWinner: boolean; isUnderWinner: boolean; spread: number | null; over: number | null; under: number | null }> = {};
@@ -300,6 +320,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
               )}
 
               {data?.hasOdds && games.map(game => {
+                const isFocused = game.id === focusedGameId;
                 const isFinal = isGameFinal(game.gameStatus);
                 const isLive = isGameLive(game.gameStatus);
                 const hc = game.homeCovers ?? null;
@@ -311,9 +332,15 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                 return (
                   <Grid size={{ xs: 12, md: 6, lg: 4 }} key={game.id}>
                     <Paper
+                      id={`game-card-${game.id}`}
                       data-testid={`game-card-${game.id}`}
                       data-redzone={String(isCardRedZone)}
-                      sx={[{ p: 2 }, isCardRedZone && { outline: '3px solid', outlineColor: 'error.main', outlineOffset: -1 }]}
+                      data-focused={String(isFocused)}
+                      sx={[
+                        { p: 2, scrollMarginTop: 80 },
+                        isCardRedZone && { outline: '3px solid', outlineColor: 'error.main', outlineOffset: -1 },
+                        isFocused && { outline: '3px solid', outlineColor: 'secondary.main', outlineOffset: -1 },
+                      ]}
                     >
                       {/* Score header */}
                       <Stack direction="row" alignItems="center" justifyContent="space-between">

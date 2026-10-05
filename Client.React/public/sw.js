@@ -46,8 +46,12 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // App already open (on any page): take that window to the game rather than just focusing
+      // whatever page it was on. Falls back to opening a new window.
       for (const client of clientList) {
-        if (client.url.includes(targetUrl) && 'focus' in client) return client.focus();
+        if ('navigate' in client && 'focus' in client) {
+          return client.navigate(targetUrl).then((c) => (c || client).focus()).catch(() => client.focus());
+        }
       }
       if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
       return undefined;
