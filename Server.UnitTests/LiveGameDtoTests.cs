@@ -111,6 +111,20 @@ public class LiveGameDtoTests
         Assert.Null(dto.Situation);
     }
 
+    // Between plays — kickoff after a score, timeouts, end of quarter — ESPN sends a situation with
+    // no possession (and a stale yardLine). Showing a ball and an arrow then is wrong (owner report:
+    // DET@CAR right after a CAR field goal), so no possession means no field graphic at all.
+    [Fact]
+    public void FromCompetition_SituationIsNull_WhenEspnReportsNoPossession()
+    {
+        var competition = BuildCompetition(possessionId: null);
+        competition.Situation = new EspnSitutation { Possession = null, YardLine = 35, Down = -1, IsRedZone = true };
+
+        var dto = LiveGameDto.FromCompetition(competition);
+
+        Assert.Null(dto.Situation);
+    }
+
     // ── IsRedZone ─────────────────────────────────────────────────────────────
 
     [Fact]

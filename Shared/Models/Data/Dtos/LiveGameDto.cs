@@ -48,16 +48,19 @@ public class GameSituationDto
     public bool IsRedZone { get; set; }
     public string DownDistanceText { get; set; } = string.Empty;
 
-    internal static GameSituationDto FromSituation(EspnSitutation situation, Competitor home, Competitor away)
+    // Null when nobody has the ball (kickoff after a score, timeouts, end of quarter) — ESPN still
+    // sends a situation then, with a stale yardLine, and drawing a ball + arrow from it is wrong.
+    internal static GameSituationDto? FromSituation(EspnSitutation situation, Competitor home, Competitor away)
     {
         var possessor = situation.Possession == home.Id ? home
                       : situation.Possession == away.Id ? away
                       : null;
+        if (possessor is null) return null;
 
         return new GameSituationDto
         {
-            PossessionTeam = possessor?.Team.Abbreviation,
-            IsHomePossession = possessor?.HomeAway == HomeAway.Home,
+            PossessionTeam = possessor.Team.Abbreviation,
+            IsHomePossession = possessor.HomeAway == HomeAway.Home,
             YardLine = situation.YardLine,
             Down = situation.Down,
             Distance = situation.Distance,
