@@ -3,9 +3,7 @@
     {
       "source": "/api/:path*",
       "destination": "$RAILWAY_URL/api/:path*",
-      "env": [
-        "RAILWAY_URL"
-      ]
+      "env": ["RAILWAY_URL"]
     },
     {
       "source": "/(.*)",

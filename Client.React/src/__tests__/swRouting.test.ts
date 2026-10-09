@@ -19,9 +19,9 @@ interface SwRouting {
   assetUrlsInShell(html: string): string[];
 }
 
-function loadRouting(): SwRouting {
+function loadRouting(src: string = swRoutingSrc): SwRouting {
   const fakeSelf: { IVLSwRouting?: SwRouting } = {};
-  new Function('self', swRoutingSrc)(fakeSelf);
+  new Function('self', src)(fakeSelf);
   return fakeSelf.IVLSwRouting!;
 }
 
@@ -122,5 +122,24 @@ describe('cache housekeeping', () => {
   it('gives the network a few seconds before falling back to the saved shell', () => {
     expect(r.NAVIGATION_TIMEOUT_MS).toBeGreaterThanOrEqual(2000);
     expect(r.NAVIGATION_TIMEOUT_MS).toBeLessThanOrEqual(5000);
+  });
+});
+
+// The production off-switch: one flag flip must stop all caching and clear what's there.
+describe('kill switch (CACHE_ENABLED = false)', () => {
+  const src = swRoutingSrc.replace('var CACHE_ENABLED = true;', 'var CACHE_ENABLED = false;');
+  const off = loadRouting(src);
+
+  it('is a real flag in the shipped file', () => {
+    expect(src).not.toBe(swRoutingSrc);
+  });
+
+  it('lets every request go straight to the network', () => {
+    expect(off.classifyRequest(req('/', { mode: 'navigate' }), ORIGIN)).toBe('passthrough');
+    expect(off.classifyRequest(req('/assets/index-abc123.js'), ORIGIN)).toBe('passthrough');
+  });
+
+  it('deletes all of our caches, current versions included', () => {
+    expect(off.cachesToDelete([off.SHELL_CACHE, off.ASSET_CACHE, 'someone-else'])).toEqual([off.SHELL_CACHE, off.ASSET_CACHE]);
   });
 });

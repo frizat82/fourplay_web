@@ -1,8 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { isAxiosError } from 'axios';
 import { http } from '../api/http';
-import ConnectionRetry from '../components/ConnectionRetry';
+import RetryPanel from '../components/RetryPanel';
+import RouteFallback from '../components/RouteFallback';
+import { isNetworkError } from '../utils/apiError';
 import type { LoginRequest, SignInResultDto, UserInfo } from '../types/auth';
 import { isAdmin } from '../utils/auth';
 import { buildLoginUrl } from '../utils/url';
@@ -44,12 +45,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // No response at all says nothing about whether the user is signed in, so don't treat it
       // as signed out (that bounced people on a weak signal to the login page). Keep any user we
       // already had and let the caller offer a retry.
-      if (isAxiosError(error) && !error.response) {
-        setUnreachable(true);
-      } else {
-        setUser(null);
-        setUnreachable(false);
-      }
+      const noResponse = isNetworkError(error);
+      if (!noResponse) setUser(null);
+      setUnreachable(noResponse);
     } finally {
       setLoading(false);
     }
@@ -114,8 +112,10 @@ export function useAuth(): AuthContextValue {
  */
 export function useAuthPending(): React.ReactElement | null {
   const { user, loading, unreachable, refresh } = useAuth();
-  if (loading) return <div>Loading...</div>;
-  if (unreachable && !user) return <ConnectionRetry onRetry={refresh} />;
+  if (loading) return <RouteFallback />;
+  if (unreachable && !user) {
+    return <RetryPanel title="Can't reach IV League" message="Check your signal and try again." actionLabel="Retry" onAction={refresh} />;
+  }
   return null;
 }
 

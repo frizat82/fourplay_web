@@ -3,6 +3,9 @@
 // script pulled in with importScripts(), not an ES module — module service workers are unreliable
 // on older iOS Safari.
 (function (self) {
+  // KILL SWITCH: set to false and deploy to turn the app-shell cache off — every request goes
+  // straight to the network and the next activate deletes all of our caches. Push is unaffected.
+  var CACHE_ENABLED = true;
   // Bump a version to drop that cache wholesale on the next activate.
   var SHELL_CACHE = 'ivl-shell-v1';
   var ASSET_CACHE = 'ivl-assets-v1';
@@ -23,7 +26,7 @@
      * 'passthrough' — everything else, including every /api call, which must always be live.
      */
     classifyRequest: function (request, origin) {
-      if (request.method !== 'GET') return 'passthrough';
+      if (!CACHE_ENABLED || request.method !== 'GET') return 'passthrough';
       var url = new URL(request.url);
       if (url.origin !== origin) return 'passthrough';
       if (url.pathname.indexOf('/api/') === 0) return 'passthrough';
@@ -43,15 +46,14 @@
 
     cachesToDelete: function (keys) {
       return keys.filter(function (key) {
-        return key.indexOf('ivl-') === 0 && key !== SHELL_CACHE && key !== ASSET_CACHE;
+        return key.indexOf('ivl-') === 0 && (!CACHE_ENABLED || (key !== SHELL_CACHE && key !== ASSET_CACHE));
       });
     },
 
     // The page's own build files, so a freshly installed worker can save what this launch already
     // downloaded before it was in control.
     assetUrlsInShell: function (html) {
-      var matches = html.match(/\/assets\/[\w.-]+/g) || [];
-      return matches.filter(function (url, i) { return matches.indexOf(url) === i; });
+      return Array.from(new Set(html.match(/\/assets\/[\w.-]+/g) || []));
     },
 
     // Cache keys come back in insertion order, so the oldest are first.

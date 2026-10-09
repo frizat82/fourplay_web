@@ -7,9 +7,9 @@
 // Caching rules (which requests, what's safe to save) live in sw-routing.js and are unit tested.
 // Every /api call bypasses the worker entirely — scores, picks and auth are always live.
 //
-// KILL SWITCH — if the cache ever misbehaves in production: delete the 'fetch' listener below,
-// and in 'activate' delete every cache whose name starts with 'ivl-' (keep the push handlers).
-// Deploy; phones pick it up on their next launch and go back to plain network loading.
+// KILL SWITCH — if the cache ever misbehaves in production, set CACHE_ENABLED = false in
+// sw-routing.js and deploy: phones pick it up on their next launch, stop using the cache and
+// delete it. Push keeps working.
 
 importScripts('/sw-routing.js');
 var routing = self.IVLSwRouting;
@@ -24,6 +24,7 @@ self.addEventListener('activate', (event) => {
     (async () => {
       const keys = await caches.keys();
       await Promise.all(routing.cachesToDelete(keys).map((key) => caches.delete(key)));
+      await trimAssets();
       // Lets a launch start its page request while the worker is still waking up (iOS 15.4+).
       if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
       await self.clients.claim();
@@ -34,7 +35,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const kind = routing.classifyRequest(event.request, self.location.origin);
   if (kind === 'shell') event.respondWith(guarded(event.request, () => serveShell(event)));
-  else if (kind === 'asset') event.respondWith(guarded(event.request, () => serveAsset(event.request)));
+  else if (kind === 'asset') event.respondWith(guarded(event.request, () => serveAsset(event)));
   // Anything else: no respondWith — the browser handles it exactly as if there were no worker.
 });
 
@@ -62,44 +63,53 @@ function serveShell(event) {
   event.waitUntil(network.catch(() => {}));
   const saved = caches.match(routing.SHELL_URL, { cacheName: routing.SHELL_CACHE });
 
+  // A promise settles once, so whichever of these resolves first wins.
   return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (response) => {
-      if (!settled) {
-        settled = true;
-        resolve(response);
-      }
-    };
-    network.then(finish, async (error) => {
+    const timer = setTimeout(async () => {
       const copy = await saved;
-      if (copy) finish(copy);
-      else if (!settled) reject(error);
-    });
-    setTimeout(async () => {
-      const copy = await saved;
-      if (copy) finish(copy); // no saved copy yet: keep waiting on the network
+      if (copy) resolve(copy); // no saved copy yet: keep waiting on the network
     }, routing.NAVIGATION_TIMEOUT_MS);
+    network.then(
+      (response) => {
+        clearTimeout(timer);
+        resolve(response);
+      },
+      async (error) => {
+        clearTimeout(timer);
+        const copy = await saved;
+        if (copy) resolve(copy);
+        else reject(error);
+      }
+    );
   });
 }
 
-// Hashed build files never change, so a saved copy is always correct.
-async function serveAsset(request) {
+// Hashed build files never change, so a saved copy is always correct. A fresh download goes to the
+// page straight away (still streaming) and is saved in the background.
+async function serveAsset(event) {
   const cache = await caches.open(routing.ASSET_CACHE);
-  const saved = await cache.match(request);
+  const saved = await cache.match(event.request);
   if (saved) return saved;
-  const response = await fetch(request);
+  const response = await fetch(event.request);
   if (routing.isCacheableResponse(response, 'asset')) {
-    await cache.put(request, response.clone());
-    const keys = await cache.keys();
-    await Promise.all(routing.entriesToTrim(keys, routing.MAX_ASSET_ENTRIES).map((key) => cache.delete(key)));
+    event.waitUntil(cache.put(event.request, response.clone()).catch(() => {}));
   }
   return response;
+}
+
+// Old builds' files pile up across deploys; drop the oldest. Run once per worker update (install
+// and activate), not on every download.
+async function trimAssets() {
+  const cache = await caches.open(routing.ASSET_CACHE);
+  const keys = await cache.keys();
+  await Promise.all(routing.entriesToTrim(keys, routing.MAX_ASSET_ENTRIES).map((key) => cache.delete(key)));
 }
 
 // Saves the current page and the build files it references. Runs at install, because the launch
 // that installs the worker downloaded those before the worker was in control.
 async function saveShell() {
-  const response = await fetch(routing.SHELL_URL, { cache: 'reload' });
+  // no-cache: revalidate (a cheap 304 when the page just loaded it) rather than re-download.
+  const response = await fetch(routing.SHELL_URL, { cache: 'no-cache' });
   if (!routing.isCacheableResponse(response, 'shell')) return;
   const html = await response.clone().text();
   const shellCache = await caches.open(routing.SHELL_CACHE);

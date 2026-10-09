@@ -55,10 +55,9 @@ const nflAdapter = createNflAdapter();
 const cfbAdapter = createCfbAdapter();
 
 function RootRedirect() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
+  // The home-screen app opens here: a spinner or retry prompt, never an empty page.
   const pending = useAuthPending();
-  // The home-screen app opens here: a spinner, never an empty page, while the session loads.
-  if (loading) return <RouteFallback />;
   if (pending) return pending;
   return user ? <Navigate to="/dashboard" replace /> : <HomePage />;
 }

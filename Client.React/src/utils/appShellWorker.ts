@@ -1,3 +1,6 @@
+/** The one service worker — app-shell cache and Web Push both live in it. */
+export const SERVICE_WORKER_URL = '/sw.js';
+
 interface Env {
   isProd: boolean;
   nav: { serviceWorker?: { register(url: string): Promise<unknown> } };
@@ -17,7 +20,7 @@ export function installAppShellWorker(
   if (!isProd || !nav.serviceWorker) return;
   const sw = nav.serviceWorker;
   // A failure just means no offline copy — the app works the same without it.
-  const register = () => void sw.register('/sw.js').catch(() => {});
+  const register = () => void sw.register(SERVICE_WORKER_URL).catch(() => {});
   if (win.document.readyState === 'complete') register();
   else win.addEventListener('load', register);
 }
