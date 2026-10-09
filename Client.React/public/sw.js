@@ -1,14 +1,118 @@
-// Hand-rolled service worker for Web Push only — no offline/precache needs, so a workbox-based
-// build plugin would add a dependency for no benefit here. Served from /sw.js (public/, not
-// bundled by Vite) so its scope covers the whole origin.
+// Hand-rolled service worker: Web Push, plus an app-shell cache so the installed app still opens
+// on a weak signal. Without the cache, a launch whose page request stalled left iOS's home-screen
+// app on a plain white screen until force-quit. Served from /sw.js (public/, not bundled by Vite)
+// so its scope covers the whole origin; Vercel serves it no-cache (vercel.json) so a fix here
+// reaches phones on their next launch.
+//
+// Caching rules (which requests, what's safe to save) live in sw-routing.js and are unit tested.
+// Every /api call bypasses the worker entirely — scores, picks and auth are always live.
+//
+// KILL SWITCH — if the cache ever misbehaves in production: delete the 'fetch' listener below,
+// and in 'activate' delete every cache whose name starts with 'ivl-' (keep the push handlers).
+// Deploy; phones pick it up on their next launch and go back to plain network loading.
 
-self.addEventListener('install', () => {
+importScripts('/sw-routing.js');
+var routing = self.IVLSwRouting;
+
+self.addEventListener('install', (event) => {
   self.skipWaiting();
+  event.waitUntil(saveShell().catch(() => {}));
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(routing.cachesToDelete(keys).map((key) => caches.delete(key)));
+      // Lets a launch start its page request while the worker is still waking up (iOS 15.4+).
+      if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
+      await self.clients.claim();
+    })()
+  );
 });
+
+self.addEventListener('fetch', (event) => {
+  const kind = routing.classifyRequest(event.request, self.location.origin);
+  if (kind === 'shell') event.respondWith(guarded(event.request, () => serveShell(event)));
+  else if (kind === 'asset') event.respondWith(guarded(event.request, () => serveAsset(event.request)));
+  // Anything else: no respondWith — the browser handles it exactly as if there were no worker.
+});
+
+// Any bug in the cache path must degrade to a plain network request, never a broken launch.
+async function guarded(request, handler) {
+  try {
+    return await handler();
+  } catch {
+    return fetch(request);
+  }
+}
+
+// Network first, but only for NAVIGATION_TIMEOUT_MS: after that, open the saved copy and let the
+// network response refresh the cache in the background for next time.
+function serveShell(event) {
+  const network = (async () => {
+    const preloaded = event.preloadResponse ? await event.preloadResponse : undefined;
+    const response = preloaded || (await fetch(event.request));
+    if (routing.isCacheableResponse(response, 'shell')) {
+      const copy = response.clone();
+      event.waitUntil(caches.open(routing.SHELL_CACHE).then((cache) => cache.put(routing.SHELL_URL, copy)).catch(() => {}));
+    }
+    return response;
+  })();
+  event.waitUntil(network.catch(() => {}));
+  const saved = caches.match(routing.SHELL_URL, { cacheName: routing.SHELL_CACHE });
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (response) => {
+      if (!settled) {
+        settled = true;
+        resolve(response);
+      }
+    };
+    network.then(finish, async (error) => {
+      const copy = await saved;
+      if (copy) finish(copy);
+      else if (!settled) reject(error);
+    });
+    setTimeout(async () => {
+      const copy = await saved;
+      if (copy) finish(copy); // no saved copy yet: keep waiting on the network
+    }, routing.NAVIGATION_TIMEOUT_MS);
+  });
+}
+
+// Hashed build files never change, so a saved copy is always correct.
+async function serveAsset(request) {
+  const cache = await caches.open(routing.ASSET_CACHE);
+  const saved = await cache.match(request);
+  if (saved) return saved;
+  const response = await fetch(request);
+  if (routing.isCacheableResponse(response, 'asset')) {
+    await cache.put(request, response.clone());
+    const keys = await cache.keys();
+    await Promise.all(routing.entriesToTrim(keys, routing.MAX_ASSET_ENTRIES).map((key) => cache.delete(key)));
+  }
+  return response;
+}
+
+// Saves the current page and the build files it references. Runs at install, because the launch
+// that installs the worker downloaded those before the worker was in control.
+async function saveShell() {
+  const response = await fetch(routing.SHELL_URL, { cache: 'reload' });
+  if (!routing.isCacheableResponse(response, 'shell')) return;
+  const html = await response.clone().text();
+  const shellCache = await caches.open(routing.SHELL_CACHE);
+  await shellCache.put(routing.SHELL_URL, response);
+  const assetCache = await caches.open(routing.ASSET_CACHE);
+  await Promise.all(
+    routing.assetUrlsInShell(html).map(async (url) => {
+      if (await assetCache.match(url)) return;
+      const asset = await fetch(url);
+      if (routing.isCacheableResponse(asset, 'asset')) await assetCache.put(url, asset);
+    })
+  );
+}
 
 // NFL (apex) and CFB (cfb. subdomain) are different origins, so each gets its own independent
 // service worker registration — this one picks the right icon at runtime the same way

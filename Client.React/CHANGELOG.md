@@ -4,6 +4,11 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-10-09
+
+- Fixed the home-screen app going to a blank white screen when opened on a weak signal — it now opens from a saved copy, shows a loading screen with a Retry button, and no longer waits on Google Fonts
+- When the app can't reach the server it now offers Retry (and retries by itself once the signal returns) instead of sending signed-in users to the login page
+
 ## 2026-10-05
 
 - Added: tapping a live game notification opens the Scores page scrolled to that game, briefly outlined; a week-result notification opens the Leaderboard

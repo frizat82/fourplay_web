@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { isAxiosError } from 'axios';
 import { http } from '../api/http';
+import ConnectionRetry from '../components/ConnectionRetry';
 import type { LoginRequest, SignInResultDto, UserInfo } from '../types/auth';
 import { isAdmin } from '../utils/auth';
 import { buildLoginUrl } from '../utils/url';
@@ -8,6 +10,8 @@ import { buildLoginUrl } from '../utils/url';
 interface AuthContextValue {
   user: UserInfo | null;
   loading: boolean;
+  /** The session check never reached the server (weak signal, timeout) — signed-in state unknown. */
+  unreachable: boolean;
   login: (payload: LoginRequest) => Promise<SignInResultDto>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -29,13 +33,23 @@ function isValidUserInfo(payload: unknown): payload is UserInfo {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [unreachable, setUnreachable] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       const response = await http.get<UserInfo>('/api/auth/me');
       setUser(isValidUserInfo(response.data) ? response.data : null);
-    } catch {
-      setUser(null);
+      setUnreachable(false);
+    } catch (error) {
+      // No response at all says nothing about whether the user is signed in, so don't treat it
+      // as signed out (that bounced people on a weak signal to the login page). Keep any user we
+      // already had and let the caller offer a retry.
+      if (isAxiosError(error) && !error.response) {
+        setUnreachable(true);
+      } else {
+        setUser(null);
+        setUnreachable(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -44,6 +58,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Retry by itself the moment the phone gets its connection back.
+  useEffect(() => {
+    if (!unreachable) return;
+    const onOnline = () => void refresh();
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [unreachable, refresh]);
 
   const login = useCallback(
     async (payload: LoginRequest) => {
@@ -71,8 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, refresh }),
-    [loading, login, logout, refresh, user]
+    () => ({ user, loading, unreachable, login, logout, refresh }),
+    [loading, unreachable, login, logout, refresh, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -86,12 +108,24 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
+/**
+ * What to render while the signed-in state isn't known yet: a loading placeholder, or a retry
+ * prompt when the session check couldn't reach the server. Null once auth has resolved.
+ */
+export function useAuthPending(): React.ReactElement | null {
+  const { user, loading, unreachable, refresh } = useAuth();
+  if (loading) return <div>Loading...</div>;
+  if (unreachable && !user) return <ConnectionRetry onRetry={refresh} />;
+  return null;
+}
+
 export function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
+  const pending = useAuthPending();
   const location = useLocation();
 
-  if (loading) {
-    return <div>Loading...</div>;
+  if (pending) {
+    return pending;
   }
 
   if (!user) {
@@ -102,11 +136,12 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 export function RequireAdmin({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
+  const pending = useAuthPending();
   const location = useLocation();
 
-  if (loading) {
-    return <div>Loading...</div>;
+  if (pending) {
+    return pending;
   }
 
   if (!user) {

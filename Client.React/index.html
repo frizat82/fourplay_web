@@ -2,6 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Boot background + splash styles, inline so they paint before anything downloads. On a weak
+         signal the bundled CSS can take a while; without this the installed iOS app sat on a plain
+         white screen. Colors match global.css's --bg-2 (indexHtml.test.ts enforces it); :where()
+         keeps these at the lowest specificity so global.css and CssBaseline take over untouched. -->
+    <style>
+      :where(body) { margin: 0; background-color: #f1f4f8; color: #0f172a; }
+      :where(html[data-theme='dark']) body { background-color: #121a2f; color: #e2e8f0; }
+      #boot-splash { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; font-family: system-ui, -apple-system, sans-serif; }
+      #boot-splash .boot-spinner { width: 32px; height: 32px; border: 3px solid currentColor; border-right-color: transparent; border-radius: 50%; opacity: 0.5; animation: boot-spin 0.8s linear infinite; }
+      #boot-splash button { font: inherit; font-weight: 600; padding: 12px 24px; min-height: 44px; border: 0; border-radius: 8px; background: #ff6b35; color: #fff; }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+    </style>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
@@ -77,15 +89,30 @@
     <meta name="twitter:title" content="IV League — Skip the Draft. Make Picks. Beat Your Friends." />
     <meta name="twitter:description" content="Pick games against the spread every week. All picks must hit to win — winners collect the pot from losers." />
     <meta name="twitter:image" content="/icon-512.png" />
-    <!-- Fonts load from <head> in parallel with the app bundle, not via an @import inside the
-         bundled CSS (which could only start after that CSS downloaded and parsed). Only the two
-         families the UI actually uses: Space Grotesk (body/headings) and Rajdhani (brand). -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-splash" data-testid="boot-splash">
+        <strong style="font-size: 28px; letter-spacing: 0.04em">IV League</strong>
+        <div class="boot-spinner" role="progressbar" aria-label="Loading"></div>
+        <p id="boot-slow" hidden>Taking longer than usual — check your signal.</p>
+        <button id="boot-retry" type="button" hidden>Retry</button>
+      </div>
+    </div>
+    <script>
+      // If the app still hasn't replaced the splash after 10s (a stalled download on a weak
+      // signal), offer a way out instead of spinning forever. React mounting over #root removes
+      // the splash, so this finds nothing to unhide once the app is up.
+      (function () {
+        var retry = document.getElementById('boot-retry');
+        retry.addEventListener('click', function () { location.reload(); });
+        setTimeout(function () {
+          if (!document.getElementById('boot-splash')) return;
+          document.getElementById('boot-slow').hidden = false;
+          retry.hidden = false;
+        }, 10000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

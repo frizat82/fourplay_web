@@ -6,6 +6,9 @@ let refreshPromise: Promise<void> | null = null;
 export const http: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
   withCredentials: true,
+  // On a weak phone signal a request can sit on a dead connection for a minute or more; fail it
+  // instead, so callers can offer a retry rather than an endless blank loading state.
+  timeout: 15_000,
   headers: {
     'Content-Type': 'application/json',
   },
