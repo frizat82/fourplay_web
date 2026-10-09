@@ -4,10 +4,6 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
-## 2026-10-09
-
-- Fixed the home-screen app opening to an all-white screen after a long time in the background — it now reloads itself when resumed after 10+ minutes away
-
 ## 2026-10-05
 
 - Added: tapping a live game notification opens the Scores page scrolled to that game, briefly outlined; a week-result notification opens the Leaderboard
