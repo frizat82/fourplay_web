@@ -15,9 +15,11 @@ import { ThemeModeProvider, useThemeMode } from './services/theme';
 import { useVersionCheck } from './utils/useVersionCheck';
 import UpdateBanner from './components/UpdateBanner';
 import { installChunkReloadGuard } from './utils/chunkReloadGuard';
+import { installResumeReload } from './utils/resumeReload';
 import './app/global.css';
 
 installChunkReloadGuard();
+installResumeReload();
 
 const queryClient = new QueryClient({
   defaultOptions: {
