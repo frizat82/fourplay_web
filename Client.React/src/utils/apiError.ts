@@ -28,3 +28,8 @@ export function extractApiErrorMessage(error: unknown, fallback: string): string
 export function isNotFound(error: unknown): boolean {
   return axios.isAxiosError(error) && error.response?.status === 404;
 }
+
+/** The request never got an answer (no connection, timeout) — distinct from the server saying no. */
+export function isNetworkError(error: unknown): boolean {
+  return axios.isAxiosError(error) && !error.response;
+}

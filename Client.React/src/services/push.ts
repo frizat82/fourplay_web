@@ -2,6 +2,7 @@ import type { PushSubscriptionRequestDto } from '../types/notifications';
 import { isStandalonePwa } from '../utils/pwa';
 import { decodeBase64Url } from '../utils/base64';
 import { toLeagueType, type SportType } from './sport';
+import { SERVICE_WORKER_URL } from '../utils/appShellWorker';
 
 export function isPushSupported(): boolean {
   return (
@@ -23,7 +24,7 @@ export function isIos(): boolean {
 }
 
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration> {
-  return navigator.serviceWorker.register('/sw.js');
+  return navigator.serviceWorker.register(SERVICE_WORKER_URL);
 }
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {

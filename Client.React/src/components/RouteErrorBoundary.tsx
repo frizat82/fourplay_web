@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Box, Button, Typography } from '@mui/material';
+import RetryPanel from './RetryPanel';
 
 interface Props {
   children: ReactNode;
@@ -31,13 +31,12 @@ export default class RouteErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children;
     const reload = this.props.onReload ?? (() => window.location.reload());
     return (
-      <Box sx={{ textAlign: 'center', py: 6, px: 2 }}>
-        <Typography variant="h6" gutterBottom>Couldn't load this page</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Check your connection and try again.
-        </Typography>
-        <Button variant="contained" onClick={reload}>Reload</Button>
-      </Box>
+      <RetryPanel
+        title="Couldn't load this page"
+        message="Check your connection and try again."
+        actionLabel="Reload"
+        onAction={reload}
+      />
     );
   }
 }

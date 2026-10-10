@@ -1,4 +1,11 @@
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import { isNetworkError } from '../utils/apiError';
+
+// On a weak phone signal a request can sit on a dead connection for a minute or more; fail reads
+// after this instead, so callers can offer a retry rather than an endless blank loading state.
+// Writes get no timeout: one the server already completed must not be reported as failed (the
+// user would think their picks weren't saved and resubmit).
+const READ_TIMEOUT_MS = 15_000;
 
 let isRefreshing = false;
 let refreshPromise: Promise<void> | null = null;
@@ -24,6 +31,12 @@ async function refreshAuth(): Promise<void> {
   return refreshPromise;
 }
 
+http.interceptors.request.use((config) => {
+  const method = (config.method ?? 'get').toLowerCase();
+  if (!config.timeout && (method === 'get' || method === 'head')) config.timeout = READ_TIMEOUT_MS;
+  return config;
+});
+
 http.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -39,8 +52,10 @@ http.interceptors.response.use(
       try {
         await refreshAuth();
         return http.request(originalRequest);
-      } catch {
-        return Promise.reject(error);
+      } catch (refreshError) {
+        // A refresh that never got an answer says nothing about the session — surface it as the
+        // connection problem it is, not as the 401 (which reads as "signed out").
+        return Promise.reject(isNetworkError(refreshError) ? refreshError : error);
       }
     }
 
