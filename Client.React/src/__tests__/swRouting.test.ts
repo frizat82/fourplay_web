@@ -15,7 +15,8 @@ interface SwRouting {
     kind: 'shell' | 'asset',
   ): boolean;
   cachesToDelete(keys: string[]): string[];
-  entriesToTrim<T>(entries: T[], max: number): T[];
+  CACHE_ENABLED: boolean;
+  assetsToEvict(cachedPaths: string[], max: number, keep: string[]): string[];
   assetUrlsInShell(html: string): string[];
 }
 
@@ -114,9 +115,20 @@ describe('cache housekeeping', () => {
     ]);
   });
 
-  it('trims the oldest asset entries once over the limit', () => {
-    expect(r.entriesToTrim(['a', 'b', 'c', 'd'], 2)).toEqual(['a', 'b']);
-    expect(r.entriesToTrim(['a', 'b'], 2)).toEqual([]);
+  it('evicts the oldest asset entries once over the limit', () => {
+    expect(r.assetsToEvict(['/assets/a', '/assets/b', '/assets/c', '/assets/d'], 2, [])).toEqual(['/assets/a', '/assets/b']);
+    expect(r.assetsToEvict(['/assets/a', '/assets/b'], 2, [])).toEqual([]);
+  });
+
+  // A file whose hash survives many deploys (e.g. a vendor chunk) stays at the front of the cache
+  // in insertion order — evicting it by age alone would leave the saved page unable to boot offline.
+  it('never evicts a file the saved page still references, however old', () => {
+    const cached = ['/assets/vendor', '/assets/old1', '/assets/old2', '/assets/index-new'];
+    expect(r.assetsToEvict(cached, 2, ['/assets/vendor', '/assets/index-new'])).toEqual(['/assets/old1', '/assets/old2']);
+  });
+
+  it('keeps every referenced file even when they alone exceed the limit', () => {
+    expect(r.assetsToEvict(['/assets/a', '/assets/b', '/assets/c'], 1, ['/assets/a', '/assets/b'])).toEqual(['/assets/c']);
   });
 
   it('gives the network a few seconds before falling back to the saved shell', () => {
@@ -132,6 +144,11 @@ describe('kill switch (CACHE_ENABLED = false)', () => {
 
   it('is a real flag in the shipped file', () => {
     expect(src).not.toBe(swRoutingSrc);
+  });
+
+  it('exposes the flag so the worker can also turn off navigation preload', () => {
+    expect(r.CACHE_ENABLED).toBe(true);
+    expect(off.CACHE_ENABLED).toBe(false);
   });
 
   it('lets every request go straight to the network', () => {

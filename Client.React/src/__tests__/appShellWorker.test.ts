@@ -43,8 +43,11 @@ describe('installAppShellWorker', () => {
 
   it('swallows a registration failure — the app works without the worker', async () => {
     const { register, nav, win } = fakeEnv({ loaded: true });
-    register.mockRejectedValueOnce(new Error('insecure context'));
+    const failure = Promise.reject(new Error('insecure context'));
+    const handled = vi.spyOn(failure, 'catch');
+    register.mockReturnValueOnce(failure);
     installAppShellWorker({ isProd: true, nav, win });
-    await Promise.resolve();
+    expect(handled).toHaveBeenCalled();
+    await failure.catch(() => {}); // settle it here so the test itself leaves nothing unhandled
   });
 });

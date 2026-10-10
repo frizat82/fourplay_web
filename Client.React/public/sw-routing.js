@@ -11,6 +11,7 @@
   var ASSET_CACHE = 'ivl-assets-v1';
 
   self.IVLSwRouting = {
+    CACHE_ENABLED: CACHE_ENABLED,
     SHELL_CACHE: SHELL_CACHE,
     ASSET_CACHE: ASSET_CACHE,
     // Vercel serves index.html for every app route, so one cached copy covers them all.
@@ -56,9 +57,13 @@
       return Array.from(new Set(html.match(/\/assets\/[\w.-]+/g) || []));
     },
 
-    // Cache keys come back in insertion order, so the oldest are first.
-    entriesToTrim: function (entries, max) {
-      return entries.length > max ? entries.slice(0, entries.length - max) : [];
+    // Which cached build files to delete. Cache keys come back in insertion order, so the oldest
+    // are first — but a file the saved page still references is never evicted, however old (a
+    // vendor chunk's hash can survive many deploys, and the saved page can't boot without it).
+    assetsToEvict: function (cachedPaths, max, keep) {
+      var evictable = cachedPaths.filter(function (path) { return keep.indexOf(path) === -1; });
+      var excess = cachedPaths.length - max;
+      return excess > 0 ? evictable.slice(0, excess) : [];
     },
   };
 })(self);

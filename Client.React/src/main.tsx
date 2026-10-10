@@ -48,33 +48,33 @@ function ThemedApp() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <UpdateBanner mismatch={mismatch} />
-      <BrowserRouter>
-        <ToastProvider>
-          <SportsProvider>
-            <AuthProvider>
-              <SessionProvider>
-                <App />
-              </SessionProvider>
-            </AuthProvider>
-          </SportsProvider>
-        </ToastProvider>
-      </BrowserRouter>
+      {/* Outermost catch: a throw in a provider (auth, session, sport) would otherwise unmount the
+          whole app and leave an empty page. Inside ThemeProvider so the fallback is readable in
+          dark mode. Route-level boundaries in App/AppLayout keep the nav up for page failures. */}
+      <RouteErrorBoundary>
+        <BrowserRouter>
+          <ToastProvider>
+            <SportsProvider>
+              <AuthProvider>
+                <SessionProvider>
+                  <App />
+                </SessionProvider>
+              </AuthProvider>
+            </SportsProvider>
+          </ToastProvider>
+        </BrowserRouter>
+      </RouteErrorBoundary>
     </ThemeProvider>
   );
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {/* Outermost catch: a throw in a provider (auth, session, theme) would otherwise unmount the
-        whole app and leave an empty page. Route-level boundaries in App/AppLayout keep the nav up
-        for ordinary page failures. */}
-    <RouteErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <ThemeModeProvider>
-          <ThemedApp />
-        </ThemeModeProvider>
-      </QueryClientProvider>
-    </RouteErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ThemeModeProvider>
+        <ThemedApp />
+      </ThemeModeProvider>
+    </QueryClientProvider>
     <Analytics />
     <SpeedInsights />
   </React.StrictMode>

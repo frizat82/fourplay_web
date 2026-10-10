@@ -8,15 +8,21 @@
 // Every /api call bypasses the worker entirely — scores, picks and auth are always live.
 //
 // KILL SWITCH — if the cache ever misbehaves in production, set CACHE_ENABLED = false in
-// sw-routing.js and deploy: phones pick it up on their next launch, stop using the cache and
-// delete it. Push keeps working.
+// sw-routing.js AND bump SW_VERSION below, then deploy: phones pick it up on their next launch,
+// stop using the cache and delete it. Push keeps working. (Bumping SW_VERSION makes this file
+// itself change, so every browser installs the update — not all re-check importScripts files.)
+const SW_VERSION = 1;
 
 importScripts('/sw-routing.js');
 var routing = self.IVLSwRouting;
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
-  event.waitUntil(saveShell().catch(() => {}));
+  event.waitUntil(
+    fetch(routing.SHELL_URL, { cache: 'no-cache' }) // revalidate: a cheap 304 when the page just loaded it
+      .then(saveShell)
+      .catch(() => {})
+  );
 });
 
 self.addEventListener('activate', (event) => {
@@ -26,7 +32,10 @@ self.addEventListener('activate', (event) => {
       await Promise.all(routing.cachesToDelete(keys).map((key) => caches.delete(key)));
       await trimAssets();
       // Lets a launch start its page request while the worker is still waking up (iOS 15.4+).
-      if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
+      // Off with the cache: nothing would use the preloaded response, so every launch would
+      // request the page twice.
+      const preload = self.registration.navigationPreload;
+      if (preload) await (routing.CACHE_ENABLED ? preload.enable() : preload.disable());
       await self.clients.claim();
     })()
   );
@@ -54,10 +63,8 @@ function serveShell(event) {
   const network = (async () => {
     const preloaded = event.preloadResponse ? await event.preloadResponse : undefined;
     const response = preloaded || (await fetch(event.request));
-    if (routing.isCacheableResponse(response, 'shell')) {
-      const copy = response.clone();
-      event.waitUntil(caches.open(routing.SHELL_CACHE).then((cache) => cache.put(routing.SHELL_URL, copy)).catch(() => {}));
-    }
+    // Save it with its build files: after a deploy this is a page whose files were never loaded.
+    event.waitUntil(saveShell(response.clone()).catch(() => {}));
     return response;
   })();
   event.waitUntil(network.catch(() => {}));
@@ -97,31 +104,35 @@ async function serveAsset(event) {
   return response;
 }
 
-// Old builds' files pile up across deploys; drop the oldest. Run once per worker update (install
-// and activate), not on every download.
+// Old builds' files pile up across deploys; drop the oldest, never one the saved page needs. Runs
+// once per worker update (activate), not on every download.
 async function trimAssets() {
+  const shell = await caches.match(routing.SHELL_URL, { cacheName: routing.SHELL_CACHE });
+  const keep = shell ? routing.assetUrlsInShell(await shell.text()) : [];
   const cache = await caches.open(routing.ASSET_CACHE);
-  const keys = await cache.keys();
-  await Promise.all(routing.entriesToTrim(keys, routing.MAX_ASSET_ENTRIES).map((key) => cache.delete(key)));
+  const paths = (await cache.keys()).map((request) => new URL(request.url).pathname);
+  await Promise.all(routing.assetsToEvict(paths, routing.MAX_ASSET_ENTRIES, keep).map((path) => cache.delete(path)));
 }
 
-// Saves the current page and the build files it references. Runs at install, because the launch
-// that installs the worker downloaded those before the worker was in control.
-async function saveShell() {
-  // no-cache: revalidate (a cheap 304 when the page just loaded it) rather than re-download.
-  const response = await fetch(routing.SHELL_URL, { cache: 'no-cache' });
+// Saves a page and the build files it references, so the saved page can always boot offline. Used
+// at install (the launch that installs the worker downloaded those before the worker was in
+// control) and on every fresh page load (after a deploy, the new page's files aren't saved yet).
+async function saveShell(response) {
   if (!routing.isCacheableResponse(response, 'shell')) return;
   const html = await response.clone().text();
-  const shellCache = await caches.open(routing.SHELL_CACHE);
-  await shellCache.put(routing.SHELL_URL, response);
+  // Files first, page last: if the connection drops partway, the previous saved page (whose files
+  // are all still here) stays in place rather than a new page that can't boot.
   const assetCache = await caches.open(routing.ASSET_CACHE);
   await Promise.all(
     routing.assetUrlsInShell(html).map(async (url) => {
       if (await assetCache.match(url)) return;
       const asset = await fetch(url);
-      if (routing.isCacheableResponse(asset, 'asset')) await assetCache.put(url, asset);
+      if (!routing.isCacheableResponse(asset, 'asset')) throw new Error(`could not save ${url}`);
+      await assetCache.put(url, asset);
     })
   );
+  const shellCache = await caches.open(routing.SHELL_CACHE);
+  await shellCache.put(routing.SHELL_URL, response);
 }
 
 // NFL (apex) and CFB (cfb. subdomain) are different origins, so each gets its own independent
