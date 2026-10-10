@@ -16,6 +16,12 @@ const SW_VERSION = 1;
 importScripts('/sw-routing.js');
 var routing = self.IVLSwRouting;
 
+// Every cache lookup ignores Vary. Servers can mark files `Vary: Origin`, and the page's own
+// requests for its scripts and styles carry an Origin header while the worker's saving fetch
+// doesn't — so a plain match() missed files that were sitting in the cache, and an offline launch
+// got the saved page but none of its code. Hashed build files are identical whatever the origin.
+const MATCH = { ignoreVary: true };
+
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
@@ -68,7 +74,7 @@ function serveShell(event) {
     return response;
   })();
   event.waitUntil(network.catch(() => {}));
-  const saved = caches.match(routing.SHELL_URL, { cacheName: routing.SHELL_CACHE });
+  const saved = caches.match(routing.SHELL_URL, { ...MATCH, cacheName: routing.SHELL_CACHE });
 
   // A promise settles once, so whichever of these resolves first wins.
   return new Promise((resolve, reject) => {
@@ -95,7 +101,7 @@ function serveShell(event) {
 // page straight away (still streaming) and is saved in the background.
 async function serveAsset(event) {
   const cache = await caches.open(routing.ASSET_CACHE);
-  const saved = await cache.match(event.request);
+  const saved = await cache.match(event.request, MATCH);
   if (saved) return saved;
   const response = await fetch(event.request);
   if (routing.isCacheableResponse(response, 'asset')) {
@@ -107,7 +113,7 @@ async function serveAsset(event) {
 // Old builds' files pile up across deploys; drop the oldest, never one the saved page needs. Runs
 // once per worker update (activate), not on every download.
 async function trimAssets() {
-  const shell = await caches.match(routing.SHELL_URL, { cacheName: routing.SHELL_CACHE });
+  const shell = await caches.match(routing.SHELL_URL, { ...MATCH, cacheName: routing.SHELL_CACHE });
   const keep = shell ? routing.assetUrlsInShell(await shell.text()) : [];
   const cache = await caches.open(routing.ASSET_CACHE);
   const paths = (await cache.keys()).map((request) => new URL(request.url).pathname);
@@ -125,7 +131,7 @@ async function saveShell(response) {
   const assetCache = await caches.open(routing.ASSET_CACHE);
   await Promise.all(
     routing.assetUrlsInShell(html).map(async (url) => {
-      if (await assetCache.match(url)) return;
+      if (await assetCache.match(url, MATCH)) return;
       const asset = await fetch(url);
       if (!routing.isCacheableResponse(asset, 'asset')) throw new Error(`could not save ${url}`);
       await assetCache.put(url, asset);

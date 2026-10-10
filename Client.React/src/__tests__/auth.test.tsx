@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AxiosError } from 'axios';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { vi } from 'vitest';
@@ -102,13 +102,16 @@ describe('AuthProvider/RequireAuth', () => {
     it('retries on its own when the device comes back online', async () => {
       mockedHttp.get
         .mockRejectedValueOnce(networkError())
-        .mockResolvedValueOnce({ data: { userId: '123', name: 'Test User', claims: [] } });
+        .mockResolvedValue({ data: { userId: '123', name: 'Test User', claims: [] } });
 
       renderProtected();
       await screen.findByText(/can't reach iv league/i);
-      act(() => { window.dispatchEvent(new Event('online')); });
-
-      await screen.findByText('Protected');
+      // The listener attaches in an effect just after the retry prompt paints, so a single event
+      // fired the instant the prompt appears can land before it exists — keep signalling instead.
+      await waitFor(() => {
+        act(() => { window.dispatchEvent(new Event('online')); });
+        expect(screen.getByText('Protected')).toBeInTheDocument();
+      });
     });
   });
 });

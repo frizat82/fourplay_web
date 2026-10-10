@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Box, Button, Typography } from '@mui/material';
+import { lockedFillSx } from '../app/buttonStyles';
 
 interface Props {
   title: string;
@@ -27,7 +28,9 @@ export default function RetryPanel({ title, message, actionLabel, onAction }: Pr
     <Box sx={{ textAlign: 'center', py: 6, px: 2 }}>
       <Typography variant="h6" gutterBottom>{title}</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{message}</Typography>
-      <Button variant="contained" onClick={() => void act()} disabled={busy}>{actionLabel}</Button>
+      <Button variant="contained" onClick={() => void act()} disabled={busy} sx={lockedFillSx('primary')}>
+        {actionLabel}
+      </Button>
     </Box>
   );
 }
