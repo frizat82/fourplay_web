@@ -6,6 +6,7 @@ import WeatherIcon from '../WeatherIcon';
 import { isGameFinal, isGameLive, spreadLabel } from '../../utils/gameHelpers';
 import { toLocalDisplay } from '../../utils/time';
 import type { GameStatusValue } from '../../services/sportAdapter';
+import { lockedFillSx } from '../../app/buttonStyles';
 
 export type PickState = 'none' | 'pending' | 'submitted';
 
@@ -118,18 +119,10 @@ export default function GameCard({
   const spreadValueSx = { minWidth: 64, textAlign: 'center', flexShrink: 0 } as const;
   const spreadValueVariant = 'subtitle1' as const;
 
-  // MUI's `disabled` state flattens contained (filled) buttons to uniform gray regardless of
-  // `color`. Keep the real color at reduced opacity instead of falling back to generic gray.
+  // Locked pick buttons keep their color (lockedFillSx) rather than MUI's disabled gray.
   // frizat: warning/amber was hard to read in both light and dark mode — "available to pick"
   // uses info (blue) instead, filled the same as the picked (success/green) state so both read
   // as equally solid, deliberate choices rather than one looking washed out.
-  const lockedFillSx = (color: 'success' | 'info') => ({
-    '&.Mui-disabled': {
-      color: `${color}.contrastText`,
-      backgroundColor: `${color}.main`,
-      opacity: 0.6,
-    },
-  });
 
   const renderPickButton = (team: string, pickState: PickState, onPick?: () => void) => {
     if (pickState === 'submitted')

@@ -10,7 +10,7 @@ import LogoutPage from './pages/LogoutPage';
 // Static, not lazy: HomePage already imports RulesContent from this module, so it's in the
 // entry chunk either way.
 import RulesPage from './pages/RulesPage';
-import { RequireAdmin, RequireAuth, useAuth } from './services/auth';
+import { RequireAdmin, RequireAuth, useAuth, useAuthPending } from './services/auth';
 import { useSportContext } from './services/sport';
 import { createNflAdapter } from './services/nflAdapter';
 import { createCfbAdapter } from './services/cfbAdapter';
@@ -55,8 +55,10 @@ const nflAdapter = createNflAdapter();
 const cfbAdapter = createCfbAdapter();
 
 function RootRedirect() {
-  const { user, loading } = useAuth();
-  if (loading) return null;
+  const { user } = useAuth();
+  // The home-screen app opens here: a spinner or retry prompt, never an empty page.
+  const pending = useAuthPending();
+  if (pending) return pending;
   return user ? <Navigate to="/dashboard" replace /> : <HomePage />;
 }
 

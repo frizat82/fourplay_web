@@ -6,6 +6,8 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-10-09
 
+- Fixed the home-screen app going to a blank white screen when opened on a weak signal — it now opens from a saved copy, shows a loading screen with a Retry button, and no longer waits on Google Fonts
+- When the app can't reach the server it now offers Retry (and retries by itself once the signal returns) instead of sending signed-in users to the login page
 - Game weather icons are now picked from ESPN's forecast code, so hazy, hot, cold, windy, sleet and night conditions show a real icon instead of N/A
 
 ## 2026-10-05

@@ -14,10 +14,22 @@ import { ToastProvider } from './services/toast';
 import { ThemeModeProvider, useThemeMode } from './services/theme';
 import { useVersionCheck } from './utils/useVersionCheck';
 import UpdateBanner from './components/UpdateBanner';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { installChunkReloadGuard } from './utils/chunkReloadGuard';
+import { installAppShellWorker } from './utils/appShellWorker';
+// Bundled rather than loaded from Google Fonts: a render-blocking stylesheet on another host
+// could stall the whole launch on a weak signal (the iOS white-screen report). Only the weights
+// the UI uses — Space Grotesk for body/headings, Rajdhani for the brand.
+import '@fontsource/space-grotesk/400.css';
+import '@fontsource/space-grotesk/500.css';
+import '@fontsource/space-grotesk/600.css';
+import '@fontsource/space-grotesk/700.css';
+import '@fontsource/rajdhani/600.css';
+import '@fontsource/rajdhani/700.css';
 import './app/global.css';
 
 installChunkReloadGuard();
+installAppShellWorker();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,17 +48,22 @@ function ThemedApp() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <UpdateBanner mismatch={mismatch} />
-      <BrowserRouter>
-        <ToastProvider>
-          <SportsProvider>
-            <AuthProvider>
-              <SessionProvider>
-                <App />
-              </SessionProvider>
-            </AuthProvider>
-          </SportsProvider>
-        </ToastProvider>
-      </BrowserRouter>
+      {/* Outermost catch: a throw in a provider (auth, session, sport) would otherwise unmount the
+          whole app and leave an empty page. Inside ThemeProvider so the fallback is readable in
+          dark mode. Route-level boundaries in App/AppLayout keep the nav up for page failures. */}
+      <RouteErrorBoundary>
+        <BrowserRouter>
+          <ToastProvider>
+            <SportsProvider>
+              <AuthProvider>
+                <SessionProvider>
+                  <App />
+                </SessionProvider>
+              </AuthProvider>
+            </SportsProvider>
+          </ToastProvider>
+        </BrowserRouter>
+      </RouteErrorBoundary>
     </ThemeProvider>
   );
 }
