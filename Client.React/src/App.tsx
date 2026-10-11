@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, type ComponentType } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './layouts/AppLayout';
-import RouteFallback from './components/RouteFallback';
+import LaunchScreen from './components/LaunchScreen';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import HomePage from './pages/HomePage';
 import PicksPage from './pages/PicksPage';
@@ -88,7 +88,7 @@ export default function App() {
     // AppLayout's own boundaries around <Outlet/>, so the nav stays up while a route chunk loads.
     // Not keyed by pathname here — that would remount AppLayout on every navigation.
     <RouteErrorBoundary>
-      <Suspense fallback={<RouteFallback fullScreen />}>
+      <Suspense fallback={<LaunchScreen />}>
         <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" caseSensitive={false} element={<Navigate to="/account/login" replace />} />

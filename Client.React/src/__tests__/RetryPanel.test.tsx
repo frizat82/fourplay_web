@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider } from '@mui/material/styles';
+import { ThemeProvider, hexToRgb } from '@mui/material/styles';
 import { createAppTheme } from '../app/theme';
 import RetryPanel from '../components/RetryPanel';
 
@@ -19,9 +19,7 @@ describe('RetryPanel', () => {
       await userEvent.click(button);
 
       expect(button).toBeDisabled();
-      const hex = theme.palette.primary.main;
-      const rgb = `rgb(${[1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
-      expect(getComputedStyle(button).backgroundColor).toBe(rgb);
+      expect(getComputedStyle(button).backgroundColor).toBe(hexToRgb(theme.palette.primary.main));
     });
   }
 

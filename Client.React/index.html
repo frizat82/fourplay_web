@@ -16,14 +16,22 @@
       #boot-splash .boot-title { align-self: end; font-size: 28px; letter-spacing: 0.04em; }
       #boot-splash .boot-below { align-self: start; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
       #boot-splash p { margin: 0; }
-      /* Same spinner as the app's (theme.ts MuiCircularProgress): 40px, primary in light, secondary
-         in dark, full opacity — so the hand-off to the app is seamless. e2e-checked against theme.ts. */
-      #boot-splash .boot-spinner { box-sizing: border-box; width: 40px; height: 40px; border: 3.6px solid #1a2847; border-right-color: transparent; border-radius: 50%; animation: boot-spin 0.8s linear infinite; }
-      :where(html[data-theme='dark']) #boot-splash .boot-spinner { border-color: #ff6b35; border-right-color: transparent; }
+      /* A copy of what MUI's CircularProgress renders (same SVG arc and both animations), coloured
+         like theme.ts's MuiCircularProgress — primary in light, secondary in dark, full opacity — so
+         the hand-off to the app's own spinner is seamless. e2e-checked against theme.ts. */
+      #boot-splash .boot-spinner { width: 40px; height: 40px; color: #1a2847; animation: boot-rotate 1.4s linear infinite; }
+      :where(html[data-theme='dark']) #boot-splash .boot-spinner { color: #ff6b35; }
+      #boot-splash .boot-spinner svg { display: block; }
+      #boot-splash .boot-spinner circle { stroke: currentColor; stroke-dasharray: 80px, 200px; stroke-dashoffset: 0; animation: boot-dash 1.4s ease-in-out infinite; }
+      @keyframes boot-rotate { to { transform: rotate(360deg); } }
+      @keyframes boot-dash {
+        0% { stroke-dasharray: 1px, 200px; stroke-dashoffset: 0; }
+        50% { stroke-dasharray: 100px, 200px; stroke-dashoffset: -15px; }
+        100% { stroke-dasharray: 1px, 200px; stroke-dashoffset: -126px; }
+      }
       /* Retry: theme.ts's primary filled button (main + contrastText) per mode — e2e-checked. */
       #boot-splash button { font: inherit; font-weight: 600; padding: 12px 24px; min-height: 44px; border: 0; border-radius: 8px; background: #1a2847; color: #fff; }
       :where(html[data-theme='dark']) #boot-splash button { background: #6366f1; }
-      @keyframes boot-spin { to { transform: rotate(360deg); } }
     </style>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -105,7 +113,7 @@
     <div id="root">
       <div id="boot-splash" data-testid="boot-splash">
         <strong class="boot-title">IV League</strong>
-        <div class="boot-spinner" role="progressbar" aria-label="Loading"></div>
+        <span class="boot-spinner" role="progressbar" aria-label="Loading"><svg viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2" fill="none" stroke-width="3.6"></circle></svg></span>
         <div class="boot-below">
           <p id="boot-slow" hidden>Taking longer than usual — check your signal.</p>
           <button id="boot-retry" type="button" hidden>Retry</button>
