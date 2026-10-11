@@ -88,7 +88,7 @@ export default function App() {
     // AppLayout's own boundaries around <Outlet/>, so the nav stays up while a route chunk loads.
     // Not keyed by pathname here — that would remount AppLayout on every navigation.
     <RouteErrorBoundary>
-      <Suspense fallback={<RouteFallback />}>
+      <Suspense fallback={<RouteFallback fullScreen />}>
         <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" caseSensitive={false} element={<Navigate to="/account/login" replace />} />

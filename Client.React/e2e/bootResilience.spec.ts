@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, devices, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setupRoutes } from './helpers/routes';
@@ -81,3 +81,63 @@ test.describe('Launch on a bad connection', () => {
     await expect(page).not.toHaveURL(/login/);
   });
 });
+
+// The launch hands off from the static splash (index.html) to the app's own loading screen while
+// the session check runs. Both spinners must sit dead centre, in the same spot, on a phone — the
+// app's used to sit near the top, so the spinner visibly jumped on every launch.
+test.describe('Launch spinner position (iPhone)', () => {
+  test.use({ viewport: devices['iPhone 13'].viewport });
+
+  async function spinnerOffsetFromCentre(page: Page) {
+    const spinner = page.getByRole('progressbar').first();
+    await expect(spinner).toBeVisible();
+    const box = (await spinner.boundingBox())!;
+    const vp = page.viewportSize()!;
+    return {
+      dx: Math.round(box.x + box.width / 2 - vp.width / 2),
+      dy: Math.round(box.y + box.height / 2 - vp.height / 2),
+    };
+  }
+
+  test('the splash spinner is centred', async ({ page }) => {
+    await page.route(APP_ENTRY, () => {});
+    await page.goto('/', { waitUntil: 'commit' });
+    await expect(page.getByTestId('boot-splash')).toBeVisible();
+    const { dx, dy } = await spinnerOffsetFromCentre(page);
+    expect(Math.abs(dx)).toBeLessThanOrEqual(2);
+    expect(Math.abs(dy)).toBeLessThanOrEqual(2);
+  });
+
+  // Same spinner on both sides of the hand-off: the splash copies the theme's CircularProgress
+  // (colour per mode from theme.ts, full opacity per /style-guide, same 40px size).
+  for (const mode of ['light', 'dark'] as const) {
+    test(`${mode} mode: the splash spinner matches the app's spinner`, async ({ page }) => {
+      const theme = createAppTheme(mode);
+      const key = theme.components!.MuiCircularProgress!.defaultProps!.color as 'primary' | 'secondary';
+      const hex = theme.palette[key].main;
+      const rgb = `rgb(${[1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+
+      await page.addInitScript(m => localStorage.setItem('FourPlayWebApp.ThemeMode', m), mode);
+      await page.route(APP_ENTRY, () => {});
+      await page.goto('/', { waitUntil: 'commit' });
+      const spinner = page.getByTestId('boot-splash').getByRole('progressbar');
+      const style = await spinner.evaluate(el => {
+        const cs = getComputedStyle(el);
+        return { color: cs.borderTopColor, opacity: cs.opacity, size: (el as HTMLElement).offsetWidth }; // layout size: a rotating spinner's bounding box grows mid-turn
+      });
+      expect(style).toEqual({ color: rgb, opacity: '1', size: 40 });
+    });
+  }
+
+  test("the app's loading spinner, while the session check runs, is centred too", async ({ page }) => {
+    await setupRoutes(page);
+    await injectAuthCookie(page);
+    await page.route('**/api/auth/me', () => {}); // still waiting on the server
+    await page.goto('/dashboard');
+    await expect(page.getByTestId('boot-splash')).toHaveCount(0); // the app has taken over
+    const { dx, dy } = await spinnerOffsetFromCentre(page);
+    expect(Math.abs(dx)).toBeLessThanOrEqual(2);
+    expect(Math.abs(dy)).toBeLessThanOrEqual(2);
+  });
+});
+

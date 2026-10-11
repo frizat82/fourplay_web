@@ -112,7 +112,7 @@ export function useAuth(): AuthContextValue {
  */
 export function useAuthPending(): React.ReactElement | null {
   const { user, loading, unreachable, refresh } = useAuth();
-  if (loading) return <RouteFallback />;
+  if (loading) return <RouteFallback fullScreen />;
   if (unreachable && !user) {
     return <RetryPanel title="Can't reach IV League" message="Check your signal and try again." actionLabel="Retry" onAction={refresh} />;
   }
