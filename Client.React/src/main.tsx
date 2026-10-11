@@ -51,7 +51,7 @@ function ThemedApp() {
       {/* Outermost catch: a throw in a provider (auth, session, sport) would otherwise unmount the
           whole app and leave an empty page. Inside ThemeProvider so the fallback is readable in
           dark mode. Route-level boundaries in App/AppLayout keep the nav up for page failures. */}
-      <RouteErrorBoundary>
+      <RouteErrorBoundary fullScreen>
         <BrowserRouter>
           <ToastProvider>
             <SportsProvider>

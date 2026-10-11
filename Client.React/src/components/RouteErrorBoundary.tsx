@@ -1,9 +1,12 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import RetryPanel from './RetryPanel';
+import LaunchScreen from './LaunchScreen';
 
 interface Props {
   children: ReactNode;
   onReload?: () => void;
+  /** Stands in for the whole app (the outermost boundaries), so centre the fallback on screen. */
+  fullScreen?: boolean;
 }
 
 interface State {
@@ -30,7 +33,7 @@ export default class RouteErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children;
     const reload = this.props.onReload ?? (() => window.location.reload());
-    return (
+    const panel = (
       <RetryPanel
         title="Couldn't load this page"
         message="Check your connection and try again."
@@ -38,5 +41,6 @@ export default class RouteErrorBoundary extends Component<Props, State> {
         onAction={reload}
       />
     );
+    return this.props.fullScreen ? <LaunchScreen>{panel}</LaunchScreen> : panel;
   }
 }

@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-10-11
+
+- Fixed the loading spinner on app launch jumping from the middle of the screen to the top — it now stays centred, in the same colour, from splash screen to app
+
 ## 2026-10-09
 
 - Fixed the home-screen app going to a blank white screen when opened on a weak signal — it now opens from a saved copy, shows a loading screen with a Retry button, and no longer waits on Google Fonts

@@ -9,12 +9,30 @@
     <style>
       :where(body) { margin: 0; background-color: #f1f4f8; color: #0f172a; }
       :where(html[data-theme='dark']) body { background-color: #121a2f; color: #e2e8f0; }
-      #boot-splash { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; font-family: system-ui, -apple-system, sans-serif; }
-      #boot-splash .boot-spinner { width: 32px; height: 32px; border: 3px solid currentColor; border-right-color: transparent; border-radius: 50%; opacity: 0.5; animation: boot-spin 0.8s linear infinite; }
+      /* Three rows, spinner in the middle one: the spinner sits dead centre — where the app's own
+         launch screens (src/components/LaunchScreen.tsx) put theirs when they take over — title
+         above, slow-signal note and Retry below. dvh where supported so iOS's toolbar doesn't
+         shift it. */
+      #boot-splash { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-rows: 1fr auto 1fr; justify-items: center; row-gap: 16px; font-family: system-ui, -apple-system, sans-serif; }
+      #boot-splash .boot-title { align-self: end; font-size: 28px; letter-spacing: 0.04em; }
+      #boot-splash .boot-below { align-self: start; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+      #boot-splash p { margin: 0; }
+      /* A copy of what MUI's CircularProgress renders (same SVG arc and both animations), coloured
+         like theme.ts's MuiCircularProgress — primary in light, secondary in dark, full opacity — so
+         the hand-off to the app's own spinner is seamless. e2e-checked against theme.ts. */
+      #boot-splash .boot-spinner { width: 40px; height: 40px; color: #1a2847; animation: boot-rotate 1.4s linear infinite; }
+      :where(html[data-theme='dark']) #boot-splash .boot-spinner { color: #ff6b35; }
+      #boot-splash .boot-spinner svg { display: block; }
+      #boot-splash .boot-spinner circle { stroke: currentColor; stroke-dasharray: 80px, 200px; stroke-dashoffset: 0; animation: boot-dash 1.4s ease-in-out infinite; }
+      @keyframes boot-rotate { to { transform: rotate(360deg); } }
+      @keyframes boot-dash {
+        0% { stroke-dasharray: 1px, 200px; stroke-dashoffset: 0; }
+        50% { stroke-dasharray: 100px, 200px; stroke-dashoffset: -15px; }
+        100% { stroke-dasharray: 1px, 200px; stroke-dashoffset: -126px; }
+      }
       /* Retry: theme.ts's primary filled button (main + contrastText) per mode — e2e-checked. */
       #boot-splash button { font: inherit; font-weight: 600; padding: 12px 24px; min-height: 44px; border: 0; border-radius: 8px; background: #1a2847; color: #fff; }
       :where(html[data-theme='dark']) #boot-splash button { background: #6366f1; }
-      @keyframes boot-spin { to { transform: rotate(360deg); } }
     </style>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -95,10 +113,12 @@
   <body>
     <div id="root">
       <div id="boot-splash" data-testid="boot-splash">
-        <strong style="font-size: 28px; letter-spacing: 0.04em">IV League</strong>
-        <div class="boot-spinner" role="progressbar" aria-label="Loading"></div>
-        <p id="boot-slow" hidden>Taking longer than usual — check your signal.</p>
-        <button id="boot-retry" type="button" hidden>Retry</button>
+        <strong class="boot-title">IV League</strong>
+        <span class="boot-spinner" role="progressbar" aria-label="Loading"><svg viewBox="22 22 44 44"><circle cx="44" cy="44" r="20.2" fill="none" stroke-width="3.6"></circle></svg></span>
+        <div class="boot-below">
+          <p id="boot-slow" hidden>Taking longer than usual — check your signal.</p>
+          <button id="boot-retry" type="button" hidden>Retry</button>
+        </div>
       </div>
     </div>
     <script>

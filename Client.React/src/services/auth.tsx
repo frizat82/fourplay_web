@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { Navigate, useLocation } from 'react-router-dom';
 import { http } from '../api/http';
 import RetryPanel from '../components/RetryPanel';
-import RouteFallback from '../components/RouteFallback';
+import LaunchScreen from '../components/LaunchScreen';
 import { isNetworkError } from '../utils/apiError';
 import type { LoginRequest, SignInResultDto, UserInfo } from '../types/auth';
 import { isAdmin } from '../utils/auth';
@@ -112,9 +112,13 @@ export function useAuth(): AuthContextValue {
  */
 export function useAuthPending(): React.ReactElement | null {
   const { user, loading, unreachable, refresh } = useAuth();
-  if (loading) return <RouteFallback />;
+  if (loading) return <LaunchScreen />;
   if (unreachable && !user) {
-    return <RetryPanel title="Can't reach IV League" message="Check your signal and try again." actionLabel="Retry" onAction={refresh} />;
+    return (
+      <LaunchScreen>
+        <RetryPanel title="Can't reach IV League" message="Check your signal and try again." actionLabel="Retry" onAction={refresh} />
+      </LaunchScreen>
+    );
   }
   return null;
 }
