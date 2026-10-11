@@ -37,4 +37,17 @@ describe('RouteErrorBoundary', () => {
     rerender(<RouteErrorBoundary key="/picks"><p>picks page</p></RouteErrorBoundary>);
     expect(screen.getByText('picks page')).toBeInTheDocument();
   });
+
+  // The outermost boundaries (main.tsx, App.tsx) replace the whole app — at launch that's a
+  // hand-off from the centred splash, so their fallback must be centred too, not pinned to the top.
+  it('centres its fallback on the whole screen when it stands in for the whole app', () => {
+    render(<RouteErrorBoundary fullScreen><Boom /></RouteErrorBoundary>);
+    expect(screen.getByTestId('launch-screen')).toContainElement(screen.getByText(/couldn't load this page/i));
+  });
+
+  it('stays inline inside the layout (nav above it) by default', () => {
+    render(<RouteErrorBoundary><Boom /></RouteErrorBoundary>);
+    expect(screen.queryByTestId('launch-screen')).not.toBeInTheDocument();
+  });
 });
+

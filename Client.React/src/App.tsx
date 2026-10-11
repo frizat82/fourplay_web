@@ -87,7 +87,7 @@ export default function App() {
     // Pages outside AppLayout (account forms, join, 404). Pages inside it suspend (and fail) at
     // AppLayout's own boundaries around <Outlet/>, so the nav stays up while a route chunk loads.
     // Not keyed by pathname here — that would remount AppLayout on every navigation.
-    <RouteErrorBoundary>
+    <RouteErrorBoundary fullScreen>
       <Suspense fallback={<LaunchScreen />}>
         <Routes>
           <Route path="/" element={<RootRedirect />} />

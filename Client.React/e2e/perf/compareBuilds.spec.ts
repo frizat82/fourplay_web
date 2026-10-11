@@ -10,12 +10,16 @@ import { createPick } from '../../src/test/fixtures';
 // already run); see the /perf-check skill for the full recipe. perf.spec.ts gates the deterministic
 // metrics on every run; this answers the timing question it deliberately doesn't.
 //
-// Both builds get identical mocked APIs (150ms each), an iPhone viewport, and two network profiles.
-// Each run is a fresh context: a first visit (no service worker yet), then a reload once the worker
-// has installed (repeat visit — what an installed home-screen app does on every launch).
+// Both builds get identical mocked APIs (150ms each), the perf project's iPhone 13 profile, and two
+// network profiles. Each run is a fresh context: a first visit (no service worker yet), then a
+// reload once the worker controls the page (repeat visit — what an installed home-screen app does on
+// every launch). Builds alternate which goes first each run, so warm-up doesn't favour either one.
 const BEFORE_DIR = process.env.PERF_COMPARE_BEFORE;
 const AFTER_DIR = fileURLToPath(new URL('../..', import.meta.url));
 const RUNS = Number(process.env.PERF_COMPARE_RUNS ?? 5);
+// The full device profile (UA, DPR, touch), not just its viewport; defaultBrowserType isn't a
+// context option.
+const { defaultBrowserType: _browserType, ...IPHONE } = devices['iPhone 13'];
 const API_LATENCY_MS = 150;
 
 const NETWORKS = [
@@ -39,11 +43,10 @@ async function startPreview(dir: string, port: number) {
   throw new Error(`vite preview did not start in ${dir}`);
 }
 
-async function timeLaunches(browser: Browser, base: string, network: (typeof NETWORKS)[number]) {
-  const first: number[] = [];
-  const repeat: number[] = [];
-  for (let run = 0; run < RUNS; run++) {
-    const ctx = await browser.newContext({ viewport: devices['iPhone 13'].viewport });
+/** One fresh-context launch: first visit, then a repeat visit once the service worker is in control. */
+async function timeLaunch(browser: Browser, base: string, network: (typeof NETWORKS)[number]) {
+  const ctx = await browser.newContext(IPHONE);
+  try {
     const page = await ctx.newPage();
     if (network.conditions) {
       const cdp = await ctx.newCDPSession(page);
@@ -59,31 +62,44 @@ async function timeLaunches(browser: Browser, base: string, network: (typeof NET
     let t = Date.now();
     await page.goto(`${base}/dashboard`);
     await ready();
-    first.push(Date.now() - t);
+    const first = Date.now() - t;
 
-    await page.evaluate(() => new Promise(r => setTimeout(r, 1500))); // let the worker install
+    // Builds without a service worker (anything before #478) just reload uncached-by-worker.
+    await page.evaluate(async () => {
+      if (!('serviceWorker' in navigator) || !(await navigator.serviceWorker.getRegistration())) return;
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) {
+        await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+      }
+    });
     t = Date.now();
     await page.reload();
     await ready();
-    repeat.push(Date.now() - t);
+    return { first, repeat: Date.now() - t };
+  } finally {
     await ctx.close();
   }
-  return { first, repeat };
 }
 
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
 test('launch timing: before vs after', async ({ browser }) => {
   test.setTimeout(10 * 60_000);
-  const builds = [
-    { name: 'before', ...(await startPreview(BEFORE_DIR!, 4301)) },
-    { name: 'after', ...(await startPreview(AFTER_DIR, 4302)) },
-  ];
+  const builds: { name: string; base: string; stop: () => void }[] = [];
   try {
+    builds.push({ name: 'before', ...(await startPreview(BEFORE_DIR!, 4301)) });
+    builds.push({ name: 'after', ...(await startPreview(AFTER_DIR, 4302)) });
     for (const network of NETWORKS) {
-      for (const b of builds) {
-        const { first, repeat } = await timeLaunches(browser, b.base, network);
-        console.log(`[compare] ${network.name.padEnd(4)} ${b.name.padEnd(6)} first-visit median ${median(first)}ms ${JSON.stringify(first)} | repeat-visit median ${median(repeat)}ms ${JSON.stringify(repeat)}`);
+      const times = new Map(builds.map(b => [b.name, { first: [] as number[], repeat: [] as number[] }]));
+      for (let run = 0; run < RUNS; run++) {
+        for (const b of run % 2 ? [...builds].reverse() : builds) {
+          const { first, repeat } = await timeLaunch(browser, b.base, network);
+          times.get(b.name)!.first.push(first);
+          times.get(b.name)!.repeat.push(repeat);
+        }
+      }
+      for (const [name, { first, repeat }] of times) {
+        console.log(`[compare] ${network.name.padEnd(4)} ${name.padEnd(6)} first-visit median ${median(first)}ms ${JSON.stringify(first)} | repeat-visit median ${median(repeat)}ms ${JSON.stringify(repeat)}`);
       }
     }
   } finally {
