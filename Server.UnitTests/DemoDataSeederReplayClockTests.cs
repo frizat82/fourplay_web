@@ -43,7 +43,7 @@ public class DemoDataSeederReplayClockTests {
         // Pre-existing row with real, far-future calendar dates — proves the fix overwrites them
         // with DemoFrozenNow-anchored values rather than leaving/self-healing them to real "now".
         db.NflSeasonWeekConfigs.Add(new NflSeasonWeekConfig {
-            Season = ReplaySeason, WeekId = ReplayWeek, WeekLabel = "Super Bowl", WeekType = "PostSeason",
+            Season = ReplaySeason, WeekId = ReplayWeek, WeekLabel = "Super Bowl", WeekType = "Super Bowl",
             ScoringFormat = "Standard",
             WeekStartDatetime = new DateTime(2027, 2, 10), WeekEndDatetime = new DateTime(2027, 2, 17),
             SpreadLockDatetime = new DateTime(2027, 2, 14),

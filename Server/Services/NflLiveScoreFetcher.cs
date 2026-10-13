@@ -7,11 +7,10 @@ namespace FourPlayWebApp.Server.Services;
 
 public class NflLiveScoreFetcher(IEspnApiService espnApi) : INflLiveScoreFetcher {
     public async Task<EspnScores?> FetchForWeekAsync(NflSeasonWeekConfig week) {
-        var isPostSeason = week.WeekType == "PostSeason";
         var startDate = DateOnly.FromDateTime(week.WeekStartDatetime);
         var endDate = DateOnly.FromDateTime(week.WeekEndDatetime);
 
-        var scoreboard = await espnApi.GetScoresByDateRangeAsync(startDate, endDate, isPostSeason);
+        var scoreboard = await espnApi.GetScoresByDateRangeAsync(startDate, endDate, week.IsPostSeason);
         if (scoreboard?.Events is null) return null;
 
         var events = GameHelpers.FilterEventsToDateWindow(scoreboard.Events, week.WeekStartDatetime, week.WeekEndDatetime);

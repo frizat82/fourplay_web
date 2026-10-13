@@ -67,7 +67,7 @@ public class NflSpreadJobTests
         Season = season,
         WeekId = weekId,
         WeekLabel = $"Week {weekId}",
-        WeekType = weekId > 18 ? "PostSeason" : "RegularSeason",
+        WeekType = weekId > 18 ? "Wild Card" : "Regular Season",
         ScoringFormat = "Standard",
         WeekStartDatetime = new DateTime(season, 11, 1, 0, 0, 0, DateTimeKind.Utc),
         WeekEndDatetime = new DateTime(season, 11, 10, 23, 59, 59, DateTimeKind.Utc),

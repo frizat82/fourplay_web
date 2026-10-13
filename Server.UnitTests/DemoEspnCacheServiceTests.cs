@@ -161,7 +161,7 @@ public class DemoEspnCacheServiceTests
             Season = 2025,
             WeekId = 22,
             WeekLabel = "Super Bowl",
-            WeekType = "PostSeason",
+            WeekType = "Super Bowl",
             ScoringFormat = "Standard",
             WeekStartDatetime = new DateTime(2026, 1, 25),
             WeekEndDatetime = new DateTime(2026, 1, 26),
@@ -208,13 +208,13 @@ public class DemoEspnCacheServiceTests
             GameTime = frozen.UtcDateTime.AddDays(-10),
         });
         db.NflSeasonWeekConfigs.Add(new Models.Data.NflSeasonWeekConfig {
-            Season = 2025, WeekId = 21, WeekLabel = "Conference Championship", WeekType = "PostSeason",
+            Season = 2025, WeekId = 21, WeekLabel = "Conference Championship", WeekType = "Conference Championship",
             ScoringFormat = "Standard",
             WeekStartDatetime = frozen.UtcDateTime.AddDays(-10), WeekEndDatetime = frozen.UtcDateTime.AddDays(-3),
             SpreadLockDatetime = frozen.UtcDateTime.AddDays(-10),
         });
         db.NflSeasonWeekConfigs.Add(new Models.Data.NflSeasonWeekConfig {
-            Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "PostSeason",
+            Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "Super Bowl",
             ScoringFormat = "Standard",
             WeekStartDatetime = frozen.UtcDateTime.AddDays(10), WeekEndDatetime = frozen.UtcDateTime.AddDays(17),
             SpreadLockDatetime = frozen.UtcDateTime.AddDays(10),

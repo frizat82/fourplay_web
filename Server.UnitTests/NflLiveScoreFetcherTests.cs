@@ -21,7 +21,7 @@ public class NflLiveScoreFetcherTests {
         Season = season,
         WeekId = weekId,
         WeekLabel = $"Week {weekId}",
-        WeekType = postSeason ? "PostSeason" : "RegularSeason",
+        WeekType = postSeason ? "Wild Card" : "Regular Season",
         ScoringFormat = "Standard",
         WeekStartDatetime = new DateTime(season, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays((weekId - 1) * 7),
         WeekEndDatetime = new DateTime(season, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(weekId * 7),

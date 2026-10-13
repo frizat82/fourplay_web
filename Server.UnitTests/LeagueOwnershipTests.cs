@@ -353,7 +353,7 @@ public class LeagueOwnershipTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
         repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
-            new() { Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "PostSeason", ScoringFormat = "Standard",
+            new() { Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "Super Bowl", ScoringFormat = "Standard",
                 FirstGameOfWeekStartDatetime = new DateTime(2026, 2, 8, 23, 30, 0, DateTimeKind.Utc) },
         });
 
@@ -372,7 +372,7 @@ public class LeagueOwnershipTests
         // Super Bowl config row exists but is set far in the future — WeeklyCost lock hasn't hit
         // yet either way, and Season 2025's WEEK 1 has no config row at all here, so tease is open.
         repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
-            new() { Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "PostSeason", ScoringFormat = "Standard",
+            new() { Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "Super Bowl", ScoringFormat = "Standard",
                 FirstGameOfWeekStartDatetime = new DateTime(2099, 2, 8, 23, 30, 0, DateTimeKind.Utc) },
         });
 
