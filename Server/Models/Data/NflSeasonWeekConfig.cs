@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using FourPlayWebApp.Shared.Helpers;
+
 namespace FourPlayWebApp.Server.Models.Data;
 
 public class NflSeasonWeekConfig {
@@ -12,4 +15,7 @@ public class NflSeasonWeekConfig {
     public DateTime? FirstGameOfWeekStartDatetime { get; set; }
     public DateTime SpreadLockDatetime { get; set; }    // UTC — when NflSpreadSchedulerJob fires NflSpreadJob for this week; required, never null
     public string? WeekNotes { get; set; }
+
+    [NotMapped]
+    public bool IsPostSeason => GameHelpers.IsNflPostSeasonWeek(WeekId);
 }
