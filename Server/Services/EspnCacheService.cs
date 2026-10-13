@@ -130,7 +130,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
                 // real week number the live-fetch path below would have put there — no current
                 // consumer reads this field from a live response for a decision, but it's a real
                 // seam the full frizat-3nv GameData DTO would close.
-                return FinalScoresEspnMapper.Build(games, season, nflWeek, matchingConfig.WeekType == "PostSeason");
+                return FinalScoresEspnMapper.Build(games, season, nflWeek, matchingConfig.IsPostSeason);
             },
             liveFetchAsync: () => _fetcher.FetchForWeekAsync(matchingConfig));
     }

@@ -75,7 +75,7 @@ public class DemoEspnCacheService : IEspnCacheService
         var games = rows.Select(row => new FinalScoresEspnMapper.FinishedGame(
             row.Id.ToString(), row.HomeTeam, row.AwayTeam, row.HomeTeamScore, row.AwayTeamScore, row.GameTime));
 
-        return FinalScoresEspnMapper.Build(games, season, nflWeek, matchingConfig?.WeekType == "PostSeason");
+        return FinalScoresEspnMapper.Build(games, season, nflWeek, GameHelpers.IsNflPostSeasonWeek(nflWeek));
     }
 
     // No-op: demo data is a frozen fixture, never refreshed by a live NflScoresJob upsert.

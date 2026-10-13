@@ -7,8 +7,10 @@ namespace FourPlayWebApp.Server.UnitTests;
 /// <summary>
 /// frizat-703.5: contract tests against the REAL ESPN + odds APIs (no mocks, real network).
 /// Proves our DTOs/parsers still match ESPN's actual wire shape, not just our frozen fixtures.
-/// Excluded from the default `dotnet test` run via the "Contract" trait — see ci.yml/dotnet.yml
-/// (--filter Category!=Contract) and .github/workflows/espn-contract.yml (weekly + on-demand).
+/// Runs in every CI build (ci.yml's backend `dotnet test`), so ESPN wire-shape drift fails the
+/// build the day it happens (frizat-iwi). They used to run only in a weekly, separate workflow
+/// that sat red for a month unnoticed. The "Contract" trait stays so they can still be run
+/// alone: `dotnet test --filter Category=Contract`.
 ///
 /// Consolidates two pre-existing untagged live-API tests (EspnApiServiceIntegrationTests,
 /// EspnCoreOddsServiceLiveApiTests) that were previously running in every default `dotnet test`
@@ -33,7 +35,8 @@ public class EspnContractTests
     private const string EspnUserAgent = "curl/8.14.1";
 
     private static HttpClient BuildEspnHttpClient(string baseAddress) {
-        var client = new HttpClient { BaseAddress = new Uri(baseAddress) };
+        // These run in every CI build now (frizat-iwi) — cap a slow ESPN well below the 100s default.
+        var client = new HttpClient { BaseAddress = new Uri(baseAddress), Timeout = TimeSpan.FromSeconds(20) };
         client.DefaultRequestHeaders.UserAgent.ParseAdd(EspnUserAgent);
         return client;
     }
@@ -75,7 +78,10 @@ public class EspnContractTests
 
         Assert.NotNull(scores);
         Assert.NotEmpty(scores!.Events);
-        Assert.True(scores.IsPostSeason());
+        // Per-event, not scores.IsPostSeason(): since ~2026-09 ESPN's single-day (dates=YYYYMMDD)
+        // responses omit the top-level `season` object, but every event still carries its own
+        // season.type — which is what NflScoresJob/NFLSpreadJob actually persist (x.Season).
+        Assert.All(scores.Events, e => Assert.True(e.IsPostSeason(), $"event {e.Id} not flagged postseason"));
     }
 
     [Fact]

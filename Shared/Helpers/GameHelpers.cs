@@ -74,6 +74,12 @@ public static class GameHelpers {
     // GetWeekFromEspnWeek below are the only two places this threshold is allowed to live.
     public const int LastSeasonEspnSkippedProBowlWeek = 2025;
 
+    // Our canonical NFL WeekId: 1-18 regular season, 19-22 postseason (NflSeasonWeekConfigs).
+    // The single postseason rule — never compare NflSeasonWeekConfig.WeekType, which stores round
+    // names ("Wild Card", "Super Bowl"), not a regular/post flag (frizat-iwi).
+    public const int LastNflRegularSeasonWeek = 18;
+    public static bool IsNflPostSeasonWeek(int weekId) => weekId > LastNflRegularSeasonWeek;
+
     // Through the 2025 season, ESPN skipped postseason week 4 for the Pro Bowl — Super Bowl was
     // raw ESPN week 5 (one slot past Conference Championship=3), not the 4th round it actually is.
     // Gated by SEASON, not by the raw week value: for 2026+ we deliberately do NOT apply the old
@@ -83,7 +89,7 @@ public static class GameHelpers {
     public static int GetWeekFromEspnWeek(long week, int season, bool isPostSeason = false) {
         if (!isPostSeason) return (int)week;
         if (season <= LastSeasonEspnSkippedProBowlWeek && week == 5) return 22;
-        return (int)(week + 18);
+        return (int)(week + LastNflRegularSeasonWeek);
     }
     public static string GetWeekName(long week, bool isPostSeason = false) {
         if (!isPostSeason) {
@@ -100,7 +106,7 @@ public static class GameHelpers {
     // User-facing period labels, matching the app's own (gameHelpers.ts) — notifications must read
     // the same as the screen, never an internal "Slate N".
     public static string GetNflWeekLabel(int nflWeek) =>
-        nflWeek <= 18 ? $"Week {nflWeek}" : GetWeekName(nflWeek - 18, isPostSeason: true);
+        !IsNflPostSeasonWeek(nflWeek) ? $"Week {nflWeek}" : GetWeekName(nflWeek - LastNflRegularSeasonWeek, isPostSeason: true);
 
     public static string GetCfbSlateLabel(int slateNumber) => slateNumber switch {
         <= 13 => $"Week {slateNumber}",

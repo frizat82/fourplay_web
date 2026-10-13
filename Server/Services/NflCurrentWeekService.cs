@@ -27,7 +27,6 @@ public class NflCurrentWeekService(ILeagueRepository repo, [FromKeyedServices(Cu
     }
 
     private static NflWeekInfo ToWeekInfo(Models.Data.NflSeasonWeekConfig cfg) {
-        var isPostSeason = cfg.WeekId > 18;
-        return new NflWeekInfo(cfg.WeekId, cfg.Season, isPostSeason, cfg.WeekLabel, cfg.ScoringFormat, cfg.SpreadLockDatetime);
+        return new NflWeekInfo(cfg.WeekId, cfg.Season, cfg.IsPostSeason, cfg.WeekLabel, cfg.ScoringFormat, cfg.SpreadLockDatetime);
     }
 }

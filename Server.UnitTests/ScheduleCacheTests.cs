@@ -70,8 +70,8 @@ public class ScheduleCacheTests {
         var repo = new LeagueRepository(factory, new MemoryCache(new MemoryCacheOptions()));
         var db = factory.CreateDbContext();
         db.NflSeasonWeekConfigs.AddRange(
-            new NflSeasonWeekConfig { Id = 1, Season = 2026, WeekId = 1, WeekLabel = "Week 1", WeekType = "RegularSeason", ScoringFormat = "Standard" },
-            new NflSeasonWeekConfig { Id = 2, Season = 2026, WeekId = 2, WeekLabel = "Week 2", WeekType = "RegularSeason", ScoringFormat = "Standard" });
+            new NflSeasonWeekConfig { Id = 1, Season = 2026, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard" },
+            new NflSeasonWeekConfig { Id = 2, Season = 2026, WeekId = 2, WeekLabel = "Week 2", WeekType = "Regular Season", ScoringFormat = "Standard" });
         await db.SaveChangesAsync();
 
         var first = await repo.GetNflSeasonWeekConfigsAsync();
@@ -90,7 +90,7 @@ public class ScheduleCacheTests {
         Assert.Empty(await repo.GetNflSeasonWeekConfigsAsync());
 
         var db = factory.CreateDbContext();
-        db.NflSeasonWeekConfigs.Add(new NflSeasonWeekConfig { Id = 1, Season = 2026, WeekId = 1, WeekLabel = "Week 1", WeekType = "RegularSeason", ScoringFormat = "Standard" });
+        db.NflSeasonWeekConfigs.Add(new NflSeasonWeekConfig { Id = 1, Season = 2026, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard" });
         await db.SaveChangesAsync();
 
         Assert.Empty(await repo.GetNflSeasonWeekConfigsAsync());
@@ -108,7 +108,7 @@ public class ScheduleCacheTests {
         await cfb.GetAllSlatesAsync(); await cfb.GetAllWeekConfigsAsync(); await nfl.GetNflSeasonWeekConfigsAsync();
 
         var db = factory.CreateDbContext();
-        db.NflSeasonWeekConfigs.Add(new NflSeasonWeekConfig { Id = 1, Season = 2026, WeekId = 1, WeekLabel = "Week 1", WeekType = "RegularSeason", ScoringFormat = "Standard" });
+        db.NflSeasonWeekConfigs.Add(new NflSeasonWeekConfig { Id = 1, Season = 2026, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard" });
         await db.SaveChangesAsync();
         Assert.Single(await nfl.GetNflSeasonWeekConfigsAsync());
         Assert.True(cache.TryGetValue(ScheduleCache.CfbSlates, out _)); // untouched tables stay cached

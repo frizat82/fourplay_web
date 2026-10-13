@@ -59,7 +59,7 @@ public class NflScoresJobTests
             Season = season,
             WeekId = weekId,
             WeekLabel = $"Week {weekId}",
-            WeekType = isPostSeason ? "PostSeason" : "RegularSeason",
+            WeekType = isPostSeason ? "Wild Card" : "Regular Season",
             ScoringFormat = "Standard",
             WeekStartDatetime = new DateTime(season, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(weekId * 7),
             WeekEndDatetime = new DateTime(season, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(weekId * 7 + 7),

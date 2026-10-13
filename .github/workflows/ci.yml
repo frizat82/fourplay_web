@@ -39,6 +39,8 @@ jobs:
   backend:
     name: Backend build & test
     runs-on: ubuntu-latest
+    # Live ESPN contract tests run here (frizat-iwi) — never let a hung call hold the runner for hours.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -54,12 +56,13 @@ jobs:
         run: dotnet build --no-restore -c Release
 
       - name: Test
-        # Category=Contract tests hit the real ESPN/odds APIs over the network — excluded here,
-        # run weekly + on-demand via espn-contract.yml instead. Collects coverage in the same
+        # Includes the Category=Contract tests, which hit the real ESPN/odds APIs: ESPN wire-shape
+        # drift fails the build like any other test (frizat-iwi — they used to run only in a
+        # weekly side workflow that sat red for a month unnoticed). Collects coverage in the same
         # run as the required test pass (dotnet.yml used to duplicate this whole job just to
         # add coverage — merged in here instead so tests run once per PR, not twice).
         run: >
-          dotnet test --no-build -c Release --filter "Category!=Contract"
+          dotnet test --no-build -c Release
           --settings Server.UnitTests/coverlet.runsettings
           --logger "console;verbosity=minimal" --logger:trx
           --collect:"XPlat Code Coverage" --results-directory ./coverage

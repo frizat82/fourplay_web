@@ -29,7 +29,7 @@ public class EspnCacheServiceTests
         Season = season,
         WeekId = weekId,
         WeekLabel = weekId > 18 ? "PostSeason Week" : $"Week {weekId}",
-        WeekType = weekId > 18 ? "PostSeason" : "RegularSeason",
+        WeekType = weekId > 18 ? "Wild Card" : "Regular Season",
         ScoringFormat = "Standard",
         WeekStartDatetime = start ?? DateTime.UtcNow.AddDays(-1),
         WeekEndDatetime = end ?? DateTime.UtcNow.AddDays(1),
@@ -215,7 +215,7 @@ public class EspnCacheServiceTests
         // that's true, mirroring CfbLiveScoreFetcher's identical fix.
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> {
             new() {
-                Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = "PostSeason", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = "Wild Card", ScoringFormat = "Standard",
                 WeekStartDatetime = new DateTime(2026, 1, 8), WeekEndDatetime = new DateTime(2026, 1, 12),
                 SpreadLockDatetime = new DateTime(2026, 1, 8),
             },
@@ -224,7 +224,7 @@ public class EspnCacheServiceTests
             // (nothing else to compare against), exempting it from the DB-first shortcut this
             // test exists to verify.
             new() {
-                Season = 2025, WeekId = 20, WeekLabel = "Divisional", WeekType = "PostSeason", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 20, WeekLabel = "Divisional", WeekType = "Divisional", ScoringFormat = "Standard",
                 WeekStartDatetime = new DateTime(2026, 1, 15), WeekEndDatetime = new DateTime(2026, 1, 19),
                 SpreadLockDatetime = new DateTime(2026, 1, 15),
             },
@@ -239,6 +239,10 @@ public class EspnCacheServiceTests
         Assert.Equal("KC", home.Team.Abbreviation);
         Assert.Equal(27, home.Score);
         Assert.Equal(TypeName.StatusFinal, comp.Status.Type.Name);
+        // The control table stores round names ("Wild Card"), never "PostSeason" — postseason
+        // comes from WeekId > 18, so a rebuilt playoff week must be stamped season type 3.
+        Assert.Equal(3, result.Season!.Type);
+        Assert.Equal(3, result.Events!.Single().Season!.Type);
         await _fetcher.DidNotReceiveWithAnyArgs().FetchForWeekAsync(default!);
     }
 
@@ -257,7 +261,7 @@ public class EspnCacheServiceTests
         // Only one config row — with nothing else to compare against, the resolver trivially
         // treats it as "current" even though its window is long past.
         var config = new NflSeasonWeekConfig {
-            Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = "PostSeason", ScoringFormat = "Standard",
+            Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = "Wild Card", ScoringFormat = "Standard",
             WeekStartDatetime = new DateTime(2026, 1, 8), WeekEndDatetime = new DateTime(2026, 1, 12),
             SpreadLockDatetime = new DateTime(2026, 1, 8),
         };
@@ -320,12 +324,12 @@ public class EspnCacheServiceTests
         // to compare against), exempting it from the DB-first shortcut this test exists to verify.
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> {
             new() {
-                Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "RegularSeason", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
                 WeekStartDatetime = new DateTime(2025, 9, 4), WeekEndDatetime = new DateTime(2025, 9, 15),
                 SpreadLockDatetime = new DateTime(2025, 9, 4),
             },
             new() {
-                Season = 2025, WeekId = 2, WeekLabel = "Week 2", WeekType = "RegularSeason", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 2, WeekLabel = "Week 2", WeekType = "Regular Season", ScoringFormat = "Standard",
                 WeekStartDatetime = new DateTime(2025, 9, 11), WeekEndDatetime = new DateTime(2025, 9, 22),
                 SpreadLockDatetime = new DateTime(2025, 9, 18),
             },
@@ -351,7 +355,7 @@ public class EspnCacheServiceTests
     {
         var now = DateTime.UtcNow;
         var config = new NflSeasonWeekConfig {
-            Season = 2026, WeekId = 3, WeekLabel = "Week 3", WeekType = "RegularSeason", ScoringFormat = "Standard",
+            Season = 2026, WeekId = 3, WeekLabel = "Week 3", WeekType = "Regular Season", ScoringFormat = "Standard",
             WeekStartDatetime = now.AddDays(-1), WeekEndDatetime = now.AddDays(1),
         };
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> { config });
@@ -384,12 +388,12 @@ public class EspnCacheServiceTests
         _leagueRepo.GetNflScoresAsync(2025, 1).Returns(rows);
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> {
             new() {
-                Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "RegularSeason", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
                 WeekStartDatetime = new DateTime(2025, 9, 4), WeekEndDatetime = new DateTime(2025, 9, 15),
                 SpreadLockDatetime = new DateTime(2025, 9, 4),
             },
             new() {
-                Season = 2025, WeekId = 2, WeekLabel = "Week 2", WeekType = "RegularSeason", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 2, WeekLabel = "Week 2", WeekType = "Regular Season", ScoringFormat = "Standard",
                 WeekStartDatetime = new DateTime(2025, 9, 11), WeekEndDatetime = new DateTime(2025, 9, 22),
                 SpreadLockDatetime = new DateTime(2025, 9, 18),
             },
@@ -443,4 +447,3 @@ public class EspnCacheServiceTests
         await _fetcher.Received(1).FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 4));
     }
 }
-
