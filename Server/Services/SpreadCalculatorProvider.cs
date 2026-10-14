@@ -1,7 +1,6 @@
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
-using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services;
@@ -24,7 +23,11 @@ public class SpreadCalculatorProvider(ILeagueRepository repository, IMemoryCache
             entry => LeagueCacheKeys.Track(cache, entry, leagueId, season),
             () => repository.GetLeagueJuiceMappingAsync(leagueId, season), new LeagueJuiceMapping());
 
-        return new SpreadCalculator(odds, JuiceTiers.For(LeagueType.Nfl, week, juiceMapping));
+        // The week's control-table row (frizat-d47), from the cached schedule table. No row means
+        // the week doesn't exist — fail loudly rather than tease against a guessed round.
+        var weekConfig = (await repository.GetNflSeasonWeekConfigsAsync(season)).FirstOrDefault(c => c.WeekId == week)
+            ?? throw new InvalidOperationException($"No NflSeasonWeekConfigs row for season {season} week {week}.");
+        return new SpreadCalculator(odds, JuiceTiers.For(weekConfig.RequiredPicks, juiceMapping));
     }
 
     // A hit is cached for an hour; a miss only for a second, so data posted moments later shows up.

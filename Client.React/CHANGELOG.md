@@ -4,6 +4,11 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-10-14
+
+- Each week's required pick count and postseason flag now come from the season schedule table instead of code, so pick limits, teases, the leaderboard and the Rules page all read the same values (no change to the counts themselves)
+- The Rules page's playoff rounds now use the schedule's round names, e.g. Wild Card Weekend and Super Bowl LXI
+
 ## 2026-10-11
 
 - Fixed the loading spinner on app launch jumping from the middle of the screen to the top — it now stays centred, in the same colour, from splash screen to app

@@ -1,6 +1,6 @@
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, getCfbPickCounts, addCfbPicks, deleteCfbPicks, removeMyCfbPick } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
-import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins, getCfbRequiredPicks, isGameLive } from '../utils/gameHelpers';
+import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins, isGameLive } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
@@ -274,7 +274,7 @@ export function createCfbAdapter(): SportAdapter {
       // CfbSlates is fully seeded ahead of time for the whole season (CfbSlateSeederJob), so
       // scanning all of them for the max RegularSeason slateNumber returns the season's total
       // length regardless of which week is actually live (frizat-8y4/frizat-8y7).
-      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: maxWeekFor(weekState), maxSeason: active.season };
+      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: active.requiredPicks, maxWeek: maxWeekFor(weekState), maxSeason: active.season };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
@@ -284,7 +284,7 @@ export function createCfbAdapter(): SportAdapter {
       if (!slate) return null;
       const { games, userPicks } = await loadSlate(leagueId, userId, slate.id, slate);
       if (games.length === 0) return null;
-      return { season, week, isPostSeason, games, userPicks, hasOdds: true, requiredPicks: getCfbRequiredPicks(slateNum), maxWeek: week, maxSeason: season };
+      return { season, week, isPostSeason, games, userPicks, hasOdds: true, requiredPicks: slate.requiredPicks, maxWeek: week, maxSeason: season };
     },
 
     async submitPicks(leagueId, { season, week, isPostSeason }, picks) {
@@ -330,7 +330,7 @@ export function createCfbAdapter(): SportAdapter {
       const weekState = slateToWeekState(active);
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
       const hasActiveGames = games.some(g => isGameLive(g.gameStatus));
-      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: getCfbRequiredPicks(active.slateNumber), maxWeek: maxWeekFor(weekState), maxSeason: active.season };
+      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: active.requiredPicks, maxWeek: maxWeekFor(weekState), maxSeason: active.season };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
@@ -340,7 +340,7 @@ export function createCfbAdapter(): SportAdapter {
       if (!slate) return null;
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate);
       if (games.length === 0) return null;
-      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: getCfbRequiredPicks(slateNum), maxWeek: week, maxSeason: season };
+      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: slate.requiredPicks, maxWeek: week, maxSeason: season };
     },
 
     // ─── Commissioner missing-picks (frizat-8ni) ───────────────────────────────
@@ -352,7 +352,7 @@ export function createCfbAdapter(): SportAdapter {
       const counts = await getCfbPickCounts(leagueId, active.id);
       return {
         picksByUser: pickCountsToMap(counts),
-        requiredPicks: getCfbRequiredPicks(active.slateNumber),
+        requiredPicks: active.requiredPicks,
         weekLabel: active.label,
       };
     },

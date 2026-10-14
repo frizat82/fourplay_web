@@ -1,6 +1,3 @@
-using System.ComponentModel.DataAnnotations.Schema;
-using FourPlayWebApp.Shared.Helpers;
-
 namespace FourPlayWebApp.Server.Models.Data;
 
 public class NflSeasonWeekConfig {
@@ -16,6 +13,12 @@ public class NflSeasonWeekConfig {
     public DateTime SpreadLockDatetime { get; set; }    // UTC — when NflSpreadSchedulerJob fires NflSpreadJob for this week; required, never null
     public string? WeekNotes { get; set; }
 
-    [NotMapped]
-    public bool IsPostSeason => GameHelpers.IsNflPostSeasonWeek(WeekId);
+    // frizat-d47: the round's rules live on its row, not in code keyed on WeekId. RequiredPicks
+    // drives the AddPicks cap, the leaderboard's incomplete-week check and the tease tier
+    // (JuiceTiers); IsPostSeason is the app's postseason (O/U offered, the Postseason selector).
+    // It is NOT ESPN's season type in general: CFB conference championships are postseason here
+    // but ESPN season type 2 (CfbSlateHelpers.IsCfpSlate stays the ESPN-boundary answer). For NFL
+    // the two happen to coincide, so the NFL ESPN fetch passes it straight through.
+    public bool IsPostSeason { get; set; }
+    public int RequiredPicks { get; set; }
 }

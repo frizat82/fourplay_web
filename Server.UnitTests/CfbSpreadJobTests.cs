@@ -70,7 +70,7 @@ public class CfbSpreadJobTests
     {
         _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
             slate.Id, slate.Season, slate.SlateNumber, slate.Label, slate.SlateType,
-            slate.StartDate, slate.EndDate, slate.FirstGameUtc, lockDatetime ?? PastLockTime));
+            slate.StartDate, slate.EndDate, slate.FirstGameUtc, lockDatetime ?? PastLockTime, slate.IsPostSeason, slate.RequiredPicks));
         _repo.GetSlateByIdAsync(slate.Id).Returns(slate);
     }
 

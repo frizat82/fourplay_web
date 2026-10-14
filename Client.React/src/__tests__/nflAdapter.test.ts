@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 import { createNflAdapter } from '../services/nflAdapter';
-import { createCompetition, createScores } from '../test/fixtures';
+import { createCompetition, createNflSeasonWeeks, createScores } from '../test/fixtures';
 import type { GameView, SportAdapter } from '../services/sportAdapter';
 
 vi.mock('../api/espn', () => ({
@@ -14,13 +14,14 @@ vi.mock('../api/league', () => ({
   addPicks: vi.fn(),
   removeMyPick: vi.fn(),
   getNflCurrentWeek: vi.fn(),
+  getNflSeasonWeeks: vi.fn(),
   getLeaguePicks: vi.fn(),
   getLeaguePickCounts: vi.fn(),
 }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 
 import { getScores, getWeekScores, getLiveGames } from '../api/espn';
-import { getUserPicks, spreadBatch, getNflCurrentWeek, getLeaguePicks, getLeaguePickCounts } from '../api/league';
+import { getUserPicks, spreadBatch, getNflCurrentWeek, getNflSeasonWeeks, getLeaguePicks, getLeaguePickCounts } from '../api/league';
 import { createSpreadResponse } from '../test/fixtures';
 import { buildAxiosError } from './testUtils/axiosError';
 
@@ -38,6 +39,7 @@ function makeScores(homeTeam: string, awayTeam: string, homeScore = 24, awayScor
 const DEFAULT_CURRENT_WEEK = {
   weekId: 8, season: 2023, isPostSeason: false,
   weekLabel: 'Week 8', scoringFormat: 'Standard', spreadLockDatetime: '2023-10-26T17:00:00Z',
+  requiredPicks: 4,
 };
 
 describe('nflAdapter', () => {
@@ -48,6 +50,8 @@ describe('nflAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getNflCurrentWeek).mockResolvedValue(DEFAULT_CURRENT_WEEK);
+    // The season's control-table rows a past week's pick count is read from (frizat-d47).
+    vi.mocked(getNflSeasonWeeks).mockResolvedValue(createNflSeasonWeeks());
     vi.mocked(getLiveGames).mockResolvedValue([]);
     vi.mocked(getLeaguePicks).mockResolvedValue([]);
     vi.mocked(getLeaguePickCounts).mockResolvedValue([]);
@@ -55,6 +59,51 @@ describe('nflAdapter', () => {
     // Default: no odds posted — the spreads endpoint 404s (nflAdapter derives hasOdds from it).
     vi.mocked(spreadBatch).mockRejectedValue(buildAxiosError(404));
     adapter = createNflAdapter();
+  });
+
+  // frizat-d47: a week's pick count is its control-table row's RequiredPicks, served by the API —
+  // never computed here from the week number. Week 8 asking for 2 proves nothing re-derives it.
+  describe('requiredPicks comes from the week\'s control-table row', () => {
+    it('loadCurrentGames uses the current week row', async () => {
+      vi.mocked(getNflCurrentWeek).mockResolvedValue({ ...DEFAULT_CURRENT_WEEK, requiredPicks: 2 });
+      vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
+
+      const result = await adapter.loadCurrentGames(1, 'user1');
+
+      expect(result.requiredPicks).toBe(2);
+    });
+
+    it('loadCurrentScores uses the current week row', async () => {
+      vi.mocked(getNflCurrentWeek).mockResolvedValue({ ...DEFAULT_CURRENT_WEEK, requiredPicks: 2 });
+      vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
+
+      const result = await adapter.loadCurrentScores(1, 'user1');
+
+      expect(result.requiredPicks).toBe(2);
+    });
+
+    it('a past week uses that season\'s row for the week', async () => {
+      vi.mocked(getNflSeasonWeeks).mockResolvedValue([
+        { weekId: 7, weekLabel: 'Week 7', isPostSeason: false, requiredPicks: 4 },
+        { weekId: 8, weekLabel: 'Week 8', isPostSeason: false, requiredPicks: 2 },
+      ]);
+      vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
+
+      const games = await adapter.loadHistoricalGames(1, 'user1', { season: 2023, week: 8, isPostSeason: false });
+      const scores = await adapter.loadHistoricalScores(1, 'user1', { season: 2023, week: 8, isPostSeason: false });
+
+      expect(games?.requiredPicks).toBe(2);
+      expect(scores?.requiredPicks).toBe(2);
+      expect(getNflSeasonWeeks).toHaveBeenCalledWith(2023);
+    });
+
+    it('getMissingPicks uses the current week row', async () => {
+      vi.mocked(getNflCurrentWeek).mockResolvedValue({ ...DEFAULT_CURRENT_WEEK, requiredPicks: 2 });
+
+      const result = await adapter.getMissingPicks(1);
+
+      expect(result.requiredPicks).toBe(2);
+    });
   });
 
   describe('loadCurrentGames', () => {
@@ -270,7 +319,7 @@ describe('nflAdapter', () => {
     it('currentSeasonYear uses the control table, never ESPN\'s own scoreboard', async () => {
       vi.mocked(getNflCurrentWeek).mockResolvedValue({
         weekId: 1, season: 2026, isPostSeason: false,
-        weekLabel: 'Week 1', scoringFormat: 'Standard', spreadLockDatetime: '2026-09-09T13:20:00Z',
+        weekLabel: 'Week 1', scoringFormat: 'Standard', spreadLockDatetime: '2026-09-09T13:20:00Z', requiredPicks: 4,
       });
 
       const year = await adapter.currentSeasonYear();
@@ -300,7 +349,7 @@ describe('nflAdapter', () => {
 
       const result = await adapter.getMissingPicks(1);
 
-      expect(result.requiredPicks).toBe(4); // DEFAULT_CURRENT_WEEK.weekId=8, regular season
+      expect(result.requiredPicks).toBe(4); // DEFAULT_CURRENT_WEEK's row
       expect(result.picksByUser.get('alice')).toBe(2);
       expect(result.picksByUser.get('bob')).toBe(1);
       expect(getLeaguePickCounts).toHaveBeenCalledWith(1, 2023, 8);

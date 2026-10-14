@@ -39,7 +39,7 @@ Short version: NFL regular season = 4 picks; postseason decreases 3→3→2→1.
 `Server/Program.cs` checks `GetPendingMigrations()` at startup outside Development and **throws, crash-looping the deployment**, rather than serve traffic against a stale schema. This has already caught a real incident (a migration that was never applied reached prod code that assumed the new table existed) — don't "fix" this guard by relaxing it. The `DB Migrate` GitHub Actions job (`.github/workflows/migrate.yml`) runs `dotnet ef database update` **unconditionally on every push to `dev`/`main`** (no `paths:` filter) for the same reason: a path-filtered trigger missed a migration once already, because the push that added it never fired the filtered workflow (see Branch Rules below). `dotnet ef database update` is idempotent — a ~5s no-op when nothing's pending — so this costs nothing on pushes with no migration changes.
 
 ### Test Rot Prevention
-When fixing a bug: grep existing tests for old wrong values before shipping. When changing `GetRequiredPicks`/`GetCfbRequiredPicks`: read ALL test files that reference the function, update expected values first, then fix the implementation.
+When fixing a bug: grep existing tests for old wrong values before shipping. When changing a round's pick count (the control tables' `RequiredPicks` column — see `/pick-rules`): read ALL test files and fixtures that encode it, update expected values first, then change the data.
 
 ---
 

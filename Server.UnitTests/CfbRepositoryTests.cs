@@ -14,6 +14,46 @@ namespace FourPlayWebApp.Server.UnitTests;
 // "line first posted" timestamp shown to users, not a re-fire timestamp.
 public class CfbRepositoryTests
 {
+    // frizat-d47: a slate's RequiredPicks/IsPostSeason are its CfbSeasonWeekConfigs row's, read
+    // live from the control table on every slate read — never a copy frozen onto CfbSlates when
+    // the season was seeded, so an edited row is what every reader (pick cap, leaderboard, tease,
+    // adapters) sees. Slate 5 asking for 2 picks proves nothing re-derives it from the number.
+    [Fact]
+    public async Task SlateReads_CarryTheirControlTableRowsRules_AsTheRowSaysNow()
+    {
+        var factory = new DbContextFactoryStub(nameof(SlateReads_CarryTheirControlTableRowsRules_AsTheRowSaysNow));
+        await using (var db = factory.CreateDbContext()) {
+            db.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
+                Season = 2026, EspnWeekNumber = 5, IvLeagueWeekNumber = 5, WeekType = "Regular Season",
+                ScoringFormat = "Standard", InScopeIvLeague = true, IsPostSeason = true, RequiredPicks = 2,
+            });
+            db.CfbSlates.Add(new CfbSlates { Id = 50, Season = 2026, SlateNumber = 5, Label = "Week 5", SlateType = "RegularSeason" });
+            db.CfbSlates.Add(new CfbSlates { Id = 60, Season = 2027, SlateNumber = 6, Label = "Week 6", SlateType = "RegularSeason" });
+            await db.SaveChangesAsync();
+        }
+        var repo = new CfbRepository(factory);
+
+        var byId = await repo.GetSlateByIdAsync(50);
+        var bySeason = (await repo.GetSlatesForSeasonAsync(2026)).Single(s => s.Id == 50);
+        var all = (await repo.GetAllSlatesAsync()).Single(s => s.Id == 50);
+
+        Assert.All(new[] { byId!, bySeason, all }, s => Assert.Equal((true, 2), (s.IsPostSeason, s.RequiredPicks)));
+        // A slate with no control-table row is a data problem where it's used: by-id and per-season
+        // reads fail loudly (as NFL does), never handing out a 0-pick cap that rejects every pick
+        // and scores every member a win. The all-seasons read still works — one old season's
+        // orphan must not break the current one.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => repo.GetSlateByIdAsync(60));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => repo.GetSlatesForSeasonAsync(2027));
+        Assert.Equal(2, (await repo.GetAllSlatesAsync()).Count());
+
+        await using (var db = factory.CreateDbContext()) {
+            var cfg = await db.CfbSeasonWeekConfigs.SingleAsync();
+            cfg.RequiredPicks = 3;
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal(3, (await repo.GetSlateByIdAsync(50))!.RequiredPicks);
+    }
+
     [Fact]
     public async Task UpsertAsync_NewGame_Inserts()
     {
@@ -309,4 +349,3 @@ public class CfbRepositoryTests
         Assert.Equal(["UGA"], (await repo.GetScoresForSeasonAsync(2026)).Select(s => s.HomeTeam));
     }
 }
-

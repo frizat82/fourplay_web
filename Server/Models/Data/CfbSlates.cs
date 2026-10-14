@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace FourPlayWebApp.Server.Models.Data;
 
 public class CfbSlates {
@@ -12,4 +14,9 @@ public class CfbSlates {
     public int? EspnWeekNumber { get; set; }          // actual ESPN week for API queries (decoupled from SlateNumber)
     public string? ScoringFormat { get; set; }        // "Standard" | "NFLDivisional" | "NFLConference" | "NFLSuperBowl"
     public DateTimeOffset DateCreated { get; set; } = DateTimeOffset.UtcNow;
+    // The slate's CfbSeasonWeekConfigs row's rules (frizat-d47) — not stored here: CfbRepository
+    // fills them from the control table on every slate read, so an edited row is never shadowed
+    // by a copy frozen at seeding time. 0 / false when the slate has no row.
+    [NotMapped] public bool IsPostSeason { get; set; }
+    [NotMapped] public int RequiredPicks { get; set; }
 }

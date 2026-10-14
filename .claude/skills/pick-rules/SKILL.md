@@ -5,7 +5,28 @@ description: NFL/CFB pick count invariants, CFB slate mapping, seeder guards, te
 
 # Pick Rules & Invariants
 
-## NFL Pick Count — `GetRequiredPicks(nflWeek)` C# / `getEspnRequiredPicks(week, isPostSeason)` TS
+## Where the rules live: the control tables (frizat-d47)
+
+Each round's pick count and postseason flag are columns on its control-table row —
+`NflSeasonWeekConfigs` (keyed by `WeekId`) and `CfbSeasonWeekConfigs` (keyed by
+`IvLeagueWeekNumber` = slate number): `RequiredPicks` and `IsPostSeason`. There is no
+code rule keyed on week/slate numbers any more. Every consumer reads the row:
+AddPicks caps (NFL `NflWeekInfo.RequiredPicks`, CFB `slate.RequiredPicks`), the leaderboard,
+the tease tier (`JuiceTiers.For(requiredPicks, …)`: 4 = regular, 3 = divisional,
+2 = conference, 1 = the final / no tease), live pick notifications, the WeeklyCost lock
+(the final = the row asking for 1 pick), the client adapters (`requiredPicks` on the API
+DTOs) and the Rules page. CFB slates don't store a copy: `CfbRepository` fills
+`CfbSlates.RequiredPicks`/`IsPostSeason` from the slate's config row on every read.
+A `RequiredPicks BETWEEN 0 AND 4` check constraint guards hand-written rows.
+
+**New season?** Seed its rows with these values (the tables below). The migration
+`AddPeriodRulesToSeasonWeekConfigs` backfilled 2025/2026 from exactly these tables.
+
+CFB `IsPostSeason` (slates 14–18, i.e. from Conf. Championships) is the app's postseason
+(O/U offered, the Postseason selector) — NOT ESPN's season type (`CfbSlateHelpers.IsCfpSlate`
+stays the ESPN-boundary answer: CFP only).
+
+## NFL Pick Count — the `RequiredPicks` seeded on each `NflSeasonWeekConfigs` row
 
 | NflWeek | ESPN Week | Label | Required Picks |
 |---------|-----------|-------|---------------|
@@ -15,9 +36,9 @@ description: NFL/CFB pick count invariants, CFB slate mapping, seeder guards, te
 | 21 | 3 | Conference Championship | 2 |
 | 22 | 4 | Super Bowl | 1 |
 
-`NflScoresJob` stores ESPN week 5 (Super Bowl) as NflWeek 22 via `j == 5 ? 4 : j` hack. `GetRequiredPicks(23)` throws — week 23 does not exist (Pro Bowl is skipped). Use `PopulateScoresTestDataAsync(21)` in tests, not 22.
+ESPN numbered the Super Bowl postseason week 5 through 2025 (Pro Bowl in week 4); `GameHelpers.GetWeekFromEspnWeek` maps it to WeekId 22 at the ESPN boundary (season-gated — see frizat-jw7 for 2026+). There is no WeekId 23. Use `PopulateScoresTestDataAsync(21)` in tests, not 22.
 
-## CFB Pick Count — `GetCfbRequiredPicks(slateNumber)` C# / `getCfbRequiredPicks(slateNumber)` TS
+## CFB Pick Count — the `RequiredPicks` seeded on each `CfbSeasonWeekConfigs` row
 
 18-slate system: slates 1–13 = regular season, 14 = Conf. Champs, 15–18 = CFP rounds.
 
@@ -62,14 +83,14 @@ Regular season weeks 1–18 map directly. Postseason: `getWeekFromEspnWeek(week,
 ## Seeder Is Production-Critical
 
 `DemoDataSeeder` seeds the same DB that Playwright e2e tests run against.
-- Every pick count must match `GetCfbRequiredPicks`/`GetRequiredPicks`
+- Every pick count must match the round's control-table `RequiredPicks` (the tables above)
 - After ANY pick logic change: re-verify seeder counts AND run `npm run test:e2e:demo`
 - `ExpectedPickCount` in `DemoDataSeeder.cs` is a guard — update it accurately, never fudge it
 
 ## Test Rot Checklist (Before Shipping Any Pick Logic Change)
 
 1. Read the tables above — understand the correct rule FIRST
-2. Grep ALL test files for old expected values: `GameHelpersTests.cs`, `LeaderboardTests.cs`, `picks.test.tsx`, e2e specs
+2. Grep ALL test files for old expected values: `PeriodRulesBackfillPostgresTests.cs`, `TestWeekConfigs.cs` (C# fixture rows), `src/test/fixtures.ts` (`nflRequiredPicks`), `LeaderboardTests.cs`, `picks.test.tsx`, e2e specs
 3. Update stale assertions BEFORE fixing the implementation
 4. Confirm new tests are red before writing any implementation
 5. Run full suite: `dotnet test` + `npm run test -- --run` + `npm run test:e2e:demo`

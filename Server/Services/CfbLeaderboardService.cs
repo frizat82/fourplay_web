@@ -66,10 +66,10 @@ public class CfbLeaderboardService(
             var slateIdByNumber = slates.ToDictionary(s => s.SlateNumber, s => s.Id);
 
             var periods = slates
-                .Select(slate => new LeaderboardPeriod(slate.SlateNumber, spreadsBySlate[slate.Id].ToList<IOddsRow>(), scoresBySlate[slate.Id].ToList<IScoreRow>()))
+                .Select(slate => new LeaderboardPeriod(slate.SlateNumber, slate.RequiredPicks, spreadsBySlate[slate.Id].ToList<IOddsRow>(), scoresBySlate[slate.Id].ToList<IScoreRow>()))
                 .ToList();
 
-            leaderboard = LeaderboardEngine.Build(LeagueType.Cfb, leagueUsers, periods,
+            leaderboard = LeaderboardEngine.Build(leagueUsers, periods,
                 (userId, slateNumber) => picksBySlateUser[(slateIdByNumber[slateNumber], userId)], juiceMapping, timeProvider.GetUtcNow(),
                 (pick, slateNumber, ex) => logger.LogError(ex, "Error scoring CFB pick {@Pick} slate {Slate}", pick, slateNumber));
         } catch (Exception ex) {

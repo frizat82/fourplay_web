@@ -104,7 +104,7 @@ public class LivePickTransitionServiceTests
     private void SetUpNflHappyPath(Dictionary<int, PickLiveNotificationState>? priorStates = null, List<NflPicks>? picks = null)
     {
         _preferencesService.AnyLiveNotificationPreferenceEnabledAsync().Returns(true);
-        _nflCurrentWeek.GetCurrentWeekAsync().Returns(new NflWeekInfo(5, 2026, false, "Week 5", "Standard", default));
+        _nflCurrentWeek.GetCurrentWeekAsync().Returns(new NflWeekInfo(5, 2026, false, "Week 5", "Standard", default, 4));
         _leagueRepository.GetNflPicksForTeamsAsync(2026, 5, Arg.Any<IReadOnlyCollection<string>>()).Returns(picks ?? [KcPick]);
         _leagueRepository.GetNflSpreadsAsync(2026, 5).Returns([KcSpread]);
         _leagueRepository.GetLeagueJuiceMappingAsync(1, 2026).Returns(NoJuice);
@@ -472,17 +472,16 @@ public class LivePickTransitionServiceTests
     //
     // Id (119) and SlateNumber (9) are deliberately DIFFERENT here (frizat: a real bug shipped
     // where ResolveCfbPeriodAsync's single int got reused both for FK-scoped repo calls, where
-    // the DB row id is correct, AND for JuiceTiers.For, which needs the 1-18 slate number — a
-    // coincidental Id==SlateNumber in an earlier version of this test masked it completely).
-    // With a non-zero Juice (13) and this spread, the wrong tier (period > 17 falls into
-    // GetCfbRequiredPicks' "_ => 1" branch => 0 tease) flips the computed cover state, so this
-    // test fails loudly if that bug reappears instead of silently passing.
+    // the DB row id is correct, AND for the tease tier — a coincidental Id==SlateNumber in an
+    // earlier version of this test masked it completely). The tier now comes from the slate's
+    // control-table RequiredPicks (4 => Juice 13, frizat-d47); with this spread, any other tier
+    // (e.g. 1 => 0 tease) flips the computed cover state, so this fails loudly if it regresses.
     [Fact]
-    public async Task RecomputeAsync_Cfb_RoutesThroughTheSameMethod_UsingSlateNumberNotId_ForJuiceTiers()
+    public async Task RecomputeAsync_Cfb_RoutesThroughTheSameMethod_UsingTheSlatesRequiredPicks_ForJuiceTiers()
     {
         _preferencesService.AnyLiveNotificationPreferenceEnabledAsync().Returns(true);
         _cfbCache.GetScoresAsync().Returns(CfbScores(27, 20, TypeName.StatusInProgress, KickoffLongAgo));
-        _cfbCurrentSlate.GetCurrentSlateAsync().Returns(new CfbSlateInfo(119, 2026, 9, "Slate 9", "Regular", default, default, null, default));
+        _cfbCurrentSlate.GetCurrentSlateAsync().Returns(new CfbSlateInfo(119, 2026, 9, "Slate 9", "Regular", default, default, null, default, false, 4));
         var cfbPick = new CfbPicks { Id = 201, UserId = "user-1", LeagueId = 2, CfbSlateId = 119, Team = "OSU", PickType = PickType.Spread, Season = 2026 };
         _cfbPicksRepository.GetCfbPicksForTeamsAsync(2026, 119, Arg.Any<IReadOnlyCollection<string>>()).Returns([cfbPick]);
         _cfbRepository.GetLeagueEligibleSpreadsForSeasonAsync(2026).Returns([
