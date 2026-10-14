@@ -180,7 +180,7 @@ beforeEach(() => {
   // Default member fully picked, so pre-existing tests that don't care about frizat-6sc's
   // missing-picks column never see it show up as an unexpected "Missing" state.
   mockedGetNflCurrentWeek.mockResolvedValue({
-    weekId: 2, season: CURRENT_SEASON, isPostSeason: false, weekLabel: 'Week 2', scoringFormat: 'Standard', spreadLockDatetime: '',
+    weekId: 2, season: CURRENT_SEASON, isPostSeason: false, weekLabel: 'Week 2', scoringFormat: 'Standard', spreadLockDatetime: '', requiredPicks: 4,
   });
   // frizat-xbq: counts come from the submitted-count endpoint. The visible-picks endpoints are
   // seeded EMPTY on purpose (that's what hides a member's pick on a game that hasn't kicked off) —
@@ -477,7 +477,7 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     sportContext.isCfb = true;
     sportContext.isNfl = false;
     mockedGetCfbCurrentSlate.mockResolvedValue({
-      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '',
+      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '', isPostSeason: false, requiredPicks: 4,
     });
     mockedGetCfbPickCounts.mockResolvedValue([]);
 
@@ -496,7 +496,7 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
   // never force scroll back, regardless of how long a future week/slate label turns out to be.
   it('caps and ellipsizes a long postseason week label in the header instead of letting it force horizontal scroll', async () => {
     mockedGetNflCurrentWeek.mockResolvedValue({
-      weekId: 21, season: CURRENT_SEASON, isPostSeason: true, weekLabel: 'Conference Championships', scoringFormat: 'Standard', spreadLockDatetime: '',
+      weekId: 21, season: CURRENT_SEASON, isPostSeason: true, weekLabel: 'Conference Championships', scoringFormat: 'Standard', spreadLockDatetime: '', requiredPicks: 2,
     });
     renderPage();
     await screen.findByText('frizat@example.com');
@@ -530,7 +530,7 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     await waitFor(() => expect(screen.getByTestId('missing-picks-1')).toHaveTextContent('Unavailable'));
 
     mockedGetNflCurrentWeek.mockResolvedValue({
-      weekId: 2, season: CURRENT_SEASON, isPostSeason: false, weekLabel: 'Week 2', scoringFormat: 'Standard', spreadLockDatetime: '',
+      weekId: 2, season: CURRENT_SEASON, isPostSeason: false, weekLabel: 'Week 2', scoringFormat: 'Standard', spreadLockDatetime: '', requiredPicks: 4,
     });
     await userEvent.click(screen.getByRole('button', { name: /retry/i }));
 
@@ -556,7 +556,7 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     sportContext.isCfb = true;
     sportContext.isNfl = false;
     mockedGetCfbCurrentSlate.mockResolvedValue({
-      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '',
+      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '', isPostSeason: false, requiredPicks: 4,
     });
     mockedGetCfbPickCounts.mockResolvedValue([]);
 

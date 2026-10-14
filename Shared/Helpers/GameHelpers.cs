@@ -75,10 +75,10 @@ public static class GameHelpers {
     public const int LastSeasonEspnSkippedProBowlWeek = 2025;
 
     // Our canonical NFL WeekId: 1-18 regular season, 19-22 postseason (NflSeasonWeekConfigs).
-    // The single postseason rule — never compare NflSeasonWeekConfig.WeekType, which stores round
-    // names ("Wild Card", "Super Bowl"), not a regular/post flag (frizat-iwi).
+    // Only for translating ESPN's postseason week numbers (GetWeekFromEspnWeek) and labels —
+    // whether a week IS postseason, and its pick count, are its control-table row's
+    // IsPostSeason/RequiredPicks (frizat-d47).
     public const int LastNflRegularSeasonWeek = 18;
-    public static bool IsNflPostSeasonWeek(int weekId) => weekId > LastNflRegularSeasonWeek;
 
     // Through the 2025 season, ESPN skipped postseason week 4 for the Pro Bowl — Super Bowl was
     // raw ESPN week 5 (one slot past Conference Championship=3), not the 4th round it actually is.
@@ -106,7 +106,7 @@ public static class GameHelpers {
     // User-facing period labels, matching the app's own (gameHelpers.ts) — notifications must read
     // the same as the screen, never an internal "Slate N".
     public static string GetNflWeekLabel(int nflWeek) =>
-        !IsNflPostSeasonWeek(nflWeek) ? $"Week {nflWeek}" : GetWeekName(nflWeek - LastNflRegularSeasonWeek, isPostSeason: true);
+        nflWeek <= LastNflRegularSeasonWeek ? $"Week {nflWeek}" : GetWeekName(nflWeek - LastNflRegularSeasonWeek, isPostSeason: true);
 
     public static string GetCfbSlateLabel(int slateNumber) => slateNumber switch {
         <= 13 => $"Week {slateNumber}",
@@ -140,40 +140,6 @@ public static class GameHelpers {
             _ => throw new ArgumentException("Invalid week name")
         };
     }
-
-    // ESPN resets postseason weeks to 1-5: 1=Wild Card, 2=Divisional, 3=Conf., 4=Pro Bowl, 5=Super Bowl
-    public static int GetEspnRequiredPicks(long week, bool isPostSeason = false) {
-        if (!isPostSeason) return 4;
-        return week switch {
-            1 => 3,
-            2 => 3,
-            3 => 2,
-            4 => 1,
-            5 => 1, // ESPN Treats Post Season Week 4 as the Pro Bowl - this sucks
-            _ => throw new ArgumentException("Invalid week number")
-        };
-    }
-
-    public static int GetRequiredPicks(long week) {
-        if (week < 19) {
-            return 4;
-        }
-        return week switch {
-            19 => 3,
-            20 => 3,
-            21 => 2,
-            22 => 1,
-            _ => throw new ArgumentException("Invalid week number")
-        };
-    }
-
-    // 18-slate system: Standard(1-14)=4, NFLDivisional(15-16)=3, NFLConference(17)=2, NFLSuperBowl(18)=1
-    public static int GetCfbRequiredPicks(int slateNumber) => slateNumber switch {
-        <= 14 => 4,
-        <= 16 => 3,
-        17 => 2,
-        _ => 1,
-    };
 
     public static string? DisplayDetails(Competition competition) {
         return competition.Status.Type.Name switch {

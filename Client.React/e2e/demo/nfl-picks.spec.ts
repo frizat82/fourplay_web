@@ -60,7 +60,7 @@ test.describe('NFL picks — demo backend', () => {
     await weekSelect.click();
     await page.getByRole('option', { name: 'Wild Card' }).click();
     await waitForSpinner(page);
-    // Wild Card requires 3 picks (GetRequiredPicks(19)=3); Alice picks LAR, CHI, BUF
+    // Wild Card requires 3 picks (the Wild Card row's RequiredPicks = 3); Alice picks LAR, CHI, BUF
     await expect(page.getByRole('button', { name: /locked in/i })).toHaveCount(3, { timeout: 8_000 });
   });
 

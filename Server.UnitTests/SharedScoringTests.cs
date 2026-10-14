@@ -16,26 +16,15 @@ public class SharedScoringTests {
 
     // ── JuiceTiers ─────────────────────────────────────────────────────────────
 
+    // The tease follows the round's pick count, read from the control table's RequiredPicks
+    // (frizat-d47) — one rule for both sports, never a week/slate number.
     [Theory]
-    [InlineData(1, 13)]
-    [InlineData(18, 13)]   // last regular-season week
-    [InlineData(19, 10)]   // Wild Card
-    [InlineData(20, 10)]   // Divisional
-    [InlineData(21, 6)]    // Conference Championship
-    [InlineData(22, 0)]    // Super Bowl — no tease (product decision, 2026-09-24)
-    public void JuiceTiers_Nfl_ByWeek(int week, double expected) =>
-        Assert.Equal(expected, JuiceTiers.For(LeagueType.Nfl, week, Mapping));
-
-    [Theory]
-    [InlineData(1, 13)]
-    [InlineData(14, 13)]   // conference championships — still regular tease
-    [InlineData(15, 10)]   // CFP first round
-    [InlineData(16, 10)]   // quarterfinals
-    [InlineData(17, 6)]    // semifinals — frizat-dcz: was <= 17 => JuiceDivisional (10), not 6
-    [InlineData(18, 0)]    // championship — no tease (product decision, 2026-09-24), same as the Super Bowl
-    [InlineData(19, 0)]
-    public void JuiceTiers_Cfb_BySlate(int slate, double expected) =>
-        Assert.Equal(expected, JuiceTiers.For(LeagueType.Cfb, slate, Mapping));
+    [InlineData(4, 13)]    // regular season (and CFB conference championships)
+    [InlineData(3, 10)]    // NFL Wild Card/Divisional, CFP first round/quarterfinals
+    [InlineData(2, 6)]     // NFL Conference Championship, CFP semifinals
+    [InlineData(1, 0)]     // Super Bowl / CFP championship — no tease (product decision, 2026-09-24)
+    public void JuiceTiers_ByRequiredPicks(int requiredPicks, double expected) =>
+        Assert.Equal(expected, JuiceTiers.For(requiredPicks, Mapping));
 
     // ── WeekOutcome ────────────────────────────────────────────────────────────
 

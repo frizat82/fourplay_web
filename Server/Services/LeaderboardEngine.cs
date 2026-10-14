@@ -6,8 +6,11 @@ using FourPlayWebApp.Shared.Models.Enum;
 
 namespace FourPlayWebApp.Server.Services;
 
-/// <summary>One NFL week or CFB slate as the leaderboard sees it: its number and its rows.</summary>
-public sealed record LeaderboardPeriod(int Number, IReadOnlyCollection<IOddsRow> Spreads, IReadOnlyCollection<IScoreRow> Scores);
+/// <summary>
+/// One NFL week or CFB slate as the leaderboard sees it: its number, its control-table pick count
+/// (frizat-d47) and its rows.
+/// </summary>
+public sealed record LeaderboardPeriod(int Number, int RequiredPicks, IReadOnlyCollection<IOddsRow> Spreads, IReadOnlyCollection<IScoreRow> Scores);
 
 /// <summary>
 /// Builds and settles a season leaderboard — one implementation for both sports. Each sport's
@@ -21,7 +24,7 @@ public static class LeaderboardEngine {
     /// Captured once for the whole run: a wall-clock tick past a kickoff mid-run must not give two
     /// users a different verdict for the same week.
     /// </param>
-    public static List<LeaderboardModel> Build(LeagueType sport, IReadOnlyList<LeagueUserMapping> users,
+    public static List<LeaderboardModel> Build(IReadOnlyList<LeagueUserMapping> users,
         IReadOnlyList<LeaderboardPeriod> periods, Func<string, int, IEnumerable<PickRow>> picksFor,
         LeagueJuiceMapping mapping, DateTimeOffset now, Action<PickRow, int, Exception> onPickError) {
         // Each period's inputs are the same for every member, so they're built once per period, not
@@ -29,9 +32,9 @@ public static class LeaderboardEngine {
         // all — Excluded, not a win, loss or pending state.
         var inputs = periods.Select(p => GameHelpers.IsWeekExcludedFromSeason(p.Number, mapping.StartWeek) ? null : new {
             p.Scores,
-            Calculator = new SpreadCalculator(p.Spreads, JuiceTiers.For(sport, p.Number, mapping)),
+            Calculator = new SpreadCalculator(p.Spreads, JuiceTiers.For(p.RequiredPicks, mapping)),
             AllGamesStarted = GameHelpers.AllGamesStarted(p.Spreads.Select(s => s.GameTime), now),
-            RequiredPicks = sport == LeagueType.Cfb ? GameHelpers.GetCfbRequiredPicks(p.Number) : GameHelpers.GetRequiredPicks(p.Number),
+            p.RequiredPicks,
         }).ToList();
 
         var leaderboard = users.Select(user => new LeaderboardModel {

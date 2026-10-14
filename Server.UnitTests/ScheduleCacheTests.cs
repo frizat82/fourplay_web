@@ -23,7 +23,9 @@ public class ScheduleCacheTests {
         var factory = new DbContextFactoryStub(nameof(CfbSchedule_IsReadOnce_ThenServedFromCache_IncludingPerSeasonAndByIdReads));
         var db = factory.CreateDbContext();
         db.CfbSlates.AddRange(Slate(1, 2026, 1), Slate(2, 2026, 2), Slate(3, 2025, 1));
-        db.CfbSeasonWeekConfigs.Add(WeekConfig(1, 2026, 1));
+        // Every slate has its control-table row, as CfbSlateSeederJob creates them — slate reads
+        // carry that row's rules (frizat-d47).
+        db.CfbSeasonWeekConfigs.AddRange(WeekConfig(1, 2026, 1), WeekConfig(3, 2026, 2), WeekConfig(4, 2025, 1));
         await db.SaveChangesAsync();
         var repo = new CfbRepository(factory, new MemoryCache(new MemoryCacheOptions()));
 
@@ -32,15 +34,15 @@ public class ScheduleCacheTests {
         // A row that appears without going through the repository isn't seen until the cache
         // expires — proof the reads below never touch the database.
         db.CfbSlates.Add(Slate(4, 2026, 3));
-        db.CfbSeasonWeekConfigs.Add(WeekConfig(2, 2026, 2));
+        db.CfbSeasonWeekConfigs.Add(WeekConfig(2, 2026, 3));
         await db.SaveChangesAsync();
 
         Assert.Equal([3, 1, 2], (await repo.GetAllSlatesAsync()).Select(s => s.Id)); // Season, SlateNumber order
         Assert.Equal([1, 2], (await repo.GetSlatesForSeasonAsync(2026)).Select(s => s.Id));
         Assert.Equal(2, (await repo.GetSlateByIdAsync(2))!.SlateNumber);
         Assert.Null(await repo.GetSlateByIdAsync(4));
-        Assert.Equal([1], (await repo.GetAllWeekConfigsAsync()).Select(c => c.Id));
-        Assert.Equal([1], (await repo.GetWeekConfigsForSeasonAsync(2026)).Select(c => c.Id));
+        Assert.Equal([4, 1, 3], (await repo.GetAllWeekConfigsAsync()).Select(c => c.Id)); // Season, EspnWeekNumber order
+        Assert.Equal([1, 3], (await repo.GetWeekConfigsForSeasonAsync(2026)).Select(c => c.Id));
     }
 
     [Fact]

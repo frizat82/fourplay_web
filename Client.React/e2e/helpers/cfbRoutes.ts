@@ -18,7 +18,7 @@ const mockInviteLink = () => ({
 export const TEST_LEAGUE_ID = 2;
 export const TEST_SEASON = 2024;
 // Regular-season slate 1 → cfbSlateNumberToWeek gives week 1, non-postseason,
-// 4 required picks (getCfbRequiredPicks: slateNumber <= 14 => 4) — same shape as picks.spec.ts's
+// 4 required picks (slate 1's control-table RequiredPicks = 4) — same shape as picks.spec.ts's
 // 2-games/4-buttons NFL setup.
 export const TEST_SLATE_ID = 501;
 export const TEST_SLATE_NUMBER = 1;
@@ -91,6 +91,9 @@ export async function setupCfbRoutes(page: Page, options: SetupCfbRoutesOptions 
     startDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     endDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     firstGameUtc: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    // Slate 1's control-table row (frizat-d47): regular season, 4 picks.
+    isPostSeason: false,
+    requiredPicks: 4,
   };
 
   const spreads: CfbSpreadDto[] = [

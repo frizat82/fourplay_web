@@ -60,24 +60,13 @@ export function getWeekFromEspnWeek(week: number, season: number, isPostSeason =
   return week + 18;
 }
 
-// NFL week name/required-picks, keyed by our own internal WeekId (1-18 regular, 19-22
-// postseason) — never ESPN's own week numbering (frizat-3nv). getNflRequiredPicks mirrors
-// GameHelpers.GetRequiredPicks on the backend exactly; getNflWeekName reuses getWeekName's own
-// round-name table below (1-4) rather than re-declaring it, offset by the constant 18 gap
-// between WeekId's postseason range and that table's index.
+// NFL week name, keyed by our own internal WeekId (1-18 regular, 19-22 postseason) — never
+// ESPN's own week numbering (frizat-3nv). Reuses getWeekName's own round-name table below (1-4)
+// rather than re-declaring it, offset by the constant 18 gap between WeekId's postseason range
+// and that table's index. Pick counts aren't computed here at all: they're each week/slate's
+// control-table RequiredPicks, served by the API (frizat-d47).
 export function getNflWeekName(nflWeek: number, isPostSeason = false): string {
   return getWeekName(isPostSeason ? nflWeek - 18 : nflWeek, isPostSeason);
-}
-
-export function getNflRequiredPicks(nflWeek: number): number {
-  if (nflWeek < 19) return 4;
-  switch (nflWeek) {
-    case 19: return 3;
-    case 20: return 3;
-    case 21: return 2;
-    case 22: return 1;
-    default: throw new Error('Invalid week number');
-  }
 }
 
 export function spreadLabel(spread: number): string {
@@ -123,14 +112,6 @@ export function getWeekName(week: number, isPostSeason = false) {
     default:
       throw new Error('Invalid week number');
   }
-}
-
-// 18-slate system: Standard(1-14)=4, NFLDivisional(15-16)=3, NFLConference(17)=2, NFLSuperBowl(18)=1
-export function getCfbRequiredPicks(slateNumber: number): number {
-  if (slateNumber <= 14) return 4;
-  if (slateNumber <= 16) return 3;
-  if (slateNumber === 17) return 2;
-  return 1;
 }
 
 const STATUS_FINAL = 0;

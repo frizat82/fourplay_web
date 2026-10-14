@@ -331,7 +331,7 @@ public class LeaderboardServiceTests {
         var mapping = new LeagueUserMapping { LeagueId = 1, League = league, User = new ApplicationUser { Id = userId, UserName = "Alice" }, UserId = userId };
         var juice = new LeagueJuiceMapping { LeagueId = 1, Season = 2024, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
 
-        var repo = Substitute.For<ILeagueRepository>();
+        var repo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2024, 2025, 2026);
         repo.GetLeagueUserMappingsAsync(1).Returns([mapping]);
         repo.GetLeagueJuiceMappingAsync(1).Returns([juice]);
         repo.GetAllNflScoresForSeasonAsync(2024).Returns([
@@ -458,7 +458,7 @@ public class LeaderboardServiceTests {
         var svc = Substitute.For<ICfbCurrentSlateService>();
         svc.GetCurrentSlateAsync().Returns(season is int s
             ? new CfbSlateInfo(999, s, slateNumber, "Stub", "RegularSeason",
-                DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today), null, DateTime.UtcNow)
+                DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today), null, DateTime.UtcNow, false, 4)
             : null);
         return svc;
     }
@@ -497,9 +497,9 @@ public class LeaderboardServiceTests {
         var leagueInfo = new LeagueInfo { Id = leagueId, LeagueName = "CFB Test", OwnerUserId = userId };
         var userMapping = new LeagueUserMapping { LeagueId = leagueId, League = leagueInfo, User = user, UserId = userId };
         var juiceMapping = new LeagueJuiceMapping { Id = 1, LeagueId = leagueId, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
-        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = slateNumber, SlateType = "RegularSeason", Label = $"Week {slateNumber}", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = slateNumber, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(slateNumber), SlateType = "RegularSeason", Label = $"Week {slateNumber}", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
 
-        var leagueRepo = Substitute.For<ILeagueRepository>();
+        var leagueRepo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2024, 2025, 2026);
         leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns([userMapping]);
         leagueRepo.GetLeagueJuiceMappingAsync(leagueId, 2025).Returns(juiceMapping);
 
@@ -544,8 +544,8 @@ public class LeaderboardServiceTests {
         leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(
             new LeagueJuiceMapping { Id = 1, LeagueId = 1, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5, StartWeek = 2 });
 
-        var slate1 = new CfbSlates { Id = 1, Season = 2025, SlateNumber = 1, SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
-        var slate2 = new CfbSlates { Id = 2, Season = 2025, SlateNumber = 2, SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+        var slate1 = new CfbSlates { Id = 1, Season = 2025, SlateNumber = 1, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(1), SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+        var slate2 = new CfbSlates { Id = 2, Season = 2025, SlateNumber = 2, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(2), SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([slate1, slate2]);
         // Slate 2 needs its own spreads/scores/picks so BuildLeaderboard doesn't just see an empty
         // slate — reuse the same fixture shape slate 1 already has in BuildCfbMocks.
@@ -613,9 +613,9 @@ public class LeaderboardServiceTests {
         var leagueInfo = new LeagueInfo { Id = leagueId, LeagueName = "CFB Test", OwnerUserId = userId };
         var userMapping = new LeagueUserMapping { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = userId, UserName = "Alice" }, UserId = userId };
         var juiceMapping = new LeagueJuiceMapping { Id = 1, LeagueId = leagueId, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
-        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 2, SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 2, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(2), SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
 
-        var leagueRepo = Substitute.For<ILeagueRepository>();
+        var leagueRepo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2024, 2025, 2026);
         leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns([userMapping]);
         leagueRepo.GetLeagueJuiceMappingAsync(leagueId, 2025).Returns(juiceMapping);
 
@@ -693,9 +693,9 @@ public class LeaderboardServiceTests {
             new() { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = pendingUserId, UserName = "Pending" }, UserId = pendingUserId },
         };
         var juiceMapping = new LeagueJuiceMapping { Id = 1, LeagueId = leagueId, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
-        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 18, SlateType = "Championship", Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 18, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(18), SlateType = "Championship", Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
 
-        var leagueRepo = Substitute.For<ILeagueRepository>();
+        var leagueRepo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2024, 2025, 2026);
         leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns(userMappings);
         leagueRepo.GetLeagueJuiceMappingAsync(leagueId, 2025).Returns(juiceMapping);
 
@@ -748,9 +748,9 @@ public class LeaderboardServiceTests {
             new() { LeagueId = leagueId, League = leagueInfo, User = new ApplicationUser { Id = pendingId, UserName = "Pending" }, UserId = pendingId },
         };
         var juiceMapping = new LeagueJuiceMapping { Id = 1, LeagueId = leagueId, Season = 2025, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 };
-        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 18, SlateType = "Championship", Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
+        var slate = new CfbSlates { Id = slateId, Season = 2025, SlateNumber = 18, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(18), SlateType = "Championship", Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) };
 
-        var leagueRepo = Substitute.For<ILeagueRepository>();
+        var leagueRepo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2024, 2025, 2026);
         leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns(userMappings);
         leagueRepo.GetLeagueJuiceMappingAsync(leagueId, 2025).Returns(juiceMapping);
 
@@ -797,9 +797,9 @@ public class LeaderboardServiceTests {
     public async Task CfbBuildLeaderboard_ExcludesSlatesAfterTheCurrentOne() {
         var userId = Guid.NewGuid().ToString();
         var (leagueRepo, cfbRepo, picksRepo, _) = BuildCfbMocks(userId, slateNumber: 1);
-        var futureSlate = new CfbSlates { Id = 2, Season = 2025, SlateNumber = 2, SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(7)), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(13)) };
+        var futureSlate = new CfbSlates { Id = 2, Season = 2025, SlateNumber = 2, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(2), SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(7)), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(13)) };
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([
-            new CfbSlates { Id = 1, Season = 2025, SlateNumber = 1, SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
+            new CfbSlates { Id = 1, Season = 2025, SlateNumber = 1, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(1), SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
             futureSlate,
         ]);
         // Current slate is still slate 1 — slate 2 hasn't happened yet.
@@ -817,8 +817,8 @@ public class LeaderboardServiceTests {
         var userId = Guid.NewGuid().ToString();
         var (leagueRepo, cfbRepo, picksRepo, _) = BuildCfbMocks(userId, slateNumber: 1);
         cfbRepo.GetSlatesForSeasonAsync(2025).Returns([
-            new CfbSlates { Id = 1, Season = 2025, SlateNumber = 1, SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
-            new CfbSlates { Id = 2, Season = 2025, SlateNumber = 2, SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(7)), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(13)) },
+            new CfbSlates { Id = 1, Season = 2025, SlateNumber = 1, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(1), SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
+            new CfbSlates { Id = 2, Season = 2025, SlateNumber = 2, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(2), SlateType = "RegularSeason", Label = "Week 2", StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(7)), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(13)) },
         ]);
         SlateSpreads(cfbRepo, 2, []);
         SlateScores(cfbRepo, 2, []);
@@ -841,7 +841,7 @@ public class LeaderboardServiceTests {
         var currentSlateService = BuildCurrentSlateService(season: 2025, slateNumber: 1);
         leagueRepo.GetLeagueJuiceMappingAsync(1, 2026).Returns(new LeagueJuiceMapping { Id = 2, LeagueId = 1, Season = 2026, Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
         cfbRepo.GetSlatesForSeasonAsync(2026).Returns([
-            new CfbSlates { Id = 3, Season = 2026, SlateNumber = 1, SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
+            new CfbSlates { Id = 3, Season = 2026, SlateNumber = 1, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(1), SlateType = "RegularSeason", Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.Today), EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6)) },
         ]);
 
         var service = new CfbLeaderboardService(new LoggerFactory().CreateLogger<CfbLeaderboardService>(), leagueRepo, cfbRepo, picksRepo, currentSlateService, TimeProvider.System);
@@ -884,12 +884,12 @@ public class LeaderboardServiceTests {
             Juice = 5, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = weeklyCost
         };
         var slate = new CfbSlates {
-            Id = slateId, Season = 2025, SlateNumber = slateNumber, SlateType = "Championship",
+            Id = slateId, Season = 2025, SlateNumber = slateNumber, RequiredPicks = TestWeekConfigs.CfbRequiredPicks(slateNumber), SlateType = "Championship",
             Label = "Championship", StartDate = DateOnly.FromDateTime(DateTime.Today),
             EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(6))
         };
 
-        var leagueRepo = Substitute.For<ILeagueRepository>();
+        var leagueRepo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2024, 2025, 2026);
         leagueRepo.GetLeagueUserMappingsAsync(leagueId).Returns(userMappings);
         leagueRepo.GetLeagueJuiceMappingAsync(leagueId, 2025).Returns(juiceMapping);
 
@@ -976,7 +976,7 @@ public class LeaderboardServiceTests {
 
     [Fact]
     public async Task CfbBuildLeaderboard_ReturnsEmpty_WhenLeagueIdIsZero() {
-        var leagueRepo = Substitute.For<ILeagueRepository>();
+        var leagueRepo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2024, 2025, 2026);
         var cfbRepo = Substitute.For<ICfbRepository>();
         var picksRepo = Substitute.For<ICfbPicksRepository>();
         var currentSlateService = Substitute.For<ICfbCurrentSlateService>();
@@ -998,7 +998,7 @@ public class LeaderboardServiceTests {
         int[] playoffWeeks = [19, 20, 21];
         for (int wi = 0; wi < playoffWeeks.Length; wi++) {
             int week = playoffWeeks[wi];
-            int requiredPicks = GameHelpers.GetRequiredPicks(week);
+            int requiredPicks = dbContext.NflSeasonWeekConfigs.Single(c => c.Season == 2024 && c.WeekId == week).RequiredPicks;
 
             // Set all picks as winners initially
             bool winWeekend = true;

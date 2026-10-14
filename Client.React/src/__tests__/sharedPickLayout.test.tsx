@@ -53,7 +53,7 @@ describe('NFL PicksPage — GameCard layout regression', () => {
     }]});
     vi.mocked(getNflCurrentWeek).mockResolvedValue({
       weekId: 8, season: 2023, isPostSeason: false,
-      weekLabel: 'Week 8', scoringFormat: 'Standard', spreadLockDatetime: new Date().toISOString(),
+      weekLabel: 'Week 8', scoringFormat: 'Standard', spreadLockDatetime: new Date().toISOString(), requiredPicks: 4,
     });
     vi.mocked(getWeekScores).mockResolvedValue(scores);
     vi.mocked(getUserPicks).mockResolvedValue([]);
@@ -93,7 +93,7 @@ vi.mock('../api/espn', () => ({
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 
-const slate: CfbSlateDto = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
+const slate: CfbSlateDto = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18', isPostSeason: false, requiredPicks: 4 };
 const spread: CfbSpreadDto = { id: 1, cfbSlateId: 1, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, over: 44.5, under: 44.5, gameTime: '2030-10-11T20:00:00Z', dateCreated: '2030-10-09T14:00:00Z', homeTeamRank: null, awayTeamRank: null };
 
 describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {

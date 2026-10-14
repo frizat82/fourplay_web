@@ -39,7 +39,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         var schedule = configs
             .Where(c => c.InScopeIvLeague)
             .OrderBy(c => c.IvLeagueWeekNumber)
-            .Select(c => new SpreadLockWeekDto(CfbWeekLabelHelper.LabelFromConfig(c), c.SpreadLockDatetime));
+            .Select(c => new SpreadLockWeekDto(CfbWeekLabelHelper.LabelFromConfig(c), c.SpreadLockDatetime, c.IsPostSeason, c.RequiredPicks));
         return Ok(schedule);
     }
 
@@ -81,7 +81,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             await Task.WhenAll(juiceMappingTask, rankingsTask);
 
             var juiceMapping = juiceMappingTask.Result ?? new LeagueJuiceMapping();
-            juice = JuiceTiers.For(LeagueType.Cfb, slate.SlateNumber, juiceMapping);
+            juice = JuiceTiers.For(slate.RequiredPicks, juiceMapping);
             latestRankByTeam = rankingsTask.Result;
         }
 
@@ -282,7 +282,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             })
             .ToList();
 
-        var requiredPicks = GameHelpers.GetCfbRequiredPicks(slate.SlateNumber);
+        var requiredPicks = slate.RequiredPicks; // copied from the control table (frizat-d47)
         // Atomic: re-checks the cap and inserts inside one advisory-lock-held transaction — see
         // PickConcurrencyGuard and LeagueController.AddPicks's identical NFL guard.
         var added = await repo.TryAddPicksAsync(newPicks, userId, request.LeagueId, request.Season, request.CfbSlateId, requiredPicks);

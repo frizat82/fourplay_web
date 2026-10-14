@@ -38,6 +38,7 @@ vi.mock('../api/league', () => ({
   getUserPicks: vi.fn(),
   spreadBatch: vi.fn(),
   getNflCurrentWeek: vi.fn(),
+  getNflSeasonWeeks: vi.fn(async () => (await import('../test/fixtures')).createNflSeasonWeeks()),
   getLeagueJuice: vi.fn(),
 }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));

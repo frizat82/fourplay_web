@@ -130,10 +130,10 @@ public class PicksTests
     /// Defaults to matching this file's Week/Season constants so every pre-existing test
     /// (all of which submit picks "for the current week") keeps passing unchanged.
     /// </summary>
-    private static INflCurrentWeekService BuildCurrentWeekService(int week = Week, int season = Season)
+    private static INflCurrentWeekService BuildCurrentWeekService(int week = Week, int season = Season, int requiredPicks = 4)
     {
         var svc = Substitute.For<INflCurrentWeekService>();
-        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(week, season, false, "Week", "PickAgainstSpread", DateTime.UtcNow.AddDays(-1)));
+        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(week, season, false, "Week", "PickAgainstSpread", DateTime.UtcNow.AddDays(-1), requiredPicks));
         return svc;
     }
 
@@ -788,6 +788,28 @@ public class PicksTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Contains("Too many picks", badRequest.Value?.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// frizat-d47: the cap is the control-table row's RequiredPicks, not a rule keyed on the week
+    /// number — change the row and the cap follows (week 2 here, which the old rule fixed at 4).
+    /// </summary>
+    [Fact]
+    public async Task AddPicks_CapsAtTheCurrentWeekRowsRequiredPicks()
+    {
+        var futureKickoff = DateTimeOffset.UtcNow.AddHours(2);
+        var repo = Substitute.For<ILeagueRepository>();
+        repo.GetNflWeeksAsync(Season).Returns([MakeNflWeek()]);
+        repo.UserExistsInLeagueAsync(UserId, LeagueId).Returns(true);
+        repo.GetUserNflPicksAsync(UserId, LeagueId, Season, Week).Returns([]);
+        repo.GetNflSpreadsAsync(Season, Week).Returns(MakeSpreads(futureKickoff));
+        repo.TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>())
+            .Returns(true);
+
+        var controller = BuildController(repo, Substitute.For<IEspnCacheService>(), BuildPrincipal(UserId));
+        await controller.AddPicks([MakePick("BUF")], BuildCurrentWeekService(requiredPicks: 2));
+
+        await repo.Received(1).TryAddNflPicksAsync(Arg.Any<IEnumerable<NflPicks>>(), UserId, LeagueId, Season, Week, 2);
     }
 
     // ── RemoveMyPick — self-service pick removal ───────────────────────────────────────────────

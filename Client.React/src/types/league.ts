@@ -21,6 +21,9 @@ export interface CfbSlateDto {
   startDate: string;
   endDate: string;
   firstGameUtc?: string | null;
+  // The slate's control-table rules, copied from CfbSeasonWeekConfigs (frizat-d47).
+  isPostSeason: boolean;
+  requiredPicks: number;
 }
 
 export interface CfbSpreadDto {
@@ -92,6 +95,17 @@ export interface NflCurrentWeekDto {
   weekLabel: string;
   scoringFormat: string;
   spreadLockDatetime: string;
+  requiredPicks: number; // the week's control-table row (frizat-d47)
+}
+
+// GET /api/league/season-weeks/{season} — one NFL week as its control-table row defines it
+// (frizat-d47). nflAdapter reads a past week's requiredPicks from here; the label and postseason
+// flag are the row's too, for building the week selector from the table rather than constants.
+export interface NflSeasonWeekDto {
+  weekId: number;
+  weekLabel: string;
+  isPostSeason: boolean;
+  requiredPicks: number;
 }
 
 // GET /api/league/spread-lock-schedule (NFL) / /api/cfb/spread-lock-schedule (CFB) — Rules page:
@@ -100,4 +114,7 @@ export interface NflCurrentWeekDto {
 export interface SpreadLockWeekDto {
   weekLabel: string;
   spreadLockDatetime: string;
+  // The row's control-table rules (frizat-d47) — the Rules page's per-round pick counts.
+  isPostSeason: boolean;
+  requiredPicks: number;
 }

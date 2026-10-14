@@ -81,8 +81,13 @@ public class DbContextFactoryStub : IDbContextFactory<ApplicationDbContext>
                 return spread;
             }).ToList();
         _dbContext.NflSpreads.AddRange(spreads);
+        AddNflWeekConfigs(2024);
         await _dbContext.SaveChangesAsync();
     }
+
+    // The season's control-table rows (frizat-d47) — what the leaderboard and
+    // SpreadCalculatorProvider now read each week's pick count from.
+    private void AddNflWeekConfigs(int season) => _dbContext.NflSeasonWeekConfigs.AddRange(TestWeekConfigs.Nfl(season));
     /// <summary>
     /// Populates exactly two weeks with distinct, non-overlapping teams so that
     /// concurrency tests can verify that a calculator for week N never contains
@@ -96,6 +101,7 @@ public class DbContextFactoryStub : IDbContextFactory<ApplicationDbContext>
             new NflSpreads { Season = 2024, NflWeek = 1, HomeTeam = "W1Home", AwayTeam = "W1Away", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 45 },
             new NflSpreads { Season = 2024, NflWeek = 2, HomeTeam = "W2Home", AwayTeam = "W2Away", HomeTeamSpread = -7, AwayTeamSpread = 7, OverUnder = 52 }
         );
+        AddNflWeekConfigs(2024);
         await _dbContext.SaveChangesAsync();
     }
 

@@ -47,10 +47,10 @@ public class CfbPicksControllerTests
         return ctrl;
     }
 
-    private static CfbSlates MakeSlate(int id = 1, int slateNumber = 1, int? espnWeekNumber = 1) => new()
+    private static CfbSlates MakeSlate(int id = 1, int slateNumber = 1, int? espnWeekNumber = 1, int requiredPicks = 4) => new()
     {
         Id = id, Season = 2025, SlateNumber = slateNumber, Label = "Week 1", SlateType = "RegularSeason",
-        EspnWeekNumber = espnWeekNumber,
+        EspnWeekNumber = espnWeekNumber, RequiredPicks = requiredPicks,
     };
 
     /// <summary>
@@ -61,7 +61,7 @@ public class CfbPicksControllerTests
     private static ICfbCurrentSlateService BuildCurrentSlateService(int slateId = 1, int season = 2025) {
         var svc = Substitute.For<ICfbCurrentSlateService>();
         svc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(slateId, season, 1, "Week 1", "RegularSeason",
-            DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(6)), null, DateTime.UtcNow.AddDays(-1)));
+            DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(6)), null, DateTime.UtcNow.AddDays(-1), false, 4));
         return svc;
     }
 
@@ -115,6 +115,28 @@ public class CfbPicksControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.NotNull(ok.Value);
+    }
+
+    // frizat-d47: the cap is the slate row's RequiredPicks (from the control table), not a rule
+    // keyed on the slate number — slate 5 here, which the old rule fixed at 4.
+    [Fact]
+    public async Task AddPicks_CapsAtTheSlateRowsRequiredPicks()
+    {
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(slateNumber: 5, requiredPicks: 2));
+        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([MakeSpread(DateTimeOffset.UtcNow.AddHours(2))]);
+        var request = new AddCfbPicksRequest
+        {
+            LeagueId = 1,
+            CfbSlateId = 1,
+            Season = 2025,
+            Picks = [new CfbPickItem { Team = "ORE", PickType = PickType.Spread }]
+        };
+        _repo.GetUserPicksAsync(1, 1, UserId).Returns([]);
+        _repo.TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>()).Returns(true);
+
+        await BuildController().AddPicks(request, BuildCurrentSlateService());
+
+        await _repo.Received(1).TryAddPicksAsync(Arg.Any<IEnumerable<CfbPicks>>(), UserId, 1, 2025, 1, 2);
     }
 
     [Fact]
@@ -555,13 +577,13 @@ public class CfbPicksControllerTests
     }
 
     [Fact]
-    public async Task GetSpreads_UsesSlateNumberTierForJuice_NotRegularSeasonJuice()
+    public async Task GetSpreads_UsesTheSlateRowsTierForJuice_NotRegularSeasonJuice()
     {
-        // Slate 16 -> quarterfinal tier -> JuiceDivisional.
+        // Slate 16 (quarterfinals) asks for 3 picks on its control-table row -> JuiceDivisional.
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([
             MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU"),
         ]);
-        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(slateNumber: 16));
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(slateNumber: 16, requiredPicks: 3));
         _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(
             new LeagueJuiceMapping { Juice = 3, JuiceDivisional = 10, JuiceConference = 6 });
 

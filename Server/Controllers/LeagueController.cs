@@ -59,9 +59,18 @@ public class LeagueController(
         var schedule = configs
             .Where(c => c.Season == current.Season)
             .OrderBy(c => c.WeekId)
-            .Select(c => new SpreadLockWeekDto(c.WeekLabel, c.SpreadLockDatetime));
+            .Select(c => new SpreadLockWeekDto(c.WeekLabel, c.SpreadLockDatetime, c.IsPostSeason, c.RequiredPicks));
         return Ok(schedule);
     }
+
+    // A season's weeks with each one's control-table rules (frizat-d47) — how the client knows a
+    // past week's pick count without computing it from the week number.
+    [HttpGet("season-weeks/{season:int}")]
+    public async Task<IActionResult> GetSeasonWeeks(int season) =>
+        Ok((await repo.GetNflSeasonWeekConfigsAsync(season))
+            .OrderBy(c => c.WeekId)
+            .Select(c => new NflSeasonWeekDto(c.WeekId, c.WeekLabel, c.IsPostSeason, c.RequiredPicks))
+            .ToList());
 
     // ---------- League Info ----------
     [HttpGet("{leagueId:int}")]
@@ -525,7 +534,9 @@ public class LeagueController(
         var newPicks = picksList
             .Where(p => !existingKeys.Contains((p.Team, p.NflWeek, p.Season, p.LeagueId)))
             .ToList();
-        var requiredPicks = GameHelpers.GetRequiredPicks(first.NflWeek);
+        // The current week's control-table row (frizat-d47) — the guard above already pinned
+        // first.NflWeek to exactly that week.
+        var requiredPicks = currentWeek.RequiredPicks;
         // Cap check + insert happen atomically inside one advisory-lock-held transaction, so two
         // concurrent submissions (double-click, two tabs) can never both squeeze past the cap —
         // see PickConcurrencyGuard.
