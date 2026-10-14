@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import { createCfbAdapter } from '../services/cfbAdapter';
+import { createCfbSlate } from '../test/fixtures';
 import type { CfbSlateDto, CfbSpreadDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
 
@@ -24,10 +25,7 @@ vi.mock('../api/espn', () => ({
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks, getCfbAllPicks, getCfbPickCounts, addCfbPicks, removeMyCfbPick } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 
-const slate: CfbSlateDto = {
-  id: 10, season: 2026, slateNumber: 8, label: 'Week 8', startDate: '2026-10-20', endDate: '2026-10-26',
-  isPostSeason: false, requiredPicks: 4,
-};
+const slate: CfbSlateDto = createCfbSlate();
 // Over/Under are deliberately asymmetric (not a mirror pair) — the backend juices each
 // independently (SpreadCalculator.GetOverUnder), so this fixture must not use equal values,
 // otherwise a regression that collapses them back into one shared number would go unnoticed.
@@ -167,36 +165,15 @@ describe('cfbAdapter', () => {
       expect(result.season).toBe(2026);
     });
 
-    // frizat-8y4: maxWeek used to be computed by scanning ALL pre-seeded RegularSeason slates
-    // for the season (CfbSlateSeederJob seeds the whole season up front, unlike NFL's NflScores
-    // rows which only exist once a game is final) — so it reflected the season's total length,
-    // not the real current week, letting Next walk all the way to the last regular-season slate
-    // regardless of which week is actually live. loadCurrentScores already got this right via
-    // maxWeek: weekState.week; loadCurrentGames must match it.
-    it('caps maxWeek at the real current week, not the season-wide last pre-seeded slate', async () => {
-      const futureSlates: CfbSlateDto[] = [9, 10, 11, 12, 13].map(slateNumber => ({
-        id: slateNumber, season: 2026, slateNumber, label: `Week ${slateNumber}`, startDate: '2026-11-01', endDate: '2026-11-07', isPostSeason: false, requiredPicks: 4,
-      }));
-      vi.mocked(getCfbSlates).mockResolvedValue([slate, ...futureSlates]); // current slateNumber=8
-      vi.mocked(getCfbSpreads).mockResolvedValue([]);
-      vi.mocked(getCfbScoresForSlate).mockResolvedValue(null);
-      vi.mocked(getCfbUserPicks).mockResolvedValue([]);
-
-      const result = await adapter.loadCurrentGames(1, 'user1');
-      expect(result.maxWeek).toBe(8);
-    });
-
     // frizat-8y7 / frizat-d47: a CFB week is its slate number (no slate - 13 postseason
-    // numbering), so a postseason current slate reports itself — slate 18 — as the cap, which
-    // the selector applies only to regular-season weeks (all 13 are below it).
-    it('reports the postseason current slate as itself: week 18, postseason, cap 18', async () => {
+    // numbering), so a postseason current slate is week 18 — which, as the selector's cap, sits
+    // above every regular-season week (1-13), leaving them all browsable.
+    it('reports the postseason current slate as itself: week 18, postseason', async () => {
       // Fresh adapter — createCfbAdapter() wraps getCfbCurrentSlate in memoizeOnce, and the
       // module-level `adapter` shared by every other test in this file has already cached its
       // own (regular-season) "current slate" by the time this test runs.
       const freshAdapter = createCfbAdapter();
-      const postseasonSlate: CfbSlateDto = {
-        id: 18, season: 2026, slateNumber: 18, label: 'CFP Championship', startDate: '2027-01-01', endDate: '2027-01-07', isPostSeason: true, requiredPicks: 1,
-      };
+      const postseasonSlate: CfbSlateDto = createCfbSlate({ id: 18, slateNumber: 18, label: 'CFP Championship', isPostSeason: true, requiredPicks: 1 });
       vi.mocked(getCfbCurrentSlate).mockResolvedValue(postseasonSlate);
       vi.mocked(getCfbSlates).mockResolvedValue([postseasonSlate]);
       vi.mocked(getCfbSpreads).mockResolvedValue([]);
@@ -207,7 +184,6 @@ describe('cfbAdapter', () => {
       expect(result.week).toBe(18);
       expect(result.isPostSeason).toBe(true);
       expect(result.weekLabel).toBe('CFP Championship');
-      expect(result.maxWeek).toBe(18);
     });
 
     // frizat-qhk: cfbAdapter.ts never read event.weather at all, so CFB games never showed a
@@ -279,13 +255,11 @@ describe('cfbAdapter', () => {
   });
 
   describe('loadCurrentScores', () => {
-    // Same as loadCurrentGames: the postseason current slate is week 18 and caps at 18.
-    it('reports the postseason current slate as itself: week 18, postseason, cap 18', async () => {
+    // Same as loadCurrentGames: the postseason current slate is week 18.
+    it('reports the postseason current slate as itself: week 18, postseason', async () => {
       // Fresh adapter — see the identical note in the loadCurrentGames test above.
       const freshAdapter = createCfbAdapter();
-      const postseasonSlate: CfbSlateDto = {
-        id: 18, season: 2026, slateNumber: 18, label: 'CFP Championship', startDate: '2027-01-01', endDate: '2027-01-07', isPostSeason: true, requiredPicks: 1,
-      };
+      const postseasonSlate: CfbSlateDto = createCfbSlate({ id: 18, slateNumber: 18, label: 'CFP Championship', isPostSeason: true, requiredPicks: 1 });
       vi.mocked(getCfbCurrentSlate).mockResolvedValue(postseasonSlate);
       vi.mocked(getCfbSpreads).mockResolvedValue([]);
       vi.mocked(getCfbScoresForSlate).mockResolvedValue(null);
@@ -295,7 +269,6 @@ describe('cfbAdapter', () => {
       const result = await freshAdapter.loadCurrentScores(1, 'user1');
       expect(result.week).toBe(18);
       expect(result.isPostSeason).toBe(true);
-      expect(result.maxWeek).toBe(18);
     });
   });
 

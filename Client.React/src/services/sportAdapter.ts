@@ -35,6 +35,19 @@ export function memoizeOnce<T>(fetch: () => Promise<T>): () => Promise<T> {
 }
 
 /**
+ * memoizeOnce per key — one in-flight/resolved promise per key (e.g. per season), same
+ * don't-cache-a-failure rule. Shared by both adapters' per-season row fetches.
+ */
+export function memoizeByKey<K, T>(fetch: (key: K) => Promise<T>): (key: K) => Promise<T> {
+  const byKey = new Map<K, () => Promise<T>>();
+  return (key: K) => {
+    let get = byKey.get(key);
+    if (!get) { get = memoizeOnce(() => fetch(key)); byKey.set(key, get); }
+    return get();
+  };
+}
+
+/**
  * Hide other users' picks for games that haven't started yet.
  * The caller's own picks are always visible (so they can confirm their submission).
  * Once a game kicks off, picks for that game become visible to everyone — mirroring
@@ -185,9 +198,6 @@ export interface LoadedWeek extends WeekState {
   requiredPicks: number;
   /** The week's name, from its control-table row */
   weekLabel: string;
-  /** The furthest week with data — used to cap the WeekYearSelector */
-  maxWeek: number;
-  maxSeason: number;
 }
 
 export interface LoadedScores extends WeekState {
@@ -198,8 +208,6 @@ export interface LoadedScores extends WeekState {
   hasActiveGames: boolean;
   requiredPicks: number;
   weekLabel: string;
-  maxWeek: number;
-  maxSeason: number;
 }
 
 export interface SportAdapter {

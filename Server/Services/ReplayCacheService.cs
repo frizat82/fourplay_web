@@ -1,7 +1,5 @@
 using System.Text.Json;
 using FourPlayWebApp.Server.Services.Interfaces;
-using FourPlayWebApp.Shared.Helpers;
-using FourPlayWebApp.Shared.Helpers.Extensions;
 using FourPlayWebApp.Shared.Models;
 using Serilog;
 
@@ -24,11 +22,10 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
     public event Action? ScoresChanged;
 
     // Which (season, week) the replayed game IS: the control table's current week (frizat-d47) —
-    // replay drives the live week, so no ESPN week numbering is ever translated. Optional so
-    // tests that never ask for a specific week can omit it.
-    private readonly INflCurrentWeekService? _currentWeek;
+    // replay drives the live week, so no ESPN week numbering is ever translated.
+    private readonly INflCurrentWeekService _currentWeek;
 
-    public ReplayCacheService(IReadOnlyList<EspnScores> snapshots, INflCurrentWeekService? currentWeek = null) {
+    public ReplayCacheService(IReadOnlyList<EspnScores> snapshots, INflCurrentWeekService currentWeek) {
         _currentWeek = currentWeek;
         if (snapshots.Count == 0) throw new ArgumentException("At least one snapshot is required.", nameof(snapshots));
         _snapshots = snapshots.ToArray();
@@ -43,7 +40,7 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
         "sample_espn_nfl_final.json",
     ];
 
-    public static ReplayCacheService LoadFromFixtureFiles(string repoRootPath, INflCurrentWeekService? currentWeek = null) {
+    public static ReplayCacheService LoadFromFixtureFiles(string repoRootPath, INflCurrentWeekService currentWeek) {
         var snapshots = new List<EspnScores>();
         foreach (var fileName in FixtureFileOrder) {
             var path = Path.Combine(repoRootPath, fileName);
@@ -83,7 +80,6 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
     // weeks". It answers only for the control table's current week (the live week replay stands
     // in for); never falls through to a real ESPN call (that would defeat the point of replay).
     public async Task<EspnScores?> GetWeekScoresAsync(int season, int nflWeek) {
-        if (_currentWeek is null) return null;
         var current = await _currentWeek.GetCurrentWeekAsync();
         return current.Season == season && current.WeekId == nflWeek ? _snapshots[_index] : null;
     }

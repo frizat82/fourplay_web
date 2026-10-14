@@ -5,7 +5,7 @@ import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../type
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, GameStatusValue, PickView, PickType, WeekState } from './sportAdapter';
-import { revealPicksForStartedGames, memoizeOnce, orFallback, pickCountsToMap } from './sportAdapter';
+import { revealPicksForStartedGames, memoizeOnce, memoizeByKey, orFallback, pickCountsToMap } from './sportAdapter';
 
 /** Map CFB backend status strings to canonical GameStatusValue */
 
@@ -202,12 +202,8 @@ export function createCfbAdapter(): SportAdapter {
   const getCurrentSlate = memoizeOnce(getCfbCurrentSlate);
 
   // A season's slates (each carrying its control-table row's label, rules and postseason flag),
-  // fetched once per season per adapter — memoizeOnce per season, so a failed fetch retries.
-  const slatesBySeason = new Map<number, () => Promise<CfbSlateDto[]>>();
-  function getSlates(season: number): Promise<CfbSlateDto[]> {
-    if (!slatesBySeason.has(season)) slatesBySeason.set(season, memoizeOnce(() => getCfbSlates(season)));
-    return slatesBySeason.get(season)!();
-  }
+  // fetched once per season per adapter.
+  const getSlates = memoizeByKey(getCfbSlates);
   const findSlate = async (season: number, week: number) => (await getSlates(season)).find(s => s.slateNumber === week);
 
   async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
@@ -243,28 +239,28 @@ export function createCfbAdapter(): SportAdapter {
       return current?.season ?? CFB_CONFIGURED_SEASON;
     },
 
+    // Also warms the season's slates, so the week selector's list doesn't wait behind the whole
+    // current-slate load (its query resolves from this memo).
     prefetchCurrentWeek() {
-      getCurrentSlate().catch(() => {});
+      getCurrentSlate().then(s => s && getSlates(s.season)).catch(() => {});
     },
 
     async loadCurrentGames(leagueId, userId) {
       const active = await getCurrentSlate();
       if (!active) {
-        return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, weekLabel: '', maxWeek: 1, maxSeason: CFB_CONFIGURED_SEASON };
+        return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, weekLabel: '' };
       }
       const { games, userPicks } = await loadSlate(leagueId, userId, active.id, active);
       const weekState = slateToWeekState(active);
-      // Cap navigation at the real current slate, not the season-wide last pre-seeded one
-      // (CfbSlates is seeded for the whole season ahead of time — frizat-8y4).
-      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: active.requiredPicks, weekLabel: active.label, maxWeek: active.slateNumber, maxSeason: active.season };
+      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: active.requiredPicks, weekLabel: active.label };
     },
 
-    async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
+    async loadHistoricalGames(leagueId, userId, { season, week }) {
       const slate = await findSlate(season, week);
       if (!slate) return null;
       const { games, userPicks } = await loadSlate(leagueId, userId, slate.id, slate);
       if (games.length === 0) return null;
-      return { season, week, isPostSeason, games, userPicks, hasOdds: true, requiredPicks: slate.requiredPicks, weekLabel: slate.label, maxWeek: week, maxSeason: season };
+      return { ...slateToWeekState(slate), games, userPicks, hasOdds: true, requiredPicks: slate.requiredPicks, weekLabel: slate.label };
     },
 
     async submitPicks(leagueId, { season, week }, picks) {
@@ -299,20 +295,20 @@ export function createCfbAdapter(): SportAdapter {
     async loadCurrentScores(leagueId, userId) {
       const active = await getCurrentSlate();
       if (!active) {
-        return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, weekLabel: '', maxWeek: 1, maxSeason: CFB_CONFIGURED_SEASON };
+        return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, weekLabel: '' };
       }
       const weekState = slateToWeekState(active);
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
       const hasActiveGames = games.some(g => isGameLive(g.gameStatus));
-      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: active.requiredPicks, weekLabel: active.label, maxWeek: active.slateNumber, maxSeason: active.season };
+      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: active.requiredPicks, weekLabel: active.label };
     },
 
-    async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
+    async loadHistoricalScores(leagueId, userId, { season, week }) {
       const slate = await findSlate(season, week);
       if (!slate) return null;
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate);
       if (games.length === 0) return null;
-      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: slate.requiredPicks, weekLabel: slate.label, maxWeek: week, maxSeason: season };
+      return { ...slateToWeekState(slate), games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: slate.requiredPicks, weekLabel: slate.label };
     },
 
     // ─── Commissioner missing-picks (frizat-8ni) ───────────────────────────────

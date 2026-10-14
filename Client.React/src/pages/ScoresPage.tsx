@@ -28,6 +28,7 @@ import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
+import { useSeasonWeeks } from '../utils/useSeasonWeeks';
 import { useReconnectingEventSource } from '../utils/useReconnectingEventSource';
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
@@ -122,14 +123,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   const sseEnabled = isCurrentWeek && isPageVisible && leaguesLoaded && !!data?.hasActiveGames && !!adapter.sseUrl;
   useReconnectingEventSource(sseEnabled ? adapter.sseUrl : null, () => void refetch());
 
-  // The season's weeks from the control table (frizat-d47) — the selector's options and names.
-  const selectorSeason = weekState?.season ?? data?.season;
-  const { data: seasonWeeks } = useQuery({
-    queryKey: [adapter.sport, 'seasonWeeks', selectorSeason],
-    queryFn: () => adapter.loadSeasonWeeks(selectorSeason!),
-    enabled: selectorSeason !== undefined,
-    staleTime: Infinity,
-  });
+  const seasonWeeks = useSeasonWeeks(adapter, weekState?.season ?? data?.season);
   const maxSeason = currentMaxSeason ?? new Date().getFullYear();
   const minSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
   const startWeek = useLeagueStartWeek(currentLeague, data?.season ?? new Date().getFullYear());
@@ -235,8 +229,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
   );
   if (!data) return null;
 
-  // No longer gated on isCurrentWeek — with navigation capped at the real current week
-  // (adapter.maxWeek), an odds-less week is simply unreachable once you've moved past it, so
+  // No longer gated on isCurrentWeek — with navigation capped at the real current week (the
+  // useCurrentWeekNav snapshot), an odds-less week is simply unreachable once you've moved past it, so
   // "no odds for the week I'm looking at" is the correct condition on its own (mirrors the
   // identical PicksPage.tsx fix, frizat-8y4).
   const oddsNotReady = !data.hasOdds;
@@ -262,7 +256,6 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
           onSeasonChange={handleSeasonChange}
           onWeekChange={handleWeekChange}
           onSeasonTypeChange={handleSeasonTypeChange}
-          {...adapter.weekSelectorConfig}
           weeks={seasonWeeks}
           maxWeek={currentMaxWeek}
           weekLabel={data?.weekLabel}

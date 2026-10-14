@@ -24,7 +24,7 @@ public class ReplayCacheServiceTests {
         Season = new Season { Year = int.Parse(label) },
     };
 
-    private static ReplayCacheService BuildService(params EspnScores[] snapshots) => new(snapshots);
+    private static ReplayCacheService BuildService(params EspnScores[] snapshots) => new(snapshots, Substitute.For<INflCurrentWeekService>());
 
     // frizat-d47: replay drives the live current week, so a week request is answered with the
     // snapshot exactly when it IS the control table's current week — never by translating the
@@ -137,7 +137,7 @@ public class ReplayCacheServiceTests {
     [Fact]
     public async Task LoadFromFixtureFiles_InProgressSnapshot_HasRealSituationData() {
         var repoRoot = FindRepoRoot();
-        var svc = ReplayCacheService.LoadFromFixtureFiles(repoRoot);
+        var svc = ReplayCacheService.LoadFromFixtureFiles(repoRoot, Substitute.For<INflCurrentWeekService>());
 
         svc.Advance(); // scheduled -> halftime
         svc.Advance(); // halftime -> in_progress

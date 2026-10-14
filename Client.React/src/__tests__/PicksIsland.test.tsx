@@ -26,7 +26,6 @@ function makeLoadedWeek(overrides: Partial<LoadedWeek> = {}): LoadedWeek {
   return {
     season: 2025, week: 3, isPostSeason: false,
     games: [], userPicks: [], hasOdds: true, requiredPicks: 4, weekLabel: 'Week 3',
-    maxWeek: 18, maxSeason: 2025,
     ...overrides,
   };
 }

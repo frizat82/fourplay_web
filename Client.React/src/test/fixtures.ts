@@ -1,3 +1,4 @@
+import type { CfbSlateDto } from '../types/league';
 import type { Mock } from 'vitest';
 import type { Competition, EspnScores, Event } from '../types/espn';
 import type { NflPickDto, PickType, SpreadCalculationResponse, SpreadResponse } from '../types/picks';
@@ -178,6 +179,16 @@ export function createPick({
 
 export function createSpreadResponse(team: string, spread: number, over?: number, under?: number): SpreadResponse {
   return { team, spread, over: over ?? null, under: under ?? null };
+}
+
+/** A CFB slate as /api/cfb/slates and /current-slate serve it — its control-table row's label,
+ * postseason flag and pick count included (frizat-d47). Regular-season slate 8 unless overridden. */
+export function createCfbSlate(overrides: Partial<CfbSlateDto> = {}): CfbSlateDto {
+  return {
+    id: 10, season: 2026, slateNumber: 8, label: 'Week 8',
+    startDate: '2026-10-20', endDate: '2026-10-26', isPostSeason: false, requiredPicks: 4,
+    ...overrides,
+  };
 }
 
 // An NFL week's control-table RequiredPicks as the API serves it (frizat-d47), per /pick-rules

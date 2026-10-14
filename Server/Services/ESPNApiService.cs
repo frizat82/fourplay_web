@@ -2,7 +2,6 @@ using System.Text.Json;
 using Serilog;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
-using FourPlayWebApp.Shared.Helpers.Extensions;
 using FourPlayWebApp.Shared.Models;
 using ILogger=Microsoft.Extensions.Logging.ILogger;
 
