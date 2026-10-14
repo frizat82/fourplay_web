@@ -83,7 +83,8 @@ if (isDemoReplayMode)
     // SSE streams, advancing on an explicit test-only trigger instead of a timer — see
     // ReplayCacheService's own doc comment.
     builder.Services.AddSingleton(sp => ReplayCacheService.LoadFromFixtureFiles(
-        Path.Combine(sp.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "..")));
+        Path.Combine(sp.GetRequiredService<IWebHostEnvironment>().ContentRootPath, ".."),
+        sp.GetRequiredService<INflCurrentWeekService>()));
     builder.Services.AddSingleton<IEspnCacheService>(sp => sp.GetRequiredService<ReplayCacheService>());
     builder.Services.AddSingleton<ICfbCacheService>(sp => sp.GetRequiredService<ReplayCacheService>());
 }

@@ -56,7 +56,7 @@ public class DemoEspnCacheServiceTests
     [Fact]
     public async Task GetWeekScoresAsync_ReturnsEvents_ForSeededPostSeasonWeek()
     {
-        // ESPN week 1 postseason = Wild Card = internal NflWeek 19 (GameHelpers.GetWeekFromEspnWeek).
+        // Wild Card = our WeekId 19.
         await using var db = BuildDb(nameof(GetWeekScoresAsync_ReturnsEvents_ForSeededPostSeasonWeek));
         db.NflScores.Add(new NflScores {
             Season = 2025,
@@ -171,7 +171,7 @@ public class DemoEspnCacheServiceTests
 
         var sut = new DemoEspnCacheService(BuildFactory(db), TimeProvider.System);
 
-        // Raw ESPN week 5 = Super Bowl = internal WeekId 22 (GameHelpers.GetWeekFromEspnWeek).
+        // Super Bowl = our WeekId 22.
         var result = await sut.GetWeekScoresAsync(2025, 22);
 
         Assert.NotNull(result);

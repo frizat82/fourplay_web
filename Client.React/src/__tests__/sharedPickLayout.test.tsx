@@ -34,7 +34,7 @@ vi.mock('../components/sports/TeamHelmet', () => ({
 vi.mock('../components/WeatherIcon', () => ({ default: () => null }));
 
 // ─── NFL regression ──────────────────────────────────────────────────────────
-vi.mock('../api/league', () => ({ addPicks: vi.fn(), getUserPicks: vi.fn(), spreadBatch: vi.fn(), getNflCurrentWeek: vi.fn(), getLeagueJuice: vi.fn() }));
+vi.mock('../api/league', () => ({ addPicks: vi.fn(), getUserPicks: vi.fn(), spreadBatch: vi.fn(), getNflCurrentWeek: vi.fn(), getNflSeasonWeeks: vi.fn().mockResolvedValue([]), getLeagueJuice: vi.fn() }));
 vi.mock('../api/jersey', () => ({ getAllJerseys: vi.fn() }));
 vi.mock('../services/spreadRelease', () => ({ getNextSpreadJob: vi.fn() }));
 
@@ -42,7 +42,7 @@ import { getWeekScores } from '../api/espn';
 import { getUserPicks, spreadBatch, getNflCurrentWeek, getLeagueJuice } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
 import { getNextSpreadJob } from '../services/spreadRelease';
-import { createCompetition, createScores, createSpreadResponse, mockLeagueJuiceEmpty } from '../test/fixtures';
+import { createCfbSlate, createCompetition, createScores, createSpreadResponse, mockLeagueJuiceEmpty } from '../test/fixtures';
 
 describe('NFL PicksPage — GameCard layout regression', () => {
   beforeEach(() => {
@@ -93,7 +93,7 @@ vi.mock('../api/espn', () => ({
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores, getCfbUserPicks } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 
-const slate: CfbSlateDto = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18', isPostSeason: false, requiredPicks: 4 };
+const slate: CfbSlateDto = createCfbSlate({ id: 1, season: 2025, startDate: '2025-10-11', endDate: '2025-10-18' });
 const spread: CfbSpreadDto = { id: 1, cfbSlateId: 1, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, over: 44.5, under: 44.5, gameTime: '2030-10-11T20:00:00Z', dateCreated: '2030-10-09T14:00:00Z', homeTeamRank: null, awayTeamRank: null };
 
 describe('CFB PicksPage (via adapter) — GameCard layout regression', () => {

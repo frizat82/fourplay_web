@@ -5,10 +5,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
-// frizat-4k9: FixEspnProbBowlWeek's week 5->4 postseason rewrite must be gated by
-// GameHelpers.LastSeasonEspnSkippedProBowlWeek — the same season threshold
-// GameHelpers.GetWeekFromEspnWeek already uses — instead of carrying its own
-// independent, unconditional copy of the quirk-correction.
+// EspnApiService's response handling: ESPN's own week numbers pass through untouched (nothing
+// reads them — frizat-d47 matches games to our weeks by control-table dates).
 public class ESPNApiServiceTests {
     private static (EspnApiService sut, CapturingHandler handler) Build() {
         var handler = new CapturingHandler();
@@ -46,18 +44,21 @@ public class ESPNApiServiceTests {
     }
     """;
 
+    // frizat-d47: nothing in the app reads ESPN's week numbers (weeks are matched by our own
+    // control-table dates), so the old season-gated Pro Bowl renumbering is gone — ESPN's raw
+    // numbers pass through untouched, whatever the season.
     [Theory]
-    [InlineData(2025, 4)] // season <= LastSeasonEspnSkippedProBowlWeek: raw week 5 rewritten to 4
-    [InlineData(2026, 5)] // season > LastSeasonEspnSkippedProBowlWeek: raw week 5 left untouched
-    public async Task GetScoresByDateRangeAsync_PostSeasonWeek5_RewrittenOnlyForGatedSeason(int seasonYear, int expectedWeekNumber) {
+    [InlineData(2025)]
+    [InlineData(2026)]
+    public async Task GetScoresByDateRangeAsync_LeavesEspnsOwnWeekNumbersUntouched(int seasonYear) {
         var (sut, handler) = Build();
         handler.ResponseBody = PostSeasonResponseBody(seasonYear, 5);
 
         var result = await sut.GetScoresByDateRangeAsync(new DateOnly(seasonYear + 1, 2, 8), new DateOnly(seasonYear + 1, 2, 9), postSeason: true);
 
         Assert.NotNull(result);
-        Assert.Equal(expectedWeekNumber, result!.Week.Number);
-        Assert.Equal(expectedWeekNumber, Assert.Single(result.Events!).Week.Number);
+        Assert.Equal(5, result!.Week.Number);
+        Assert.Equal(5, Assert.Single(result.Events!).Week.Number);
     }
 
     // A day whose games are all final isn't requested again (EspnDayCache); the season type is part

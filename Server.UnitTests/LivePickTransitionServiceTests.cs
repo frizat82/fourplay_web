@@ -481,7 +481,7 @@ public class LivePickTransitionServiceTests
     {
         _preferencesService.AnyLiveNotificationPreferenceEnabledAsync().Returns(true);
         _cfbCache.GetScoresAsync().Returns(CfbScores(27, 20, TypeName.StatusInProgress, KickoffLongAgo));
-        _cfbCurrentSlate.GetCurrentSlateAsync().Returns(new CfbSlateInfo(119, 2026, 9, "Slate 9", "Regular", default, default, null, default, false, 4));
+        _cfbCurrentSlate.GetCurrentSlateAsync().Returns(new CfbSlateInfo(119, 2026, 9, "Slate 9", default, default, null, default, false, 4));
         var cfbPick = new CfbPicks { Id = 201, UserId = "user-1", LeagueId = 2, CfbSlateId = 119, Team = "OSU", PickType = PickType.Spread, Season = 2026 };
         _cfbPicksRepository.GetCfbPicksForTeamsAsync(2026, 119, Arg.Any<IReadOnlyCollection<string>>()).Returns([cfbPick]);
         _cfbRepository.GetLeagueEligibleSpreadsForSeasonAsync(2026).Returns([

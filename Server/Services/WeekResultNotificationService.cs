@@ -25,31 +25,39 @@ public class WeekResultNotificationService(
     // recorded as sent silently, so it can never be pushed later either.
     public static readonly TimeSpan PushWindowAfterPeriodEnd = TimeSpan.FromHours(48);
 
+    // Each period's end and name come from its control-table row (frizat-d47) — the label is the
+    // row's own WeekLabel, never derived from the week number.
+    private sealed record Period(DateTimeOffset End, string Label);
+
     public Task<int> CheckNflWeekResultsAsync(int season) =>
-        CheckWeekResultsAsync(LeagueType.Nfl, season, week => $"NFL {GameHelpers.GetNflWeekLabel(week)}",
+        CheckWeekResultsAsync(LeagueType.Nfl, season, "NFL",
             async () => (await leagueRepository.GetNflSeasonWeekConfigsAsync(season))
                 .GroupBy(c => c.WeekId)
-                .ToDictionary(g => g.Key, g => new DateTimeOffset(DateTime.SpecifyKind(g.Max(c => c.WeekEndDatetime), DateTimeKind.Utc))),
+                .ToDictionary(g => g.Key, g => new Period(
+                    new DateTimeOffset(DateTime.SpecifyKind(g.Max(c => c.WeekEndDatetime), DateTimeKind.Utc)), g.First().WeekLabel)),
             nflScores.GetScoresAsync, league => nflLeaderboardService.BuildLeaderboard(league.Id, season));
 
     public Task<int> CheckCfbWeekResultsAsync(int season) =>
-        CheckWeekResultsAsync(LeagueType.Cfb, season, slate => $"CFB {GameHelpers.GetCfbSlateLabel(slate)}",
-            async () => (await cfbRepository.GetAllSlatesAsync())
-                .Where(s => s.Season == season)
+        CheckWeekResultsAsync(LeagueType.Cfb, season, "CFB",
+            // Per-season read: fails loudly on a slate with no control-table row rather than
+            // pushing a blank round name.
+            async () => (await cfbRepository.GetSlatesForSeasonAsync(season))
                 .GroupBy(s => s.SlateNumber)
-                .ToDictionary(g => g.Key, g => new DateTimeOffset(g.Max(s => s.EndDate).ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero)),
+                .ToDictionary(g => g.Key, g => new Period(
+                    new DateTimeOffset(g.Max(s => s.EndDate).ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero), g.First().Label)),
             cfbScores.GetScoresAsync, league => cfbLeaderboardService.BuildLeaderboard(league.Id, season));
 
-    private async Task<int> CheckWeekResultsAsync(LeagueType sport, int season, Func<int, string> periodLabel,
-        Func<Task<Dictionary<int, DateTimeOffset>>> getPeriodEnds,
+    private async Task<int> CheckWeekResultsAsync(LeagueType sport, int season, string sportLabel,
+        Func<Task<Dictionary<int, Period>>> getPeriods,
         Func<Task<EspnScores?>> getScores, Func<LeagueInfo, Task<List<LeaderboardModel>>> buildLeaderboard)
     {
         var leagues = await leagueRepository.GetLeaguesByTypeAsync(sport);
         if (leagues.Count == 0) return 0;
-        var periodEnds = await getPeriodEnds();
+        var periods = await getPeriods();
         var now = clock.GetUtcNow();
-        // A week with no schedule row is treated as stale — never pushed.
-        bool IsPushable(int week) => periodEnds.TryGetValue(week, out var end) && now <= end + PushWindowAfterPeriodEnd;
+        // A week with no schedule row is treated as stale — never pushed (so it never needs a label).
+        bool IsPushable(int week) => periods.TryGetValue(week, out var p) && now <= p.End + PushWindowAfterPeriodEnd;
+        string periodLabel(int week) => $"{sportLabel} {periods[week].Label}";
         // The just-decided week is the one the live scoreboard holds; any team missing from it
         // (an older week catching up) falls back to its abbreviation.
         var teamNames = GameHelpers.GetTeamDisplayNames(await getScores());

@@ -197,8 +197,7 @@ public class DemoDataSeederIdempotencyTests : IClassFixture<PostgresSeederFixtur
         db.CfbSlates.Add(new CfbSlates
         {
             Season = DemoSeason, SlateNumber = 1,
-            Label = "Week 1", SlateType = "Regular",
-            StartDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.UtcNow),
             EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(6)),
         });
         await db.SaveChangesAsync();

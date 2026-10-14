@@ -95,13 +95,13 @@ function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePic
     );
   }
 
-  const weekLabel = adapter.weekSelectorConfig.weekLabelFn?.(data.week, data.isPostSeason) ?? `Week ${data.week}`;
+  const weekLabel = data.weekLabel;
 
   if (!data.hasOdds) {
     return (
       <Box>
         <Typography variant="body1" fontWeight={500}>{leagueName}</Typography>
-        <Typography variant="body2" color="text.secondary">{weekLabel} — spreads not released yet</Typography>
+        <Typography variant="body2" color="text.secondary">{weekLabel ? `${weekLabel} — ` : ''}spreads not released yet</Typography>
       </Box>
     );
   }

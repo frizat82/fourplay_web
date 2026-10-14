@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import { createCfbSlate } from '../test/fixtures';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
@@ -46,6 +47,7 @@ vi.mock('../services/auth', () => ({ useAuth: () => authState }));
 vi.mock('../services/toast', () => ({ useToast: () => ({ push: toastPush }) }));
 
 vi.mock('../api/league', () => ({
+  getNflSeasonWeeks: vi.fn().mockResolvedValue([]),
   getLeagueUserMappings: vi.fn(),
   getLeagueJuice: vi.fn(),
   getLeagueCost: vi.fn(),
@@ -69,6 +71,7 @@ vi.mock('../api/league', () => ({
   getLeaguePickCounts: vi.fn(),
 }));
 vi.mock('../api/cfb', () => ({
+  getCfbSlates: vi.fn().mockResolvedValue([]),
   getCfbCurrentSlate: vi.fn(),
   getCfbAllPicks: vi.fn(),
   getCfbPickCounts: vi.fn(),
@@ -476,9 +479,7 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     sportContext.sport = 'CFB';
     sportContext.isCfb = true;
     sportContext.isNfl = false;
-    mockedGetCfbCurrentSlate.mockResolvedValue({
-      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '', isPostSeason: false, requiredPicks: 4,
-    });
+    mockedGetCfbCurrentSlate.mockResolvedValue(createCfbSlate({ id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3' }));
     mockedGetCfbPickCounts.mockResolvedValue([]);
 
     renderPage();
@@ -555,9 +556,7 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     sportContext.sport = 'CFB';
     sportContext.isCfb = true;
     sportContext.isNfl = false;
-    mockedGetCfbCurrentSlate.mockResolvedValue({
-      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '', isPostSeason: false, requiredPicks: 4,
-    });
+    mockedGetCfbCurrentSlate.mockResolvedValue(createCfbSlate({ id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3' }));
     mockedGetCfbPickCounts.mockResolvedValue([]);
 
     renderPage();

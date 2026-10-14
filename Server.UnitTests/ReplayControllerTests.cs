@@ -1,3 +1,5 @@
+using FourPlayWebApp.Server.Services.Interfaces;
+using NSubstitute;
 using FourPlayWebApp.Server.Controllers;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Shared.Models;
@@ -9,7 +11,7 @@ namespace FourPlayWebApp.Server.UnitTests;
 public class ReplayControllerTests {
     [Fact]
     public void Advance_WhenReplayServiceRegistered_AdvancesAndReturnsOk() {
-        var replayService = new ReplayCacheService([new EspnScores(), new EspnScores()]);
+        var replayService = new ReplayCacheService([new EspnScores(), new EspnScores()], Substitute.For<INflCurrentWeekService>());
         var services = new ServiceCollection();
         services.AddSingleton(replayService);
         var sut = new ReplayController(services.BuildServiceProvider());
@@ -31,7 +33,7 @@ public class ReplayControllerTests {
 
     [Fact]
     public void Reset_WhenReplayServiceRegistered_ResetsAndReturnsOk() {
-        var replayService = new ReplayCacheService([new EspnScores(), new EspnScores()]);
+        var replayService = new ReplayCacheService([new EspnScores(), new EspnScores()], Substitute.For<INflCurrentWeekService>());
         replayService.Advance();
         var services = new ServiceCollection();
         services.AddSingleton(replayService);

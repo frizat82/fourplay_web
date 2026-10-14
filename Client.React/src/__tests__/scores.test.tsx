@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import ScoresPage from '../pages/ScoresPage';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCfbAdapter } from '../services/cfbAdapter';
-import { createCurrentWeek, createPick, createScores, createSpreadResponse, createCompetition, mockLeagueJuiceEmpty } from '../test/fixtures';
+import { createCfbSlate, createCurrentWeek, createPick, createScores, createSpreadResponse, createCompetition, mockLeagueJuiceEmpty } from '../test/fixtures';
 import { vi } from 'vitest';
 import type { NflPickDto } from '../types/picks';
 
@@ -640,22 +640,24 @@ describe('ScoresPage', () => {
     // loadHistoricalScores returns maxSeason: <the season being viewed>, so re-deriving the
     // ceiling from the active query's data on every render collapses it instead of remembering
     // the real ceiling from the last current-week load (currentWeekSnapshot).
-    await setupDefaults({ week: 2 }); // current week resolves to season 2024 (fixture default)
-    // getWeekScores now serves both the current week (season 2024) and the historical navigation
-    // below (season 2022) — differentiate by the requested year so the initial current-week load
+    await setupDefaults({ week: 2 });
+    // Current season 2026, browsing back to 2025 — the first season with control-table rows.
+    mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(2, false, 2026));
+    // getWeekScores serves both the current week (season 2026) and the historical navigation
+    // below (season 2025) — differentiate by the requested year so the initial current-week load
     // isn't overwritten by the season-2022 fixture before the snapshot is even captured.
-    mockedGetWeekScores.mockImplementation(async (season: number) => season === 2022
-      ? createScores({ week: 2, seasonYear: 2022, gameStarted: true })
-      : makeScores(2, false, true));
+    mockedGetWeekScores.mockImplementation(async (season: number) => season === 2025
+      ? createScores({ week: 2, seasonYear: 2025, gameStarted: true })
+      : createScores({ week: 2, seasonYear: 2026, gameStarted: true }));
     await renderPage();
 
     await userEvent.click(screen.getAllByRole('combobox')[0]);
-    await userEvent.click(screen.getByRole('option', { name: '2022 Season' }));
-    await waitFor(() => expect(screen.getByText('2022 Season')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('option', { name: '2025 Season' }));
+    await waitFor(() => expect(screen.getByText('2025 Season')).toBeInTheDocument());
 
-    // The current season (2024) must still be a selectable option — not dropped from the range.
+    // The current season (2026) must still be a selectable option — not dropped from the range.
     await userEvent.click(screen.getAllByRole('combobox')[0]);
-    expect(screen.getByRole('option', { name: '2024 Season' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '2026 Season' })).toBeInTheDocument();
   });
 
   it('shows an error alert with a retry button when the scores query fails', async () => {
@@ -690,7 +692,7 @@ describe('ScoresPage', () => {
     // below actually needs.
     unmount();
 
-    const cfbSlate = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18', isPostSeason: false, requiredPicks: 4 };
+    const cfbSlate = createCfbSlate({ id: 1, season: 2025, startDate: '2025-10-11', endDate: '2025-10-18' });
     const cfbSpread = { id: 1, cfbSlateId: 1, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, over: 44.5, under: 44.5, gameTime: '2025-10-11T20:00:00Z', dateCreated: '2025-10-09T14:00:00Z', homeTeamRank: null, awayTeamRank: null };
     mockedGetCfbCurrentSlate.mockResolvedValue(cfbSlate);
     mockedGetCfbSlates.mockResolvedValue([cfbSlate]);

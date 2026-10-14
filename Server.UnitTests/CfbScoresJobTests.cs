@@ -50,8 +50,7 @@ public class CfbScoresJobTests
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         return new() {
             Id = 1, Season = 2025, SlateNumber = 1,
-            Label = "Week 1", SlateType = "RegularSeason",
-            StartDate = today.AddDays(-1),
+            Label = "Week 1", StartDate = today.AddDays(-1),
             EndDate   = today.AddDays(1),
             EspnWeekNumber = 1,
             ScoringFormat = "Spread",
@@ -103,8 +102,7 @@ public class CfbScoresJobTests
     public async Task Execute_WhenSlatesExistButSeasonNotCurrentlyActive_SkipsFetchEntirely()
     {
         var offSeasonSlate = new CfbSlates {
-            Id = 1, Season = 2025, SlateNumber = 4, Label = "Championship", SlateType = "Championship",
-            StartDate = new DateOnly(2026, 1, 5), EndDate = new DateOnly(2026, 1, 12),
+            Id = 1, Season = 2025, SlateNumber = 4, Label = "Championship", StartDate = new DateOnly(2026, 1, 5), EndDate = new DateOnly(2026, 1, 12),
             EspnWeekNumber = 16, ScoringFormat = "Spread",
         };
         _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns([offSeasonSlate]);

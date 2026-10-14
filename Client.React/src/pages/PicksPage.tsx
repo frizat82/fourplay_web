@@ -26,6 +26,7 @@ import { extractApiErrorMessage } from '../utils/apiError';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
+import { useSeasonWeeks } from '../utils/useSeasonWeeks';
 
 // Pick key: "team|pickType" — never gameId. A team plays at most one game per week/slate, so
 // team+pickType is already a complete, unambiguous key; gameId (ESPN's own id for NFL, a derived
@@ -87,7 +88,7 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const season = weekState?.season ?? data?.season ?? new Date().getFullYear();
   const week = weekState?.week ?? data?.week ?? 0;
   const isPostSeason = weekState?.isPostSeason ?? data?.isPostSeason ?? false;
-  const maxWeek = currentMaxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
+  const seasonWeeks = useSeasonWeeks(adapter, weekState?.season ?? data?.season);
   const maxSeason = currentMaxSeason ?? new Date().getFullYear();
   const minSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
   const startWeek = useLeagueStartWeek(currentLeague, season);
@@ -206,8 +207,8 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   if (isError && !data) return (
     <QueryErrorAlert title="Picks" onRetry={() => void refetch()} />
   );
-  // No longer gated on isCurrentWeek — with navigation capped at the real current week
-  // (adapter.maxWeek), an odds-less week is simply unreachable once you've moved past it, so
+  // No longer gated on isCurrentWeek — with navigation capped at the real current week (the
+  // useCurrentWeekNav snapshot), an odds-less week is simply unreachable once you've moved past it, so
   // "no odds for the week I'm looking at" is the correct condition on its own. Previously this
   // also had to be true for the *current* week specifically, or a stale isCurrentWeek flag
   // left a spread-less future week's pick buttons fully clickable (frizat-8y4).
@@ -229,8 +230,9 @@ export default function PicksPage({ adapter }: PicksPageProps) {
           onSeasonChange={handleSeasonChange}
           onWeekChange={handleWeekChange}
           onSeasonTypeChange={handleSeasonTypeChange}
-          {...adapter.weekSelectorConfig}
-          maxRegularSeasonWeek={maxWeek}
+          weeks={seasonWeeks}
+          maxWeek={currentMaxWeek}
+          weekLabel={data?.weekLabel}
           maxSeason={maxSeason}
           minSeason={minSeason}
           isCurrent={isCurrentWeek}

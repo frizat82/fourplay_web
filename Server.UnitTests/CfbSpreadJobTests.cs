@@ -56,8 +56,7 @@ public class CfbSpreadJobTests
     private static CfbSlates BuildSlate(int slateId = 1) => new()
     {
         Id = slateId, Season = 2025, SlateNumber = 1,
-        Label = "Week 1", SlateType = "RegularSeason",
-        StartDate = new DateOnly(2025, 12, 19),
+        Label = "Week 1", StartDate = new DateOnly(2025, 12, 19),
         EndDate   = new DateOnly(2025, 12, 20),
         EspnWeekNumber = 1,
         ScoringFormat = "Spread",
@@ -69,7 +68,7 @@ public class CfbSpreadJobTests
     private void SetCurrentSlate(CfbSlates slate, DateTime? lockDatetime = null)
     {
         _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
-            slate.Id, slate.Season, slate.SlateNumber, slate.Label, slate.SlateType,
+            slate.Id, slate.Season, slate.SlateNumber, slate.Label,
             slate.StartDate, slate.EndDate, slate.FirstGameUtc, lockDatetime ?? PastLockTime, slate.IsPostSeason, slate.RequiredPicks));
         _repo.GetSlateByIdAsync(slate.Id).Returns(slate);
     }
@@ -204,8 +203,7 @@ public class CfbSpreadJobTests
     private static CfbSlates BuildCfpSlate(int slateId = 2) => new()
     {
         Id = slateId, Season = 2025, SlateNumber = 15,
-        Label = "CFP First Round", SlateType = "FirstRound",
-        StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20),
+        Label = "CFP First Round", StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20),
         EspnWeekNumber = 16, ScoringFormat = "NFLDivisional",
     };
 

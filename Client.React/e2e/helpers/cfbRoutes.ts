@@ -17,7 +17,7 @@ const mockInviteLink = () => ({
 
 export const TEST_LEAGUE_ID = 2;
 export const TEST_SEASON = 2024;
-// Regular-season slate 1 → cfbSlateNumberToWeek gives week 1, non-postseason,
+// Regular-season slate 1 → week 1 (a CFB week is its slate number), non-postseason,
 // 4 required picks (slate 1's control-table RequiredPicks = 4) — same shape as picks.spec.ts's
 // 2-games/4-buttons NFL setup.
 export const TEST_SLATE_ID = 501;
@@ -87,7 +87,6 @@ export async function setupCfbRoutes(page: Page, options: SetupCfbRoutesOptions 
     season: TEST_SEASON,
     slateNumber: TEST_SLATE_NUMBER,
     label: 'Week 1',
-    slateType: 'RegularSeason',
     startDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     endDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     firstGameUtc: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),

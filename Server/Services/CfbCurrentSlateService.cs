@@ -21,7 +21,7 @@ public class CfbCurrentSlateService(ICfbRepository repo, [FromKeyedServices(Curr
             && sw.Window.Start == resolved.Value.Start && sw.Window.End == resolved.Value.End);
 
         return new CfbSlateInfo(active.Id, active.Season, active.SlateNumber, active.Label,
-            active.SlateType, active.StartDate, active.EndDate, active.FirstGameUtc, activeWindow.SpreadLockDatetime,
+            active.StartDate, active.EndDate, active.FirstGameUtc, activeWindow.SpreadLockDatetime,
             active.IsPostSeason, active.RequiredPicks);
     }
 

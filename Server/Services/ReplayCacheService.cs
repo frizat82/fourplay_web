@@ -1,7 +1,5 @@
 using System.Text.Json;
 using FourPlayWebApp.Server.Services.Interfaces;
-using FourPlayWebApp.Shared.Helpers;
-using FourPlayWebApp.Shared.Helpers.Extensions;
 using FourPlayWebApp.Shared.Models;
 using Serilog;
 
@@ -23,7 +21,12 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
 
     public event Action? ScoresChanged;
 
-    public ReplayCacheService(IReadOnlyList<EspnScores> snapshots) {
+    // Which (season, week) the replayed game IS: the control table's current week (frizat-d47) —
+    // replay drives the live week, so no ESPN week numbering is ever translated.
+    private readonly INflCurrentWeekService _currentWeek;
+
+    public ReplayCacheService(IReadOnlyList<EspnScores> snapshots, INflCurrentWeekService currentWeek) {
+        _currentWeek = currentWeek;
         if (snapshots.Count == 0) throw new ArgumentException("At least one snapshot is required.", nameof(snapshots));
         _snapshots = snapshots.ToArray();
     }
@@ -37,7 +40,7 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
         "sample_espn_nfl_final.json",
     ];
 
-    public static ReplayCacheService LoadFromFixtureFiles(string repoRootPath) {
+    public static ReplayCacheService LoadFromFixtureFiles(string repoRootPath, INflCurrentWeekService currentWeek) {
         var snapshots = new List<EspnScores>();
         foreach (var fileName in FixtureFileOrder) {
             var path = Path.Combine(repoRootPath, fileName);
@@ -51,7 +54,7 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
         }
         RewriteKickoffTimes(snapshots);
         Log.Information("ReplayCacheService: loaded {Count} replay snapshots", snapshots.Count);
-        return new ReplayCacheService(snapshots);
+        return new ReplayCacheService(snapshots, currentWeek);
     }
 
     // The captured fixtures embed the real game's original 2025 kickoff time, which is always in
@@ -74,17 +77,13 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
     public Task<EspnScores?> GetScoresAsync() => Task.FromResult<EspnScores?>(_snapshots[_index]);
 
     // Replay mode drives one fixed game through scheduled->final — it has no concept of "other
-    // weeks". Only serve a result when the request matches the current snapshot's own week;
-    // never fall through to a real ESPN call (that would defeat the point of replay/demo mode).
-    // The snapshot's own Week.Number is real captured ESPN wire data (frizat-703.5 fixtures), so
-    // it's converted to our internal WeekId to compare against the caller's now-internal request.
-    public Task<EspnScores?> GetWeekScoresAsync(int season, int nflWeek) {
-        var current = _snapshots[_index];
-        var currentNflWeek = current.Week?.Number is { } w
-            ? GameHelpers.GetWeekFromEspnWeek(w, (int)(current.Season?.Year ?? 0), current.IsPostSeason())
-            : (int?)null;
-        var matches = current.Season?.Year == season && currentNflWeek == nflWeek;
-        return Task.FromResult(matches ? current : null);
+    // weeks". It answers only for the control table's current week (the live week replay stands
+    // in for); never falls through to a real ESPN call (that would defeat the point of replay).
+    public async Task<EspnScores?> GetWeekScoresAsync(int season, int nflWeek) {
+        NflWeekInfo current;
+        try { current = await _currentWeek.GetCurrentWeekAsync(); }
+        catch (InvalidOperationException) { return null; } // no current week resolves: nothing to replay
+        return current.Season == season && current.WeekId == nflWeek ? _snapshots[_index] : null;
     }
 
     /// <summary>Advances to the next captured snapshot. No-op once at the last one.</summary>

@@ -40,78 +40,12 @@ export function isWeekExcludedFromSeason(week: number, startWeek: number): boole
   return week < startWeek;
 }
 
-// Through the 2025 season, ESPN skipped postseason week 4 for the Pro Bowl (Super Bowl was raw
-// ESPN week 5). Must match the backend's GameHelpers.LastSeasonEspnSkippedProBowlWeek exactly —
-// see docs/ESPNProBowl.md and Shared/Helpers/GameHelpers.cs's identical constant (frizat-4k9).
-const LAST_SEASON_ESPN_SKIPPED_PRO_BOWL_WEEK = 2025;
-
-// Converts ESPN's own raw week numbering into our internal WeekId — legitimately still needed
-// wherever raw ESPN data is genuinely being ingested/interpreted (e.g. the frozen demo/replay
-// fixture, which IS a real captured ESPN wire snapshot) — but never for routing/fetching, which
-// is WeekId-primary everywhere now (frizat-3nv). Gated by SEASON, not by the raw week value,
-// mirroring GameHelpers.GetWeekFromEspnWeek exactly: for season <= 2025, raw week 5 remaps to
-// WeekId 22 (Super Bowl); for season >= 2026 no remap happens (the Pro Bowl gap is assumed
-// closed), so a genuine week=5 response for 2026+ fails loudly (WeekId 23, no match) instead of
-// silently coinciding with the right answer by accident.
-export function getWeekFromEspnWeek(week: number, season: number, isPostSeason = false) {
-  if (!isPostSeason) return week;
-  if (season <= LAST_SEASON_ESPN_SKIPPED_PRO_BOWL_WEEK && week === 5) return 22;
-  // DB postseason weeks: WC=19, Div=20, CC=21, SB=22.
-  return week + 18;
-}
-
-// NFL week name, keyed by our own internal WeekId (1-18 regular, 19-22 postseason) — never
-// ESPN's own week numbering (frizat-3nv). Reuses getWeekName's own round-name table below (1-4)
-// rather than re-declaring it, offset by the constant 18 gap between WeekId's postseason range
-// and that table's index. Pick counts aren't computed here at all: they're each week/slate's
-// control-table RequiredPicks, served by the API (frizat-d47).
-export function getNflWeekName(nflWeek: number, isPostSeason = false): string {
-  return getWeekName(isPostSeason ? nflWeek - 18 : nflWeek, isPostSeason);
-}
-
+// Week names, postseason flags and pick counts are never computed here: they're each week's /
+// slate's control-table row, served by the API (frizat-d47). ESPN's own week numbering is never
+// translated either — weeks are our control table's.
 export function spreadLabel(spread: number): string {
   if (spread === 0) return 'PK';
   return spread > 0 ? `+${spread}` : `${spread}`;
-}
-
-// CFB 18-slate system: SlateNumbers 1-13 = regular season, 14-18 = postseason
-// Postseason: 14=Conf.Champs, 15=CFP First Round, 16=CFP QF, 17=CFP SF, 18=CFP Championship
-export function getCfbWeekName(week: number, isPostSeason = false): string {
-  if (!isPostSeason) return `Week ${week}`;
-  switch (week) {
-    case 1: return 'Conf. Championships';
-    case 2: return 'CFP First Round';
-    case 3: return 'CFP Quarterfinals';
-    case 4: return 'CFP Semifinals';
-    case 5: return 'CFP Championship';
-    default: return `Postseason Week ${week}`;
-  }
-}
-
-export function cfbSlateNumberToWeek(slateNumber: number): { week: number; isPostSeason: boolean } {
-  return slateNumber <= 13
-    ? { week: slateNumber, isPostSeason: false }
-    : { week: slateNumber - 13, isPostSeason: true };
-}
-
-export function cfbWeekToSlateNumber(week: number, isPostSeason: boolean): number {
-  return isPostSeason ? 13 + week : week;
-}
-
-export function getWeekName(week: number, isPostSeason = false) {
-  if (!isPostSeason) return `Week ${week}`;
-  switch (week) {
-    case 1:
-      return 'Wild Card';
-    case 2:
-      return 'Divisional Round';
-    case 3:
-      return 'Conference Championship';
-    case 4:
-      return 'Super Bowl';
-    default:
-      throw new Error('Invalid week number');
-  }
 }
 
 const STATUS_FINAL = 0;
@@ -240,11 +174,6 @@ export function isAfterKickoff(competition: Competition, now: Date = new Date())
 
 export function shouldShowGamePicks(competition: Competition) {
   return isGameStarted(competition) || isAfterKickoff(competition);
-}
-
-export function isPostSeason(scores: EspnScores | null) {
-  if (!scores?.season) return false;
-  return scores.season.type === 3;
 }
 
 export function getScoreEvents(scores: EspnScores | null | undefined): Event[] {

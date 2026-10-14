@@ -767,7 +767,7 @@ public class LeagueOwnershipTests
         repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Cfb }));
         var cfbSlateSvc = Substitute.For<ICfbCurrentSlateService>();
         cfbSlateSvc.IsSeasonActiveAsync().Returns(true);
-        cfbSlateSvc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(1, 2025, 4, "Slate 4", "Regular Season",
+        cfbSlateSvc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(1, 2025, 4, "Slate 4",
             new DateOnly(2025, 9, 20), new DateOnly(2025, 9, 26), null, new DateTime(2025, 9, 20, 12, 0, 0, DateTimeKind.Utc), false, 4));
 
         var dto = new LeagueCreateDto("L", LeagueType.Cfb, OwnerId, 2025, 13, 10, 6, 5);

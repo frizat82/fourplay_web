@@ -13,7 +13,7 @@ namespace FourPlayWebApp.Server.UnitTests;
 // the repositories, DemoDataSeeder's direct writes, and any future writer).
 public class ScheduleCacheTests {
     private static CfbSlates Slate(int id, int season, int number) =>
-        new() { Id = id, Season = season, SlateNumber = number, Label = $"W{number}", SlateType = "RegularSeason" };
+        new() { Id = id, Season = season, SlateNumber = number, Label = $"W{number}" };
 
     private static CfbSeasonWeekConfig WeekConfig(int id, int season, int espnWeek) =>
         new() { Id = id, Season = season, EspnWeekNumber = espnWeek, IvLeagueWeekNumber = espnWeek, ScoringFormat = "Standard" };
