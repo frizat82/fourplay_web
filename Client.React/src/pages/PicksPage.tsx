@@ -87,7 +87,14 @@ export default function PicksPage({ adapter }: PicksPageProps) {
   const season = weekState?.season ?? data?.season ?? new Date().getFullYear();
   const week = weekState?.week ?? data?.week ?? 0;
   const isPostSeason = weekState?.isPostSeason ?? data?.isPostSeason ?? false;
-  const maxWeek = currentMaxWeek ?? adapter.weekSelectorConfig.maxRegularSeasonWeek;
+  // The season's weeks from the control table (frizat-d47) — the selector's options and names.
+  const selectorSeason = weekState?.season ?? data?.season;
+  const { data: seasonWeeks } = useQuery({
+    queryKey: [adapter.sport, 'seasonWeeks', selectorSeason],
+    queryFn: () => adapter.loadSeasonWeeks(selectorSeason!),
+    enabled: selectorSeason !== undefined,
+    staleTime: Infinity,
+  });
   const maxSeason = currentMaxSeason ?? new Date().getFullYear();
   const minSeason = useLeagueMinSeason(currentLeague, adapter.weekSelectorConfig.minSeason);
   const startWeek = useLeagueStartWeek(currentLeague, season);
@@ -230,7 +237,9 @@ export default function PicksPage({ adapter }: PicksPageProps) {
           onWeekChange={handleWeekChange}
           onSeasonTypeChange={handleSeasonTypeChange}
           {...adapter.weekSelectorConfig}
-          maxRegularSeasonWeek={maxWeek}
+          weeks={seasonWeeks}
+          maxWeek={currentMaxWeek}
+          weekLabel={data?.weekLabel}
           maxSeason={maxSeason}
           minSeason={minSeason}
           isCurrent={isCurrentWeek}

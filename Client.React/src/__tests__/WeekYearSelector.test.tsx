@@ -4,6 +4,17 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import WeekYearSelector from '../components/WeekYearSelector';
 import { createAppTheme } from '../app/theme';
+import type { SeasonWeek } from '../services/sportAdapter';
+
+// The season's control-table rows (frizat-d47): the selector's weeks, their names and which are
+// postseason all come from these — never from a hardcoded week count or name table.
+const NFL_WEEKS: SeasonWeek[] = [
+  ...Array.from({ length: 18 }, (_, i) => ({ week: i + 1, label: `Week ${i + 1}`, isPostSeason: false })),
+  { week: 19, label: 'Wild Card Weekend', isPostSeason: true },
+  { week: 20, label: 'Divisional Round', isPostSeason: true },
+  { week: 21, label: 'Conference Championships', isPostSeason: true },
+  { week: 22, label: 'Super Bowl LXI', isPostSeason: true },
+];
 
 const defaultProps = {
   season: 2025,
@@ -14,7 +25,7 @@ const defaultProps = {
   onSeasonTypeChange: vi.fn(),
   minSeason: 2020,
   maxSeason: 2025,
-  maxRegularSeasonWeek: 18,
+  weeks: NFL_WEEKS as SeasonWeek[] | undefined,
 };
 
 function setup(overrides?: Partial<typeof defaultProps> & Record<string, unknown>) {
@@ -122,14 +133,14 @@ describe('WeekYearSelector', () => {
   // Postseason week names
   // -----------------------------------------------------------------------
 
-  it('renders postseason week 1 as Wild Card', () => {
-    setup({ week: 1, isPostSeason: true });
-    expect(screen.getByText('Wild Card')).toBeInTheDocument();
+  it('names postseason weeks with their row labels', () => {
+    setup({ week: 19, isPostSeason: true });
+    expect(screen.getByText('Wild Card Weekend')).toBeInTheDocument();
   });
 
-  it('renders postseason week 4 as Super Bowl', () => {
-    setup({ week: 4, isPostSeason: true });
-    expect(screen.getByText('Super Bowl')).toBeInTheDocument();
+  it('names the final with its row label', () => {
+    setup({ week: 22, isPostSeason: true });
+    expect(screen.getByText('Super Bowl LXI')).toBeInTheDocument();
   });
 
   // -----------------------------------------------------------------------
@@ -150,29 +161,34 @@ describe('WeekYearSelector', () => {
   });
 
   // -----------------------------------------------------------------------
-  // weekLabelFn prop
+  // frizat-d47: the rows decide everything — any numbering, any names
   // -----------------------------------------------------------------------
 
-  it('uses default getWeekName when weekLabelFn not provided', () => {
-    setup({ week: 1, isPostSeason: true, postSeasonWeekOptions: [1, 2, 3, 4] });
-    expect(screen.getByText('Wild Card')).toBeInTheDocument();
+  it('takes its weeks, names and postseason split from the rows (CFB: slate numbers)', async () => {
+    const cfbWeeks: SeasonWeek[] = [
+      ...Array.from({ length: 13 }, (_, i) => ({ week: i + 1, label: `Week ${i + 1}`, isPostSeason: false })),
+      { week: 14, label: 'Conf. Championships', isPostSeason: true },
+      { week: 18, label: 'CFP Championship', isPostSeason: true },
+    ];
+    const onWeekChange = vi.fn();
+    const { user } = setup({ season: 2026, maxSeason: 2026, week: 14, isPostSeason: true, weeks: cfbWeeks, onWeekChange });
+
+    expect(screen.getByText('Conf. Championships')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /next/i }));
+    expect(onWeekChange).toHaveBeenCalledWith(18, { isPostSeason: true });
   });
 
-  it('uses custom weekLabelFn when provided (CFB regression guard: week 5 postseason must not throw)', () => {
-    const getCfbWeekName = (w: number, ps: boolean) => {
-      if (!ps) return `Week ${w}`;
-      const labels: Record<number, string> = { 1: 'Conf. Championships', 2: 'CFP First Round', 3: 'CFP Quarterfinals', 4: 'CFP Semifinals', 5: 'CFP Championship' };
-      return labels[w] ?? `Postseason Week ${w}`;
-    };
-    expect(() =>
-      setup({
-        week: 5,
-        isPostSeason: true,
-        postSeasonWeekOptions: [1, 2, 3, 4, 5],
-        weekLabelFn: getCfbWeekName,
-      })
-    ).not.toThrow();
-    expect(screen.getByText('CFP Championship')).toBeInTheDocument();
+  it('caps the current season at the current week, but not a past season', () => {
+    setup({ season: 2025, maxSeason: 2025, week: 6, maxWeek: 6 });
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled(); // 2025 is current: week 6 is the last
+
+    setup({ season: 2024, maxSeason: 2025, week: 6, maxWeek: 6 });
+    expect(screen.getAllByRole('button', { name: /next/i })[1]).toBeEnabled(); // a past season isn't capped
+  });
+
+  it('shows the given week label while the rows are still loading', () => {
+    setup({ weeks: undefined, week: 19, isPostSeason: true, weekLabel: 'Wild Card Weekend' });
+    expect(screen.getByText('Wild Card Weekend')).toBeInTheDocument();
   });
 
   // -----------------------------------------------------------------------

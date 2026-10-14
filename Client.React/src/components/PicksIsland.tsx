@@ -95,7 +95,7 @@ function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePic
     );
   }
 
-  const weekLabel = adapter.weekSelectorConfig.weekLabelFn?.(data.week, data.isPostSeason) ?? `Week ${data.week}`;
+  const weekLabel = data.weekLabel;
 
   if (!data.hasOdds) {
     return (

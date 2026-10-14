@@ -737,7 +737,7 @@ public class DemoDataSeeder(
 
         // Super Bowl — build picks dict from SuperBowlPicksMap (bool→bool[])
         var sbPicksAsArrays = SuperBowlPicksMap.ToDictionary(kv => kv.Key, kv => new[] { kv.Value });
-        // NflScoresJob maps ESPN wk5→4 via (j==5?4:j), so GetWeekFromEspnWeek(4,true)=22
+        // Super Bowl = our WeekId 22 (its NflSeasonWeekConfigs row)
         await SeedPostseasonWeekAsync(league, users, 22, "Super Bowl",
             new DateTimeOffset(2026, 2, 9, 0, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 2, 9, 23, 59, 59, TimeSpan.Zero),

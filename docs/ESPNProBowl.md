@@ -1,4 +1,13 @@
-# ESPN's Pro Bowl week gap — status and what to verify
+# ESPN's Pro Bowl week gap — RESOLVED by removal (frizat-d47, 2026-10-14)
+
+**Nothing in the app reads ESPN's week numbers any more.** Games are fetched by our own
+control-table date windows and stamped with our own WeekId; the week selector, labels and
+notifications come from the control-table rows. `GetWeekFromEspnWeek`, the season-gated
+`LastSeasonEspnSkippedProBowlWeek`, `FixEspnProbBowlWeek`'s renumbering and the TS mirror
+were all deleted, so ESPN's 2026+ postseason numbering (frizat-jw7) no longer matters.
+`ESPNApiService` still drops the old Pro Bowl exhibition's NFC/AFC placeholder game.
+
+The rest of this file is the historical record of how the gap was handled before.
 
 ## The assumption
 

@@ -6,6 +6,9 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-10-14
 
+- The week selector's weeks, postseason split and every week or round name now come from the season schedule table, and notifications use the same names (e.g. Wild Card Weekend, CFP Semifinals)
+- CFB weeks are numbered by slate (1-18) throughout, and past CFB seasons can now be browsed week by week
+- ESPN's own week numbering is no longer used anywhere; weeks are always matched by the schedule's dates
 - Each week's required pick count and postseason flag now come from the season schedule table instead of code, so pick limits, teases, the leaderboard and the Rules page all read the same values (no change to the counts themselves)
 - The Rules page's playoff rounds now use the schedule's round names, e.g. Wild Card Weekend and Super Bowl LXI
 

@@ -186,11 +186,17 @@ function nflRequiredPicks(weekId: number) {
   return weekId <= 18 ? 4 : weekId <= 20 ? 3 : weekId === 21 ? 2 : 1;
 }
 
+// An NFL week's control-table WeekLabel, as the seeded rows name them.
+function nflWeekLabel(weekId: number) {
+  return ({ 19: 'Wild Card Weekend', 20: 'Divisional Round', 21: 'Conference Championships', 22: 'Super Bowl' } as Record<number, string>)[weekId]
+    ?? `Week ${weekId}`;
+}
+
 // A season's NFL control-table rows as GET /api/league/season-weeks/{season} serves them.
 export function createNflSeasonWeeks() {
   return Array.from({ length: 22 }, (_, i) => {
     const weekId = i + 1;
-    return { weekId, weekLabel: `Week ${weekId}`, isPostSeason: weekId > 18, requiredPicks: nflRequiredPicks(weekId) };
+    return { weekId, weekLabel: nflWeekLabel(weekId), isPostSeason: weekId > 18, requiredPicks: nflRequiredPicks(weekId) };
   });
 }
 
@@ -199,7 +205,7 @@ export function createNflSeasonWeeks() {
 export function createCurrentWeek(week: number, postSeason = false, season = 2024) {
   return {
     weekId: week, season, isPostSeason: postSeason,
-    weekLabel: postSeason ? `Postseason Week ${week}` : `Week ${week}`,
+    weekLabel: nflWeekLabel(week),
     scoringFormat: 'Standard', spreadLockDatetime: new Date().toISOString(),
     requiredPicks: nflRequiredPicks(week),
   };

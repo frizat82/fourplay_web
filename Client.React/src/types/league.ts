@@ -17,7 +17,6 @@ export interface CfbSlateDto {
   season: number;
   slateNumber: number;
   label: string;
-  slateType: string;
   startDate: string;
   endDate: string;
   firstGameUtc?: string | null;

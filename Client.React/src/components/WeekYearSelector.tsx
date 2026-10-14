@@ -2,8 +2,8 @@ import { Box, Button, Chip, MenuItem, Select, Stack } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useEffect, useMemo } from 'react';
-import { getWeekName } from '../utils/gameHelpers';
 import { buildDescendingSeasonRange } from '../utils/seasonRange';
+import type { SeasonWeek } from '../services/sportAdapter';
 
 interface WeekYearSelectorProps {
   season: number;
@@ -12,12 +12,16 @@ interface WeekYearSelectorProps {
   onSeasonChange: (season: number) => void;
   onWeekChange: (week: number, meta?: { isPostSeason?: boolean }) => void;
   onSeasonTypeChange: (isPostSeason: boolean) => void;
-  regularWeekOptions?: number[];
-  postSeasonWeekOptions?: number[];
+  // The season's weeks as its control-table rows define them (frizat-d47) — which weeks exist,
+  // which are postseason, and what each is called. undefined while they load.
+  weeks: SeasonWeek[] | undefined;
+  // The current week (the live one): within the current season (maxSeason) navigation stops
+  // there — later regular-season weeks have no spreads yet. Postseason stays browsable.
+  maxWeek?: number;
+  // The shown week's name, used until the rows load.
+  weekLabel?: string;
   minSeason?: number;
   maxSeason?: number;
-  maxRegularSeasonWeek?: number;
-  weekLabelFn?: (week: number, isPostSeason: boolean) => string;
   // Whether the displayed season/week IS the live current one — false shows an "Archived" chip so
   // it's unmistakable at a glance that this isn't the active week (undefined = caller doesn't know
   // yet, e.g. still loading, so no chip either way).
@@ -31,25 +35,23 @@ export default function WeekYearSelector({
   onSeasonChange,
   onWeekChange,
   onSeasonTypeChange,
-  regularWeekOptions,
-  postSeasonWeekOptions,
+  weeks,
+  maxWeek,
+  weekLabel,
   minSeason = 2020,
   maxSeason = new Date().getFullYear(),
-  maxRegularSeasonWeek = 18,
-  weekLabelFn = getWeekName,
   isCurrent,
 }: WeekYearSelectorProps) {
-  const defaultRegularWeeks = useMemo(() => Array.from({ length: maxRegularSeasonWeek }, (_, idx) => idx + 1), [
-    maxRegularSeasonWeek,
-  ]);
-  const regularOptions = useMemo(() => {
-    const base = regularWeekOptions?.length ? regularWeekOptions : defaultRegularWeeks;
-    return Array.from(new Set(base)).sort((a, b) => a - b);
-  }, [regularWeekOptions, defaultRegularWeeks]);
-  const postSeasonOptions = useMemo(() => {
-    const base = postSeasonWeekOptions?.length ? postSeasonWeekOptions : [1, 2, 3, 4];
-    return Array.from(new Set(base)).sort((a, b) => a - b);
-  }, [postSeasonWeekOptions]);
+  const weekNumbers = (rows: SeasonWeek[]) => rows.map((w) => w.week).sort((a, b) => a - b);
+  // Every regular-season week of the season — where Previous lands when crossing into it.
+  const allRegular = useMemo(() => weekNumbers((weeks ?? []).filter((w) => !w.isPostSeason)), [weeks]);
+  const isCappedSeason = maxWeek !== undefined && season === maxSeason;
+  const regularOptions = useMemo(
+    () => (isCappedSeason ? allRegular.filter((w) => w <= maxWeek!) : allRegular),
+    [allRegular, isCappedSeason, maxWeek],
+  );
+  const postSeasonOptions = useMemo(() => weekNumbers((weeks ?? []).filter((w) => w.isPostSeason)), [weeks]);
+  const labels = useMemo(() => new Map((weeks ?? []).map((w) => [w.week, w.label])), [weeks]);
 
   const currentOptions = isPostSeason ? postSeasonOptions : regularOptions;
   const fallbackWeek = currentOptions[0] ?? 1;
@@ -71,7 +73,9 @@ export default function WeekYearSelector({
     }
     if (season > minSeason) {
       onSeasonChange(season - 1);
-      const lastRegular = regularOptions[regularOptions.length - 1] ?? maxRegularSeasonWeek;
+      // A past season is never capped: land on its last regular week (once its own rows load,
+      // the selector re-clamps if that season is shaped differently).
+      const lastRegular = allRegular[allRegular.length - 1] ?? week;
       onWeekChange(lastRegular, { isPostSeason: false });
     }
   };
@@ -150,7 +154,7 @@ export default function WeekYearSelector({
         </Select>
 
         <Select
-          value={clampedWeek}
+          value={weeks ? clampedWeek : week}
           onChange={(e) => onWeekChange(Number(e.target.value), { isPostSeason: isPostSeason })}
           size="small"
           // frizat: minWidth let MUI auto-size the box to whichever label happened to be
@@ -161,11 +165,14 @@ export default function WeekYearSelector({
           // group never moves; full-width on xs since mobile always stacks one-per-row now.
           sx={{ width: { xs: '100%', sm: 260 } }}
         >
-          {currentOptions.map((w) => (
-            <MenuItem key={w} value={w}>
-              {weekLabelFn(w, isPostSeason)}
-            </MenuItem>
-          ))}
+          {weeks
+            ? currentOptions.map((w) => (
+                <MenuItem key={w} value={w}>
+                  {labels.get(w)}
+                </MenuItem>
+              ))
+            // Rows still loading: show just the current week, by the name the page already has.
+            : <MenuItem value={week}>{weekLabel ?? ''}</MenuItem>}
         </Select>
 
         <Select

@@ -36,8 +36,8 @@ public class PeriodRulesBackfillPostgresTests(PostgresFixture postgres) {
             (r.IsPostSeason, r.RequiredPicks)));
     }
 
-    // frizat-d47: CFB rows carry their own label, backfilled to exactly what CfbWeekLabelHelper
-    // used to derive — the slates' and the Rules page's names now read it.
+    // frizat-d47: CFB rows carry their own label, backfilled to exactly what the (deleted)
+    // CfbWeekLabelHelper used to derive — the slates' and the Rules page's names now read it.
     [Fact]
     public async Task Migration_BackfillsEveryCfbRowsWeekLabel() {
         await using var db = postgres.OpenDb();

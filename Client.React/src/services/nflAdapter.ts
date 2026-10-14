@@ -10,21 +10,12 @@ import {
   getHomeTeam, getAwayTeam,
   getHomeTeamScore, getAwayTeamScore,
   getTeamRecord,
-  getWeekFromEspnWeek, getNflWeekName,
-  isPostSeason as isPostSeasonHelper,
   isGameOver, isGameStarted, toGameStatus,
   computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins,
 } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, PickView, PickType } from './sportAdapter';
 import { revealPicksForStartedGames, memoizeOnce, orFallback, pickCountsToMap } from './sportAdapter';
 import { isNotFound } from '../utils/apiError';
-
-// Cap navigation at the real current week, not a hardcoded season length — once the season
-// moves into the postseason the full regular season (18) is legitimately browsable/complete;
-// mirrors cfbAdapter.ts's already-correct dynamic maxWeek.
-function maxWeekFor(isPostSeason: boolean, nflWeek: number): number {
-  return isPostSeason ? 18 : nflWeek;
-}
 
 function competitionToGameView(
   competition: Competition,
@@ -149,38 +140,29 @@ function buildLiveGameMap(events: Event[], liveGames: LiveGame[]): Map<string, L
   return map;
 }
 
-// The frozen demo/replay fixture is real captured ESPN wire data (its own week.number is ESPN's
-// raw numbering, not our internal WeekId) — this is the one place nflAdapter.ts still legitimately
-// needs to interpret ESPN's own shape, since a frozen fixture genuinely IS an ESPN ingestion point.
-function isFrozenWeekMatch(frozenData: EspnScores | null, season: number, nflWeek: number, isPostSeason: boolean): boolean {
-  if (!frozenData?.week || !frozenData.season) return false;
-  const frozenIsPostSeason = isPostSeasonHelper(frozenData);
-  const frozenNflWeek = getWeekFromEspnWeek(frozenData.week.number, frozenData.season.year, frozenIsPostSeason);
-  return frozenData.season.year === season && frozenNflWeek === nflWeek && frozenIsPostSeason === isPostSeason;
-}
-
 // A past week's scoreboard. Demo mode serves a frozen in-progress fixture as its "current"
-// scoreboard, used instead when it's the week being asked for — so both are fetched together, and
+// scoreboard, used instead when the week asked for IS the control table's current week (never by
+// reading the fixture's own ESPN week number — frizat-d47) — so both are fetched together, and
 // the current one exactly once: it used to go first, with up to 5 retries 500ms apart whenever it
 // had no events (every off-season view of a past week waited 2.5s+ before starting its own fetch).
-async function loadPastWeekScores(season: number, nflWeek: number, isPostSeason: boolean): Promise<EspnScores | null> {
-  const [frozenData, weekData] = await Promise.all([orFallback(getScores, null), getWeekScores(season, nflWeek)]);
-  return isFrozenWeekMatch(frozenData, season, nflWeek, isPostSeason) ? frozenData : weekData;
+async function loadPastWeekScores(season: number, nflWeek: number, isCurrentWeek: Promise<boolean>): Promise<EspnScores | null> {
+  const [frozenData, weekData, isCurrent] = await Promise.all([orFallback(getScores, null), getWeekScores(season, nflWeek), isCurrentWeek]);
+  return isCurrent && frozenData?.events?.length ? frozenData : weekData;
 }
 
 // A past week's scoreboard with the requests that ride alongside it (picks, odds, the season's
 // control-table rows): all go out together, but an empty week still resolves to null however
-// those extras fare. The week's pick count is its row's (frizat-d47) — only looked up once the
-// week has games, since a week the server served games for always has a row: a missing one is a
-// real data problem, so it fails loudly rather than guessing a count.
-async function loadPastWeek<P>(season: number, week: number, isPostSeason: boolean, picks: Promise<P>,
+// those extras fare. The week's pick count and name are its row's (frizat-d47) — only looked up
+// once the week has games, since a week the server served games for always has a row: a missing
+// one is a real data problem, so it fails loudly rather than guessing.
+async function loadPastWeek<P>(season: number, week: number, isCurrentWeek: Promise<boolean>, picks: Promise<P>,
   odds: Promise<WeekOdds>, seasonWeeks: Promise<NflSeasonWeekDto[]>) {
-  const data = await loadPastWeekScores(season, week, isPostSeason);
+  const data = await loadPastWeekScores(season, week, isCurrentWeek);
   if (!data?.events?.length) { void Promise.allSettled([picks, odds, seasonWeeks]); return null; }
   const [pickDtos, weekOdds, rows] = await Promise.all([picks, odds, seasonWeeks]);
   const row = rows.find(w => w.weekId === week);
   if (!row) throw new Error(`No NFL control-table row for season ${season} week ${week}`);
-  return { events: data.events, pickDtos, odds: weekOdds, requiredPicks: row.requiredPicks };
+  return { events: data.events, pickDtos, odds: weekOdds, row };
 }
 
 // One week's games (with teased spreads) and the given picks mapped onto them.
@@ -192,9 +174,11 @@ async function toGamesAndPicks(events: Event[], leagueId: number, season: number
   return { games, picks };
 }
 
-// requiredPicks is the week's control-table row (frizat-d47) — never computed from the week number.
-function weekMeta(season: number, week: number, isPostSeason: boolean, requiredPicks: number, { hasOdds }: WeekOdds) {
-  return { season, week, isPostSeason, hasOdds, requiredPicks, maxWeek: maxWeekFor(isPostSeason, week), maxSeason: season };
+// The week's pick count and name are its control-table row's (frizat-d47) — never computed from
+// the week number. maxWeek is the week itself: the selector caps the current season there.
+function weekMeta(season: number, week: number, isPostSeason: boolean,
+  { requiredPicks, weekLabel }: { requiredPicks: number; weekLabel: string }, { hasOdds }: WeekOdds) {
+  return { season, week, isPostSeason, hasOdds, requiredPicks, weekLabel, maxWeek: week, maxSeason: season };
 }
 
 export function createNflAdapter(): SportAdapter {
@@ -224,6 +208,9 @@ export function createNflAdapter(): SportAdapter {
     if (!seasonWeeksBySeason.has(season)) seasonWeeksBySeason.set(season, memoizeOnce(() => getNflSeasonWeeks(season)));
     return seasonWeeksBySeason.get(season)!();
   }
+  // Whether (season, week) is the control table's current week — a failed lookup just means "no".
+  const isTheCurrentWeek = (season: number, week: number) =>
+    getCurrentWeek().then(c => c.season === season && c.weekId === week, () => false);
 
   return {
     sport: 'nfl',
@@ -234,13 +221,11 @@ export function createNflAdapter(): SportAdapter {
     // here would bypass that proxy and drop the SameSite=Lax auth cookie on non-HTTPS origins.
     sseUrl: '/api/espn/live-stream',
     weekSelectorConfig: {
-      maxRegularSeasonWeek: 18,
       minSeason: 2020,
-      // Our own internal WeekId (19-22) — contiguous, no ESPN Pro-Bowl-skip gap to work around
-      // here at all (frizat-3nv/frizat-4k9: that quirk is normalized once, at the ESPN-ingestion
-      // boundary, and never leaks past it).
-      postSeasonWeekOptions: [19, 20, 21, 22],
-      weekLabelFn: getNflWeekName,
+    },
+
+    async loadSeasonWeeks(season) {
+      return (await getSeasonWeeks(season)).map(w => ({ week: w.weekId, label: w.weekLabel, isPostSeason: w.isPostSeason }));
     },
 
     async currentSeasonYear() {
@@ -255,22 +240,23 @@ export function createNflAdapter(): SportAdapter {
     // ─── Picks ──────────────────────────────────────────────────────────────
 
     async loadCurrentGames(leagueId, userId) {
-      const { season, weekId: week, isPostSeason, requiredPicks } = await getCurrentWeek();
+      const current = await getCurrentWeek();
+      const { season, weekId: week, isPostSeason } = current;
       const [data, pickDtos, odds] = await Promise.all([
         getWeekScores(season, week),
         getUserPicks(userId, leagueId, season, week),
         fetchWeekOdds(leagueId, season, week),
       ]);
       const { games, picks } = await toGamesAndPicks(data?.events ?? [], leagueId, season, week, odds, pickDtos);
-      return { ...weekMeta(season, week, isPostSeason, requiredPicks, odds), games, userPicks: picks };
+      return { ...weekMeta(season, week, isPostSeason, current, odds), games, userPicks: picks };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
-      const past = await loadPastWeek(season, week, isPostSeason,
+      const past = await loadPastWeek(season, week, isTheCurrentWeek(season, week),
         getUserPicks(userId, leagueId, season, week), fetchWeekOdds(leagueId, season, week), getSeasonWeeks(season));
       if (!past) return null;
       const { games, picks } = await toGamesAndPicks(past.events, leagueId, season, week, past.odds, past.pickDtos);
-      return { ...weekMeta(season, week, isPostSeason, past.requiredPicks, past.odds), games, userPicks: picks };
+      return { ...weekMeta(season, week, isPostSeason, past.row, past.odds), games, userPicks: picks };
     },
 
     async submitPicks(leagueId, { season, week }, picks) {
@@ -288,7 +274,8 @@ export function createNflAdapter(): SportAdapter {
     // ─── Scores ─────────────────────────────────────────────────────────────
 
     async loadCurrentScores(leagueId, userId) {
-      const { season, weekId: week, isPostSeason, requiredPicks } = await getCurrentWeek();
+      const current = await getCurrentWeek();
+      const { season, weekId: week, isPostSeason } = current;
       const [data, pickDtos, odds, liveGames] = await Promise.all([
         getWeekScores(season, week),
         getLeaguePicks(leagueId, season, week),
@@ -300,17 +287,17 @@ export function createNflAdapter(): SportAdapter {
       // Use typed helpers on raw competitions — not string comparison on already-mapped GameView
       const hasActiveGames = events.some(ev => ev.competitions.some(c => isGameStarted(c) && !isGameOver(c)));
       return {
-        ...weekMeta(season, week, isPostSeason, requiredPicks, odds), games, hasActiveGames,
+        ...weekMeta(season, week, isPostSeason, current, odds), games, hasActiveGames,
         allPicks: revealPicksForStartedGames(picks, games, userId), userPicks: picks.filter(p => p.userId === userId),
       };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
-      const past = await loadPastWeek(season, week, isPostSeason,
+      const past = await loadPastWeek(season, week, isTheCurrentWeek(season, week),
         getLeaguePicks(leagueId, season, week), fetchWeekOdds(leagueId, season, week), getSeasonWeeks(season));
       if (!past) return null;
       const { games, picks } = await toGamesAndPicks(past.events, leagueId, season, week, past.odds, past.pickDtos);
-      return { ...weekMeta(season, week, isPostSeason, past.requiredPicks, past.odds), games, hasActiveGames: false, allPicks: picks, userPicks: picks.filter(p => p.userId === userId) };
+      return { ...weekMeta(season, week, isPostSeason, past.row, past.odds), games, hasActiveGames: false, allPicks: picks, userPicks: picks.filter(p => p.userId === userId) };
     },
 
     // ─── Commissioner missing-picks (frizat-8ni) ───────────────────────────────

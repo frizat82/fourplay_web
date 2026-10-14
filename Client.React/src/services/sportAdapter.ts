@@ -155,7 +155,18 @@ export interface MissingPicksResult {
 
 export interface WeekState {
   season: number;
+  /** Our own week number: NFL's WeekId (1-22), CFB's slate number (1-18) — the control table's key. */
   week: number;
+  isPostSeason: boolean;
+}
+
+/**
+ * One week of a season as its control-table row defines it (frizat-d47): its number, its name,
+ * and whether it's postseason. The week selector is built from these, never from constants.
+ */
+export interface SeasonWeek {
+  week: number;
+  label: string;
   isPostSeason: boolean;
 }
 
@@ -172,6 +183,8 @@ export interface LoadedWeek extends WeekState {
   userPicks: PickView[];
   hasOdds: boolean;
   requiredPicks: number;
+  /** The week's name, from its control-table row */
+  weekLabel: string;
   /** The furthest week with data — used to cap the WeekYearSelector */
   maxWeek: number;
   maxSeason: number;
@@ -184,6 +197,7 @@ export interface LoadedScores extends WeekState {
   hasOdds: boolean;
   hasActiveGames: boolean;
   requiredPicks: number;
+  weekLabel: string;
   maxWeek: number;
   maxSeason: number;
 }
@@ -219,12 +233,10 @@ export interface SportAdapter {
   sseUrl?: string;
   // loadJerseys is optional — if defined, PicksPage shows jerseys when data is non-empty
   weekSelectorConfig: {
-    regularWeekOptions?: number[];
-    postSeasonWeekOptions?: number[];
-    maxRegularSeasonWeek: number;
     minSeason: number;
-    weekLabelFn?: (week: number, isPostSeason: boolean) => string;
   };
+  /** A season's weeks from its control-table rows — what the week selector offers and names. */
+  loadSeasonWeeks(season: number): Promise<SeasonWeek[]>;
   currentSeasonYear(): Promise<number>;
   /**
    * Starts the adapter's memoized current week/slate fetch without waiting on it — called when an

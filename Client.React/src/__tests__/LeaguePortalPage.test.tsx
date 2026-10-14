@@ -477,7 +477,7 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     sportContext.isCfb = true;
     sportContext.isNfl = false;
     mockedGetCfbCurrentSlate.mockResolvedValue({
-      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '', isPostSeason: false, requiredPicks: 4,
+      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', startDate: '', endDate: '', isPostSeason: false, requiredPicks: 4,
     });
     mockedGetCfbPickCounts.mockResolvedValue([]);
 
@@ -556,7 +556,7 @@ describe('LeaguePortalPage (frizat-6sc: commissioner missing-picks view)', () =>
     sportContext.isCfb = true;
     sportContext.isNfl = false;
     mockedGetCfbCurrentSlate.mockResolvedValue({
-      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', slateType: 'RegularSeason', startDate: '', endDate: '', isPostSeason: false, requiredPicks: 4,
+      id: 1, season: CURRENT_SEASON, slateNumber: 3, label: 'Week 3', startDate: '', endDate: '', isPostSeason: false, requiredPicks: 4,
     });
     mockedGetCfbPickCounts.mockResolvedValue([]);
 

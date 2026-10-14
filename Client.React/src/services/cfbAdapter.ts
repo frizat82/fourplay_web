@@ -1,6 +1,6 @@
 import { getCfbCurrentSlate, getCfbSlates, getCfbSpreads, getCfbScores as getCfbDbScores, getCfbUserPicks, getCfbAllPicks, getCfbPickCounts, addCfbPicks, deleteCfbPicks, removeMyCfbPick } from '../api/cfb';
 import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
-import { cfbSlateNumberToWeek, cfbWeekToSlateNumber, getCfbWeekName, computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins, isGameLive } from '../utils/gameHelpers';
+import { computeHomeCovers, computeAwayCovers, computeOverWins, computeUnderWins, isGameLive } from '../utils/gameHelpers';
 import type { CfbSlateDto, CfbSpreadDto, CfbScoreDto, CfbPickDto } from '../types/league';
 import type { EspnScores } from '../types/espn';
 import { getHomeTeamScore, getAwayTeamScore, toGameStatus, isHomeAway } from '../utils/gameHelpers';
@@ -13,20 +13,10 @@ import { revealPicksForStartedGames, memoizeOnce, orFallback, pickCountsToMap } 
 const CFB_CONFIGURED_SEASON = 2026;
 // Earliest supported CFB season (controls the lower bound of the season dropdown).
 const CFB_FIRST_SEASON = 2025;
-const CFB_POST_WEEKS = [1, 2, 3, 4, 5]; // Conf.Champs + CFP First Round/QF/SF/Championship
-// Regular season = slates 1-13 (cfbSlateNumberToWeek's own cutoff) — the correct maxWeek to
-// report once the season has moved into postseason, when weekState.week is a small postseason
-// week number instead (frizat-8y7: that number was briefly leaking in as the regular-season cap
-// the moment CFB's navigation stopped being capped by a separate static option list).
-const CFB_REGULAR_SEASON_LENGTH = 13;
-
-function maxWeekFor(weekState: WeekState): number {
-  return weekState.isPostSeason ? CFB_REGULAR_SEASON_LENGTH : weekState.week;
-}
-
+// A CFB week IS its slate (frizat-d47): the week number is the slate number and its postseason
+// flag is the slate's control-table row's — no slate arithmetic, same as NFL's WeekId.
 function slateToWeekState(slate: CfbSlateDto): WeekState {
-  const { week, isPostSeason } = cfbSlateNumberToWeek(slate.slateNumber);
-  return { season: slate.season, week, isPostSeason };
+  return { season: slate.season, week: slate.slateNumber, isPostSeason: slate.isPostSeason };
 }
 
 /**
@@ -206,19 +196,19 @@ async function loadSlate(leagueId: number, _userId: string, slateId: number, sla
 }
 
 export function createCfbAdapter(): SportAdapter {
-  let cachedSlates: CfbSlateDto[] = [];
   // A real null (empty CfbSlates table — legitimate bootstrap state, not an error; see
   // CfbCurrentSlateService) is a valid cacheable answer here, same as nflAdapter.ts's
   // getCurrentWeek(). A rejected fetch (network/DB failure) is not cached, so it retries.
   const getCurrentSlate = memoizeOnce(getCfbCurrentSlate);
 
-  async function getSlates(): Promise<CfbSlateDto[]> {
-    if (cachedSlates.length === 0) {
-      const current = await getCurrentSlate();
-      if (current) cachedSlates = await getCfbSlates(current.season);
-    }
-    return cachedSlates;
+  // A season's slates (each carrying its control-table row's label, rules and postseason flag),
+  // fetched once per season per adapter — memoizeOnce per season, so a failed fetch retries.
+  const slatesBySeason = new Map<number, () => Promise<CfbSlateDto[]>>();
+  function getSlates(season: number): Promise<CfbSlateDto[]> {
+    if (!slatesBySeason.has(season)) slatesBySeason.set(season, memoizeOnce(() => getCfbSlates(season)));
+    return slatesBySeason.get(season)!();
   }
+  const findSlate = async (season: number, week: number) => (await getSlates(season)).find(s => s.slateNumber === week);
 
   async function loadScoresForSlate(leagueId: number, userId: string, slate: CfbSlateDto): Promise<{ games: GameView[]; allPicks: PickView[]; userPicks: PickView[] }> {
     const [spreads, allPickDtos, dbScores, { espn, liveGameMap }] = await Promise.all([
@@ -241,16 +231,11 @@ export function createCfbAdapter(): SportAdapter {
     // VITE_API_TARGET URL (breaks the same-origin proxy path and the SameSite=Lax auth cookie).
     sseUrl: '/api/cfb/live-stream',
     weekSelectorConfig: {
-      // No regularWeekOptions override — WeekYearSelector falls back to deriving the regular-
-      // season option list from the dynamic maxRegularSeasonWeek prop (PicksPage/ScoresPage
-      // pass the real current week via `maxWeek`), same mechanism nflAdapter.ts already relies
-      // on. A static full-season array here previously always won over that dynamic value
-      // (WeekYearSelector prioritizes a non-empty regularWeekOptions unconditionally), so Next
-      // stayed clickable through the whole season regardless of maxWeek (frizat-8y4).
-      postSeasonWeekOptions: CFB_POST_WEEKS,
-      maxRegularSeasonWeek: CFB_REGULAR_SEASON_LENGTH,
       minSeason: CFB_FIRST_SEASON,
-      weekLabelFn: getCfbWeekName,
+    },
+
+    async loadSeasonWeeks(season) {
+      return (await getSlates(season)).map(s => ({ week: s.slateNumber, label: s.label, isPostSeason: s.isPostSeason }));
     },
 
     async currentSeasonYear() {
@@ -265,32 +250,25 @@ export function createCfbAdapter(): SportAdapter {
     async loadCurrentGames(leagueId, userId) {
       const active = await getCurrentSlate();
       if (!active) {
-        return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_CONFIGURED_SEASON };
+        return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], userPicks: [], hasOdds: false, requiredPicks: 0, weekLabel: '', maxWeek: 1, maxSeason: CFB_CONFIGURED_SEASON };
       }
       const { games, userPicks } = await loadSlate(leagueId, userId, active.id, active);
       const weekState = slateToWeekState(active);
-      // Cap navigation at the real current week (or the full regular-season length once
-      // postseason is active — see maxWeekFor), not the season-wide last pre-seeded slate.
-      // CfbSlates is fully seeded ahead of time for the whole season (CfbSlateSeederJob), so
-      // scanning all of them for the max RegularSeason slateNumber returns the season's total
-      // length regardless of which week is actually live (frizat-8y4/frizat-8y7).
-      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: active.requiredPicks, maxWeek: maxWeekFor(weekState), maxSeason: active.season };
+      // Cap navigation at the real current slate, not the season-wide last pre-seeded one
+      // (CfbSlates is seeded for the whole season ahead of time — frizat-8y4).
+      return { ...weekState, games, userPicks, hasOdds: games.length > 0, requiredPicks: active.requiredPicks, weekLabel: active.label, maxWeek: active.slateNumber, maxSeason: active.season };
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week, isPostSeason }) {
-      const slates = await getSlates();
-      const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
-      const slate = slates.find(s => s.slateNumber === slateNum && s.season === season);
+      const slate = await findSlate(season, week);
       if (!slate) return null;
       const { games, userPicks } = await loadSlate(leagueId, userId, slate.id, slate);
       if (games.length === 0) return null;
-      return { season, week, isPostSeason, games, userPicks, hasOdds: true, requiredPicks: slate.requiredPicks, maxWeek: week, maxSeason: season };
+      return { season, week, isPostSeason, games, userPicks, hasOdds: true, requiredPicks: slate.requiredPicks, weekLabel: slate.label, maxWeek: week, maxSeason: season };
     },
 
-    async submitPicks(leagueId, { season, week, isPostSeason }, picks) {
-      const slates = await getSlates();
-      const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
-      const slate = slates.find(s => s.slateNumber === slateNum);
+    async submitPicks(leagueId, { season, week }, picks) {
+      const slate = await findSlate(season, week);
       if (!slate) return;
       await addCfbPicks(leagueId, slate.id, season, picks.map(p => ({
         team: p.team,
@@ -298,18 +276,14 @@ export function createCfbAdapter(): SportAdapter {
       })));
     },
 
-    async removePick(leagueId, { season, week, isPostSeason }, pick) {
-      const slates = await getSlates();
-      const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
-      const slate = slates.find(s => s.slateNumber === slateNum);
+    async removePick(leagueId, { season, week }, pick) {
+      const slate = await findSlate(season, week);
       if (!slate) return;
       await removeMyCfbPick({ leagueId, cfbSlateId: slate.id, season, team: pick.team, pickType: pick.pickType });
     },
 
-    async clearPicks(leagueId, { week, isPostSeason }) {
-      const slates = await getSlates();
-      const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
-      const slate = slates.find(s => s.slateNumber === slateNum);
+    async clearPicks(leagueId, { season, week }) {
+      const slate = await findSlate(season, week);
       if (!slate) return [];
       await deleteCfbPicks(leagueId, slate.id);
       const [fresh, spreads] = await Promise.all([
@@ -325,22 +299,20 @@ export function createCfbAdapter(): SportAdapter {
     async loadCurrentScores(leagueId, userId) {
       const active = await getCurrentSlate();
       if (!active) {
-        return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, maxWeek: 1, maxSeason: CFB_CONFIGURED_SEASON };
+        return { season: CFB_CONFIGURED_SEASON, week: 1, isPostSeason: false, games: [], allPicks: [], userPicks: [], hasOdds: false, hasActiveGames: false, requiredPicks: 0, weekLabel: '', maxWeek: 1, maxSeason: CFB_CONFIGURED_SEASON };
       }
       const weekState = slateToWeekState(active);
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, active);
       const hasActiveGames = games.some(g => isGameLive(g.gameStatus));
-      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: active.requiredPicks, maxWeek: maxWeekFor(weekState), maxSeason: active.season };
+      return { ...weekState, games, allPicks, userPicks, hasOdds: games.length > 0, hasActiveGames, requiredPicks: active.requiredPicks, weekLabel: active.label, maxWeek: active.slateNumber, maxSeason: active.season };
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week, isPostSeason }) {
-      const slates = await getSlates();
-      const slateNum = cfbWeekToSlateNumber(week, isPostSeason);
-      const slate = slates.find(s => s.slateNumber === slateNum && s.season === season);
+      const slate = await findSlate(season, week);
       if (!slate) return null;
       const { games, allPicks, userPicks } = await loadScoresForSlate(leagueId, userId, slate);
       if (games.length === 0) return null;
-      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: slate.requiredPicks, maxWeek: week, maxSeason: season };
+      return { season, week, isPostSeason, games, allPicks, userPicks, hasOdds: true, hasActiveGames: false, requiredPicks: slate.requiredPicks, weekLabel: slate.label, maxWeek: week, maxSeason: season };
     },
 
     // ─── Commissioner missing-picks (frizat-8ni) ───────────────────────────────
