@@ -23,7 +23,7 @@ function makeAdapter(seasonYear = 2025): SportAdapter {
   return {
     sport: 'nfl',
     pollIntervalMs: 0,
-    weekSelectorConfig: { maxRegularSeasonWeek: 18, minSeason: 2020, weekLabelFn: () => '' },
+    weekSelectorConfig: { minSeason: 2020 },
     currentSeasonYear: async () => seasonYear,
   } as unknown as SportAdapter;
 }

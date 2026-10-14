@@ -2,13 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import type { WeekState } from '../services/sportAdapter';
 
-export interface CurrentWeekSnapshot extends WeekState {
-  maxWeek: number;
-  maxSeason: number;
-}
+export type CurrentWeekSnapshot = WeekState;
 
 interface CurrentWeekNavResult {
   currentWeekSnapshot: CurrentWeekSnapshot | null;
+  /** The live current week/season — the selector's navigation cap (frizat-d47). */
   maxWeek: number | undefined;
   maxSeason: number | undefined;
   routeToCurrentIfMatches: (candidate: WeekState) => WeekState | null;
@@ -41,7 +39,7 @@ interface CurrentWeekNavResult {
  */
 export function useCurrentWeekNav(
   isCurrentWeek: boolean,
-  data: (WeekState & { maxWeek: number; maxSeason: number }) | null | undefined,
+  data: WeekState | null | undefined,
   setWeekState: (s: WeekState | null) => void,
 ): CurrentWeekNavResult {
   const location = useLocation();
@@ -55,9 +53,8 @@ export function useCurrentWeekNav(
     setCurrentWeekSnapshot(prev =>
       prev
         && prev.season === data.season && prev.week === data.week && prev.isPostSeason === data.isPostSeason
-        && prev.maxWeek === data.maxWeek && prev.maxSeason === data.maxSeason
         ? prev
-        : { season: data.season, week: data.week, isPostSeason: data.isPostSeason, maxWeek: data.maxWeek, maxSeason: data.maxSeason });
+        : { season: data.season, week: data.week, isPostSeason: data.isPostSeason });
   }, [isCurrentWeek, data]);
 
   const routeToCurrentIfMatches = useCallback((candidate: WeekState): WeekState | null => {
@@ -81,8 +78,8 @@ export function useCurrentWeekNav(
 
   return {
     currentWeekSnapshot,
-    maxWeek: currentWeekSnapshot?.maxWeek,
-    maxSeason: currentWeekSnapshot?.maxSeason,
+    maxWeek: currentWeekSnapshot?.week,
+    maxSeason: currentWeekSnapshot?.season,
     routeToCurrentIfMatches,
   };
 }

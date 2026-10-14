@@ -33,21 +33,18 @@ public class CfbCacheServiceTests
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     private static readonly CfbSlateInfo DefaultSlateInfo = new(
-        Id: 1, Season: 2026, SlateNumber: 5, Label: "Week 5", SlateType: "RegularSeason",
-        StartDate: Today.AddDays(-1), EndDate: Today.AddDays(1), FirstGameUtc: null,
+        Id: 1, Season: 2026, SlateNumber: 5, Label: "Week 5", StartDate: Today.AddDays(-1), EndDate: Today.AddDays(1), FirstGameUtc: null,
         SpreadLockDatetime: DateTime.UtcNow.AddDays(-7), IsPostSeason: false, RequiredPicks: 4);
 
     private static readonly CfbSlates DefaultSlate = new() {
-        Id = 1, Season = 2026, SlateNumber = 5, Label = "Week 5", SlateType = "RegularSeason",
-        StartDate = Today.AddDays(-1), EndDate = Today.AddDays(1),
+        Id = 1, Season = 2026, SlateNumber = 5, Label = "Week 5", StartDate = Today.AddDays(-1), EndDate = Today.AddDays(1),
         EspnWeekNumber = 5, ScoringFormat = "Spread",
     };
 
     // A separate, already-ENDED slate (fixed past calendar dates) for the settled-cache tests
     // below — DefaultSlate is deliberately always-active so it can't exercise the DB-first path.
     private static readonly CfbSlates SettledSlate = new() {
-        Id = 2, Season = 2025, SlateNumber = 4, Label = "Week 4", SlateType = "RegularSeason",
-        StartDate = new DateOnly(2025, 9, 27), EndDate = new DateOnly(2025, 9, 28),
+        Id = 2, Season = 2025, SlateNumber = 4, Label = "Week 4", StartDate = new DateOnly(2025, 9, 27), EndDate = new DateOnly(2025, 9, 28),
         EspnWeekNumber = 4, ScoringFormat = "Spread",
     };
 
@@ -203,7 +200,7 @@ public class CfbCacheServiceTests
         };
         _cfbRepo.GetScoresForSlateAsync(SettledSlate.Id).Returns((IEnumerable<CfbScores>)rows);
         _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
-            SettledSlate.Id, SettledSlate.Season, SettledSlate.SlateNumber, SettledSlate.Label, SettledSlate.SlateType,
+            SettledSlate.Id, SettledSlate.Season, SettledSlate.SlateNumber, SettledSlate.Label,
             SettledSlate.StartDate, SettledSlate.EndDate, null, DateTime.UtcNow, SettledSlate.IsPostSeason, SettledSlate.RequiredPicks));
         var espnScores = BuildScoreboard();
         _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == SettledSlate.Id), Arg.Any<bool>()).Returns(espnScores);
@@ -251,8 +248,7 @@ public class CfbCacheServiceTests
     public async Task GetSlateScoresAsync_MissingEspnWeekNumber_ReturnsNull_EvenWithPersistedRows()
     {
         var slate = new CfbSlates {
-            Id = 3, Season = 2025, SlateNumber = 1, Label = "Week 1", SlateType = "RegularSeason",
-            StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20), EspnWeekNumber = null,
+            Id = 3, Season = 2025, SlateNumber = 1, Label = "Week 1", StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20), EspnWeekNumber = null,
         };
         _cfbRepo.GetSlateByIdAsync(slate.Id).Returns(slate);
         var rows = new List<CfbScores> {

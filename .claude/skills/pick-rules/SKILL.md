@@ -36,7 +36,7 @@ stays the ESPN-boundary answer: CFP only).
 | 21 | 3 | Conference Championship | 2 |
 | 22 | 4 | Super Bowl | 1 |
 
-ESPN numbered the Super Bowl postseason week 5 through 2025 (Pro Bowl in week 4); `GameHelpers.GetWeekFromEspnWeek` maps it to WeekId 22 at the ESPN boundary (season-gated — see frizat-jw7 for 2026+). There is no WeekId 23. Use `PopulateScoresTestDataAsync(21)` in tests, not 22.
+There is no WeekId 23. Use `PopulateScoresTestDataAsync(21)` in tests, not 22. ESPN's own postseason week numbering (it skipped week 4 for the Pro Bowl through 2025) is irrelevant: nothing reads ESPN week numbers — games are fetched by our rows' date windows and stamped with our WeekId.
 
 ## CFB Pick Count — the `RequiredPicks` seeded on each `CfbSeasonWeekConfigs` row
 
@@ -49,7 +49,12 @@ ESPN numbered the Super Bowl postseason week 5 through 2025 (Pro Bowl in week 4)
 | 17 | CFP Semifinals | 2 |
 | 18 | CFP Championship | 1 |
 
-## CFB Slate Numbering (ESPN Week → SlateNumber)
+## CFB Slate Numbering
+
+The CFB week shown everywhere IS the slate number (1–18) — no `slate - 13` postseason numbering.
+Each slate's label and postseason flag are its `CfbSeasonWeekConfigs` row's `WeekLabel` /
+`IsPostSeason` (the week selector is built from the season's rows). `EspnWeekNumber` stays on the
+row only as an ESPN-adapter input (AP rankings key, CFP query):
 
 | SlateNumber | ESPN Week | Label |
 |---|---|---|
@@ -60,12 +65,9 @@ ESPN numbered the Super Bowl postseason week 5 through 2025 (Pro Bowl in week 4)
 | 17 | 20 | CFP Semifinals |
 | 18 | 21 | CFP Championship |
 
-`cfbSlateNumberToWeek(n)` / `cfbWeekToSlateNumber(week, isPostSeason)` in `src/utils/gameHelpers.ts`.
-Slates ≤13 → `isPostSeason=false`; slates 14+ → `isPostSeason=true`, `week = slateNumber - 13`.
-
 ## NFL Week Numbering
 
-Regular season weeks 1–18 map directly. Postseason: `getWeekFromEspnWeek(week, isPostSeason)` adds +18 offset (Wild Card=19, Divisional=20, Conference=21, Super Bowl=22).
+Our WeekId everywhere: 1–18 regular season, 19 Wild Card, 20 Divisional, 21 Conference, 22 Super Bowl — each a `NflSeasonWeekConfigs` row with its own `WeekLabel` / `IsPostSeason` / `RequiredPicks`. The week selector, labels and notifications all read the rows (frizat-d47).
 
 ## Demo Stack Pick Count Invariants (5 users, CFB Demo League)
 

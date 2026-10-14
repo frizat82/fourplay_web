@@ -106,6 +106,34 @@ describe('nflAdapter', () => {
     });
   });
 
+  // frizat-d47: the selector's weeks are the season's control-table rows.
+  it('loadSeasonWeeks lists that season\'s rows by WeekId, with their labels and postseason flag', async () => {
+    vi.mocked(getNflSeasonWeeks).mockResolvedValue([
+      { weekId: 18, weekLabel: 'Week 18', isPostSeason: false, requiredPicks: 4 },
+      { weekId: 19, weekLabel: 'Wild Card Weekend', isPostSeason: true, requiredPicks: 3 },
+    ]);
+
+    expect(await adapter.loadSeasonWeeks(2026)).toEqual([
+      { week: 18, label: 'Week 18', isPostSeason: false },
+      { week: 19, label: 'Wild Card Weekend', isPostSeason: true },
+    ]);
+    expect(getNflSeasonWeeks).toHaveBeenCalledWith(2026);
+  });
+
+  // frizat-d47: a past week is always its own week's scores (our WeekId) — never ESPN's live
+  // "current" scoreboard, whose own week numbering could disagree near a week boundary. Demo and
+  // replay serve their frozen game through that same per-week endpoint for the current week.
+  it('a past-week load reads only that week\'s scores, never the live scoreboard', async () => {
+    vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
+    vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
+
+    const result = await adapter.loadHistoricalScores(1, 'user1', { season: 2023, week: 8, isPostSeason: false });
+
+    expect(result?.games[0].homeTeam).toBe('KC');
+    expect(getWeekScores).toHaveBeenCalledWith(2023, 8);
+    expect(getScores).not.toHaveBeenCalled();
+  });
+
   describe('loadCurrentGames', () => {
     it('maps ESPN competitions to GameView[]', async () => {
       vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));

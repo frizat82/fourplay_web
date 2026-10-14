@@ -210,7 +210,7 @@ public class EspnCacheServiceTests
         var rows = new List<Shared.Models.Data.NflScores> {
             new() { Id = 1, Season = 2025, NflWeek = 19, HomeTeam = "KC", AwayTeam = "DEN", HomeTeamScore = 27, AwayTeamScore = 20, GameTime = new DateTimeOffset(2026, 1, 10, 18, 0, 0, TimeSpan.Zero) },
         };
-        // Wild Card (ESPN week 1, postseason) = internal NflWeek 19 (GameHelpers.GetWeekFromEspnWeek).
+        // Wild Card = our WeekId 19.
         _leagueRepo.GetNflScoresAsync(2025, 19).Returns(rows);
         // This week's own window has fully ended (well in the past) — DB-first only kicks in once
         // that's true, mirroring CfbLiveScoreFetcher's identical fix.

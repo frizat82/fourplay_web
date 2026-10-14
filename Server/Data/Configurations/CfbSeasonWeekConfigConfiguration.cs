@@ -21,7 +21,11 @@ public class CfbSeasonWeekConfigConfiguration : IEntityTypeConfiguration<CfbSeas
 
         // frizat-d47: a real round asks for 1-4 picks; only an excluded week (99) carries 0. A
         // typo'd or forgotten count fails the insert rather than silently capping a slate at 0.
-        entity.ToTable(t => t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_RequiredPicks",
-            "\"RequiredPicks\" BETWEEN 1 AND 4 OR (\"IvLeagueWeekNumber\" = 99 AND \"RequiredPicks\" = 0)"));
+        entity.ToTable(t => {
+            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_RequiredPicks",
+                "\"RequiredPicks\" BETWEEN 1 AND 4 OR (\"IvLeagueWeekNumber\" = 99 AND \"RequiredPicks\" = 0)");
+            // Every screen and push names the round by this — never blank (frizat-d47).
+            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_WeekLabel", "\"WeekLabel\" <> ''");
+        });
     }
 }

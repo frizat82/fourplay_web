@@ -57,7 +57,7 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
             ? (await WithRulesAsync([slate], requireRow: true))[0]
             : null;
 
-    // frizat-d47: a slate's RequiredPicks/IsPostSeason are read live from its control-table row
+    // frizat-d47: a slate's Label/RequiredPicks/IsPostSeason are read live from its control-table row
     // (Season + IvLeagueWeekNumber == SlateNumber), both tables cached — so the rules have one
     // home and an edited row reaches every reader, never a copy frozen when the season was seeded.
     // Slates are seeded from those rows, so where a slate is actually used (requireRow) one
@@ -68,7 +68,7 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
             .ToDictionary(c => (c.Season, c.IvLeagueWeekNumber));
         foreach (var slate in slates) {
             if (rules.GetValueOrDefault((slate.Season, slate.SlateNumber)) is { } row)
-                (slate.IsPostSeason, slate.RequiredPicks) = (row.IsPostSeason, row.RequiredPicks);
+                (slate.Label, slate.IsPostSeason, slate.RequiredPicks) = (row.WeekLabel, row.IsPostSeason, row.RequiredPicks);
             else if (requireRow)
                 throw new InvalidOperationException($"No CfbSeasonWeekConfigs row for season {slate.Season} slate {slate.SlateNumber}.");
         }

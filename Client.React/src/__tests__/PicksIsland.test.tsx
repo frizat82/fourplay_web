@@ -25,8 +25,7 @@ function makeLeague(leagueId: number, leagueName: string): LeagueUserMappingDto 
 function makeLoadedWeek(overrides: Partial<LoadedWeek> = {}): LoadedWeek {
   return {
     season: 2025, week: 3, isPostSeason: false,
-    games: [], userPicks: [], hasOdds: true, requiredPicks: 4,
-    maxWeek: 18, maxSeason: 2025,
+    games: [], userPicks: [], hasOdds: true, requiredPicks: 4, weekLabel: 'Week 3',
     ...overrides,
   };
 }
@@ -35,7 +34,7 @@ function makeAdapter(loadCurrentGames: SportAdapter['loadCurrentGames']): SportA
   return {
     sport: 'nfl',
     pollIntervalMs: 0,
-    weekSelectorConfig: { maxRegularSeasonWeek: 18, minSeason: 2020 },
+    weekSelectorConfig: { minSeason: 2020 },
     loadCurrentGames,
   } as unknown as SportAdapter;
 }

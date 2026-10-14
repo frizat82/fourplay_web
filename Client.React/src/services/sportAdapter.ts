@@ -35,6 +35,19 @@ export function memoizeOnce<T>(fetch: () => Promise<T>): () => Promise<T> {
 }
 
 /**
+ * memoizeOnce per key — one in-flight/resolved promise per key (e.g. per season), same
+ * don't-cache-a-failure rule. Shared by both adapters' per-season row fetches.
+ */
+export function memoizeByKey<K, T>(fetch: (key: K) => Promise<T>): (key: K) => Promise<T> {
+  const byKey = new Map<K, () => Promise<T>>();
+  return (key: K) => {
+    let get = byKey.get(key);
+    if (!get) { get = memoizeOnce(() => fetch(key)); byKey.set(key, get); }
+    return get();
+  };
+}
+
+/**
  * Hide other users' picks for games that haven't started yet.
  * The caller's own picks are always visible (so they can confirm their submission).
  * Once a game kicks off, picks for that game become visible to everyone — mirroring
@@ -155,7 +168,18 @@ export interface MissingPicksResult {
 
 export interface WeekState {
   season: number;
+  /** Our own week number: NFL's WeekId (1-22), CFB's slate number (1-18) — the control table's key. */
   week: number;
+  isPostSeason: boolean;
+}
+
+/**
+ * One week of a season as its control-table row defines it (frizat-d47): its number, its name,
+ * and whether it's postseason. The week selector is built from these, never from constants.
+ */
+export interface SeasonWeek {
+  week: number;
+  label: string;
   isPostSeason: boolean;
 }
 
@@ -172,9 +196,8 @@ export interface LoadedWeek extends WeekState {
   userPicks: PickView[];
   hasOdds: boolean;
   requiredPicks: number;
-  /** The furthest week with data — used to cap the WeekYearSelector */
-  maxWeek: number;
-  maxSeason: number;
+  /** The week's name, from its control-table row */
+  weekLabel: string;
 }
 
 export interface LoadedScores extends WeekState {
@@ -184,8 +207,7 @@ export interface LoadedScores extends WeekState {
   hasOdds: boolean;
   hasActiveGames: boolean;
   requiredPicks: number;
-  maxWeek: number;
-  maxSeason: number;
+  weekLabel: string;
 }
 
 export interface SportAdapter {
@@ -219,12 +241,10 @@ export interface SportAdapter {
   sseUrl?: string;
   // loadJerseys is optional — if defined, PicksPage shows jerseys when data is non-empty
   weekSelectorConfig: {
-    regularWeekOptions?: number[];
-    postSeasonWeekOptions?: number[];
-    maxRegularSeasonWeek: number;
     minSeason: number;
-    weekLabelFn?: (week: number, isPostSeason: boolean) => string;
   };
+  /** A season's weeks from its control-table rows — what the week selector offers and names. */
+  loadSeasonWeeks(season: number): Promise<SeasonWeek[]>;
   currentSeasonYear(): Promise<number>;
   /**
    * Starts the adapter's memoized current week/slate fetch without waiting on it — called when an

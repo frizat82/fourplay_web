@@ -74,8 +74,7 @@ public class CfbLiveScoreFetcherTests {
 
     private static CfbSlates BuildRegularSeasonSlate() => new() {
         Id = 1, Season = 2026, SlateNumber = 5,
-        Label = "Week 5", SlateType = "RegularSeason",
-        StartDate = new DateOnly(2025, 9, 27), EndDate = new DateOnly(2025, 9, 28),
+        Label = "Week 5", StartDate = new DateOnly(2025, 9, 27), EndDate = new DateOnly(2025, 9, 28),
         EspnWeekNumber = 5, ScoringFormat = "Spread",
     };
 
@@ -120,8 +119,7 @@ public class CfbLiveScoreFetcherTests {
         // match against these StartDate/EndDate values — proves the fetch is date-driven, not
         // secretly still week-driven.
         var slate = new CfbSlates {
-            Id = 19, Season = 2026, SlateNumber = 1, Label = "Week 1", SlateType = "RegularSeason",
-            StartDate = new DateOnly(2026, 9, 1), EndDate = new DateOnly(2026, 9, 7),
+            Id = 19, Season = 2026, SlateNumber = 1, Label = "Week 1", StartDate = new DateOnly(2026, 9, 1), EndDate = new DateOnly(2026, 9, 7),
             EspnWeekNumber = 1, ScoringFormat = "Standard",
         };
         _cfbApi.GetScoresByDateRangeAsync(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7))
@@ -142,8 +140,7 @@ public class CfbLiveScoreFetcherTests {
     [Fact]
     public async Task FetchForSlateAsync_RegularSeason_ExcludesGame_OutsideSlateDateRange_EvenIfEspnReturnsIt() {
         var slate = new CfbSlates {
-            Id = 19, Season = 2026, SlateNumber = 1, Label = "Week 1", SlateType = "RegularSeason",
-            StartDate = new DateOnly(2026, 9, 1), EndDate = new DateOnly(2026, 9, 7),
+            Id = 19, Season = 2026, SlateNumber = 1, Label = "Week 1", StartDate = new DateOnly(2026, 9, 1), EndDate = new DateOnly(2026, 9, 7),
             EspnWeekNumber = 1, ScoringFormat = "Standard",
         };
         var inWindow = new Competition {
@@ -187,8 +184,7 @@ public class CfbLiveScoreFetcherTests {
 
     private static CfbSlates BuildCfpSlate() => new() {
         Id = 2, Season = 2026, SlateNumber = 15,
-        Label = "CFP First Round", SlateType = "FirstRound",
-        StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20),
+        Label = "CFP First Round", StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20),
         EspnWeekNumber = 16, ScoringFormat = "NFLDivisional",
     };
 
@@ -223,8 +219,7 @@ public class CfbLiveScoreFetcherTests {
 
     private static CfbSlates BuildSlateMissingWeekNumber() => new() {
         Id = 3, Season = 2025, SlateNumber = 1,
-        Label = "Week 1", SlateType = "RegularSeason",
-        StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20),
+        Label = "Week 1", StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20),
         EspnWeekNumber = null,
     };
 

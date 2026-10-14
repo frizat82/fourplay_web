@@ -101,7 +101,7 @@ public class SpreadLockScheduleEndpointTests
 
     private static CfbSeasonWeekConfig MakeConfig(int ivWeek, string weekType, DateTime lock_, bool inScope = true) => new() {
         Season = 2026, EspnWeekNumber = ivWeek, IvLeagueWeekNumber = ivWeek,
-        WeekType = weekType, ScoringFormat = "Standard", InScopeIvLeague = inScope,
+        WeekType = weekType, WeekLabel = $"Week {ivWeek}", ScoringFormat = "Standard", InScopeIvLeague = inScope,
         SpreadLockDatetime = lock_,
     };
 
@@ -111,7 +111,7 @@ public class SpreadLockScheduleEndpointTests
         var cfbRepo = Substitute.For<ICfbRepository>();
         var svc = Substitute.For<ICfbCurrentSlateService>();
         svc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
-            1, 2026, 1, "Week 1", "RegularSeason", new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7), null, DateTime.UtcNow, false, 4));
+            1, 2026, 1, "Week 1", new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7), null, DateTime.UtcNow, false, 4));
         var semis = MakeConfig(17, "FBS Playoff", new DateTime(2027, 1, 8, 12, 0, 0, DateTimeKind.Utc));
         semis.ScoringFormat = "NFLConference";
         semis.IsPostSeason = true;
@@ -131,7 +131,7 @@ public class SpreadLockScheduleEndpointTests
         var cfbRepo = Substitute.For<ICfbRepository>();
         var svc = Substitute.For<ICfbCurrentSlateService>();
         svc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
-            1, 2026, 1, "Week 1", "RegularSeason", new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7), null, DateTime.UtcNow, false, 4));
+            1, 2026, 1, "Week 1", new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7), null, DateTime.UtcNow, false, 4));
         cfbRepo.GetWeekConfigsForSeasonAsync(2026).Returns([
             MakeConfig(0, "Regular Season", new DateTime(2026, 8, 27, 12, 0, 0, DateTimeKind.Utc), inScope: false),
             MakeConfig(2, "Regular Season", new DateTime(2026, 9, 10, 13, 0, 0, DateTimeKind.Utc)),

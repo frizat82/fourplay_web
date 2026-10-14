@@ -64,60 +64,6 @@ public static class GameHelpers {
         // Convert target back to UTC so subtraction is safe
         return nextSundayNoon - nowCst;
     }
-    // TODO(docs/ESPNProBowl.md): verify against a real ESPN response once the 2026 postseason
-    // bracket actually exists (~Jan 2027) — the NFL discontinued the Pro Bowl GAME starting with
-    // the 2026 season (announced 2026-08-26), so ESPN's postseason week numbering is expected to
-    // close the old week-4 gap from here on. See docs/ESPNProBowl.md for the full writeup; update
-    // this value if this guess turns out wrong. Public (not the private it was originally) so
-    // ESPNApiService.FixEspnProbBowlWeek can gate its own identical quirk-correction on the same
-    // threshold instead of carrying an independent, unconditional copy (frizat-4k9) — this and
-    // GetWeekFromEspnWeek below are the only two places this threshold is allowed to live.
-    public const int LastSeasonEspnSkippedProBowlWeek = 2025;
-
-    // Our canonical NFL WeekId: 1-18 regular season, 19-22 postseason (NflSeasonWeekConfigs).
-    // Only for translating ESPN's postseason week numbers (GetWeekFromEspnWeek) and labels —
-    // whether a week IS postseason, and its pick count, are its control-table row's
-    // IsPostSeason/RequiredPicks (frizat-d47).
-    public const int LastNflRegularSeasonWeek = 18;
-
-    // Through the 2025 season, ESPN skipped postseason week 4 for the Pro Bowl — Super Bowl was
-    // raw ESPN week 5 (one slot past Conference Championship=3), not the 4th round it actually is.
-    // Gated by SEASON, not by the raw week value: for 2026+ we deliberately do NOT apply the old
-    // week==5 special case, so if that guess is wrong, a real ESPN week=5 postseason response for
-    // 2026+ maps to a nonexistent WeekId (23) and fails loudly (no matching config/DB rows found)
-    // instead of silently coinciding with the right answer by accident.
-    public static int GetWeekFromEspnWeek(long week, int season, bool isPostSeason = false) {
-        if (!isPostSeason) return (int)week;
-        if (season <= LastSeasonEspnSkippedProBowlWeek && week == 5) return 22;
-        return (int)(week + LastNflRegularSeasonWeek);
-    }
-    public static string GetWeekName(long week, bool isPostSeason = false) {
-        if (!isPostSeason) {
-            return $"Week {week}";
-        }
-        return week switch {
-            1 => "Wild Card",
-            2 => "Divisional Round",
-            3 => "Conference Championship",
-            4 => "Super Bowl",
-            _ => throw new ArgumentException("Invalid week number")
-        };
-    }
-    // User-facing period labels, matching the app's own (gameHelpers.ts) — notifications must read
-    // the same as the screen, never an internal "Slate N".
-    public static string GetNflWeekLabel(int nflWeek) =>
-        nflWeek <= LastNflRegularSeasonWeek ? $"Week {nflWeek}" : GetWeekName(nflWeek - LastNflRegularSeasonWeek, isPostSeason: true);
-
-    public static string GetCfbSlateLabel(int slateNumber) => slateNumber switch {
-        <= 13 => $"Week {slateNumber}",
-        14 => "Conf. Championships",
-        15 => "CFP First Round",
-        16 => "CFP Quarterfinals",
-        17 => "CFP Semifinals",
-        18 => "CFP Championship",
-        _ => throw new ArgumentOutOfRangeException(nameof(slateNumber), slateNumber, "CFB slates run 1-18"),
-    };
-
     // Abbreviation -> ESPN's full team name ("BUFF" -> "Buffalo Bulls") from a scoreboard.
     public static Dictionary<string, string> GetTeamDisplayNames(EspnScores? scores) =>
         (scores?.Events ?? [])
@@ -127,19 +73,6 @@ public static class GameHelpers {
             .GroupBy(c => c.Team.Abbreviation)
             .ToDictionary(g => g.Key, g => g.First().Team.DisplayName!);
 
-    public static int GetWeekFromName(string weekName, bool isPostSeason = false) {
-        if (!isPostSeason) {
-            return int.Parse(weekName.Replace("Week ", ""));
-        }
-
-        return weekName switch {
-            "Wild Card" => 1,
-            "Divisional Round" => 2,
-            "Conference Championship" => 3,
-            "Super Bowl" => 4,
-            _ => throw new ArgumentException("Invalid week name")
-        };
-    }
 
     public static string? DisplayDetails(Competition competition) {
         return competition.Status.Type.Name switch {

@@ -2,7 +2,7 @@ namespace FourPlayWebApp.Server.Services.Interfaces;
 
 // IsPostSeason/RequiredPicks are the slate's control-table row values (frizat-d47) — the same
 // fields /api/cfb/slates serves, so the client's one CfbSlateDto type is true of both endpoints.
-public record CfbSlateInfo(int Id, int Season, int SlateNumber, string Label, string SlateType,
+public record CfbSlateInfo(int Id, int Season, int SlateNumber, string Label,
     DateOnly StartDate, DateOnly EndDate, DateTimeOffset? FirstGameUtc, DateTime SpreadLockDatetime,
     bool IsPostSeason, int RequiredPicks);
 
