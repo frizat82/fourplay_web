@@ -8,6 +8,7 @@ public class CfbSeasonWeekConfig {
     public DateOnly WeekStartDate { get; set; }
     public DateOnly WeekEndDate { get; set; }
     public string WeekType { get; set; } = string.Empty;
+    public string WeekLabel { get; set; } = string.Empty;   // "Week 5", "CFP Semifinals" — what every screen and push calls this round (frizat-d47)
     public string ScoringFormat { get; set; } = string.Empty;
     public bool InScopeIvLeague { get; set; }
     public DateTime SpreadLockDatetime { get; set; }        // UTC — when CfbSpreadSchedulerJob fires CfbSpreadJob for this week; required, never null

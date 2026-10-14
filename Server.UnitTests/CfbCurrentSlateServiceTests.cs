@@ -18,7 +18,6 @@ public class CfbCurrentSlateServiceTests
         Season = season,
         SlateNumber = slateNumber,
         Label = $"Slate {slateNumber}",
-        SlateType = "RegularSeason",
         StartDate = start,
         EndDate = end,
     };

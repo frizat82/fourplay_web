@@ -1,3 +1,4 @@
+using NSubstitute;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Models;
@@ -24,6 +25,22 @@ public class ReplayCacheServiceTests {
     };
 
     private static ReplayCacheService BuildService(params EspnScores[] snapshots) => new(snapshots);
+
+    // frizat-d47: replay drives the live current week, so a week request is answered with the
+    // snapshot exactly when it IS the control table's current week — never by translating the
+    // captured fixture's own ESPN week number (ESPN numbering appears nowhere in our code).
+    [Fact]
+    public async Task GetWeekScoresAsync_ServesTheSnapshot_OnlyForTheControlTablesCurrentWeek() {
+        var currentWeek = Substitute.For<INflCurrentWeekService>();
+        currentWeek.GetCurrentWeekAsync().Returns(new NflWeekInfo(22, 2025, true, "Super Bowl LX", "Standard", default, 1));
+        var snapshot = Snapshot("2025");
+        snapshot.Week = new Week { Number = 5 }; // ESPN's raw number for that week — must be irrelevant
+        var svc = new ReplayCacheService([snapshot], currentWeek);
+
+        Assert.Same(snapshot, await svc.GetWeekScoresAsync(2025, 22));
+        Assert.Null(await svc.GetWeekScoresAsync(2025, 21));
+        Assert.Null(await svc.GetWeekScoresAsync(2024, 22));
+    }
 
     [Fact]
     public async Task GetScoresAsync_InitiallyReturnsFirstSnapshot() {

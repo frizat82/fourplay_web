@@ -134,29 +134,10 @@ public class CfbSlateSeederJobTests
 
         await BuildJob().Execute(_context);
 
-        var regular = saved!.Where(s => s.SlateType == "RegularSeason").OrderBy(s => s.SlateNumber).ToList();
+        var regular = saved!.Where(s => s.SlateNumber <= 13).OrderBy(s => s.SlateNumber).ToList();
         Assert.Equal(13, regular.Count);
         Assert.Equal(1, regular[0].SlateNumber);
         Assert.Equal(13, regular[12].SlateNumber);
-    }
-
-    [Fact]
-    public async Task Execute_SeedsCorrectPostseasonSlateTypes()
-    {
-        _repo.GetWeekConfigsForSeasonAsync(Season).Returns(Make2026Configs());
-        _repo.GetSlatesForSeasonAsync(Season).Returns([]);
-        IEnumerable<CfbSlates>? saved = null;
-        await _repo.AddSlatesAsync(Arg.Do<IEnumerable<CfbSlates>>(s => saved = s));
-
-        await BuildJob().Execute(_context);
-
-        var post = saved!.Where(s => s.SlateType != "RegularSeason").OrderBy(s => s.SlateNumber).ToList();
-        Assert.Equal(5, post.Count);
-        Assert.Equal("ConferenceChampionship", post[0].SlateType);
-        Assert.Equal("FirstRound",             post[1].SlateType);
-        Assert.Equal("Quarterfinal",           post[2].SlateType);
-        Assert.Equal("Semifinal",              post[3].SlateType);
-        Assert.Equal("Championship",           post[4].SlateType);
     }
 
     [Fact]
@@ -170,12 +151,12 @@ public class CfbSlateSeederJobTests
         await BuildJob().Execute(_context);
 
         // CFP First Round: IV slate 15 → ESPN week 16 (skips Army-Navy week 15)
-        var firstRound = saved!.Single(s => s.SlateType == "FirstRound");
+        var firstRound = saved!.Single(s => s.SlateNumber == 15);
         Assert.Equal(15, firstRound.SlateNumber);
         Assert.Equal(16, firstRound.EspnWeekNumber);
 
         // CFP Championship: IV slate 18 → ESPN week 21
-        var championship = saved!.Single(s => s.SlateType == "Championship");
+        var championship = saved!.Single(s => s.SlateNumber == 18);
         Assert.Equal(18, championship.SlateNumber);
         Assert.Equal(21, championship.EspnWeekNumber);
         Assert.Equal(new DateOnly(2027, 1, 19), championship.StartDate);

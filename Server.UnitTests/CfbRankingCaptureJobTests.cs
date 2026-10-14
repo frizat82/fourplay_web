@@ -41,8 +41,7 @@ public class CfbRankingCaptureJobTests
     private static CfbSlates BuildSlate(int slateId = 1) => new()
     {
         Id = slateId, Season = 2026, SlateNumber = 1,
-        Label = "Week 1", SlateType = "RegularSeason",
-        StartDate = new DateOnly(2026, 9, 1),
+        Label = "Week 1", StartDate = new DateOnly(2026, 9, 1),
         EndDate   = new DateOnly(2026, 9, 7),
         EspnWeekNumber = 1,
         ScoringFormat = "Spread",

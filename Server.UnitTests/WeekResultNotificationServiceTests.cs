@@ -39,11 +39,12 @@ public class WeekResultNotificationServiceTests
         SetCfbSlateEnds(Enumerable.Range(1, 18).Select(s => (s, DateOnly.FromDateTime(Now.UtcDateTime.AddDays(3)))).ToArray());
     }
 
+    // Labels are the rows' own (frizat-d47) — "Week N" here unless a test names the round.
     private void SetNflWeekEnds(params (int Week, DateTime End)[] weeks) =>
-        _repo.GetNflSeasonWeekConfigsAsync(2026).Returns(weeks.Select(w => new NflSeasonWeekConfig { Season = 2026, WeekId = w.Week, WeekEndDatetime = w.End }).ToList());
+        _repo.GetNflSeasonWeekConfigsAsync(2026).Returns(weeks.Select(w => new NflSeasonWeekConfig { Season = 2026, WeekId = w.Week, WeekLabel = $"Week {w.Week}", WeekEndDatetime = w.End }).ToList());
 
     private void SetCfbSlateEnds(params (int Slate, DateOnly End)[] slates) =>
-        _cfbRepo.GetAllSlatesAsync().Returns(slates.Select(s => new CfbSlates { Season = 2026, SlateNumber = s.Slate, EndDate = s.End }).ToList());
+        _cfbRepo.GetAllSlatesAsync().Returns(slates.Select(s => new CfbSlates { Season = 2026, SlateNumber = s.Slate, Label = $"Week {s.Slate}", EndDate = s.End }).ToList());
 
     private WeekResultNotificationService BuildService() => new(_repo, _cfbRepo, _nflLeaderboard, _cfbLeaderboard, _dispatcher, _espnCache, _cfbCache, new FakeTimeProvider(Now));
 
@@ -234,9 +235,33 @@ public class WeekResultNotificationServiceTests
             Arg.Is<PushPayload>(p => p.Body.StartsWith("NFL Week 5:") && p.Sport == LeagueType.Nfl && p.Url == "/leaderboard"), Arg.Any<CancellationToken>());
     }
 
+    // frizat-d47: the week's name is its control-table row's WeekLabel, never derived from the
+    // week number — a deliberately unusual label proves nothing re-derives it.
+    [Fact]
+    public async Task CheckNflWeekResultsAsync_UsesTheRowsWeekLabel()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync(2026).Returns(new List<NflSeasonWeekConfig> {
+            new() { Season = 2026, WeekId = 19, WeekLabel = "Wild Card Weekend", WeekEndDatetime = Now.UtcDateTime.AddDays(3) },
+        });
+        var league = League(1, LeagueType.Nfl);
+        _repo.GetLeaguesByTypeAsync(LeagueType.Nfl).Returns(new List<LeagueInfo> { league });
+        _repo.GetWeekResultNotificationsSentAsync(1, 2026).Returns(new HashSet<(string, int)>());
+        _nflLeaderboard.BuildLeaderboard(1, 2026L).Returns(new List<LeaderboardModel> {
+            Row(User("user-1"), new LeaderboardWeekResults { Week = 19, WeekResult = WeekResult.Won, Score = 100 })
+        });
+
+        await BuildService().CheckNflWeekResultsAsync(2026);
+
+        await _dispatcher.Received(1).DispatchAsync("user-1", Arg.Any<Func<NotificationPreferencesDto, bool>>(),
+            Arg.Is<PushPayload>(p => p.Body.StartsWith("NFL Wild Card Weekend:")), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task CheckCfbWeekResultsAsync_PostseasonSlate_UsesTheRoundName()
     {
+        _cfbRepo.GetAllSlatesAsync().Returns(new List<CfbSlates> {
+            new() { Season = 2026, SlateNumber = 17, Label = "CFP Semifinals", EndDate = DateOnly.FromDateTime(Now.UtcDateTime.AddDays(3)) },
+        });
         var league = League(2, LeagueType.Cfb);
         _repo.GetLeaguesByTypeAsync(LeagueType.Cfb).Returns(new List<LeagueInfo> { league });
         _repo.GetWeekResultNotificationsSentAsync(2, 2026).Returns(new HashSet<(string, int)>());

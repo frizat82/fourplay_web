@@ -26,9 +26,10 @@ public class CfbRepositoryTests
             db.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
                 Season = 2026, EspnWeekNumber = 5, IvLeagueWeekNumber = 5, WeekType = "Regular Season",
                 ScoringFormat = "Standard", InScopeIvLeague = true, IsPostSeason = true, RequiredPicks = 2,
+                WeekLabel = "Rivalry Week",
             });
-            db.CfbSlates.Add(new CfbSlates { Id = 50, Season = 2026, SlateNumber = 5, Label = "Week 5", SlateType = "RegularSeason" });
-            db.CfbSlates.Add(new CfbSlates { Id = 60, Season = 2027, SlateNumber = 6, Label = "Week 6", SlateType = "RegularSeason" });
+            db.CfbSlates.Add(new CfbSlates { Id = 50, Season = 2026, SlateNumber = 5, Label = "Week 5" });
+            db.CfbSlates.Add(new CfbSlates { Id = 60, Season = 2027, SlateNumber = 6, Label = "Week 6" });
             await db.SaveChangesAsync();
         }
         var repo = new CfbRepository(factory);
@@ -37,7 +38,7 @@ public class CfbRepositoryTests
         var bySeason = (await repo.GetSlatesForSeasonAsync(2026)).Single(s => s.Id == 50);
         var all = (await repo.GetAllSlatesAsync()).Single(s => s.Id == 50);
 
-        Assert.All(new[] { byId!, bySeason, all }, s => Assert.Equal((true, 2), (s.IsPostSeason, s.RequiredPicks)));
+        Assert.All(new[] { byId!, bySeason, all }, s => Assert.Equal((true, 2, "Rivalry Week"), (s.IsPostSeason, s.RequiredPicks, s.Label)));
         // A slate with no control-table row is a data problem where it's used: by-id and per-season
         // reads fail loudly (as NFL does), never handing out a 0-pick cap that rejects every pick
         // and scores every member a win. The all-seasons read still works — one old season's
@@ -174,7 +175,7 @@ public class CfbRepositoryTests
     {
         var factory = new DbContextFactoryStub(nameof(DeleteSlatesAsync_SlateHasDependentSpread_SkipsDeleteAndReturnsFalse));
         var seedDb = factory.CreateDbContext();
-        var slate = new CfbSlates { Id = 1, Season = 2026, SlateNumber = 3, Label = "Week 3", SlateType = "RegularSeason" };
+        var slate = new CfbSlates { Id = 1, Season = 2026, SlateNumber = 3, Label = "Week 3" };
         seedDb.CfbSlates.Add(slate);
         seedDb.CfbSpreads.Add(new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B" });
         await seedDb.SaveChangesAsync();
@@ -191,7 +192,7 @@ public class CfbRepositoryTests
     {
         var factory = new DbContextFactoryStub(nameof(DeleteSlatesAsync_NoDependentData_DeletesAndReturnsTrue));
         var seedDb = factory.CreateDbContext();
-        var slate = new CfbSlates { Id = 1, Season = 2026, SlateNumber = 3, Label = "Week 3", SlateType = "RegularSeason" };
+        var slate = new CfbSlates { Id = 1, Season = 2026, SlateNumber = 3, Label = "Week 3" };
         seedDb.CfbSlates.Add(slate);
         await seedDb.SaveChangesAsync();
         var repo = new CfbRepository(factory);
@@ -207,8 +208,8 @@ public class CfbRepositoryTests
     {
         var factory = new DbContextFactoryStub(nameof(GetWeeksWithSpreadDataAsync_ReturnsSeasonSlateNumberPairsWithSpreads));
         var seedDb = factory.CreateDbContext();
-        seedDb.CfbSlates.Add(new CfbSlates { Id = 1, Season = 2026, SlateNumber = 3, Label = "Week 3", SlateType = "RegularSeason" });
-        seedDb.CfbSlates.Add(new CfbSlates { Id = 2, Season = 2026, SlateNumber = 4, Label = "Week 4", SlateType = "RegularSeason" });
+        seedDb.CfbSlates.Add(new CfbSlates { Id = 1, Season = 2026, SlateNumber = 3, Label = "Week 3" });
+        seedDb.CfbSlates.Add(new CfbSlates { Id = 2, Season = 2026, SlateNumber = 4, Label = "Week 4" });
         seedDb.CfbSpreads.Add(new CfbSpreads { CfbSlateId = 1, HomeTeam = "A", AwayTeam = "B" });
         await seedDb.SaveChangesAsync();
 
@@ -227,9 +228,9 @@ public class CfbRepositoryTests
     {
         var factory = new DbContextFactoryStub(nameof(GetAllSlatesAsync_ReturnsSlatesAcrossEverySeason_OrderedBySeasonThenSlateNumber));
         var seedDb = factory.CreateDbContext();
-        seedDb.CfbSlates.Add(new CfbSlates { Id = 1, Season = 2026, SlateNumber = 2, Label = "Slate 2", SlateType = "RegularSeason" });
-        seedDb.CfbSlates.Add(new CfbSlates { Id = 2, Season = 2025, SlateNumber = 4, Label = "Slate 4", SlateType = "Championship" });
-        seedDb.CfbSlates.Add(new CfbSlates { Id = 3, Season = 2026, SlateNumber = 1, Label = "Slate 1", SlateType = "RegularSeason" });
+        seedDb.CfbSlates.Add(new CfbSlates { Id = 1, Season = 2026, SlateNumber = 2, Label = "Slate 2" });
+        seedDb.CfbSlates.Add(new CfbSlates { Id = 2, Season = 2025, SlateNumber = 4, Label = "Slate 4" });
+        seedDb.CfbSlates.Add(new CfbSlates { Id = 3, Season = 2026, SlateNumber = 1, Label = "Slate 1" });
         await seedDb.SaveChangesAsync();
         var repo = new CfbRepository(factory);
 
@@ -331,9 +332,9 @@ public class CfbRepositoryTests
         var factory = new DbContextFactoryStub(nameof(GetSpreadsAndScoresForSeasonAsync_ReturnOnlyThatSeasonsSlates));
         var db = factory.CreateDbContext();
         db.CfbSlates.AddRange(
-            new CfbSlates { Id = 1, Season = 2026, SlateNumber = 1, Label = "W1", SlateType = "RegularSeason" },
-            new CfbSlates { Id = 2, Season = 2026, SlateNumber = 2, Label = "W2", SlateType = "RegularSeason" },
-            new CfbSlates { Id = 3, Season = 2025, SlateNumber = 1, Label = "W1", SlateType = "RegularSeason" });
+            new CfbSlates { Id = 1, Season = 2026, SlateNumber = 1, Label = "W1" },
+            new CfbSlates { Id = 2, Season = 2026, SlateNumber = 2, Label = "W2" },
+            new CfbSlates { Id = 3, Season = 2025, SlateNumber = 1, Label = "W1" });
         db.CfbSpreads.AddRange(
             new CfbSpreads { CfbSlateId = 1, HomeTeam = "OSU", AwayTeam = "MICH", IsLeagueEligible = true },
             new CfbSpreads { CfbSlateId = 1, HomeTeam = "BSU", AwayTeam = "UNM", IsLeagueEligible = false },

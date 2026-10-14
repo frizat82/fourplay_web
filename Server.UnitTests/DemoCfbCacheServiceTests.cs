@@ -96,8 +96,7 @@ public class DemoCfbCacheServiceTests
             InScopeIvLeague = true, SpreadLockDatetime = new DateTime(2025, 9, 25, 0, 0, 0, DateTimeKind.Utc),
         });
         db.CfbSlates.Add(new CfbSlates {
-            Id = 42, Season = 2025, SlateNumber = 4, Label = "Week 4", SlateType = "RegularSeason",
-            StartDate = new DateOnly(2025, 9, 27), EndDate = new DateOnly(2025, 9, 28),
+            Id = 42, Season = 2025, SlateNumber = 4, Label = "Week 4", StartDate = new DateOnly(2025, 9, 27), EndDate = new DateOnly(2025, 9, 28),
             EspnWeekNumber = 4, ScoringFormat = "Spread",
         });
         db.CfbScores.Add(new CfbScores {
@@ -114,8 +113,7 @@ public class DemoCfbCacheServiceTests
             InScopeIvLeague = true, SpreadLockDatetime = new DateTime(2025, 10, 2, 0, 0, 0, DateTimeKind.Utc),
         });
         db.CfbSlates.Add(new CfbSlates {
-            Id = 43, Season = 2025, SlateNumber = 5, Label = "Week 5", SlateType = "RegularSeason",
-            StartDate = new DateOnly(2025, 10, 4), EndDate = new DateOnly(2025, 10, 5),
+            Id = 43, Season = 2025, SlateNumber = 5, Label = "Week 5", StartDate = new DateOnly(2025, 10, 4), EndDate = new DateOnly(2025, 10, 5),
             EspnWeekNumber = 5, ScoringFormat = "Spread",
         });
         await db.SaveChangesAsync();

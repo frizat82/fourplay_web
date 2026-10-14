@@ -12,19 +12,6 @@ namespace FourPlayWebApp.Server.Jobs;
 public class CfbSlateSeederJob(ICfbRepository repo) : IJob {
     private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;
 
-    // IvLeagueWeekNumber is the canonical source for SlateType within FBS Playoff weeks
-    // because both CFP First Round (IV=15) and Quarterfinals (IV=16) share ScoringFormat="NFLDivisional"
-    private static string SlateTypeFromConfig(CfbSeasonWeekConfig cfg) {
-        if (cfg.WeekType == "Conference Championships") return "ConferenceChampionship";
-        return cfg.ScoringFormat switch {
-            "NFLDivisional" when cfg.IvLeagueWeekNumber == 15 => "FirstRound",
-            "NFLDivisional" => "Quarterfinal",
-            "NFLConference" => "Semifinal",
-            "NFLSuperBowl"  => "Championship",
-            _ => "RegularSeason",
-        };
-    }
-
     public async Task Execute(IJobExecutionContext context) {
         Log.Information("CfbSlateSeederJob: checking season {Season}", Season);
 
@@ -59,8 +46,6 @@ public class CfbSlateSeederJob(ICfbRepository repo) : IJob {
         var slates = configs.Select(cfg => new CfbSlates {
             Season       = Season,
             SlateNumber  = cfg.IvLeagueWeekNumber,
-            Label        = CfbWeekLabelHelper.LabelFromConfig(cfg),
-            SlateType    = SlateTypeFromConfig(cfg),
             StartDate    = cfg.WeekStartDate,
             EndDate      = cfg.WeekEndDate,
             EspnWeekNumber  = cfg.EspnWeekNumber,

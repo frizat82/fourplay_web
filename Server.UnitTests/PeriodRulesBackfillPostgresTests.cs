@@ -36,6 +36,24 @@ public class PeriodRulesBackfillPostgresTests(PostgresFixture postgres) {
             (r.IsPostSeason, r.RequiredPicks)));
     }
 
+    // frizat-d47: CFB rows carry their own label, backfilled to exactly what CfbWeekLabelHelper
+    // used to derive — the slates' and the Rules page's names now read it.
+    [Fact]
+    public async Task Migration_BackfillsEveryCfbRowsWeekLabel() {
+        await using var db = postgres.OpenDb();
+        var rows = await db.CfbSeasonWeekConfigs.AsNoTracking().Where(c => c.IvLeagueWeekNumber != 99).ToListAsync();
+
+        Assert.NotEmpty(rows);
+        Assert.All(rows, r => Assert.Equal(r.IvLeagueWeekNumber switch {
+            <= 13 => $"Week {r.IvLeagueWeekNumber}",
+            14 => "Conf. Championships",
+            15 => "CFP First Round",
+            16 => "CFP Quarterfinals",
+            17 => "CFP Semifinals",
+            _ => "CFP Championship",
+        }, r.WeekLabel));
+    }
+
     // A real round asks for 1-4 picks: 0 (what a forgotten value would be) is rejected, not
     // silently turned into a 0-pick cap that rejects every pick and scores every week a win.
     [Theory]

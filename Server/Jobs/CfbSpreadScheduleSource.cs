@@ -13,7 +13,7 @@ public class CfbSpreadScheduleSource(ICfbRepository repo) : ISpreadScheduleSourc
         return configs.Select(cfg => new TimedTriggerCandidate(
             cfg.SpreadLockDatetime,
             $"CFB Spreads {cfg.Season} Wk{cfg.IvLeagueWeekNumber}",
-            $"CFB spreads for {CfbWeekLabelHelper.LabelFromConfig(cfg)} — scheduled lock time",
+            $"CFB spreads for {cfg.WeekLabel} — scheduled lock time",
             weeksWithData.Contains((cfg.Season, cfg.IvLeagueWeekNumber))));
     }
 }

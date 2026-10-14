@@ -39,7 +39,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         var schedule = configs
             .Where(c => c.InScopeIvLeague)
             .OrderBy(c => c.IvLeagueWeekNumber)
-            .Select(c => new SpreadLockWeekDto(CfbWeekLabelHelper.LabelFromConfig(c), c.SpreadLockDatetime, c.IsPostSeason, c.RequiredPicks));
+            .Select(c => new SpreadLockWeekDto(c.WeekLabel, c.SpreadLockDatetime, c.IsPostSeason, c.RequiredPicks));
         return Ok(schedule);
     }
 

@@ -96,6 +96,10 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<DateOnly>("WeekEndDate")
                         .HasColumnType("date");
 
+                    b.Property<string>("WeekLabel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateOnly>("WeekStartDate")
                         .HasColumnType("date");
 
@@ -140,10 +144,6 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<DateTimeOffset?>("FirstGameUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Label")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<string>("ScoringFormat")
                         .HasColumnType("text");
 
@@ -152,10 +152,6 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.Property<int>("SlateNumber")
                         .HasColumnType("integer");
-
-                    b.Property<string>("SlateType")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");

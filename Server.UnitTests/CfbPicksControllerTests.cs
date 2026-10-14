@@ -49,8 +49,7 @@ public class CfbPicksControllerTests
 
     private static CfbSlates MakeSlate(int id = 1, int slateNumber = 1, int? espnWeekNumber = 1, int requiredPicks = 4) => new()
     {
-        Id = id, Season = 2025, SlateNumber = slateNumber, Label = "Week 1", SlateType = "RegularSeason",
-        EspnWeekNumber = espnWeekNumber, RequiredPicks = requiredPicks,
+        Id = id, Season = 2025, SlateNumber = slateNumber, Label = "Week 1", EspnWeekNumber = espnWeekNumber, RequiredPicks = requiredPicks,
     };
 
     /// <summary>
@@ -60,7 +59,7 @@ public class CfbPicksControllerTests
     /// </summary>
     private static ICfbCurrentSlateService BuildCurrentSlateService(int slateId = 1, int season = 2025) {
         var svc = Substitute.For<ICfbCurrentSlateService>();
-        svc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(slateId, season, 1, "Week 1", "RegularSeason",
+        svc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(slateId, season, 1, "Week 1",
             DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(6)), null, DateTime.UtcNow.AddDays(-1), false, 4));
         return svc;
     }
