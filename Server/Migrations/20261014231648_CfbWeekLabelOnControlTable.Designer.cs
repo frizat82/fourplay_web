@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FourPlayWebApp.Server.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261014185156_CfbWeekLabelOnControlTable")]
+    [Migration("20261014231648_CfbWeekLabelOnControlTable")]
     partial class CfbWeekLabelOnControlTable
     {
         /// <inheritdoc />
@@ -122,6 +122,8 @@ namespace FourPlayWebApp.Server.Migrations
                     b.ToTable("CfbSeasonWeekConfigs", t =>
                         {
                             t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_RequiredPicks", "\"RequiredPicks\" BETWEEN 1 AND 4 OR (\"IvLeagueWeekNumber\" = 99 AND \"RequiredPicks\" = 0)");
+
+                            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_WeekLabel", "\"WeekLabel\" <> ''");
                         });
                 });
 

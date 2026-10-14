@@ -80,7 +80,9 @@ public class ReplayCacheService : IEspnCacheService, ICfbCacheService {
     // weeks". It answers only for the control table's current week (the live week replay stands
     // in for); never falls through to a real ESPN call (that would defeat the point of replay).
     public async Task<EspnScores?> GetWeekScoresAsync(int season, int nflWeek) {
-        var current = await _currentWeek.GetCurrentWeekAsync();
+        NflWeekInfo current;
+        try { current = await _currentWeek.GetCurrentWeekAsync(); }
+        catch (InvalidOperationException) { return null; } // no current week resolves: nothing to replay
         return current.Season == season && current.WeekId == nflWeek ? _snapshots[_index] : null;
     }
 

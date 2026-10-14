@@ -119,6 +119,8 @@ namespace FourPlayWebApp.Server.Migrations
                     b.ToTable("CfbSeasonWeekConfigs", t =>
                         {
                             t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_RequiredPicks", "\"RequiredPicks\" BETWEEN 1 AND 4 OR (\"IvLeagueWeekNumber\" = 99 AND \"RequiredPicks\" = 0)");
+
+                            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_WeekLabel", "\"WeekLabel\" <> ''");
                         });
                 });
 

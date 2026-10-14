@@ -1,7 +1,7 @@
-import { getScores, getWeekScores, getLiveGames } from '../api/espn';
+import { getWeekScores, getLiveGames } from '../api/espn';
 import { getUserPicks, spreadBatch, addPicks, removeMyPick, getLeaguePicks, getLeaguePickCounts, getNflCurrentWeek, getNflSeasonWeeks } from '../api/league';
 import { getAllJerseys } from '../api/jersey';
-import type { Competition, EspnScores, Event } from '../types/espn';
+import type { Competition, Event } from '../types/espn';
 import type { LiveGame } from '../types/liveGame';
 import type { NflPickDto, SpreadResponse } from '../types/picks';
 import type { NflSeasonWeekDto } from '../types/league';
@@ -140,24 +140,17 @@ function buildLiveGameMap(events: Event[], liveGames: LiveGame[]): Map<string, L
   return map;
 }
 
-// A past week's scoreboard. Demo mode serves a frozen in-progress fixture as its "current"
-// scoreboard, used instead when the week asked for IS the control table's current week (never by
-// reading the fixture's own ESPN week number — frizat-d47) — so both are fetched together, and
-// the current one exactly once: it used to go first, with up to 5 retries 500ms apart whenever it
-// had no events (every off-season view of a past week waited 2.5s+ before starting its own fetch).
-async function loadPastWeekScores(season: number, nflWeek: number, isCurrentWeek: Promise<boolean>): Promise<EspnScores | null> {
-  const [frozenData, weekData, isCurrent] = await Promise.all([orFallback(getScores, null), getWeekScores(season, nflWeek), isCurrentWeek]);
-  return isCurrent && frozenData?.events?.length ? frozenData : weekData;
-}
-
 // A past week's scoreboard with the requests that ride alongside it (picks, odds, the season's
 // control-table rows): all go out together, but an empty week still resolves to null however
 // those extras fare. The week's pick count and name are its row's (frizat-d47) — only looked up
 // once the week has games, since a week the server served games for always has a row: a missing
 // one is a real data problem, so it fails loudly rather than guessing.
-async function loadPastWeek<P>(season: number, week: number, isCurrentWeek: Promise<boolean>, picks: Promise<P>,
+// Only that week's own scores (by our WeekId) — never ESPN's live "current" scoreboard, whose own
+// week numbering could disagree near a boundary. Demo and replay serve their frozen game through
+// this same per-week endpoint for the current week (DemoEspnCacheService/ReplayCacheService).
+async function loadPastWeek<P>(season: number, week: number, picks: Promise<P>,
   odds: Promise<WeekOdds>, seasonWeeks: Promise<NflSeasonWeekDto[]>) {
-  const data = await loadPastWeekScores(season, week, isCurrentWeek);
+  const data = await getWeekScores(season, week);
   if (!data?.events?.length) { void Promise.allSettled([picks, odds, seasonWeeks]); return null; }
   const [pickDtos, weekOdds, rows] = await Promise.all([picks, odds, seasonWeeks]);
   const row = rows.find(w => w.weekId === week);
@@ -204,9 +197,6 @@ export function createNflAdapter(): SportAdapter {
 
   // A season's control-table rows (frizat-d47), fetched once per season per adapter.
   const getSeasonWeeks = memoizeByKey(getNflSeasonWeeks);
-  // Whether (season, week) is the control table's current week — a failed lookup just means "no".
-  const isTheCurrentWeek = (season: number, week: number) =>
-    getCurrentWeek().then(c => c.season === season && c.weekId === week, () => false);
 
   return {
     sport: 'nfl',
@@ -217,7 +207,8 @@ export function createNflAdapter(): SportAdapter {
     // here would bypass that proxy and drop the SameSite=Lax auth cookie on non-HTTPS origins.
     sseUrl: '/api/espn/live-stream',
     weekSelectorConfig: {
-      minSeason: 2020,
+      // The first season with control-table rows (frizat-d47) — earlier seasons have no weeks.
+      minSeason: 2025,
     },
 
     async loadSeasonWeeks(season) {
@@ -250,7 +241,7 @@ export function createNflAdapter(): SportAdapter {
     },
 
     async loadHistoricalGames(leagueId, userId, { season, week }) {
-      const past = await loadPastWeek(season, week, isTheCurrentWeek(season, week),
+      const past = await loadPastWeek(season, week,
         getUserPicks(userId, leagueId, season, week), fetchWeekOdds(leagueId, season, week), getSeasonWeeks(season));
       if (!past) return null;
       const { games, picks } = await toGamesAndPicks(past.events, leagueId, season, week, past.odds, past.pickDtos);
@@ -291,7 +282,7 @@ export function createNflAdapter(): SportAdapter {
     },
 
     async loadHistoricalScores(leagueId, userId, { season, week }) {
-      const past = await loadPastWeek(season, week, isTheCurrentWeek(season, week),
+      const past = await loadPastWeek(season, week,
         getLeaguePicks(leagueId, season, week), fetchWeekOdds(leagueId, season, week), getSeasonWeeks(season));
       if (!past) return null;
       const { games, picks } = await toGamesAndPicks(past.events, leagueId, season, week, past.odds, past.pickDtos);

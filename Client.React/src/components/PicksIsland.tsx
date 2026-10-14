@@ -101,7 +101,7 @@ function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePic
     return (
       <Box>
         <Typography variant="body1" fontWeight={500}>{leagueName}</Typography>
-        <Typography variant="body2" color="text.secondary">{weekLabel} — spreads not released yet</Typography>
+        <Typography variant="body2" color="text.secondary">{weekLabel ? `${weekLabel} — ` : ''}spreads not released yet</Typography>
       </Box>
     );
   }

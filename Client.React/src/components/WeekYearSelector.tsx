@@ -54,6 +54,7 @@ export default function WeekYearSelector({
   const labels = useMemo(() => new Map((weeks ?? []).map((w) => [w.week, w.label])), [weeks]);
 
   const currentOptions = isPostSeason ? postSeasonOptions : regularOptions;
+  const hasOptions = currentOptions.length > 0;
   const fallbackWeek = currentOptions[0] ?? 1;
   const clampedWeek = currentOptions.includes(week) ? week : fallbackWeek;
 
@@ -154,7 +155,7 @@ export default function WeekYearSelector({
         </Select>
 
         <Select
-          value={weeks ? clampedWeek : week}
+          value={hasOptions ? clampedWeek : week}
           onChange={(e) => onWeekChange(Number(e.target.value), { isPostSeason: isPostSeason })}
           size="small"
           // frizat: minWidth let MUI auto-size the box to whichever label happened to be
@@ -165,13 +166,14 @@ export default function WeekYearSelector({
           // group never moves; full-width on xs since mobile always stacks one-per-row now.
           sx={{ width: { xs: '100%', sm: 260 } }}
         >
-          {weeks
+          {hasOptions
             ? currentOptions.map((w) => (
                 <MenuItem key={w} value={w}>
                   {labels.get(w)}
                 </MenuItem>
               ))
-            // Rows still loading: show just the current week, by the name the page already has.
+            // Rows still loading (or none for this season): show just the current week, by the
+            // name the page already has.
             : <MenuItem value={week}>{weekLabel ?? ''}</MenuItem>}
         </Select>
 

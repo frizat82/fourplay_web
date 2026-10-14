@@ -449,3 +449,16 @@ describe('cfbAdapter requiredPicks comes from the slate row', () => {
     expect((await adapter.getMissingPicks(1)).requiredPicks).toBe(2);
   });
 });
+
+// A transient /api/cfb/slates failure must not be memoized as "this season has no slates" —
+// that would make every later pick submission silently find no slate and do nothing.
+describe('cfbAdapter season slates', () => {
+  it('retries a failed slates fetch instead of caching an empty season', async () => {
+    vi.clearAllMocks();
+    vi.mocked(getCfbSlates).mockRejectedValueOnce(new Error('503')).mockResolvedValue([slate]);
+    const adapter = createCfbAdapter();
+
+    await expect(adapter.loadSeasonWeeks(2026)).rejects.toThrow('503');
+    expect(await adapter.loadSeasonWeeks(2026)).toEqual([{ week: 8, label: 'Week 8', isPostSeason: false }]);
+  });
+});

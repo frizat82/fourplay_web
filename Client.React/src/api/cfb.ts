@@ -14,9 +14,11 @@ export async function getCfbSpreadLockSchedule(): Promise<SpreadLockWeekDto[]> {
   return res.json();
 }
 
+// Throws on failure rather than returning [] — the CFB adapter memoizes a season's slates, and an
+// empty list cached from a transient failure would make every later pick submission find no slate.
 export async function getCfbSlates(season: number): Promise<CfbSlateDto[]> {
   const res = await fetch(`${BASE}/slates/${season}`);
-  if (!res.ok) return [];
+  if (!res.ok) throw new Error(`GET /api/cfb/slates/${season} failed: ${res.status}`);
   return res.json();
 }
 

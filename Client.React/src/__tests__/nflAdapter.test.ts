@@ -120,20 +120,18 @@ describe('nflAdapter', () => {
     expect(getNflSeasonWeeks).toHaveBeenCalledWith(2026);
   });
 
-  // frizat-d47: a past week uses the live scoreboard (demo: the frozen fixture) only when it IS
-  // the control table's current week — never by reading the scoreboard's own ESPN week number.
-  it('a past-week load uses the live scoreboard only for the control table\'s current week', async () => {
-    const live = makeScores('SF', 'DAL');
-    live.week = { number: 5 }; // ESPN's own numbering — must be irrelevant
-    vi.mocked(getScores).mockResolvedValue(live);
+  // frizat-d47: a past week is always its own week's scores (our WeekId) — never ESPN's live
+  // "current" scoreboard, whose own week numbering could disagree near a week boundary. Demo and
+  // replay serve their frozen game through that same per-week endpoint for the current week.
+  it('a past-week load reads only that week\'s scores, never the live scoreboard', async () => {
     vi.mocked(getWeekScores).mockResolvedValue(makeScores('KC', 'BUF'));
     vi.mocked(spreadBatch).mockResolvedValue({ responses: {} });
 
-    const current = await adapter.loadHistoricalScores(1, 'user1', { season: 2023, week: 8, isPostSeason: false });
-    const other = await adapter.loadHistoricalScores(1, 'user1', { season: 2023, week: 7, isPostSeason: false });
+    const result = await adapter.loadHistoricalScores(1, 'user1', { season: 2023, week: 8, isPostSeason: false });
 
-    expect(current?.games[0].homeTeam).toBe('SF'); // week 8 is DEFAULT_CURRENT_WEEK
-    expect(other?.games[0].homeTeam).toBe('KC');
+    expect(result?.games[0].homeTeam).toBe('KC');
+    expect(getWeekScores).toHaveBeenCalledWith(2023, 8);
+    expect(getScores).not.toHaveBeenCalled();
   });
 
   describe('loadCurrentGames', () => {

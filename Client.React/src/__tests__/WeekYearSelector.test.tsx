@@ -186,6 +186,11 @@ describe('WeekYearSelector', () => {
     expect(screen.getAllByRole('button', { name: /next/i })[1]).toBeEnabled(); // a past season isn't capped
   });
 
+  it('falls back to the current week when the season has no rows', () => {
+    setup({ weeks: [], week: 5, weekLabel: 'Week 5' });
+    expect(screen.getByText('Week 5')).toBeInTheDocument();
+  });
+
   it('shows the given week label while the rows are still loading', () => {
     setup({ weeks: undefined, week: 19, isPostSeason: true, weekLabel: 'Wild Card Weekend' });
     expect(screen.getByText('Wild Card Weekend')).toBeInTheDocument();

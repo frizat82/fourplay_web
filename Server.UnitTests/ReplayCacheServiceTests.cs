@@ -43,6 +43,15 @@ public class ReplayCacheServiceTests {
     }
 
     [Fact]
+    public async Task GetWeekScoresAsync_WhenNoCurrentWeekResolves_ReturnsNull_NotAnError() {
+        var currentWeek = Substitute.For<INflCurrentWeekService>();
+        currentWeek.GetCurrentWeekAsync().Returns<NflWeekInfo>(_ => throw new InvalidOperationException("no week"));
+        var svc = new ReplayCacheService([Snapshot("2025")], currentWeek);
+
+        Assert.Null(await svc.GetWeekScoresAsync(2025, 22));
+    }
+
+    [Fact]
     public async Task GetScoresAsync_InitiallyReturnsFirstSnapshot() {
         var svc = BuildService(Snapshot("1"), Snapshot("2"), Snapshot("3"));
 
