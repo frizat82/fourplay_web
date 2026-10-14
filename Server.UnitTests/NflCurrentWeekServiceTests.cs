@@ -14,9 +14,12 @@ namespace FourPlayWebApp.Server.UnitTests;
 // fallback behavior as a regression guard for that refactor.
 public class NflCurrentWeekServiceTests
 {
-    private static NflSeasonWeekConfig Config(int season, int weekId, DateTime start, DateTime end) => new() {
+    private static NflSeasonWeekConfig Config(int season, int weekId, DateTime start, DateTime end,
+        bool isPostSeason = false, int requiredPicks = 4) => new() {
         Season = season,
         WeekId = weekId,
+        IsPostSeason = isPostSeason,
+        RequiredPicks = requiredPicks,
         WeekLabel = $"Week {weekId}",
         WeekType = "Regular",
         ScoringFormat = "Standard",
@@ -107,16 +110,18 @@ public class NflCurrentWeekServiceTests
     // former WeekId->EspnWeek mapping (and its unconditional, non-season-gated Pro-Bowl-skip
     // special case, flagged separately under frizat-4k9) is gone, not relocated.
     [Fact]
-    public async Task GetCurrentWeekAsync_ResolvesPostseasonRounds_ByWeekIdOnly() {
+    public async Task GetCurrentWeekAsync_ReturnsTheRowsPostSeasonFlagAndPickCount() {
+        // frizat-d47: straight from the control-table row, never derived from the WeekId.
         var now = DateTime.UtcNow;
         var svc = BuildService([
-            Config(2025, 22, now.AddDays(-1), now.AddDays(1)),
+            Config(2025, 22, now.AddDays(-1), now.AddDays(1), isPostSeason: true, requiredPicks: 1),
         ]);
 
         var result = await svc.GetCurrentWeekAsync();
 
         Assert.Equal(22, result.WeekId);
         Assert.True(result.IsPostSeason);
+        Assert.Equal(1, result.RequiredPicks);
     }
 
     // frizat-tf2: GetCurrentWeekAsync must resolve "current" against an injected TimeProvider

@@ -40,15 +40,15 @@ public class LeagueJuiceScheduleSourceTests
         LeagueJuiceMappings = mappings,
     };
 
-    private static NflSeasonWeekConfig MakeNflWeek(int season, int weekId, DateTime firstGameUtc) => new() {
+    private static NflSeasonWeekConfig MakeNflWeek(int season, int weekId, DateTime firstGameUtc, int requiredPicks = 4) => new() {
         Season = season, WeekId = weekId, WeekLabel = $"Week {weekId}", WeekType = "Regular Season", ScoringFormat = "Standard",
-        FirstGameOfWeekStartDatetime = firstGameUtc,
+        FirstGameOfWeekStartDatetime = firstGameUtc, RequiredPicks = requiredPicks,
     };
     private static NflSeasonWeekConfig MakeNflWeek1(int season, DateTime firstGameUtc) => MakeNflWeek(season, 1, firstGameUtc);
 
-    private static CfbSeasonWeekConfig MakeCfbSlate(int season, int slateNumber, DateOnly startDate) => new() {
+    private static CfbSeasonWeekConfig MakeCfbSlate(int season, int slateNumber, DateOnly startDate, int requiredPicks = 4) => new() {
         Season = season, EspnWeekNumber = slateNumber, IvLeagueWeekNumber = slateNumber, WeekStartDate = startDate,
-        WeekEndDate = startDate.AddDays(6), InScopeIvLeague = true,
+        WeekEndDate = startDate.AddDays(6), InScopeIvLeague = true, RequiredPicks = requiredPicks,
     };
     private static CfbSeasonWeekConfig MakeCfbSlate1(int season, DateOnly startDate) => MakeCfbSlate(season, 1, startDate);
 
@@ -278,8 +278,9 @@ public class LeagueJuiceScheduleSourceTests
     // ── GetWeekLockTimeUtc / GetSeasonStartLockTimeUtc / GetSeasonEndLockTimeUtc ─────
     // frizat: extracted for LeagueController.UpdateLeagueJuice to reuse the identical
     // "when does this week/slate start" boundary the scheduler above already computes — tease
-    // points lock at season start (week/slate 1), WeeklyCost locks at season end (NFL WeekId 22
-    // Super Bowl / CFB slate 18 Championship). Pure, no I/O.
+    // points lock at season start (week/slate 1), WeeklyCost locks at season end — the final
+    // round, the control-table row asking for 1 pick (NFL Super Bowl / CFP Championship,
+    // frizat-d47). Pure, no I/O.
 
     [Fact]
     public void GetSeasonStartLockTimeUtc_Nfl_ResolvesWeek1LockTime() {
@@ -291,10 +292,10 @@ public class LeagueJuiceScheduleSourceTests
     }
 
     [Fact]
-    public void GetSeasonEndLockTimeUtc_Nfl_ResolvesWeek22_NotWeek1() {
+    public void GetSeasonEndLockTimeUtc_Nfl_ResolvesTheFinalRound_NotWeek1() {
         var nflConfigs = new[] {
             MakeNflWeek(2025, 1, new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc)),
-            MakeNflWeek(2025, 22, new DateTime(2026, 2, 8, 23, 30, 0, DateTimeKind.Utc)),
+            MakeNflWeek(2025, 22, new DateTime(2026, 2, 8, 23, 30, 0, DateTimeKind.Utc), requiredPicks: 1),
         };
 
         var lockTime = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(LeagueType.Nfl, 2025, nflConfigs, []);
@@ -330,15 +331,41 @@ public class LeagueJuiceScheduleSourceTests
     }
 
     [Fact]
-    public void GetSeasonEndLockTimeUtc_Cfb_ResolvesSlate18_NotSlate1() {
+    public void GetSeasonEndLockTimeUtc_Cfb_ResolvesTheFinalRound_NotSlate1() {
         var cfbConfigs = new[] {
             MakeCfbSlate(2025, 1, new DateOnly(2025, 8, 23)),
-            MakeCfbSlate(2025, 18, new DateOnly(2026, 1, 12)),
+            MakeCfbSlate(2025, 18, new DateOnly(2026, 1, 12), requiredPicks: 1),
         };
 
         var lockTime = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(LeagueType.Cfb, 2025, [], cfbConfigs);
 
         Assert.Equal(new DateTime(2026, 1, 12, 20, 0, 0, DateTimeKind.Utc), lockTime); // 2pm CST = 20:00 UTC
+    }
+
+    // frizat-d47: the final is whichever row the control table marks as the 1-pick round — not a
+    // hardcoded WeekId 22, and not simply the highest row seeded so far.
+    [Fact]
+    public void GetSeasonEndLockTimeUtc_Nfl_FollowsTheOnePickRow_NotAHardcodedWeek22() {
+        var nflConfigs = new[] {
+            MakeNflWeek(2025, 21, new DateTime(2026, 1, 25, 20, 0, 0, DateTimeKind.Utc), requiredPicks: 1),
+            MakeNflWeek(2025, 22, new DateTime(2026, 2, 8, 23, 30, 0, DateTimeKind.Utc), requiredPicks: 4),
+        };
+
+        var lockTime = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(LeagueType.Nfl, 2025, nflConfigs, []);
+
+        Assert.Equal(new DateTime(2026, 1, 25, 20, 0, 0, DateTimeKind.Utc), lockTime); // 2pm CST = 20:00 UTC
+    }
+
+    [Fact]
+    public void GetSeasonEndLockTimeUtc_Nfl_WithTwoOnePickRows_LocksAtTheLaterOne() {
+        var nflConfigs = new[] {
+            MakeNflWeek(2025, 22, new DateTime(2026, 2, 8, 23, 30, 0, DateTimeKind.Utc), requiredPicks: 1),
+            MakeNflWeek(2025, 21, new DateTime(2026, 1, 25, 20, 0, 0, DateTimeKind.Utc), requiredPicks: 1),
+        };
+
+        var lockTime = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(LeagueType.Nfl, 2025, nflConfigs, []);
+
+        Assert.Equal(new DateTime(2026, 2, 8, 20, 0, 0, DateTimeKind.Utc), lockTime); // week 22's, not week 21's
     }
 
     [Fact]

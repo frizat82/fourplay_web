@@ -131,9 +131,7 @@ public class LivePickTransitionService(
         {
             var juiceMapping = await leagueRepository.GetLeagueJuiceMappingAsync(byLeague.Key, period.Season);
             if (juiceMapping is null) continue;
-            // JuiceTiers/GetCfbRequiredPicks need the CFB slate NUMBER (1-18), never its DB row id
-            // — those are two distinct identifiers for the same slate (see ResolveCfbPeriodAsync).
-            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(sport, period.JuiceTierNumber, juiceMapping));
+            var calculator = new SpreadCalculator(spreads, JuiceTiers.For(period.RequiredPicks, juiceMapping));
             var members = await leagueRepository.GetLeagueUserMappingsAsync(byLeague.Key);
             var betResults = new Dictionary<(string Team, PickType PickType), BetResult>();
             var mineEvents = new List<(string UserId, (string Team, PickType PickType) Bet, bool Covering, bool AtFinal)>();
@@ -281,22 +279,20 @@ public class LivePickTransitionService(
     /// <param name="Season">Season year.</param>
     /// <param name="Id">The value FK-scoped repository calls key on — NflSeasonWeekConfig.WeekId
     /// for NFL, CfbSlates' own DB row id for CFB.</param>
-    /// <param name="JuiceTierNumber">The value JuiceTiers.For/GetCfbRequiredPicks expect — for NFL
-    /// this is the same WeekId as Id (NFL's week number already serves both roles); for CFB it's
-    /// the slate's 1-18 SlateNumber, which is NOT the same as its DB row id (Id grows across every
-    /// season and never resets, so reusing it here would silently apply the wrong tease tier).</param>
-    private readonly record struct ResolvedPeriod(int Season, int Id, int JuiceTierNumber);
+    /// <param name="RequiredPicks">The period's control-table pick count (frizat-d47), which picks
+    /// its tease tier (JuiceTiers.For).</param>
+    private readonly record struct ResolvedPeriod(int Season, int Id, int RequiredPicks);
 
     private async Task<ResolvedPeriod?> ResolveNflPeriodAsync()
     {
         var week = await nflCurrentWeek.GetCurrentWeekAsync();
-        return new ResolvedPeriod(week.Season, week.WeekId, week.WeekId);
+        return new ResolvedPeriod(week.Season, week.WeekId, week.RequiredPicks);
     }
 
     private async Task<ResolvedPeriod?> ResolveCfbPeriodAsync()
     {
         var slate = await cfbCurrentSlate.GetCurrentSlateAsync();
-        return slate is null ? null : new ResolvedPeriod(slate.Season, slate.Id, slate.SlateNumber);
+        return slate is null ? null : new ResolvedPeriod(slate.Season, slate.Id, slate.RequiredPicks);
     }
 
     private static List<Competition> DiffCompetitions(EspnScores? previous, EspnScores current)

@@ -180,6 +180,20 @@ export function createSpreadResponse(team: string, spread: number, over?: number
   return { team, spread, over: over ?? null, under: under ?? null };
 }
 
+// An NFL week's control-table RequiredPicks as the API serves it (frizat-d47), per /pick-rules
+// for our WeekId numbering: 1-18 = 4, 19-20 = 3, 21 = 2, 22 = 1.
+function nflRequiredPicks(weekId: number) {
+  return weekId <= 18 ? 4 : weekId <= 20 ? 3 : weekId === 21 ? 2 : 1;
+}
+
+// A season's NFL control-table rows as GET /api/league/season-weeks/{season} serves them.
+export function createNflSeasonWeeks() {
+  return Array.from({ length: 22 }, (_, i) => {
+    const weekId = i + 1;
+    return { weekId, weekLabel: `Week ${weekId}`, isPostSeason: weekId > 18, requiredPicks: nflRequiredPicks(weekId) };
+  });
+}
+
 /** Control table's resolved "current week" answer (getNflCurrentWeek) — matches
  * createScores'/makeScores' fixture convention (season 2024 unless overridden). */
 export function createCurrentWeek(week: number, postSeason = false, season = 2024) {
@@ -187,6 +201,7 @@ export function createCurrentWeek(week: number, postSeason = false, season = 202
     weekId: week, season, isPostSeason: postSeason,
     weekLabel: postSeason ? `Postseason Week ${week}` : `Week ${week}`,
     scoringFormat: 'Standard', spreadLockDatetime: new Date().toISOString(),
+    requiredPicks: nflRequiredPicks(week),
   };
 }
 

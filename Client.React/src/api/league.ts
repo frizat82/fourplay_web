@@ -6,7 +6,7 @@ import type {
   BatchSpreadResponse,
   NflPickDto,
 } from '../types/picks';
-import type { LeagueUserMappingDto, MemberPickCountDto, NflWeekDto, NflCurrentWeekDto, SpreadLockWeekDto } from '../types/league';
+import type { LeagueUserMappingDto, MemberPickCountDto, NflWeekDto, NflCurrentWeekDto, NflSeasonWeekDto, SpreadLockWeekDto } from '../types/league';
 import type {
   LeagueInfoDto,
   LeagueJuiceMappingDto,
@@ -69,6 +69,11 @@ export async function getNflWeeks(season: number) {
 export async function getNflCurrentWeek() {
   const { data } = await http.get<NflCurrentWeekDto>('/api/league/current-week');
   return data;
+}
+
+export async function getNflSeasonWeeks(season: number) {
+  const { data } = await http.get<NflSeasonWeekDto[]>(`/api/league/season-weeks/${season}`);
+  return data ?? [];
 }
 
 export async function getNflSpreadLockSchedule() {

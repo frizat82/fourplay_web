@@ -28,7 +28,7 @@ public class SpreadCalculatorProviderConcurrencyTests
         };
         var juice = new LeagueJuiceMapping { WeeklyCost = 5, Juice = 5 };
 
-        var repo = Substitute.For<ILeagueRepository>();
+        var repo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2024);
         repo.GetNflSpreadsAsync(2024, 1).Returns(Task.FromResult<List<NflSpreads>?>(week1Spreads));
         repo.GetNflSpreadsAsync(2024, 2).Returns(Task.FromResult<List<NflSpreads>?>(week2Spreads));
         repo.GetLeagueJuiceMappingAsync(Arg.Any<int>(), Arg.Any<int>()).Returns(Task.FromResult<LeagueJuiceMapping?>(juice));

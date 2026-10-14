@@ -39,6 +39,7 @@ vi.mock('../api/espn', () => ({
 vi.mock('../api/league', () => ({
   getLeaguePicks: vi.fn(), spreadBatch: vi.fn(),
   addPicks: vi.fn(), getUserPicks: vi.fn(), getNflCurrentWeek: vi.fn(),
+  getNflSeasonWeeks: vi.fn(async () => (await import('../test/fixtures')).createNflSeasonWeeks()),
   getLeagueJuice: vi.fn(),
 }));
 vi.mock('../api/cfb', () => ({
@@ -689,7 +690,7 @@ describe('ScoresPage', () => {
     // below actually needs.
     unmount();
 
-    const cfbSlate = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18' };
+    const cfbSlate = { id: 1, season: 2025, slateNumber: 8, label: 'Week 8', slateType: 'RegularSeason', startDate: '2025-10-11', endDate: '2025-10-18', isPostSeason: false, requiredPicks: 4 };
     const cfbSpread = { id: 1, cfbSlateId: 1, homeTeam: 'MICH', awayTeam: 'PSU', homeTeamSpread: -3.5, awayTeamSpread: 3.5, over: 44.5, under: 44.5, gameTime: '2025-10-11T20:00:00Z', dateCreated: '2025-10-09T14:00:00Z', homeTeamRank: null, awayTeamRank: null };
     mockedGetCfbCurrentSlate.mockResolvedValue(cfbSlate);
     mockedGetCfbSlates.mockResolvedValue([cfbSlate]);

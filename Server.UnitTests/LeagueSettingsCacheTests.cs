@@ -19,7 +19,7 @@ public class LeagueSettingsCacheTests {
 
     [Fact]
     public async Task Provider_UsesEachSeasonsOwnJuice_WhenTheCacheIsShared() {
-        var repo = Substitute.For<ILeagueRepository>();
+        var repo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2024, 2025);
         repo.GetNflSpreadsAsync(2024, 1).Returns(Week1(2024));
         repo.GetNflSpreadsAsync(2025, 1).Returns(Week1(2025));
         repo.GetLeagueJuiceMappingAsync(1, 2024).Returns(new LeagueJuiceMapping { LeagueId = 1, Season = 2024, Juice = 13 });
@@ -65,7 +65,7 @@ public class LeagueSettingsCacheTests {
     // eviction (it would otherwise be served for the full hour).
     [Fact]
     public async Task Provider_ReadInFlightDuringInvalidation_DoesNotCacheTheStaleJuice() {
-        var repo = Substitute.For<ILeagueRepository>();
+        var repo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2025);
         repo.GetNflSpreadsAsync(2025, 1).Returns(Week1(2025));
         var inFlight = new TaskCompletionSource<LeagueJuiceMapping?>();
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(inFlight.Task, Task.FromResult<LeagueJuiceMapping?>(new LeagueJuiceMapping { Juice = 9 }));

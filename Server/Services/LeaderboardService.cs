@@ -1,7 +1,6 @@
 using FourPlayWebApp.Server.Models.Data;
 using Serilog;
 using FourPlayWebApp.Server.Services.Interfaces;
-using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -42,11 +41,15 @@ public class LeaderboardService(
             var maxWeek = leagueScores.Max(x => x.NflWeek);
             var spreadsByWeek = leagueSpreads.ToLookup(s => s.NflWeek);
             var scoresByWeek = leagueScores.ToLookup(s => s.NflWeek);
+            // A week with scores but no control-table row throws (KeyNotFound) and is logged below
+            // — never scored against a guessed pick count.
+            var requiredPicksByWeek = (await leagueRepository.GetNflSeasonWeekConfigsAsync((int)seasonYear))
+                .ToDictionary(c => c.WeekId, c => c.RequiredPicks);
             var weeks = Enumerable.Range(1, maxWeek)
-                .Select(week => new LeaderboardPeriod(week, spreadsByWeek[week].ToList<IOddsRow>(), scoresByWeek[week].ToList<IScoreRow>()))
+                .Select(week => new LeaderboardPeriod(week, requiredPicksByWeek[week], spreadsByWeek[week].ToList<IOddsRow>(), scoresByWeek[week].ToList<IScoreRow>()))
                 .ToList();
 
-            leaderboard = LeaderboardEngine.Build(LeagueType.Nfl, leagueUsers, weeks,
+            leaderboard = LeaderboardEngine.Build(leagueUsers, weeks,
                 (userId, week) => picksByUserWeek[(userId, week)], seasonJuice, timeProvider.GetUtcNow(),
                 (pick, week, ex) => logger.LogError(ex, "Error scoring pick {@Pick} week {Week}", pick, week));
         } catch (Exception ex) {

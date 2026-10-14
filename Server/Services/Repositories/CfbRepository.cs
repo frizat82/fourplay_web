@@ -44,12 +44,36 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
 
     // Per-season and by-id reads filter the cached whole table (ordered Season, SlateNumber).
     public async Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season) =>
-        ScheduleCache.Copies((await SlateRowsAsync()).Where(s => s.Season == season));
+        await WithRulesAsync(ScheduleCache.Copies((await SlateRowsAsync()).Where(s => s.Season == season)), requireRow: true);
 
-    public async Task<IEnumerable<CfbSlates>> GetAllSlatesAsync() => ScheduleCache.Copies(await SlateRowsAsync());
+    // Spans every season, so one old season's orphan slate must not break reads for the current
+    // one: fills the rules wherever a row exists. CfbCurrentSlateService resolves the active slate
+    // through its config row anyway.
+    public async Task<IEnumerable<CfbSlates>> GetAllSlatesAsync() =>
+        await WithRulesAsync(ScheduleCache.Copies(await SlateRowsAsync()), requireRow: false);
 
     public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) =>
-        ScheduleCache.Copy((await SlateRowsAsync()).FirstOrDefault(s => s.Id == slateId));
+        ScheduleCache.Copy((await SlateRowsAsync()).FirstOrDefault(s => s.Id == slateId)) is { } slate
+            ? (await WithRulesAsync([slate], requireRow: true))[0]
+            : null;
+
+    // frizat-d47: a slate's RequiredPicks/IsPostSeason are read live from its control-table row
+    // (Season + IvLeagueWeekNumber == SlateNumber), both tables cached — so the rules have one
+    // home and an edited row reaches every reader, never a copy frozen when the season was seeded.
+    // Slates are seeded from those rows, so where a slate is actually used (requireRow) one
+    // without a row is a data problem: fail loudly, as NFL does, rather than hand out a 0-pick cap.
+    private async Task<List<CfbSlates>> WithRulesAsync(List<CfbSlates> slates, bool requireRow) {
+        var rules = (await WeekConfigRowsAsync())
+            .Where(c => c.IvLeagueWeekNumber != 99)
+            .ToDictionary(c => (c.Season, c.IvLeagueWeekNumber));
+        foreach (var slate in slates) {
+            if (rules.GetValueOrDefault((slate.Season, slate.SlateNumber)) is { } row)
+                (slate.IsPostSeason, slate.RequiredPicks) = (row.IsPostSeason, row.RequiredPicks);
+            else if (requireRow)
+                throw new InvalidOperationException($"No CfbSeasonWeekConfigs row for season {slate.Season} slate {slate.SlateNumber}.");
+        }
+        return slates;
+    }
 
     private Task<IReadOnlyList<CfbSlates>> SlateRowsAsync() => ScheduleCache.CfbSlateRowsAsync(cache, dbFactory);
 

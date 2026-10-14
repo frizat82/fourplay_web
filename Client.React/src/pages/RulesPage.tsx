@@ -10,7 +10,6 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { getNflRequiredPicks, getCfbRequiredPicks } from '../utils/gameHelpers';
 import { useSportContext } from '../services/sport';
 import { getNflSpreadLockSchedule } from '../api/league';
 import { getCfbSpreadLockSchedule } from '../api/cfb';
@@ -176,10 +175,8 @@ function MatchupExample() {
 // once violated in seeded demo data (a user showing requiredPicks+1 total picks), which read as a
 // UI bug until traced back to the data itself — the Rules page should state the rule plainly so
 // it's never ambiguous again.
-function OverUnderExample() {
+function OverUnderExample({ round: { weekLabel, requiredPicks } }: { round: SpreadLockWeekDto }) {
   const { isCfb } = useSportContext();
-  const roundLabel = isCfb ? 'CFP First Round' : 'Wild Card';
-  const requiredPicks = isCfb ? getCfbRequiredPicks(15) : getNflRequiredPicks(19);
   const picks = isCfb
     ? [
         { type: 'spread' as const, label: 'Ohio State Buckeyes', detail: 'Teased line +8.5' },
@@ -208,7 +205,7 @@ function OverUnderExample() {
           color="text.secondary"
           sx={{ letterSpacing: '0.06em', textTransform: 'uppercase' }}
         >
-          {roundLabel} · {requiredPicks} picks required
+          {weekLabel} · {requiredPicks} picks required
         </Typography>
       </Box>
       {picks.map((p, i) => (
@@ -331,37 +328,22 @@ function ScenarioExample() {
   );
 }
 
-function PlayoffGrid() {
-  const { isCfb } = useSportContext();
-
-  const rounds = isCfb
-    ? [
-        { round: 'Conf. Championships', picks: getCfbRequiredPicks(14) },
-        { round: 'First Round', picks: getCfbRequiredPicks(15) },
-        { round: 'Quarterfinals', picks: getCfbRequiredPicks(16) },
-        { round: 'Semifinals', picks: getCfbRequiredPicks(17) },
-        { round: 'Championship', picks: getCfbRequiredPicks(18) },
-      ]
-    : [
-        { round: 'Wild Card', picks: getNflRequiredPicks(19) },
-        { round: 'Divisional', picks: getNflRequiredPicks(20) },
-        { round: 'Championship', picks: getNflRequiredPicks(21) },
-        { round: 'Super Bowl', picks: getNflRequiredPicks(22) },
-      ];
-
+// One tile per postseason round, straight from its row.
+function PlayoffGrid({ rounds }: { rounds: SpreadLockWeekDto[] }) {
+  if (rounds.length === 0) return null;
   return (
     <Grid container spacing={1} data-testid="playoff-grid">
-      {rounds.map(({ round, picks }) => (
-        <Grid size={6} key={round}>
+      {rounds.map(({ weekLabel, requiredPicks }) => (
+        <Grid size={6} key={weekLabel}>
           <Box sx={{ bgcolor: 'action.hover', borderRadius: 1.5, p: 1.5 }}>
             <Typography variant="caption" color="text.secondary" display="block">
-              {round}
+              {weekLabel}
             </Typography>
             <Typography variant="h5" fontWeight={500}>
-              {picks}
+              {requiredPicks}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {picks === 1 ? 'pick required' : 'picks required'}
+              {requiredPicks === 1 ? 'pick required' : 'picks required'}
             </Typography>
           </Box>
         </Grid>
@@ -401,14 +383,12 @@ function formatLockTime(iso: string) {
   });
 }
 
-// Sport-scoped — NFL page shows only NFL lock times, CFB page shows only CFB's, never both at
-// once (matches every other sport-agnostic view in this app).
-function SpreadLockSchedule({ isCfb }: { isCfb: boolean }) {
-  // undefined = not loaded yet.
+// The current season's control-table rows for this sport (never both at once — matches every
+// other sport-agnostic view in this app). Every pick count on this page comes from them
+// (frizat-d47): the lock schedule, the regular-season count, the playoff rounds and the
+// Over/Under example. undefined = not loaded yet.
+function useSeasonSchedule(isCfb: boolean) {
   const [weeks, setWeeks] = useState<SpreadLockWeekDto[] | undefined>(undefined);
-  // Snapshotted once per mount (lazy initializer) rather than read during render — "upcoming"
-  // only needs to be roughly right for this page, not live-ticking.
-  const [now] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -421,6 +401,14 @@ function SpreadLockSchedule({ isCfb }: { isCfb: boolean }) {
       cancelled = true;
     };
   }, [isCfb]);
+
+  return weeks;
+}
+
+function SpreadLockSchedule({ weeks }: { weeks: SpreadLockWeekDto[] | undefined }) {
+  // Snapshotted once per mount (lazy initializer) rather than read during render — "upcoming"
+  // only needs to be roughly right for this page, not live-ticking.
+  const [now] = useState(() => Date.now());
 
   if (!weeks || weeks.length === 0) return null;
 
@@ -473,7 +461,7 @@ function SpreadLockSchedule({ isCfb }: { isCfb: boolean }) {
   );
 }
 
-function SpreadLockInfo({ isCfb }: { isCfb: boolean }) {
+function SpreadLockInfo({ weeks }: { weeks: SpreadLockWeekDto[] | undefined }) {
   return (
     <Box>
       <SectionLabel>When spreads lock</SectionLabel>
@@ -488,14 +476,22 @@ function SpreadLockInfo({ isCfb }: { isCfb: boolean }) {
           game kicks off.
         </RuleRow>
       </Paper>
-      <SpreadLockSchedule isCfb={isCfb} />
+      <SpreadLockSchedule weeks={weeks} />
     </Box>
   );
 }
 
+// The Over/Under example shows exactly this many picks (two spreads + one Over/Under), so it's
+// illustrated with the first postseason round that asks for that many.
+const OVER_UNDER_EXAMPLE_PICKS = 3;
+
 export function RulesContent() {
   const { isCfb } = useSportContext();
-  const regularPicks = getNflRequiredPicks(1);
+  const weeks = useSeasonSchedule(isCfb);
+  // Until the rows load, the prose reads without a number ("get all your picks right").
+  const regularPicks = weeks?.find((w) => !w.isPostSeason)?.requiredPicks;
+  const postSeasonRounds = weeks?.filter((w) => w.isPostSeason) ?? [];
+  const overUnderRound = postSeasonRounds.find((w) => w.requiredPicks === OVER_UNDER_EXAMPLE_PICKS);
 
   return (
     <Stack spacing={3}>
@@ -507,7 +503,7 @@ export function RulesContent() {
             Every Vegas line is teased by{' '}
             <strong>your league&apos;s configured amount</strong> in your favor. This moves the
             spread dramatically — but you still have to get all{' '}
-            <strong>{regularPicks} picks right</strong> to win the week.
+            <strong>{regularPicks ?? 'your'} picks right</strong> to win the week.
           </Typography>
           <TeaseFormula />
         </Box>
@@ -540,7 +536,7 @@ export function RulesContent() {
         <SectionLabel>How picks work</SectionLabel>
         <Paper variant="outlined" sx={{ borderRadius: 2, p: 1.5 }}>
           <RuleRow color="primary">
-            Each week you pick <strong>{regularPicks} teams</strong> against the teased spread
+            Each week you pick <strong>{regularPicks ?? 'your'} teams</strong> against the teased spread
             during the regular season.
           </RuleRow>
           <RuleRow color="secondary">
@@ -580,7 +576,7 @@ export function RulesContent() {
       <Divider />
 
       {/* When Spreads Lock */}
-      <SpreadLockInfo isCfb={isCfb} />
+      <SpreadLockInfo weeks={weeks} />
 
       <Divider />
 
@@ -615,7 +611,7 @@ export function RulesContent() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
           Fewer games each round means fewer required picks.
         </Typography>
-        <PlayoffGrid />
+        <PlayoffGrid rounds={postSeasonRounds} />
       </Box>
 
       <Divider />
@@ -639,12 +635,14 @@ export function RulesContent() {
             wrong and it&apos;s the same as missing any other pick.
           </RuleRow>
         </Paper>
-        <OverUnderExample />
-        <InfoCallout>
-          {isCfb
-            ? 'CFP First Round needs 3 correct picks. Two spread picks plus one Over/Under is still 3 total picks — not 4.'
-            : 'Wild Card needs 3 correct picks. Two spread picks plus one Over/Under is still 3 total picks — not 4.'}
-        </InfoCallout>
+        {overUnderRound && (
+          <>
+            <OverUnderExample round={overUnderRound} />
+            <InfoCallout>
+              {`${overUnderRound.weekLabel} needs ${overUnderRound.requiredPicks} correct picks. Two spread picks plus one Over/Under is still ${overUnderRound.requiredPicks} total picks — not ${overUnderRound.requiredPicks + 1}.`}
+            </InfoCallout>
+          </>
+        )}
       </Box>
     </Stack>
   );

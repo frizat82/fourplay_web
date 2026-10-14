@@ -71,11 +71,17 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<bool>("InScopeIvLeague")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsPostSeason")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("IvLeagueWeekNumber")
                         .HasColumnType("integer");
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
+
+                    b.Property<int>("RequiredPicks")
+                        .HasColumnType("integer");
 
                     b.Property<string>("ScoringFormat")
                         .IsRequired()
@@ -106,7 +112,10 @@ namespace FourPlayWebApp.Server.Migrations
                         .IsUnique()
                         .HasFilter("\"IvLeagueWeekNumber\" <> 99");
 
-                    b.ToTable("CfbSeasonWeekConfigs");
+                    b.ToTable("CfbSeasonWeekConfigs", t =>
+                        {
+                            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_RequiredPicks", "\"RequiredPicks\" BETWEEN 1 AND 4 OR (\"IvLeagueWeekNumber\" = 99 AND \"RequiredPicks\" = 0)");
+                        });
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.CfbSlates", b =>
@@ -449,6 +458,12 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<DateTime?>("FirstGameOfWeekStartDatetime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsPostSeason")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("RequiredPicks")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ScoringFormat")
                         .IsRequired()
                         .HasColumnType("text");
@@ -481,7 +496,10 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("NflSeasonWeekConfigs");
+                    b.ToTable("NflSeasonWeekConfigs", t =>
+                        {
+                            t.HasCheckConstraint("CK_NflSeasonWeekConfigs_RequiredPicks", "\"RequiredPicks\" BETWEEN 1 AND 4");
+                        });
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.NflWeeks", b =>

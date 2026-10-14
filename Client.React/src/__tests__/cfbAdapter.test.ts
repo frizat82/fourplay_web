@@ -27,6 +27,7 @@ import { getCfbScoresForSlate, getCfbLiveGames } from '../api/espn';
 const slate: CfbSlateDto = {
   id: 10, season: 2026, slateNumber: 8, label: 'Week 8',
   slateType: 'RegularSeason', startDate: '2026-10-20', endDate: '2026-10-26',
+  isPostSeason: false, requiredPicks: 4,
 };
 // Over/Under are deliberately asymmetric (not a mirror pair) — the backend juices each
 // independently (SpreadCalculator.GetOverUnder), so this fixture must not use equal values,
@@ -176,7 +177,7 @@ describe('cfbAdapter', () => {
     it('caps maxWeek at the real current week, not the season-wide last pre-seeded slate', async () => {
       const futureSlates: CfbSlateDto[] = [9, 10, 11, 12, 13].map(slateNumber => ({
         id: slateNumber, season: 2026, slateNumber, label: `Week ${slateNumber}`,
-        slateType: 'RegularSeason', startDate: '2026-11-01', endDate: '2026-11-07',
+        slateType: 'RegularSeason', startDate: '2026-11-01', endDate: '2026-11-07', isPostSeason: false, requiredPicks: 4,
       }));
       vi.mocked(getCfbSlates).mockResolvedValue([slate, ...futureSlates]); // current slateNumber=8
       vi.mocked(getCfbSpreads).mockResolvedValue([]);
@@ -200,7 +201,7 @@ describe('cfbAdapter', () => {
       const freshAdapter = createCfbAdapter();
       const postseasonSlate: CfbSlateDto = {
         id: 18, season: 2026, slateNumber: 18, label: 'CFP Championship',
-        slateType: 'Postseason', startDate: '2027-01-01', endDate: '2027-01-07',
+        slateType: 'Postseason', startDate: '2027-01-01', endDate: '2027-01-07', isPostSeason: true, requiredPicks: 1,
       };
       vi.mocked(getCfbCurrentSlate).mockResolvedValue(postseasonSlate);
       vi.mocked(getCfbSlates).mockResolvedValue([postseasonSlate]);
@@ -290,7 +291,7 @@ describe('cfbAdapter', () => {
       const freshAdapter = createCfbAdapter();
       const postseasonSlate: CfbSlateDto = {
         id: 18, season: 2026, slateNumber: 18, label: 'CFP Championship',
-        slateType: 'Postseason', startDate: '2027-01-01', endDate: '2027-01-07',
+        slateType: 'Postseason', startDate: '2027-01-01', endDate: '2027-01-07', isPostSeason: true, requiredPicks: 1,
       };
       vi.mocked(getCfbCurrentSlate).mockResolvedValue(postseasonSlate);
       vi.mocked(getCfbSpreads).mockResolvedValue([]);
@@ -388,7 +389,7 @@ describe('cfbAdapter', () => {
 
       const result = await adapter.getMissingPicks(1);
 
-      expect(result.requiredPicks).toBe(4); // slate.slateNumber=8, regular season
+      expect(result.requiredPicks).toBe(4); // the slate row's requiredPicks
       expect(result.picksByUser.get('alice')).toBe(2);
       expect(result.picksByUser.get('bob')).toBe(1);
       expect(getCfbPickCounts).toHaveBeenCalledWith(1, slate.id);
@@ -451,3 +452,34 @@ describe('cfbAdapter', () => {
   });
 });
 
+
+// frizat-d47: a slate's pick count is its control-table row's requiredPicks (copied onto the
+// slate), never computed here from the slate number. Slate 8 asking for 2 proves nothing
+// re-derives it.
+describe('cfbAdapter requiredPicks comes from the slate row', () => {
+  const oddSlate: CfbSlateDto = { ...slate, requiredPicks: 2 };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getCfbCurrentSlate).mockResolvedValue(oddSlate);
+    vi.mocked(getCfbSlates).mockResolvedValue([oddSlate]);
+    vi.mocked(getCfbLiveGames).mockResolvedValue([]);
+    vi.mocked(getCfbScores).mockResolvedValue([]);
+    vi.mocked(getCfbSpreads).mockResolvedValue([spread]);
+    vi.mocked(getCfbScoresForSlate).mockResolvedValue(espnFinalGame);
+    vi.mocked(getCfbUserPicks).mockResolvedValue([]);
+    vi.mocked(getCfbAllPicks).mockResolvedValue([]);
+    vi.mocked(getCfbPickCounts).mockResolvedValue([]);
+  });
+
+  it('current and past slates, games and scores, and missing picks all use it', async () => {
+    const adapter = createCfbAdapter();
+    const week = { season: 2026, week: 8, isPostSeason: false };
+
+    expect((await adapter.loadCurrentGames(1, 'u1')).requiredPicks).toBe(2);
+    expect((await adapter.loadCurrentScores(1, 'u1')).requiredPicks).toBe(2);
+    expect((await adapter.loadHistoricalGames(1, 'u1', week))?.requiredPicks).toBe(2);
+    expect((await adapter.loadHistoricalScores(1, 'u1', week))?.requiredPicks).toBe(2);
+    expect((await adapter.getMissingPicks(1)).requiredPicks).toBe(2);
+  });
+});

@@ -18,5 +18,10 @@ public class CfbSeasonWeekConfigConfiguration : IEntityTypeConfiguration<CfbSeas
         entity.HasIndex(e => new { e.Season, e.IvLeagueWeekNumber })
             .IsUnique()
             .HasFilter("\"IvLeagueWeekNumber\" <> 99");
+
+        // frizat-d47: a real round asks for 1-4 picks; only an excluded week (99) carries 0. A
+        // typo'd or forgotten count fails the insert rather than silently capping a slate at 0.
+        entity.ToTable(t => t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_RequiredPicks",
+            "\"RequiredPicks\" BETWEEN 1 AND 4 OR (\"IvLeagueWeekNumber\" = 99 AND \"RequiredPicks\" = 0)"));
     }
 }

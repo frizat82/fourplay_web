@@ -22,7 +22,7 @@ public class EspnCacheServiceTests
     private readonly IMemoryCache _memoryCache = new MemoryCache(new MemoryCacheOptions());
 
     // Default week returned by the mock — tests that don't care about the specific week use this
-    private static readonly NflWeekInfo DefaultWeek = new(5, 2025, false, "Week 5", "Standard", new DateTime(2025, 10, 2, 18, 0, 0, DateTimeKind.Utc));
+    private static readonly NflWeekInfo DefaultWeek = new(5, 2025, false, "Week 5", "Standard", new DateTime(2025, 10, 2, 18, 0, 0, DateTimeKind.Utc), 4);
 
     private static NflSeasonWeekConfig BuildConfig(int weekId, int season, DateTime? start = null, DateTime? end = null) => new() {
         Id = weekId,
@@ -30,6 +30,7 @@ public class EspnCacheServiceTests
         WeekId = weekId,
         WeekLabel = weekId > 18 ? "PostSeason Week" : $"Week {weekId}",
         WeekType = weekId > 18 ? "Wild Card" : "Regular Season",
+        IsPostSeason = weekId > 18,
         ScoringFormat = "Standard",
         WeekStartDatetime = start ?? DateTime.UtcNow.AddDays(-1),
         WeekEndDatetime = end ?? DateTime.UtcNow.AddDays(1),
@@ -216,6 +217,7 @@ public class EspnCacheServiceTests
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> {
             new() {
                 Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = "Wild Card", ScoringFormat = "Standard",
+                IsPostSeason = true, RequiredPicks = 3,
                 WeekStartDatetime = new DateTime(2026, 1, 8), WeekEndDatetime = new DateTime(2026, 1, 12),
                 SpreadLockDatetime = new DateTime(2026, 1, 8),
             },
@@ -225,6 +227,7 @@ public class EspnCacheServiceTests
             // test exists to verify.
             new() {
                 Season = 2025, WeekId = 20, WeekLabel = "Divisional", WeekType = "Divisional", ScoringFormat = "Standard",
+                IsPostSeason = true, RequiredPicks = 3,
                 WeekStartDatetime = new DateTime(2026, 1, 15), WeekEndDatetime = new DateTime(2026, 1, 19),
                 SpreadLockDatetime = new DateTime(2026, 1, 15),
             },
@@ -240,7 +243,8 @@ public class EspnCacheServiceTests
         Assert.Equal(27, home.Score);
         Assert.Equal(TypeName.StatusFinal, comp.Status.Type.Name);
         // The control table stores round names ("Wild Card"), never "PostSeason" — postseason
-        // comes from WeekId > 18, so a rebuilt playoff week must be stamped season type 3.
+        // comes from the row's IsPostSeason (frizat-d47), so a rebuilt playoff week must be
+        // stamped season type 3.
         Assert.Equal(3, result.Season!.Type);
         Assert.Equal(3, result.Events!.Single().Season!.Type);
         await _fetcher.DidNotReceiveWithAnyArgs().FetchForWeekAsync(default!);

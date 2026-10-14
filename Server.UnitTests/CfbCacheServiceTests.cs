@@ -35,7 +35,7 @@ public class CfbCacheServiceTests
     private static readonly CfbSlateInfo DefaultSlateInfo = new(
         Id: 1, Season: 2026, SlateNumber: 5, Label: "Week 5", SlateType: "RegularSeason",
         StartDate: Today.AddDays(-1), EndDate: Today.AddDays(1), FirstGameUtc: null,
-        SpreadLockDatetime: DateTime.UtcNow.AddDays(-7));
+        SpreadLockDatetime: DateTime.UtcNow.AddDays(-7), IsPostSeason: false, RequiredPicks: 4);
 
     private static readonly CfbSlates DefaultSlate = new() {
         Id = 1, Season = 2026, SlateNumber = 5, Label = "Week 5", SlateType = "RegularSeason",
@@ -204,7 +204,7 @@ public class CfbCacheServiceTests
         _cfbRepo.GetScoresForSlateAsync(SettledSlate.Id).Returns((IEnumerable<CfbScores>)rows);
         _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
             SettledSlate.Id, SettledSlate.Season, SettledSlate.SlateNumber, SettledSlate.Label, SettledSlate.SlateType,
-            SettledSlate.StartDate, SettledSlate.EndDate, null, DateTime.UtcNow));
+            SettledSlate.StartDate, SettledSlate.EndDate, null, DateTime.UtcNow, SettledSlate.IsPostSeason, SettledSlate.RequiredPicks));
         var espnScores = BuildScoreboard();
         _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == SettledSlate.Id), Arg.Any<bool>()).Returns(espnScores);
 
@@ -339,4 +339,3 @@ public class CfbCacheServiceTests
         Assert.Same(other, result);
     }
 }
-

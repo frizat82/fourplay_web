@@ -22,7 +22,7 @@ public class SpreadBatchTests {
     private const string UserId = "member-1";
 
     private static LeagueController BuildController() {
-        var repo = Substitute.For<ILeagueRepository>();
+        var repo = Substitute.For<ILeagueRepository>().WithNflWeekConfigs(2025);
         repo.UserExistsInLeagueAsync(UserId, 1).Returns(true);
         repo.GetNflSpreadsAsync(2025, 3).Returns(new List<NflSpreads> {
             new() { Season = 2025, NflWeek = 3, HomeTeam = "KC", AwayTeam = "BAL", HomeTeamSpread = -3, AwayTeamSpread = 3, OverUnder = 45 },

@@ -140,11 +140,17 @@ public class LeagueJuiceScheduleSource(ILeagueRepository leagueRepo, ICfbReposit
         IEnumerable<NflSeasonWeekConfig> nflConfigs, IEnumerable<CfbSeasonWeekConfig> cfbConfigs, int startWeek = 1) =>
         GetWeekLockTimeUtc(leagueType, season, startWeek, nflConfigs, cfbConfigs);
 
-    // WeeklyCost locks here — the season's final week (NFL WeekId 22 Super Bowl) or slate (CFB
-    // slate 18 Championship), per CLAUDE.md's pick-count tables (/pick-rules).
+    // WeeklyCost locks here — the season's final (NFL Super Bowl / CFP Championship): the
+    // control-table round that asks for 1 pick (frizat-d47; the same "1 = the final" rule as
+    // JuiceTiers), not a hardcoded 22/18. Not seeded yet means null, like GetWeekLockTimeUtc.
     public static DateTime? GetSeasonEndLockTimeUtc(LeagueType leagueType, int season,
-        IEnumerable<NflSeasonWeekConfig> nflConfigs, IEnumerable<CfbSeasonWeekConfig> cfbConfigs) =>
-        GetWeekLockTimeUtc(leagueType, season, leagueType == LeagueType.Cfb ? 18 : 22, nflConfigs, cfbConfigs);
+        IEnumerable<NflSeasonWeekConfig> nflConfigs, IEnumerable<CfbSeasonWeekConfig> cfbConfigs) {
+        const int FinalRoundPicks = 1;
+        var finalPeriod = leagueType == LeagueType.Cfb
+            ? cfbConfigs.Where(c => c.Season == season && c.RequiredPicks == FinalRoundPicks).Max(c => (int?)c.IvLeagueWeekNumber)
+            : nflConfigs.Where(c => c.Season == season && c.RequiredPicks == FinalRoundPicks).Max(c => (int?)c.WeekId);
+        return finalPeriod is int final ? GetWeekLockTimeUtc(leagueType, season, final, nflConfigs, cfbConfigs) : null;
+    }
 
     public static DateTime LockTimeUtc(DateOnly seasonStartDate) {
         var wallClockCentral = seasonStartDate.ToDateTime(new TimeOnly(14, 0));
