@@ -34,12 +34,8 @@ public class DemoCfbCacheService : ICfbCacheService
 
     // Backs the "browse a non-current slate" path on the Scores page (GetCfbScoresForSlate in
     // EspnController) — mirrors DemoEspnCacheService.GetWeekScoresAsync's NFL pattern exactly,
-    // adapted to CFB's slate model (frizat-d0t). Resolves "current slate" inline via
-    // CfbCurrentSlateService.BuildSlateWindows (the SAME shared helper that class itself uses,
-    // including its fail-loud throw on a slate with no matching config — an earlier version of
-    // this method inlined its own copy that silently fell back to DateTime.MaxValue instead,
-    // which could have let demo's "current slate" resolution silently disagree with prod's for
-    // the exact data-integrity case that throw exists to catch) rather than
+    // adapted to CFB's slate model (frizat-d0t). Resolves "current slate" with
+    // CfbCurrentSlateService.ResolveCurrentSlate (the SAME function that service uses) rather than
     // constructor-injecting that Scoped service into this Singleton — same captive-dependency
     // reasoning DemoEspnCacheService's own comment explains, and must use the same keyed clock
     // CfbCurrentSlateService resolves "current" against (frizat-tf2) so the two don't disagree.
@@ -47,25 +43,18 @@ public class DemoCfbCacheService : ICfbCacheService
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync();
 
-        var slate = await db.CfbSlates.FirstOrDefaultAsync(s => s.Id == slateId);
-        if (slate is null || !slate.EspnWeekNumber.HasValue) return null;
+        var allSlates = await db.CfbSeasonWeekConfigs.Where(c => c.InScopeIvLeague).ToListAsync();
+        var slate = allSlates.FirstOrDefault(s => s.Id == slateId);
+        if (slate is null) return null;
 
-        var allSlates = await db.CfbSlates.ToListAsync();
-        var configs = await db.CfbSeasonWeekConfigs.ToListAsync();
-        var slateWindows = CfbCurrentSlateService.BuildSlateWindows(allSlates, configs);
-        var resolvedCurrent = SeasonWindowResolver.ResolveCurrentWeek(slateWindows.Select(sw => sw.Window), _timeProvider.GetUtcNow().UtcDateTime);
-        var isCurrentSlate = resolvedCurrent is not null
-            && resolvedCurrent.Value.Season == slate.Season
-            && resolvedCurrent.Value.Start == slate.StartDate.ToDateTime(TimeOnly.MinValue)
-            && resolvedCurrent.Value.End == slate.EndDate.ToDateTime(TimeOnly.MaxValue);
-
-        if (isCurrentSlate) return _scores;
+        var current = CfbCurrentSlateService.ResolveCurrentSlate(allSlates, _timeProvider.GetUtcNow().UtcDateTime);
+        if (current?.Id == slateId) return _scores;
 
         var rows = await db.CfbScores.Where(s => s.CfbSlateId == slateId).ToListAsync();
         if (rows.Count == 0) return null;
 
         var games = rows.Select(FinalScoresEspnMapper.FromCfbScores);
-        return FinalScoresEspnMapper.Build(games, slate.Season, slate.EspnWeekNumber.Value, CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat));
+        return FinalScoresEspnMapper.Build(games, slate.Season, slate.SlateNumber, CfbSlateHelpers.IsCfpSlate(slate));
     }
 
     // No-op: demo data is a frozen fixture, never refreshed by a live CfbScoresJob upsert.

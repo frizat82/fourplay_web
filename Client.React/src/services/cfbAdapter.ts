@@ -196,7 +196,7 @@ async function loadSlate(leagueId: number, _userId: string, slateId: number, sla
 }
 
 export function createCfbAdapter(): SportAdapter {
-  // A real null (empty CfbSlates table — legitimate bootstrap state, not an error; see
+  // A real null (no in-scope CFB control-table rows — legitimate bootstrap state, not an error; see
   // CfbCurrentSlateService) is a valid cacheable answer here, same as nflAdapter.ts's
   // getCurrentWeek(). A rejected fetch (network/DB failure) is not cached, so it retries.
   const getCurrentSlate = memoizeOnce(getCfbCurrentSlate);

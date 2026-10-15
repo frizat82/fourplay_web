@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
@@ -45,7 +46,7 @@ public class NflScoresJobTests
         _currentWeekService.IsSeasonActiveAsync().Returns(true);
         _currentWeekService.GetCurrentWeekAsync().Returns(new NflWeekInfo(
             WeekId: 1, Season: _year, IsPostSeason: false,
-            WeekLabel: "Week 1", ScoringFormat: "Standard", SpreadLockDatetime: DateTime.UtcNow.AddDays(-1), RequiredPicks: 4));
+            WeekLabel: "Week 1", ScoringFormat: ScoringFormat.Standard, SpreadLockDatetime: DateTime.UtcNow.AddDays(-1), RequiredPicks: 4));
         // NflScoresJob filters the current season's rows out of the one unscoped fetch (no
         // second, season-scoped DB call) — see Execute_FetchesOnlyTheCurrentSeasonsConfigs...
         _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> { BuildConfig(1, _year) });
@@ -59,8 +60,8 @@ public class NflScoresJobTests
             Season = season,
             WeekId = weekId,
             WeekLabel = $"Week {weekId}",
-            WeekType = isPostSeason ? "Wild Card" : "Regular Season",
-            ScoringFormat = "Standard",
+            WeekType = isPostSeason ? WeekType.Playoff : WeekType.RegularSeason,
+            ScoringFormat = ScoringFormat.Standard,
             WeekStartDatetime = new DateTime(season, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(weekId * 7),
             WeekEndDatetime = new DateTime(season, 9, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(weekId * 7 + 7),
         };

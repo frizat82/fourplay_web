@@ -48,19 +48,6 @@ namespace FourPlayWebApp.Server.Controllers {
             }
         }
         [Authorize(Roles = "Administrator")]
-        [HttpPost("run-cfb-slate-seeder")]
-        public async Task<IActionResult> RunCfbSlateSeeder() {
-            try {
-                var scheduler = await schedulerFactory.GetScheduler();
-                await scheduler.TriggerJob(new JobKey("CFB Slate Seeder"));
-                Log.Information("Started CFB Slate Seeder Job");
-                return Ok(new MessageResponseDto("Started CFB Slate Seeder Job"));
-            }
-            catch (Exception e) {
-                return BadRequest(e.Message);
-            }
-        }
-        [Authorize(Roles = "Administrator")]
         [HttpPost("run-cfb-spreads")]
         public Task<IActionResult> RunCfbSpreads([FromQuery] bool force = false) =>
             // The fixed "CFB Spread Job" JobKey this used to trigger no longer exists — CFB
@@ -146,7 +133,7 @@ namespace FourPlayWebApp.Server.Controllers {
             var allJobs = await GetAllJobsStatusAsync();
 
             // "Spreads " (plural, trailing space) matches only the per-week triggers registered by
-            // NflSpreadSchedulerJob/CfbSlateSeederJob ("NFL Spreads {season} Wk{n}" / "CFB Spreads
+            // NflSpreadSchedulerJob/CfbSpreadSchedulerJob ("NFL Spreads {season} Wk{n}" / "CFB Spreads
             // {season} Wk{n}") — NOT the scheduler jobs' own triggers ("NFL Spread Scheduler ..."),
             // whose next-run time is when the scheduler next checks in, not when spreads get fetched.
             var candidates = allJobs.Where(job =>

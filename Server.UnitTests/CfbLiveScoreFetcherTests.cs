@@ -72,10 +72,10 @@ public class CfbLiveScoreFetcherTests {
 
     // ── Regular season / conf-champs: control-table date-range query (frizat-11t) ────────────
 
-    private static CfbSlates BuildRegularSeasonSlate() => new() {
-        Id = 1, Season = 2026, SlateNumber = 5,
-        Label = "Week 5", StartDate = new DateOnly(2025, 9, 27), EndDate = new DateOnly(2025, 9, 28),
-        EspnWeekNumber = 5, ScoringFormat = "Spread",
+    private static CfbSeasonWeekConfig BuildRegularSeasonSlate() => new() {
+        Id = 1, Season = 2026, IvLeagueWeekNumber = 5, InScopeIvLeague = true,
+        WeekLabel = "Week 5", WeekStartDate = new DateOnly(2025, 9, 27), WeekEndDate = new DateOnly(2025, 9, 28),
+ ScoringFormat = ScoringFormat.Standard,
     };
 
     // frizat-9m0: the fetcher no longer filters by rank — every FBS game for the week is returned
@@ -84,7 +84,7 @@ public class CfbLiveScoreFetcherTests {
     [Fact]
     public async Task FetchForSlateAsync_RegularSeason_IncludesGame_WhenBothTeamsUnranked() {
         var slate = BuildRegularSeasonSlate();
-        _cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate).Returns(BuildScoreboardWithRanking(homeRank: 99, awayRank: 99));
+        _cfbApi.GetScoresByDateRangeAsync(slate.WeekStartDate, slate.WeekEndDate).Returns(BuildScoreboardWithRanking(homeRank: 99, awayRank: 99));
 
         var result = await BuildFetcher().FetchForSlateAsync(slate, isCurrentSlate: false);
 
@@ -95,7 +95,7 @@ public class CfbLiveScoreFetcherTests {
     [Fact]
     public async Task FetchForSlateAsync_RegularSeason_IncludesGame_WhenOneTeamIsRanked() {
         var slate = BuildRegularSeasonSlate();
-        _cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate).Returns(BuildScoreboardWithRanking(homeRank: 5, awayRank: 99));
+        _cfbApi.GetScoresByDateRangeAsync(slate.WeekStartDate, slate.WeekEndDate).Returns(BuildScoreboardWithRanking(homeRank: 5, awayRank: 99));
 
         var result = await BuildFetcher().FetchForSlateAsync(slate, isCurrentSlate: false);
 
@@ -112,16 +112,12 @@ public class CfbLiveScoreFetcherTests {
     // the correct one. Querying by our own control-table date range instead of ESPN's week number
     // means the fetch itself only ever returns events ESPN placed within OUR slate's actual window —
     // "our week wins, not ESPN's" — so that assumption holds. This test proves the call is built from
-    // slate.StartDate/EndDate, not derived from slate.EspnWeekNumber in any way.
+    // the row's WeekStartDate/WeekEndDate.
     [Fact]
-    public async Task FetchForSlateAsync_RegularSeason_QueriesByControlTableDateRange_NotEspnWeekNumber() {
-        // EspnWeekNumber is deliberately something a week-based call would never coincidentally
-        // match against these StartDate/EndDate values — proves the fetch is date-driven, not
-        // secretly still week-driven.
-        var slate = new CfbSlates {
-            Id = 19, Season = 2026, SlateNumber = 1, Label = "Week 1", StartDate = new DateOnly(2026, 9, 1), EndDate = new DateOnly(2026, 9, 7),
-            EspnWeekNumber = 1, ScoringFormat = "Standard",
-        };
+    public async Task FetchForSlateAsync_RegularSeason_QueriesByControlTableDateRange() {
+        var slate = new CfbSeasonWeekConfig {
+            Id = 19, Season = 2026, IvLeagueWeekNumber = 1, WeekLabel = "Week 1", WeekStartDate = new DateOnly(2026, 9, 1), WeekEndDate = new DateOnly(2026, 9, 7),
+            ScoringFormat = ScoringFormat.Standard, InScopeIvLeague = true };
         _cfbApi.GetScoresByDateRangeAsync(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7))
             .Returns(BuildScoreboardWithRanking(date: new DateTimeOffset(2026, 9, 5, 1, 0, 0, TimeSpan.Zero)));
 
@@ -139,10 +135,9 @@ public class CfbLiveScoreFetcherTests {
     // timezone-boundary edge case on a late-night/West-Coast CFB kickoff).
     [Fact]
     public async Task FetchForSlateAsync_RegularSeason_ExcludesGame_OutsideSlateDateRange_EvenIfEspnReturnsIt() {
-        var slate = new CfbSlates {
-            Id = 19, Season = 2026, SlateNumber = 1, Label = "Week 1", StartDate = new DateOnly(2026, 9, 1), EndDate = new DateOnly(2026, 9, 7),
-            EspnWeekNumber = 1, ScoringFormat = "Standard",
-        };
+        var slate = new CfbSeasonWeekConfig {
+            Id = 19, Season = 2026, IvLeagueWeekNumber = 1, WeekLabel = "Week 1", WeekStartDate = new DateOnly(2026, 9, 1), WeekEndDate = new DateOnly(2026, 9, 7),
+            ScoringFormat = ScoringFormat.Standard, InScopeIvLeague = true };
         var inWindow = new Competition {
             Date = new DateTimeOffset(2026, 9, 5, 1, 0, 0, TimeSpan.Zero),
             Competitors = [
@@ -169,7 +164,7 @@ public class CfbLiveScoreFetcherTests {
                 new Event { Id = "2", Season = new Season { Year = 2026, Type = 2 }, Week = new Week { Number = 1 }, Competitions = [outOfWindow] },
             ],
         };
-        _cfbApi.GetScoresByDateRangeAsync(slate.StartDate, slate.EndDate).Returns(scoreboard);
+        _cfbApi.GetScoresByDateRangeAsync(slate.WeekStartDate, slate.WeekEndDate).Returns(scoreboard);
 
         var result = await BuildFetcher().FetchForSlateAsync(slate, isCurrentSlate: false);
 
@@ -182,10 +177,10 @@ public class CfbLiveScoreFetcherTests {
 
     // ── CFP: week=999 bucket + date-window filter ────────────────────────────
 
-    private static CfbSlates BuildCfpSlate() => new() {
-        Id = 2, Season = 2026, SlateNumber = 15,
-        Label = "CFP First Round", StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20),
-        EspnWeekNumber = 16, ScoringFormat = "NFLDivisional",
+    private static CfbSeasonWeekConfig BuildCfpSlate() => new() {
+        Id = 2, Season = 2026, IvLeagueWeekNumber = 15, InScopeIvLeague = true,
+        WeekLabel = "CFP First Round", WeekStartDate = new DateOnly(2025, 12, 19), WeekEndDate = new DateOnly(2025, 12, 20),
+        WeekType = WeekType.Playoff, ScoringFormat = ScoringFormat.Divisional,
     };
 
     [Fact]
@@ -208,27 +203,5 @@ public class CfbLiveScoreFetcherTests {
         var result = await BuildFetcher().FetchForSlateAsync(BuildCfpSlate(), isCurrentSlate: false);
 
         Assert.Null(result);
-    }
-
-    // ── Missing EspnWeekNumber: the control table (CfbSeasonWeekConfig.EspnWeekNumber) is
-    // non-nullable and CfbSlateSeederJob is the only producer of CfbSlates rows, so every real
-    // slate carries a week number. frizat-11t: the regular-season ESPN fetch itself is now
-    // date-range-based (slate.StartDate/EndDate), not week-based — EspnWeekNumber is still required
-    // as the CfbRanking natural-key component, so a missing value still means the control table
-    // wasn't seeded correctly. ──────────────────────────────────────────────────────────────
-
-    private static CfbSlates BuildSlateMissingWeekNumber() => new() {
-        Id = 3, Season = 2025, SlateNumber = 1,
-        Label = "Week 1", StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20),
-        EspnWeekNumber = null,
-    };
-
-    [Fact]
-    public async Task FetchForSlateAsync_MissingEspnWeekNumber_ReturnsNull_NeverCallsEspn() {
-        var result = await BuildFetcher().FetchForSlateAsync(BuildSlateMissingWeekNumber(), isCurrentSlate: false);
-
-        Assert.Null(result);
-        await _cfbApi.DidNotReceiveWithAnyArgs().GetScoresByDateRangeAsync(default, default);
-        await _cfbApi.DidNotReceive().GetCfpGamesAsync();
     }
 }

@@ -8,7 +8,7 @@ namespace FourPlayWebApp.Server.Jobs;
 // and CfbRankingCaptureJob (earlier capture, as soon as a week's schedule is known) — one
 // implementation of "which CfbRanking rows does this batch of ESPN events produce for this slate."
 internal static class CfbRankingExtractor {
-    public static List<CfbRanking> ExtractFrom(IEnumerable<Event> events, CfbSlates slate) {
+    public static List<CfbRanking> ExtractFrom(IEnumerable<Event> events, CfbSeasonWeekConfig slate) {
         var rankings = new List<CfbRanking>();
 
         foreach (var evt in events) {
@@ -20,7 +20,7 @@ internal static class CfbRankingExtractor {
                 .Where(c => CfbSlateHelpers.RankOf(c) is not null)
                 .Select(c => new CfbRanking {
                     Season           = slate.Season,
-                    EspnWeekNumber   = slate.EspnWeekNumber ?? 0,
+                    WeekNumber       = slate.SlateNumber,
                     EspnEventId      = eventId,
                     TeamAbbreviation = c.Team.Abbreviation,
                     CuratedRank      = c.CuratedRank!.Current,

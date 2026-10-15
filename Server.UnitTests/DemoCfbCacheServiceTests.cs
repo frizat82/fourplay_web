@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services;
@@ -91,14 +92,13 @@ public class DemoCfbCacheServiceTests
     {
         var db = BuildDb(nameof(GetSlateScoresAsync_ForANonCurrentSlateWithPersistedRows_ReturnsDbBuiltScores));
         db.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
-            Season = 2025, EspnWeekNumber = 4, IvLeagueWeekNumber = 4,
+            Season = 2025, IvLeagueWeekNumber = 4,
             WeekStartDate = new DateOnly(2025, 9, 27), WeekEndDate = new DateOnly(2025, 9, 28),
             InScopeIvLeague = true, SpreadLockDatetime = new DateTime(2025, 9, 25, 0, 0, 0, DateTimeKind.Utc),
         });
-        db.CfbSlates.Add(new CfbSlates {
-            Id = 42, Season = 2025, SlateNumber = 4, Label = "Week 4", StartDate = new DateOnly(2025, 9, 27), EndDate = new DateOnly(2025, 9, 28),
-            EspnWeekNumber = 4, ScoringFormat = "Spread",
-        });
+        db.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
+            Id = 42, Season = 2025, IvLeagueWeekNumber = 4, WeekLabel = "Week 4", WeekStartDate = new DateOnly(2025, 9, 27), WeekEndDate = new DateOnly(2025, 9, 28),
+            ScoringFormat = ScoringFormat.Standard, InScopeIvLeague = true });
         db.CfbScores.Add(new CfbScores {
             CfbSlateId = 42, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14,
             GameStatus = TypeName.StatusFinal, GameTime = new DateTimeOffset(2025, 9, 27, 18, 0, 0, TimeSpan.Zero),
@@ -108,14 +108,13 @@ public class DemoCfbCacheServiceTests
         // else to compare against), exempting it from the DB-first shortcut this test exists to
         // verify (mirrors EspnCacheServiceTests' identical NFL fixture-seeding pattern).
         db.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
-            Season = 2025, EspnWeekNumber = 5, IvLeagueWeekNumber = 5,
+            Season = 2025, IvLeagueWeekNumber = 5,
             WeekStartDate = new DateOnly(2025, 10, 4), WeekEndDate = new DateOnly(2025, 10, 5),
             InScopeIvLeague = true, SpreadLockDatetime = new DateTime(2025, 10, 2, 0, 0, 0, DateTimeKind.Utc),
         });
-        db.CfbSlates.Add(new CfbSlates {
-            Id = 43, Season = 2025, SlateNumber = 5, Label = "Week 5", StartDate = new DateOnly(2025, 10, 4), EndDate = new DateOnly(2025, 10, 5),
-            EspnWeekNumber = 5, ScoringFormat = "Spread",
-        });
+        db.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
+            Id = 43, Season = 2025, IvLeagueWeekNumber = 5, WeekLabel = "Week 5", WeekStartDate = new DateOnly(2025, 10, 4), WeekEndDate = new DateOnly(2025, 10, 5),
+            ScoringFormat = ScoringFormat.Standard, InScopeIvLeague = true });
         await db.SaveChangesAsync();
         var service = BuildService(db);
 

@@ -2,6 +2,7 @@ import { vi } from 'vitest';
 import { createNflAdapter } from '../services/nflAdapter';
 import { createCompetition, createNflSeasonWeeks, createScores } from '../test/fixtures';
 import type { GameView, SportAdapter } from '../services/sportAdapter';
+import type { NflCurrentWeekDto } from '../types/league';
 
 vi.mock('../api/espn', () => ({
   getScores: vi.fn(),
@@ -36,7 +37,7 @@ function makeScores(homeTeam: string, awayTeam: string, homeScore = 24, awayScor
 // "current" scoreboard (getScores), which reflects whatever ESPN itself
 // considers current (e.g. the most recently completed game during any gap in play) regardless of
 // the league's actual spread-release schedule.
-const DEFAULT_CURRENT_WEEK = {
+const DEFAULT_CURRENT_WEEK: NflCurrentWeekDto = {
   weekId: 8, season: 2023, isPostSeason: false,
   weekLabel: 'Week 8', scoringFormat: 'Standard', spreadLockDatetime: '2023-10-26T17:00:00Z',
   requiredPicks: 4,

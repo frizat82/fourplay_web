@@ -19,7 +19,6 @@ export interface CfbSlateDto {
   label: string;
   startDate: string;
   endDate: string;
-  firstGameUtc?: string | null;
   // The slate's control-table rules, copied from CfbSeasonWeekConfigs (frizat-d47).
   isPostSeason: boolean;
   requiredPicks: number;
@@ -83,6 +82,10 @@ export interface NflWeekDto {
   dateCreated: string;
 }
 
+// A control-table row's scoring format — the server's shared ScoringFormat enum, by name
+// (frizat-b4g). Fixed to the row's RequiredPicks: 4/3/2/1/0.
+export type ScoringFormat = 'Standard' | 'Divisional' | 'Conference' | 'Final' | 'None';
+
 // GET /api/league/current-week — mirrors CfbSlateDto's role for NFL: the season/week to treat
 // as "current," resolved server-side with a real off-season/pre-season fallback (NflCurrentWeekService).
 // No espnWeek field — nothing on the frontend routes by ESPN's own week numbering anymore,
@@ -92,7 +95,7 @@ export interface NflCurrentWeekDto {
   season: number;
   isPostSeason: boolean;
   weekLabel: string;
-  scoringFormat: string;
+  scoringFormat: ScoringFormat;
   spreadLockDatetime: string;
   requiredPicks: number; // the week's control-table row (frizat-d47)
 }

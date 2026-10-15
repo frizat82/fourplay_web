@@ -42,9 +42,7 @@ public class WeekResultNotificationService(
             // Per-season read: fails loudly on a slate with no control-table row rather than
             // pushing a blank round name.
             async () => (await cfbRepository.GetSlatesForSeasonAsync(season))
-                .GroupBy(s => s.SlateNumber)
-                .ToDictionary(g => g.Key, g => new Period(
-                    new DateTimeOffset(g.Max(s => s.EndDate).ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero), g.First().Label)),
+                .ToDictionary(s => s.SlateNumber, s => new Period(new DateTimeOffset(s.EndUtc), s.WeekLabel)),
             cfbScores.GetScoresAsync, league => cfbLeaderboardService.BuildLeaderboard(league.Id, season));
 
     private async Task<int> CheckWeekResultsAsync(LeagueType sport, int season, string sportLabel,

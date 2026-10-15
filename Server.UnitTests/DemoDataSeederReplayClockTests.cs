@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
@@ -43,8 +44,8 @@ public class DemoDataSeederReplayClockTests {
         // Pre-existing row with real, far-future calendar dates — proves the fix overwrites them
         // with DemoFrozenNow-anchored values rather than leaving/self-healing them to real "now".
         db.NflSeasonWeekConfigs.Add(new NflSeasonWeekConfig {
-            Season = ReplaySeason, WeekId = ReplayWeek, WeekLabel = "Super Bowl", WeekType = "Super Bowl",
-            ScoringFormat = "Standard",
+            Season = ReplaySeason, WeekId = ReplayWeek, WeekLabel = "Super Bowl", WeekType = WeekType.Playoff,
+            ScoringFormat = ScoringFormat.Standard,
             WeekStartDatetime = new DateTime(2027, 2, 10), WeekEndDatetime = new DateTime(2027, 2, 17),
             SpreadLockDatetime = new DateTime(2027, 2, 14),
         });

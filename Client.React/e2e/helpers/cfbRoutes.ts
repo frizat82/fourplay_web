@@ -89,7 +89,6 @@ export async function setupCfbRoutes(page: Page, options: SetupCfbRoutesOptions 
     label: 'Week 1',
     startDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     endDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    firstGameUtc: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
     // Slate 1's control-table row (frizat-d47): regular season, 4 picks.
     isPostSeason: false,
     requiredPicks: 4,

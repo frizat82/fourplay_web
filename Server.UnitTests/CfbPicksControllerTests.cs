@@ -47,9 +47,10 @@ public class CfbPicksControllerTests
         return ctrl;
     }
 
-    private static CfbSlates MakeSlate(int id = 1, int slateNumber = 1, int? espnWeekNumber = 1, int requiredPicks = 4) => new()
+    private static CfbSeasonWeekConfig MakeSlate(int id = 1, int slateNumber = 1, int requiredPicks = 4) => new()
     {
-        Id = id, Season = 2025, SlateNumber = slateNumber, Label = "Week 1", EspnWeekNumber = espnWeekNumber, RequiredPicks = requiredPicks,
+        Id = id, Season = 2025, IvLeagueWeekNumber = slateNumber, InScopeIvLeague = true, WeekLabel = "Week 1", RequiredPicks = requiredPicks,
+        ScoringFormat = TestWeekConfigs.ScoringFormatFor(requiredPicks),
     };
 
     /// <summary>
@@ -60,7 +61,7 @@ public class CfbPicksControllerTests
     private static ICfbCurrentSlateService BuildCurrentSlateService(int slateId = 1, int season = 2025) {
         var svc = Substitute.For<ICfbCurrentSlateService>();
         svc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(slateId, season, 1, "Week 1",
-            DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(6)), null, DateTime.UtcNow.AddDays(-1), false, 4));
+            DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(6)), DateTime.UtcNow.AddDays(-1), false, 4));
         return svc;
     }
 
@@ -602,7 +603,7 @@ public class CfbPicksControllerTests
         // team/week) — not resolved here; see CfbRepositoryTests for the upsert behavior.
         var spread = MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU");
         _cfbRepo.GetSpreadsForSlateAsync(1).Returns([spread]);
-        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(espnWeekNumber: 3));
+        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(slateNumber: 3));
         _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 0 });
         _cfbRepo.GetLatestRankingsForWeekAsync(2025, 3).Returns(new Dictionary<string, int> {
             ["ORE"] = 5,
@@ -616,23 +617,6 @@ public class CfbPicksControllerTests
         var dto = Assert.Single(returned);
         Assert.Equal(5, dto.HomeTeamRank);
         Assert.Null(dto.AwayTeamRank);
-    }
-
-    [Fact]
-    public async Task GetSpreads_HasNullRanks_WhenSlateHasNoEspnWeekNumber()
-    {
-        var spread = MakeSpread(DateTimeOffset.UtcNow.AddHours(2), "ORE", "OSU");
-        _cfbRepo.GetSpreadsForSlateAsync(1).Returns([spread]);
-        _cfbRepo.GetSlateByIdAsync(1).Returns(MakeSlate(espnWeekNumber: null));
-        _leagueRepo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Juice = 0 });
-
-        var result = await BuildController().GetSpreads(1, 1);
-
-        var ok = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.Single(Assert.IsAssignableFrom<IEnumerable<CfbSpreadDto>>(ok.Value));
-        Assert.Null(dto.HomeTeamRank);
-        Assert.Null(dto.AwayTeamRank);
-        await _cfbRepo.DidNotReceive().GetLatestRankingsForWeekAsync(Arg.Any<int>(), Arg.Any<int>());
     }
 
     [Fact]

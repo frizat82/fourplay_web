@@ -7,75 +7,24 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace FourPlayWebApp.Server.Services.Repositories;
 
-// cache: the schedule tables (CfbSlates, CfbSeasonWeekConfigs) are cached via ScheduleCache (saves
-// evict it — ScheduleCacheInterceptor). Optional so tests that don't care can omit it (reads go
+// cache: the CFB control table (CfbSeasonWeekConfigs) is cached via ScheduleCache (saves evict
+// it — ScheduleCacheInterceptor). Optional so tests that don't care can omit it (reads go
 // straight to the database).
 public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IMemoryCache? cache = null) : ICfbRepository {
-    public async Task<bool> SlatesExistForSeasonAsync(int season) {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.CfbSlates.AnyAsync(s => s.Season == season);
-    }
+    // frizat-b4g: a slate IS an in-scope control-table row, read straight from the one CFB table —
+    // its label, dates and rules are the row's own, so an edited row reaches every reader.
+    // Per-season and by-id reads filter the cached whole table, ordered by week number.
+    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetSlatesForSeasonAsync(int season) =>
+        ScheduleCache.Copies(InWeekOrder((await WeekConfigRowsAsync()).Where(c => c.InScopeIvLeague && c.Season == season)));
 
-    public async Task AddSlatesAsync(IEnumerable<CfbSlates> slates) {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        db.CfbSlates.AddRange(slates);
-        await db.SaveChangesAsync();
-    }
+    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllSlatesAsync() =>
+        ScheduleCache.Copies(InWeekOrder((await WeekConfigRowsAsync()).Where(c => c.InScopeIvLeague)));
 
-    public async Task<bool> DeleteSlatesAsync(IEnumerable<CfbSlates> slates) {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var slateList = slates.ToList();
-        var ids = slateList.Select(s => s.Id).ToHashSet();
+    public async Task<CfbSeasonWeekConfig?> GetSlateByIdAsync(int slateId) =>
+        ScheduleCache.Copy((await WeekConfigRowsAsync()).FirstOrDefault(c => c.InScopeIvLeague && c.Id == slateId));
 
-        // frizat-2lc: never bulk-delete slates that already carry real dependent data — guard
-        // lives here, not just in the one caller that exists today, so any future caller of
-        // DeleteSlatesAsync gets the same protection against real data loss / an unhandled FK
-        // violation (CfbSpreads/CfbScores/CfbPicks.CfbSlateId is Restrict, not Cascade).
-        var hasDependentData = ids.Count > 0 &&
-            (await db.CfbSpreads.AnyAsync(s => ids.Contains(s.CfbSlateId))
-             || await db.CfbScores.AnyAsync(s => ids.Contains(s.CfbSlateId))
-             || await db.CfbPicks.AnyAsync(p => ids.Contains(p.CfbSlateId)));
-        if (hasDependentData) return false;
-
-        db.CfbSlates.RemoveRange(slateList);
-        await db.SaveChangesAsync();
-        return true;
-    }
-
-    // Per-season and by-id reads filter the cached whole table (ordered Season, SlateNumber).
-    public async Task<IEnumerable<CfbSlates>> GetSlatesForSeasonAsync(int season) =>
-        await WithRulesAsync(ScheduleCache.Copies((await SlateRowsAsync()).Where(s => s.Season == season)), requireRow: true);
-
-    // Spans every season, so one old season's orphan slate must not break reads for the current
-    // one: fills the rules wherever a row exists. CfbCurrentSlateService resolves the active slate
-    // through its config row anyway.
-    public async Task<IEnumerable<CfbSlates>> GetAllSlatesAsync() =>
-        await WithRulesAsync(ScheduleCache.Copies(await SlateRowsAsync()), requireRow: false);
-
-    public async Task<CfbSlates?> GetSlateByIdAsync(int slateId) =>
-        ScheduleCache.Copy((await SlateRowsAsync()).FirstOrDefault(s => s.Id == slateId)) is { } slate
-            ? (await WithRulesAsync([slate], requireRow: true))[0]
-            : null;
-
-    // frizat-d47: a slate's Label/RequiredPicks/IsPostSeason are read live from its control-table row
-    // (Season + IvLeagueWeekNumber == SlateNumber), both tables cached — so the rules have one
-    // home and an edited row reaches every reader, never a copy frozen when the season was seeded.
-    // Slates are seeded from those rows, so where a slate is actually used (requireRow) one
-    // without a row is a data problem: fail loudly, as NFL does, rather than hand out a 0-pick cap.
-    private async Task<List<CfbSlates>> WithRulesAsync(List<CfbSlates> slates, bool requireRow) {
-        var rules = (await WeekConfigRowsAsync())
-            .Where(c => c.IvLeagueWeekNumber != 99)
-            .ToDictionary(c => (c.Season, c.IvLeagueWeekNumber));
-        foreach (var slate in slates) {
-            if (rules.GetValueOrDefault((slate.Season, slate.SlateNumber)) is { } row)
-                (slate.Label, slate.IsPostSeason, slate.RequiredPicks) = (row.WeekLabel, row.IsPostSeason, row.RequiredPicks);
-            else if (requireRow)
-                throw new InvalidOperationException($"No CfbSeasonWeekConfigs row for season {slate.Season} slate {slate.SlateNumber}.");
-        }
-        return slates;
-    }
-
-    private Task<IReadOnlyList<CfbSlates>> SlateRowsAsync() => ScheduleCache.CfbSlateRowsAsync(cache, dbFactory);
+    private static IEnumerable<CfbSeasonWeekConfig> InWeekOrder(IEnumerable<CfbSeasonWeekConfig> slates) =>
+        slates.OrderBy(c => c.Season).ThenBy(c => c.IvLeagueWeekNumber);
 
     public async Task UpsertAsync(IEnumerable<CfbSpreads> spreads) {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -112,10 +61,11 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
     public async Task<HashSet<(int Season, int Week)>> GetWeeksWithSpreadDataAsync() {
         await using var db = await dbFactory.CreateDbContextAsync();
         var pairs = await db.CfbSpreads
-            .Join(db.CfbSlates, s => s.CfbSlateId, sl => sl.Id, (s, sl) => new { sl.Season, sl.SlateNumber })
+            .Join(db.CfbSeasonWeekConfigs.Where(c => c.IvLeagueWeekNumber != null), s => s.CfbSlateId, c => c.Id,
+                (s, c) => new { c.Season, Week = c.IvLeagueWeekNumber!.Value })
             .Distinct()
             .ToListAsync();
-        return pairs.Select(p => (p.Season, p.SlateNumber)).ToHashSet();
+        return pairs.Select(p => (p.Season, p.Week)).ToHashSet();
     }
 
     public async Task<IEnumerable<CfbSpreads>> GetSpreadsForSlateAsync(int cfbSlateId) {
@@ -125,7 +75,7 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
 
     // Rank doesn't change once captured for a week, so a later capture (CfbRankingCaptureJob,
     // then CfbSpreadJob riding along with its odds fetch) overwrites the same row rather than
-    // appending a new one — enforced by the unique index on (Season, EspnWeekNumber, TeamAbbreviation).
+    // appending a new one — enforced by the unique index on (Season, WeekNumber, TeamAbbreviation).
     public async Task AddRankingsAsync(IEnumerable<CfbRanking> rankings) {
         await using var db = await dbFactory.CreateDbContextAsync();
         var rankingList = rankings.ToList();
@@ -134,11 +84,11 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
         // Every caller (CfbRankingCaptureJob's whole-season sweep, CfbSpreadJob's single-slate
         // capture) only ever produces rankings for one season per call — no need for a HashSet.
         var season = rankingList[0].Season;
-        var weeks = rankingList.Select(r => r.EspnWeekNumber).ToHashSet();
+        var weeks = rankingList.Select(r => r.WeekNumber).ToHashSet();
         await UpsertByKeyAsync(
             db.CfbRankings, rankingList,
-            r => (r.Season, r.EspnWeekNumber, r.TeamAbbreviation),
-            db.CfbRankings.Where(r => r.Season == season && weeks.Contains(r.EspnWeekNumber)),
+            r => (r.Season, r.WeekNumber, r.TeamAbbreviation),
+            db.CfbRankings.Where(r => r.Season == season && weeks.Contains(r.WeekNumber)),
             (existing, ranking) => {
                 existing.CuratedRank   = ranking.CuratedRank;
                 existing.EspnEventId   = ranking.EspnEventId;
@@ -147,10 +97,10 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
         await db.SaveChangesAsync();
     }
 
-    public async Task<Dictionary<string, int>> GetLatestRankingsForWeekAsync(int season, int espnWeekNumber) {
+    public async Task<Dictionary<string, int>> GetLatestRankingsForWeekAsync(int season, int weekNumber) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbRankings
-            .Where(r => r.Season == season && r.EspnWeekNumber == espnWeekNumber)
+            .Where(r => r.Season == season && r.WeekNumber == weekNumber)
             .ToDictionaryAsync(r => r.TeamAbbreviation, r => r.CuratedRank);
     }
 
@@ -159,19 +109,19 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
         return await db.CfbScores.Where(s => s.CfbSlateId == cfbSlateId).ToListAsync();
     }
 
-    // Subquery against CfbSlates (translated server-side), not a local slate-id list .Contains —
-    // see CLAUDE.md's Npgsql gotcha.
+    // Subquery against the control table (translated server-side), not a local slate-id list
+    // .Contains — see CLAUDE.md's Npgsql gotcha.
     public async Task<List<CfbSpreads>> GetLeagueEligibleSpreadsForSeasonAsync(int season) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbSpreads.AsNoTracking()
-            .Where(s => s.IsLeagueEligible && db.CfbSlates.Any(sl => sl.Id == s.CfbSlateId && sl.Season == season))
+            .Where(s => s.IsLeagueEligible && db.CfbSeasonWeekConfigs.Any(sl => sl.Id == s.CfbSlateId && sl.Season == season))
             .ToListAsync();
     }
 
     public async Task<List<CfbScores>> GetScoresForSeasonAsync(int season) {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.CfbScores.AsNoTracking()
-            .Where(s => db.CfbSlates.Any(sl => sl.Id == s.CfbSlateId && sl.Season == season))
+            .Where(s => db.CfbSeasonWeekConfigs.Any(sl => sl.Id == s.CfbSlateId && sl.Season == season))
             .ToListAsync();
     }
 

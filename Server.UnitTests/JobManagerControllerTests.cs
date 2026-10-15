@@ -32,7 +32,6 @@ public class JobManagerControllerTests
         nameof(JobManagerController.RunSpreads),
         nameof(JobManagerController.RunScores),
         nameof(JobManagerController.RunUserJob),
-        nameof(JobManagerController.RunCfbSlateSeeder),
         nameof(JobManagerController.RunCfbSpreads),
         nameof(JobManagerController.RunCfbScores),
         nameof(JobManagerController.DeleteJob),
@@ -102,20 +101,6 @@ public class JobManagerControllerTests
         var result = await controller.RunUserJob();
 
         Assert.IsType<BadRequestObjectResult>(result);
-    }
-
-    // ── Functional: RunCfbSlateSeeder happy path ───────────────────────────────
-
-    [Fact]
-    public async Task RunCfbSlateSeeder_ReturnsOk_WhenSchedulerSucceeds()
-    {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        scheduler.TriggerJob(new JobKey("CFB Slate Seeder")).Returns(Task.CompletedTask);
-
-        var result = await controller.RunCfbSlateSeeder();
-
-        Assert.IsType<OkObjectResult>(result);
-        await scheduler.Received(1).TriggerJob(Arg.Is<JobKey>(k => k.Name == "CFB Slate Seeder"));
     }
 
     // ── Functional: RunCfbSpreads happy path ──────────────────────────────────

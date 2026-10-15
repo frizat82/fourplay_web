@@ -15,9 +15,20 @@ AddPicks caps (NFL `NflWeekInfo.RequiredPicks`, CFB `slate.RequiredPicks`), the 
 the tease tier (`JuiceTiers.For(requiredPicks, …)`: 4 = regular, 3 = divisional,
 2 = conference, 1 = the final / no tease), live pick notifications, the WeeklyCost lock
 (the final = the row asking for 1 pick), the client adapters (`requiredPicks` on the API
-DTOs) and the Rules page. CFB slates don't store a copy: `CfbRepository` fills
-`CfbSlates.RequiredPicks`/`IsPostSeason` from the slate's config row on every read.
-A `RequiredPicks BETWEEN 0 AND 4` check constraint guards hand-written rows.
+DTOs) and the Rules page.
+
+**One control table per sport, the same shape (frizat-b4g).** There is no `CfbSlates` table: a
+CFB slate IS an in-scope `CfbSeasonWeekConfigs` row, and `CfbSpreads`/`CfbScores`/`CfbPicks.CfbSlateId`
+point at that row's `Id`. Both tables carry:
+- `WeekType` (shared enum: `RegularSeason`, `ConferenceChampionships`, `Playoff`, `Dead`). CFB
+  `Playoff` is what selects ESPN's CFP endpoint (`CfbSlateHelpers.IsCfpSlate`), filtered to the
+  row's date window; everything else is fetched by the row's dates.
+- `ScoringFormat` (shared enum: `Standard`/`Divisional`/`Conference`/`Final`/`None`), which a
+  check constraint ties to `RequiredPicks` (4/3/2/1/0).
+- `InScopeIvLeague`, the skip flag: an out-of-scope CFB week (bye/dead week) has
+  `IvLeagueWeekNumber = NULL` and `RequiredPicks = 0`. No 99 sentinel. NFL rows are all in scope.
+- AP rankings (`CfbRankings`) are keyed by (Season, `WeekNumber` = our slate number, team). No
+  ESPN week number is stored anywhere.
 
 **New season?** Seed its rows with these values (the tables below). The migration
 `AddPeriodRulesToSeasonWeekConfigs` backfilled 2025/2026 from exactly these tables.
@@ -53,17 +64,16 @@ There is no WeekId 23. Use `PopulateScoresTestDataAsync(21)` in tests, not 22. E
 
 The CFB week shown everywhere IS the slate number (1–18) — no `slate - 13` postseason numbering.
 Each slate's label and postseason flag are its `CfbSeasonWeekConfigs` row's `WeekLabel` /
-`IsPostSeason` (the week selector is built from the season's rows). `EspnWeekNumber` stays on the
-row only as an ESPN-adapter input (AP rankings key, CFP query):
+`IsPostSeason` (the week selector is built from the season's rows):
 
-| SlateNumber | ESPN Week | Label |
+| SlateNumber | WeekType | Label |
 |---|---|---|
-| 1–13 | 1–13 | Week 1 – Week 13 |
-| 14 | 14 | Conf. Championships |
-| 15 | 16 | CFP First Round |
-| 16 | 18 | CFP Quarterfinals |
-| 17 | 20 | CFP Semifinals |
-| 18 | 21 | CFP Championship |
+| 1–13 | RegularSeason | Week 1 – Week 13 |
+| 14 | ConferenceChampionships | Conf. Championships |
+| 15 | Playoff | CFP First Round |
+| 16 | Playoff | CFP Quarterfinals |
+| 17 | Playoff | CFP Semifinals |
+| 18 | Playoff | CFP Championship |
 
 ## NFL Week Numbering
 
@@ -92,7 +102,7 @@ Our WeekId everywhere: 1–18 regular season, 19 Wild Card, 20 Divisional, 21 Co
 ## Test Rot Checklist (Before Shipping Any Pick Logic Change)
 
 1. Read the tables above — understand the correct rule FIRST
-2. Grep ALL test files for old expected values: `PeriodRulesBackfillPostgresTests.cs`, `TestWeekConfigs.cs` (C# fixture rows), `src/test/fixtures.ts` (`nflRequiredPicks`), `LeaderboardTests.cs`, `picks.test.tsx`, e2e specs
+2. Grep ALL test files for old expected values: `PeriodRulesBackfillPostgresTests.cs`, `OneCfbControlTableMigrationTests.cs`, `TestWeekConfigs.cs` (C# fixture rows), `src/test/fixtures.ts` (`nflRequiredPicks`), `LeaderboardTests.cs`, `picks.test.tsx`, e2e specs
 3. Update stale assertions BEFORE fixing the implementation
 4. Confirm new tests are red before writing any implementation
 5. Run full suite: `dotnet test` + `npm run test -- --run` + `npm run test:e2e:demo`

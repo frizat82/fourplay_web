@@ -104,7 +104,7 @@ public class LivePickTransitionServiceTests
     private void SetUpNflHappyPath(Dictionary<int, PickLiveNotificationState>? priorStates = null, List<NflPicks>? picks = null)
     {
         _preferencesService.AnyLiveNotificationPreferenceEnabledAsync().Returns(true);
-        _nflCurrentWeek.GetCurrentWeekAsync().Returns(new NflWeekInfo(5, 2026, false, "Week 5", "Standard", default, 4));
+        _nflCurrentWeek.GetCurrentWeekAsync().Returns(new NflWeekInfo(5, 2026, false, "Week 5", ScoringFormat.Standard, default, 4));
         _leagueRepository.GetNflPicksForTeamsAsync(2026, 5, Arg.Any<IReadOnlyCollection<string>>()).Returns(picks ?? [KcPick]);
         _leagueRepository.GetNflSpreadsAsync(2026, 5).Returns([KcSpread]);
         _leagueRepository.GetLeagueJuiceMappingAsync(1, 2026).Returns(NoJuice);
@@ -481,7 +481,7 @@ public class LivePickTransitionServiceTests
     {
         _preferencesService.AnyLiveNotificationPreferenceEnabledAsync().Returns(true);
         _cfbCache.GetScoresAsync().Returns(CfbScores(27, 20, TypeName.StatusInProgress, KickoffLongAgo));
-        _cfbCurrentSlate.GetCurrentSlateAsync().Returns(new CfbSlateInfo(119, 2026, 9, "Slate 9", default, default, null, default, false, 4));
+        _cfbCurrentSlate.GetCurrentSlateAsync().Returns(new CfbSlateInfo(119, 2026, 9, "Slate 9", default, default, default, false, 4));
         var cfbPick = new CfbPicks { Id = 201, UserId = "user-1", LeagueId = 2, CfbSlateId = 119, Team = "OSU", PickType = PickType.Spread, Season = 2026 };
         _cfbPicksRepository.GetCfbPicksForTeamsAsync(2026, 119, Arg.Any<IReadOnlyCollection<string>>()).Returns([cfbPick]);
         _cfbRepository.GetLeagueEligibleSpreadsForSeasonAsync(2026).Returns([
