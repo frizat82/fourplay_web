@@ -15,16 +15,16 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
     // its label, dates and rules are the row's own, so an edited row reaches every reader.
     // Per-season and by-id reads filter the cached whole table, ordered by week number.
     public async Task<IEnumerable<CfbSeasonWeekConfig>> GetSlatesForSeasonAsync(int season) =>
-        ScheduleCache.Copies(InScope(await WeekConfigRowsAsync()).Where(c => c.Season == season));
+        ScheduleCache.Copies(InWeekOrder((await WeekConfigRowsAsync()).Where(c => c.InScopeIvLeague && c.Season == season)));
 
     public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllSlatesAsync() =>
-        ScheduleCache.Copies(InScope(await WeekConfigRowsAsync()));
+        ScheduleCache.Copies(InWeekOrder((await WeekConfigRowsAsync()).Where(c => c.InScopeIvLeague)));
 
     public async Task<CfbSeasonWeekConfig?> GetSlateByIdAsync(int slateId) =>
-        ScheduleCache.Copy(InScope(await WeekConfigRowsAsync()).FirstOrDefault(c => c.Id == slateId));
+        ScheduleCache.Copy((await WeekConfigRowsAsync()).FirstOrDefault(c => c.InScopeIvLeague && c.Id == slateId));
 
-    private static IEnumerable<CfbSeasonWeekConfig> InScope(IEnumerable<CfbSeasonWeekConfig> rows) =>
-        rows.Where(c => c.InScopeIvLeague).OrderBy(c => c.Season).ThenBy(c => c.IvLeagueWeekNumber);
+    private static IEnumerable<CfbSeasonWeekConfig> InWeekOrder(IEnumerable<CfbSeasonWeekConfig> slates) =>
+        slates.OrderBy(c => c.Season).ThenBy(c => c.IvLeagueWeekNumber);
 
     public async Task UpsertAsync(IEnumerable<CfbSpreads> spreads) {
         await using var db = await dbFactory.CreateDbContextAsync();

@@ -1,15 +1,6 @@
-using FourPlayWebApp.Server.Models.Data;
+using FourPlayWebApp.Shared.Models.Data.Dtos;
 
 namespace FourPlayWebApp.Server.Services.Interfaces;
-
-// One CFB slate (an in-scope control-table row, frizat-b4g) as both /api/cfb/slates and
-// /api/cfb/current-slate serve it — the client's one CfbSlateDto type.
-public record CfbSlateInfo(int Id, int Season, int SlateNumber, string Label,
-    DateOnly StartDate, DateOnly EndDate, DateTime SpreadLockDatetime,
-    bool IsPostSeason, int RequiredPicks) {
-    public static CfbSlateInfo From(CfbSeasonWeekConfig s) => new(s.Id, s.Season, s.SlateNumber, s.WeekLabel,
-        s.WeekStartDate, s.WeekEndDate, s.SpreadLockDatetime, s.IsPostSeason, s.RequiredPicks);
-}
 
 public interface ICfbCurrentSlateService {
     Task<CfbSlateInfo?> GetCurrentSlateAsync();

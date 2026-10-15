@@ -1,5 +1,7 @@
+using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
+using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
 
 namespace FourPlayWebApp.Server.Services;
@@ -7,7 +9,7 @@ namespace FourPlayWebApp.Server.Services;
 public class CfbCurrentSlateService(ICfbRepository repo, [FromKeyedServices(CurrentWeekClock.Key)] TimeProvider timeProvider) : ICfbCurrentSlateService {
     public async Task<CfbSlateInfo?> GetCurrentSlateAsync() {
         var active = ResolveCurrentSlate(await repo.GetAllSlatesAsync(), timeProvider.GetUtcNow().UtcDateTime);
-        return active is null ? null : CfbSlateInfo.From(active);
+        return active is null ? null : active.ToSlateInfo();
     }
 
     // frizat-9xg: most recent slate whose own spread grab has passed, unless we're within

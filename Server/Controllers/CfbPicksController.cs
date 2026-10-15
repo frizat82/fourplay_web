@@ -43,7 +43,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     [HttpGet("slates/{season}")]
     public async Task<IActionResult> GetSlates(int season) =>
         Ok((await cfbRepo.GetSlatesForSeasonAsync(season))
-            .Select(CfbSlateInfo.From)
+            .Select(s => s.ToSlateInfo())
             .ToList());
 
     // frizat-9m0: the full FBS slate is persisted for audit (see CfbSpreadJob), but only

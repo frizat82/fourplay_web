@@ -27,37 +27,48 @@ namespace FourPlayWebApp.Server.Migrations
             migrationBuilder.DropForeignKey(name: "FK_CfbScores_CfbSlates_CfbSlateId", table: "CfbScores");
             migrationBuilder.DropForeignKey(name: "FK_CfbSpreads_CfbSlates_CfbSlateId", table: "CfbSpreads");
 
-            // Re-point every slate reference from CfbSlates.Id to the matching control-table row's
-            // Id. Two passes via negative ids: old and new id ranges overlap, and the
-            // (CfbSlateId, HomeTeam)-style unique indexes are checked row by row, so a direct
-            // UPDATE could transiently collide.
-            foreach (var (table, column, scope) in new[] {
+            // The old schema had two skip markers (InScopeIvLeague false, IvLeagueWeekNumber 99).
+            // They agree on every real row; refuse to guess if one doesn't.
+            migrationBuilder.Sql("""
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM "CfbSeasonWeekConfigs" WHERE "InScopeIvLeague" = ("IvLeagueWeekNumber" = 99)) THEN
+                        RAISE EXCEPTION 'frizat-b4g: a CFB control-table row''s InScopeIvLeague disagrees with its 99 week number';
+                    END IF;
+                END $$;
+                """);
+
+            // Re-point every slate reference from CfbSlates.Id to the matching in-scope
+            // control-table row's Id. Two passes via negative ids: old and new id ranges overlap,
+            // and the (CfbSlateId, HomeTeam)-style unique indexes are checked row by row, so a
+            // direct UPDATE could transiently collide.
+            var references = new[] {
                 ("CfbSpreads", "CfbSlateId", ""),
                 ("CfbScores", "CfbSlateId", ""),
                 ("CfbPicks", "CfbSlateId", ""),
                 ("TeamLiveNotificationStates", "Period", "AND t.\"Sport\" = 1"),
-            })
+            };
+            foreach (var (table, column, scope) in references)
             {
                 migrationBuilder.Sql($"""
                     UPDATE "{table}" t SET "{column}" = -c."Id"
                     FROM "CfbSlates" s
-                    JOIN "CfbSeasonWeekConfigs" c ON c."Season" = s."Season" AND c."IvLeagueWeekNumber" = s."SlateNumber"
+                    JOIN "CfbSeasonWeekConfigs" c ON c."Season" = s."Season" AND c."IvLeagueWeekNumber" = s."SlateNumber" AND c."InScopeIvLeague"
                     WHERE t."{column}" = s."Id" {scope};
-                    UPDATE "{table}" t SET "{column}" = -t."{column}" WHERE t."{column}" < 0 {scope};
                     """);
             }
-            // Fail loudly if any CFB reference was left pointing at a slate with no control-table
-            // row (it would now point at nothing).
-            migrationBuilder.Sql("""
+            // Anything still positive matched no in-scope row: it would now point at an unrelated
+            // row (or a skipped week nothing reads). Fail loudly before flipping the rest back.
+            migrationBuilder.Sql($"""
                 DO $$
                 BEGIN
-                    IF EXISTS (SELECT 1 FROM "CfbSpreads" t WHERE NOT EXISTS (SELECT 1 FROM "CfbSeasonWeekConfigs" c WHERE c."Id" = t."CfbSlateId"))
-                    OR EXISTS (SELECT 1 FROM "CfbScores" t WHERE NOT EXISTS (SELECT 1 FROM "CfbSeasonWeekConfigs" c WHERE c."Id" = t."CfbSlateId"))
-                    OR EXISTS (SELECT 1 FROM "CfbPicks" t WHERE NOT EXISTS (SELECT 1 FROM "CfbSeasonWeekConfigs" c WHERE c."Id" = t."CfbSlateId")) THEN
-                        RAISE EXCEPTION 'frizat-b4g: a CFB spread/score/pick did not map to a control-table row';
+                    IF {string.Join(" OR ", references.Select(r => $"""EXISTS (SELECT 1 FROM "{r.Item1}" t WHERE t."{r.Item2}" > 0 {r.Item3})"""))} THEN
+                        RAISE EXCEPTION 'frizat-b4g: a CFB spread/score/pick/notification state did not map to an in-scope control-table row';
                     END IF;
                 END $$;
                 """);
+            foreach (var (table, column, scope) in references)
+                migrationBuilder.Sql($"""UPDATE "{table}" t SET "{column}" = -t."{column}" WHERE t."{column}" < 0 {scope};""");
 
             // AP rankings: ESPN week -> our week (the row's slate number), before ESPN's week
             // column goes. Same two-pass negative trick for the (Season, week, team) unique index.
@@ -70,7 +81,7 @@ namespace FourPlayWebApp.Server.Migrations
                 UPDATE "CfbRankings" r SET "WeekNumber" = -c."IvLeagueWeekNumber"
                 FROM "CfbSeasonWeekConfigs" c
                 WHERE c."Season" = r."Season" AND c."EspnWeekNumber" = r."WeekNumber" AND c."InScopeIvLeague";
-                DELETE FROM "CfbRankings" WHERE "WeekNumber" > 0; -- captured for no slate: nothing reads it
+                DELETE FROM "CfbRankings" WHERE "WeekNumber" >= 0; -- captured for no slate: nothing reads it
                 UPDATE "CfbRankings" SET "WeekNumber" = -"WeekNumber";
                 """);
 

@@ -20,7 +20,7 @@ namespace FourPlayWebApp.Server.UnitTests;
 /// shows up).
 /// </summary>
 public sealed class OneCfbControlTableMigrationFixture : IAsyncLifetime {
-    private const string Before = "20261014231648_CfbWeekLabelOnControlTable";
+    public const string Before = "20261014231648_CfbWeekLabelOnControlTable";
     public const int Season = 2026;
     public const string UserId = "b4g-user";
 
@@ -190,5 +190,29 @@ public class OneCfbControlTableMigrationTests(OneCfbControlTableMigrationFixture
         var exists = await db.Database.SqlQuery<bool>($"""SELECT to_regclass('"CfbSlates"') IS NOT NULL AS "Value" """).SingleAsync();
 
         Assert.False(exists);
+    }
+}
+
+// A slate reference the migration can't map to an in-scope week must stop the migration (and so
+// the deploy), not be left pointing at an unrelated control-table row.
+public class OneCfbControlTableMigrationRefusalTests {
+    [Fact]
+    public async Task Migration_Fails_WhenASpreadsSlateHasNoInScopeWeek() {
+        await using var container = new PostgreSqlBuilder().WithImage("postgres:16-alpine").WithCleanUp(true).Build();
+        await container.StartAsync();
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseNpgsql(container.GetConnectionString()).Options);
+        await db.GetService<IMigrator>().MigrateAsync(OneCfbControlTableMigrationFixture.Before);
+        // Slate 19 of a season with no row 19.
+        await db.Database.ExecuteSqlAsync($"""
+            INSERT INTO "CfbSlates" ("Id", "Season", "SlateNumber", "StartDate", "EndDate", "ScoringFormat")
+            VALUES (9001, 2026, 19, DATE '2027-02-01', DATE '2027-02-07', 'Standard')
+            """);
+        db.CfbSpreads.Add(new CfbSpreads { CfbSlateId = 9001, HomeTeam = "HOME", AwayTeam = "AWAY", GameTime = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => db.Database.MigrateAsync());
+
+        Assert.Contains("did not map to an in-scope control-table row", ex.Message);
     }
 }
