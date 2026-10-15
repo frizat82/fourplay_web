@@ -36,12 +36,9 @@ public class NflSpreadJob(
             // week (NflWeekInfo alone carries no date window) and fetch by date range — never
             // trust ESPN's own week=N bucketing (frizat-11t's NFL mirror).
             var configs = await leagueRepository.GetNflSeasonWeekConfigsAsync(currentWeek.Season);
-            var config = configs.FirstOrDefault(c => c.WeekId == currentWeek.WeekId);
-            if (config is null) {
-                Log.Warning("NflSpreadJob: no NflSeasonWeekConfig row for {Season} week {WeekId}", currentWeek.Season, currentWeek.WeekId);
-                await observer.RecordJobSuccessAsync(jobName, $"No NflSeasonWeekConfig row for {currentWeek.Season} week {currentWeek.WeekId}");
-                return;
-            }
+            // The current week was resolved from these rows, so a missing one is a real fault: fail the run.
+            var config = configs.FirstOrDefault(c => c.WeekId == currentWeek.WeekId)
+                ?? throw new InvalidOperationException($"NflSpreadJob: no NflSeasonWeekConfig row for {currentWeek.Season} week {currentWeek.WeekId}");
 
             var scoreboard = await fetcher.FetchForWeekAsync(config);
             if (scoreboard is null) {

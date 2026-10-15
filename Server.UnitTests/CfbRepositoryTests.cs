@@ -143,8 +143,7 @@ public class CfbRepositoryTests
         Assert.DoesNotContain((2026, 4), weeksWithData);
     }
 
-    // GetAllSlatesAsync spans every season —
-    // added so CfbCurrentSlateService can resolve the current slate across every season in
+    // GetAllSlatesAsync spans every season, so CfbCurrentSlateService can resolve the current slate across every season in
     // the DB instead of a single hardcoded ConfiguredSeason (frizat plan: wobbly-chasing-lynx).
     [Fact]
     public async Task GetAllSlatesAsync_ReturnsSlatesAcrossEverySeason_OrderedBySeasonThenSlateNumber()
