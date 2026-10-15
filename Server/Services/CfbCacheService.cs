@@ -74,7 +74,7 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                     .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc))));
 
                 var currentSlate = await currentSlateService.GetCurrentSlateAsync();
-                var slate = currentSlate is null ? null : await cfbRepo.GetSlateByIdAsync(currentSlate.Id);
+                var slate = currentSlate is null ? null : slates.FirstOrDefault(s => s.Id == currentSlate.Id);
                 if (slate is null) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
                 // ExpectedGames stays false for CFB: a slate's games aren't known up front (a CFP
                 // round's matchups may not be set yet), so an empty scoreboard isn't an outage.
