@@ -24,7 +24,7 @@ public class LeagueJuiceSchedulerJobTests
         _leagueRepo = Substitute.For<ILeagueRepository>();
         _cfbRepo = Substitute.For<ICfbRepository>();
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig>());
-        _cfbRepo.GetAllWeekConfigsAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig>());
+        _cfbRepo.GetAllSlatesAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig>());
         _leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo>());
         _leagueRepo.GetJuiceRemindersSentAsync().Returns(new HashSet<(int, int)>());
 

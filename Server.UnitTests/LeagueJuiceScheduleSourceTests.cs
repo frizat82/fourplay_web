@@ -24,7 +24,7 @@ public class LeagueJuiceScheduleSourceTests
         _leagueRepo = Substitute.For<ILeagueRepository>();
         _cfbRepo = Substitute.For<ICfbRepository>();
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig>());
-        _cfbRepo.GetAllWeekConfigsAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig>());
+        _cfbRepo.GetAllSlatesAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig>());
         _leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo>());
         _leagueRepo.GetJuiceRemindersSentAsync().Returns(new HashSet<(int, int)>());
     }
@@ -121,7 +121,7 @@ public class LeagueJuiceScheduleSourceTests
     [Fact]
     public async Task Cfb_LockTime_Is2PmCentralOnSlate1StartDate()
     {
-        _cfbRepo.GetAllWeekConfigsAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig> {
+        _cfbRepo.GetAllSlatesAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig> {
             MakeCfbSlate1(2025, new DateOnly(2025, 8, 23)),
         });
         _leagueRepo.GetAllLeaguesAsync().Returns([MakeLeague(1, LeagueType.Cfb)]);
@@ -229,7 +229,7 @@ public class LeagueJuiceScheduleSourceTests
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns([
             MakeNflWeek1(2025, new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc)),
         ]);
-        _cfbRepo.GetAllWeekConfigsAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig> {
+        _cfbRepo.GetAllSlatesAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig> {
             MakeCfbSlate1(2025, new DateOnly(2025, 8, 23)),
         });
         _leagueRepo.GetAllLeaguesAsync().Returns([MakeLeague(1, LeagueType.Cfb)]);
@@ -238,27 +238,6 @@ public class LeagueJuiceScheduleSourceTests
 
         var lockCandidate = Assert.Single(locks);
         Assert.Equal(new DateTime(2025, 8, 23, 19, 0, 0, DateTimeKind.Utc), lockCandidate.LockTime);
-    }
-
-    // /code-review: every other consumer of CfbSeasonWeekConfig (CfbSpreadScheduleSource,
-    // CfbRepository's slate reads) filters on InScopeIvLeague — this must match, or a slate-1 row
-    // entered with scope not yet confirmed would still schedule Juice reminders/locks against it.
-    [Fact]
-    public async Task CfbSeason_ExcludedWhenSlate1RowIsNotInScopeIvLeague()
-    {
-        _cfbRepo.GetAllWeekConfigsAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig> {
-            new() {
-                Season = 2025, IvLeagueWeekNumber = 1,
-                WeekStartDate = new DateOnly(2025, 8, 23), WeekEndDate = new DateOnly(2025, 8, 29),
-                InScopeIvLeague = false,
-            },
-        });
-        _leagueRepo.GetAllLeaguesAsync().Returns([MakeLeague(1, LeagueType.Cfb)]);
-
-        var (reminders, locks) = await BuildSource(new DateTimeOffset(2025, 8, 10, 0, 0, 0, TimeSpan.Zero)).GetCandidatesAsync();
-
-        Assert.Empty(reminders);
-        Assert.Empty(locks);
     }
 
     [Fact]
@@ -374,21 +353,6 @@ public class LeagueJuiceScheduleSourceTests
 
         Assert.Null(startLock);
         Assert.Null(endLock);
-    }
-
-    [Fact]
-    public void GetWeekLockTimeUtc_Cfb_IgnoresRowNotInScopeIvLeague() {
-        var cfbConfigs = new[] {
-            new CfbSeasonWeekConfig {
-                Season = 2025, IvLeagueWeekNumber = 18,
-                WeekStartDate = new DateOnly(2026, 1, 12), WeekEndDate = new DateOnly(2026, 1, 18),
-                InScopeIvLeague = false,
-            },
-        };
-
-        var lockTime = LeagueJuiceScheduleSource.GetSeasonEndLockTimeUtc(LeagueType.Cfb, 2025, [], cfbConfigs);
-
-        Assert.Null(lockTime);
     }
 
     // ── JobData ────────────────────────────────────────────────────────────────────

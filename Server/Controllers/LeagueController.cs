@@ -150,7 +150,7 @@ public class LeagueController(
         // one of them — fetched once, not once per season row.
         var leagueType = mappings[0].League.LeagueType;
         var nflConfigs = leagueType == LeagueType.Cfb ? [] : await repo.GetNflSeasonWeekConfigsAsync();
-        var cfbConfigs = leagueType == LeagueType.Cfb ? await cfbRepo.GetAllWeekConfigsAsync() : [];
+        var cfbConfigs = leagueType == LeagueType.Cfb ? await cfbRepo.GetAllSlatesAsync() : [];
 
         var dtoMappings = mappings.Select(m => {
             var (teaseLocked, weeklyCostLocked) = GetJuiceLockState(leagueType, m.Season, m.StartWeek, nflConfigs, cfbConfigs);

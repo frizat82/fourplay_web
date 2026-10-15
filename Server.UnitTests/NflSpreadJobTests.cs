@@ -172,6 +172,19 @@ public class NflSpreadJobTests
     // Early-return when GetWeekScores returns null
     // -----------------------------------------------------------------------
 
+    // Same rule as CfbSpreadJob: the current week always comes from the control table, so its row
+    // missing is a real fault — the run fails (and alerts) instead of recording a quiet success.
+    [Fact]
+    public async Task Execute_WhenTheCurrentWeeksRowIsMissing_ThrowsAndFetchesNothing()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync(2024).Returns(new List<NflSeasonWeekConfig>());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        await _fetcher.DidNotReceiveWithAnyArgs().FetchForWeekAsync(default!);
+        await _observer.DidNotReceiveWithAnyArgs().RecordJobSuccessAsync(default!, default!);
+    }
+
     [Fact]
     public async Task Execute_WhenGetWeekScoresReturnsNull_ThrowsAndSavesNoSpreads()
     {

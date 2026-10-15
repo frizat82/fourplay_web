@@ -123,6 +123,20 @@ public class CfbSpreadJobTests
         await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>());
     }
 
+    // The current slate always comes from the same in-scope rows the repository serves, so its row
+    // missing is a real fault: the run fails (and alerts) instead of recording a quiet success.
+    [Fact]
+    public async Task Execute_WhenTheCurrentSlatesRowIsMissing_ThrowsAndFetchesNothing()
+    {
+        SetCurrentSlate(BuildSlate());
+        _repo.GetSlateByIdAsync(Arg.Any<int>()).Returns((CfbSeasonWeekConfig?)null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        await _fetcher.DidNotReceiveWithAnyArgs().FetchForSlateAsync(default!, default);
+        await _observer.DidNotReceiveWithAnyArgs().RecordJobSuccessAsync(default!, default!);
+    }
+
     [Fact]
     public async Task Execute_WhenFetcherReturnsNull_ThrowsAndSavesNoSpreads()
     {

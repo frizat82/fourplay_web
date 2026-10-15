@@ -151,8 +151,8 @@ public class LeagueOwnershipTests
     // fires. Used by tests that don't care about the season-boundary locks themselves.
     private static ICfbRepository EmptyCfbRepo() {
         var cfbRepo = Substitute.For<ICfbRepository>();
-        cfbRepo.GetAllWeekConfigsAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig>());
-        cfbRepo.GetWeekConfigsForSeasonAsync(Arg.Any<int>()).Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig>());
+        cfbRepo.GetAllSlatesAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig>());
+        cfbRepo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig>());
         return cfbRepo;
     }
 
