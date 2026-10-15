@@ -1,3 +1,4 @@
+using System.Reflection;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Enum;
@@ -146,5 +147,88 @@ public class EspnScoresFingerprintTests {
         var after = EspnScoresFingerprint.Compute(MakeScores(MakeSituation()));
 
         Assert.NotEqual(before, after);
+    }
+
+    // frizat-6u6: the fingerprint used to hash a hand-picked list of fields, so a field the UI
+    // started showing (e.g. timeouts) never triggered a push until someone remembered to add it.
+    // Now every field of the fetched week counts: change any one of them in a real captured
+    // in-progress scoreboard and the fingerprint must move.
+    [Fact]
+    public void Compute_Changes_WhenAnyFieldOfTheWeekChanges() {
+        var missed = new List<string>();
+        var baseline = EspnScoresFingerprint.Compute(LoadInProgress());
+
+        foreach (var path in LeafPaths(LoadInProgress(), "", typeof(EspnScores))) {
+            var scores = LoadInProgress();
+            if (!TryMutate(scores, path)) continue;
+            if (EspnScoresFingerprint.Compute(scores) == baseline) missed.Add(path);
+        }
+
+        Assert.Empty(missed);
+    }
+
+    private static EspnScores LoadInProgress() {
+        using var stream = typeof(EspnScoresFingerprint).Assembly.GetManifestResourceStream("sample_espn_nfl_in_progress.json")!;
+        return System.Text.Json.JsonSerializer.Deserialize<EspnScores>(stream, EspnApiServiceJsonConverter.Settings)!;
+    }
+
+    private static readonly Type[] LeafTypes = [typeof(string), typeof(bool), typeof(int), typeof(long), typeof(double),
+        typeof(decimal), typeof(DateTime), typeof(DateTimeOffset), typeof(Uri)];
+
+    private static bool IsLeaf(Type t) {
+        var u = Nullable.GetUnderlyingType(t) ?? t;
+        return u.IsEnum || LeafTypes.Contains(u);
+    }
+
+    private static IEnumerable<PropertyInfo> Settable(Type t) =>
+        t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0);
+
+    // Every settable leaf reachable from a populated object, as "Prop/Prop[0]/Prop" paths
+    // (first element of each array — every element is serialized the same way).
+    private static IEnumerable<string> LeafPaths(object? node, string prefix, Type type) {
+        if (node is null) yield break;
+        foreach (var prop in Settable(type)) {
+            var path = prefix + "/" + prop.Name;
+            var value = prop.GetValue(node);
+            if (IsLeaf(prop.PropertyType)) { yield return path; continue; }
+            if (value is Array arr) {
+                if (arr.Length > 0 && arr.GetValue(0) is { } first) {
+                    if (IsLeaf(first.GetType())) continue; // arrays of scalars: rare, not walked
+                    foreach (var p in LeafPaths(first, path + "[0]", first.GetType())) yield return p;
+                }
+                continue;
+            }
+            if (value is not null && !prop.PropertyType.IsValueType)
+                foreach (var p in LeafPaths(value, path, value.GetType())) yield return p;
+        }
+    }
+
+    private static bool TryMutate(object root, string path) {
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        object node = root;
+        foreach (var part in parts[..^1]) {
+            var name = part.TrimEnd(']').Split('[')[0];
+            var value = node.GetType().GetProperty(name)!.GetValue(node)!;
+            node = part.EndsWith("[0]") ? ((Array)value).GetValue(0)! : value;
+        }
+        var prop = node.GetType().GetProperty(parts[^1])!;
+        var current = prop.GetValue(node);
+        var t = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+        object? next = t switch {
+            _ when t == typeof(string) => (current as string ?? "") + "x",
+            _ when t == typeof(bool) => !(bool)(current ?? false),
+            _ when t == typeof(int) => (int)(current ?? 0) + 1,
+            _ when t == typeof(long) => (long)(current ?? 0L) + 1,
+            _ when t == typeof(double) => (double)(current ?? 0d) + 1,
+            _ when t == typeof(decimal) => (decimal)(current ?? 0m) + 1,
+            _ when t == typeof(DateTime) => ((DateTime)(current ?? DateTime.UnixEpoch)).AddMinutes(1),
+            _ when t == typeof(DateTimeOffset) => ((DateTimeOffset)(current ?? DateTimeOffset.UnixEpoch)).AddMinutes(1),
+            _ when t == typeof(Uri) => new Uri(((Uri?)current)?.ToString() + "x", UriKind.RelativeOrAbsolute),
+            _ when t.IsEnum => Enum.GetValues(t).Cast<object>().FirstOrDefault(v => !Equals(v, current)),
+            _ => null,
+        };
+        if (next is null) return false;
+        prop.SetValue(node, next);
+        return true;
     }
 }
