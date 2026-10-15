@@ -18,21 +18,58 @@ public class EspnScoresFingerprintTests {
     }
 
     // Change any one field of a real captured in-progress scoreboard and the fingerprint must move.
+    // Sub-objects the capture doesn't have (odds, weather, rankings...) are filled in first, so
+    // every field the model maps is reached — including ones added later.
     [Fact]
     public void Compute_Changes_WhenAnyFieldOfTheWeekChanges() {
         var scores = LoadInProgress();
+        FillMissing(scores, []);
         var baseline = EspnScoresFingerprint.Compute(scores);
+        var visited = new List<string>();
         var missed = new List<string>();
 
         foreach (var (owner, prop, path) in Leaves(scores, "")) {
             var original = prop.GetValue(owner);
             if (Mutated(prop.PropertyType, original) is not { } next) continue;
+            visited.Add(path);
             prop.SetValue(owner, next);
             if (EspnScoresFingerprint.Compute(scores) == baseline) missed.Add(path);
             prop.SetValue(owner, original);
         }
 
         Assert.Empty(missed);
+        Assert.Contains(visited, p => p.Contains("/Odds[0]/"));
+        Assert.Contains(visited, p => p.Contains("/Weather/"));
+        Assert.Contains(visited, p => p.Contains("/CuratedRank/"));
+    }
+
+    // Gives every null sub-object and empty array one default instance, recursively (a type
+    // already on the current path is left alone, so self-referencing types can't recurse forever).
+    private static void FillMissing(object node, HashSet<Type> onPath) {
+        if (!onPath.Add(node.GetType())) return;
+        foreach (var prop in node.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                     .Where(p => p.CanWrite && p.GetIndexParameters().Length == 0 && !IsLeaf(p.PropertyType))) {
+            var value = prop.GetValue(node);
+            if (prop.PropertyType.IsArray) {
+                var elementType = prop.PropertyType.GetElementType()!;
+                if (IsLeaf(elementType) || onPath.Contains(elementType)) continue;
+                if (value is not Array { Length: > 0 }) {
+                    if (elementType.GetConstructor(Type.EmptyTypes) is null) continue;
+                    var arr = Array.CreateInstance(elementType, 1);
+                    arr.SetValue(Activator.CreateInstance(elementType), 0);
+                    prop.SetValue(node, value = arr);
+                }
+                if (((Array)value).GetValue(0) is { } first) FillMissing(first, onPath);
+                continue;
+            }
+            if (prop.PropertyType.IsValueType || onPath.Contains(prop.PropertyType)) continue;
+            if (value is null) {
+                if (prop.PropertyType.GetConstructor(Type.EmptyTypes) is null) continue;
+                prop.SetValue(node, value = Activator.CreateInstance(prop.PropertyType));
+            }
+            FillMissing(value!, onPath);
+        }
+        onPath.Remove(node.GetType());
     }
 
     // ESPN's live feed sometimes omits the situation sub-object (frizat-66c): no throw, and its

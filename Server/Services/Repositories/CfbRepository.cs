@@ -13,7 +13,9 @@ namespace FourPlayWebApp.Server.Services.Repositories;
 public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IMemoryCache? cache = null) : ICfbRepository {
     // frizat-b4g: a slate IS an in-scope control-table row, read straight from the one CFB table —
     // its label, dates and rules are the row's own, so an edited row reaches every reader.
-    // Every read filters the cached whole table, which is already in (Season, week) order.
+    // Every read filters the cached whole table, cached in (Season, week number) order — slates
+    // are therefore in week order (skipped weeks' null numbers sort differently per database, but
+    // no slate read returns them).
     public async Task<IEnumerable<CfbSeasonWeekConfig>> GetSlatesForSeasonAsync(int season) =>
         ScheduleCache.Copies((await WeekConfigRowsAsync()).Where(c => c.InScopeIvLeague && c.Season == season));
 
