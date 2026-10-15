@@ -38,7 +38,6 @@ public class ScheduleCacheTests {
         Assert.Equal(2, (await repo.GetSlateByIdAsync(2))!.SlateNumber);
         Assert.Null(await repo.GetSlateByIdAsync(4));
         Assert.Null(await repo.GetSlateByIdAsync(5)); // skipped week
-        Assert.Equal([5, 1, 2], (await repo.GetWeekConfigsForSeasonAsync(2026)).Select(c => c.Id)); // date order, skipped weeks included
     }
 
     [Fact]

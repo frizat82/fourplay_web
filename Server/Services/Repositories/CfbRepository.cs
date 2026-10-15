@@ -13,18 +13,17 @@ namespace FourPlayWebApp.Server.Services.Repositories;
 public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IMemoryCache? cache = null) : ICfbRepository {
     // frizat-b4g: a slate IS an in-scope control-table row, read straight from the one CFB table —
     // its label, dates and rules are the row's own, so an edited row reaches every reader.
-    // Per-season and by-id reads filter the cached whole table, ordered by week number.
+    // Every read filters the cached whole table, cached in (Season, week number) order — slates
+    // are therefore in week order (skipped weeks' null numbers sort differently per database, but
+    // no slate read returns them).
     public async Task<IEnumerable<CfbSeasonWeekConfig>> GetSlatesForSeasonAsync(int season) =>
-        ScheduleCache.Copies(InWeekOrder((await WeekConfigRowsAsync()).Where(c => c.InScopeIvLeague && c.Season == season)));
+        ScheduleCache.Copies((await WeekConfigRowsAsync()).Where(c => c.InScopeIvLeague && c.Season == season));
 
     public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllSlatesAsync() =>
-        ScheduleCache.Copies(InWeekOrder((await WeekConfigRowsAsync()).Where(c => c.InScopeIvLeague)));
+        ScheduleCache.Copies((await WeekConfigRowsAsync()).Where(c => c.InScopeIvLeague));
 
     public async Task<CfbSeasonWeekConfig?> GetSlateByIdAsync(int slateId) =>
         ScheduleCache.Copy((await WeekConfigRowsAsync()).FirstOrDefault(c => c.InScopeIvLeague && c.Id == slateId));
-
-    private static IEnumerable<CfbSeasonWeekConfig> InWeekOrder(IEnumerable<CfbSeasonWeekConfig> slates) =>
-        slates.OrderBy(c => c.Season).ThenBy(c => c.IvLeagueWeekNumber);
 
     public async Task UpsertAsync(IEnumerable<CfbSpreads> spreads) {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -124,11 +123,6 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
             .Where(s => db.CfbSeasonWeekConfigs.Any(sl => sl.Id == s.CfbSlateId && sl.Season == season))
             .ToListAsync();
     }
-
-    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetWeekConfigsForSeasonAsync(int season) =>
-        ScheduleCache.Copies((await WeekConfigRowsAsync()).Where(c => c.Season == season));
-
-    public async Task<IEnumerable<CfbSeasonWeekConfig>> GetAllWeekConfigsAsync() => ScheduleCache.Copies(await WeekConfigRowsAsync());
 
     private Task<IReadOnlyList<CfbSeasonWeekConfig>> WeekConfigRowsAsync() => ScheduleCache.CfbWeekConfigRowsAsync(cache, dbFactory);
 

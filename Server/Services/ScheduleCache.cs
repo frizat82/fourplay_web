@@ -45,7 +45,7 @@ public static class ScheduleCache {
     public static Task<IReadOnlyList<CfbSeasonWeekConfig>> CfbWeekConfigRowsAsync(IMemoryCache? cache, IDbContextFactory<ApplicationDbContext> factory) =>
         RowsAsync(cache, CfbWeekConfigs, async () => {
             await using var db = await factory.CreateDbContextAsync();
-            return await db.CfbSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.WeekStartDate).ToListAsync();
+            return await db.CfbSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.IvLeagueWeekNumber).ToListAsync();
         });
 
     // Shallow copies: these are flat rows (no navigation data loaded), so a caller changing a field

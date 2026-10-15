@@ -24,7 +24,7 @@ public class LeagueJuiceScheduleSource(ILeagueRepository leagueRepo, ICfbReposit
     public async Task<(IEnumerable<TimedTriggerCandidate> Reminders, IEnumerable<TimedTriggerCandidate> Locks)> GetCandidatesAsync() {
         var leaguesTask = leagueRepo.GetAllLeaguesAsync();
         var nflConfigsTask = leagueRepo.GetNflSeasonWeekConfigsAsync();
-        var cfbConfigsTask = cfbRepo.GetAllWeekConfigsAsync();
+        var cfbConfigsTask = cfbRepo.GetAllSlatesAsync();
         var remindersSentTask = leagueRepo.GetJuiceRemindersSentAsync();
         await Task.WhenAll(leaguesTask, nflConfigsTask, cfbConfigsTask, remindersSentTask);
 
@@ -41,7 +41,7 @@ public class LeagueJuiceScheduleSource(ILeagueRepository leagueRepo, ICfbReposit
         var nflLockTimes = nflConfigs.Where(c => c.WeekId == 1 && c.FirstGameOfWeekStartDatetime.HasValue)
             .Select(c => c.Season).Distinct()
             .ToDictionary(s => s, s => GetSeasonStartLockTimeUtc(LeagueType.Nfl, s, nflConfigs, cfbConfigs)!.Value);
-        var cfbLockTimes = cfbConfigs.Where(c => c.IvLeagueWeekNumber == 1 && c.InScopeIvLeague)
+        var cfbLockTimes = cfbConfigs.Where(c => c.IvLeagueWeekNumber == 1)
             .Select(c => c.Season).Distinct()
             .ToDictionary(s => s, s => GetSeasonStartLockTimeUtc(LeagueType.Cfb, s, nflConfigs, cfbConfigs)!.Value);
 
@@ -100,7 +100,7 @@ public class LeagueJuiceScheduleSource(ILeagueRepository leagueRepo, ICfbReposit
     public async Task<(bool TeaseLocked, bool WeeklyCostLocked)> GetJuiceLockStateAsync(LeagueType leagueType, int season, int startWeek) {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         IEnumerable<NflSeasonWeekConfig> nflConfigs = leagueType == LeagueType.Cfb ? [] : await leagueRepo.GetNflSeasonWeekConfigsAsync(season);
-        IEnumerable<CfbSeasonWeekConfig> cfbConfigs = leagueType == LeagueType.Cfb ? await cfbRepo.GetWeekConfigsForSeasonAsync(season) : [];
+        IEnumerable<CfbSeasonWeekConfig> cfbConfigs = leagueType == LeagueType.Cfb ? await cfbRepo.GetSlatesForSeasonAsync(season) : [];
 
         var teaseLockTime = GetSeasonStartLockTimeUtc(leagueType, season, nflConfigs, cfbConfigs, startWeek);
         var weeklyCostLockTime = GetSeasonEndLockTimeUtc(leagueType, season, nflConfigs, cfbConfigs);
@@ -117,8 +117,7 @@ public class LeagueJuiceScheduleSource(ILeagueRepository leagueRepo, ICfbReposit
     public static DateTime? GetWeekLockTimeUtc(LeagueType leagueType, int season, int weekOrSlateNumber,
         IEnumerable<NflSeasonWeekConfig> nflConfigs, IEnumerable<CfbSeasonWeekConfig> cfbConfigs) {
         if (leagueType == LeagueType.Cfb) {
-            var slate = cfbConfigs.FirstOrDefault(c =>
-                c.Season == season && c.IvLeagueWeekNumber == weekOrSlateNumber && c.InScopeIvLeague);
+            var slate = cfbConfigs.FirstOrDefault(c => c.Season == season && c.IvLeagueWeekNumber == weekOrSlateNumber);
             return slate is null ? null : LockTimeUtc(slate.WeekStartDate);
         }
         var week = nflConfigs.FirstOrDefault(c =>

@@ -42,12 +42,8 @@ public class CfbSpreadJob(
                 return;
             }
 
-            var slate = await repo.GetSlateByIdAsync(slateInfo.Id);
-            if (slate is null) {
-                Log.Warning("CfbSpreadJob: slate {SlateId} vanished between resolution and fetch", slateInfo.Id);
-                await observer.RecordJobSuccessAsync(jobName, $"Slate {slateInfo.Id} vanished between resolution and fetch");
-                return;
-            }
+            var slate = await repo.GetSlateByIdAsync(slateInfo.Id)
+                ?? throw new InvalidOperationException($"CfbSpreadJob: current slate {slateInfo.Id} is not a slate the repository serves");
 
             var spreads = new List<CfbSpreads>();
             var rankings = new List<CfbRanking>();

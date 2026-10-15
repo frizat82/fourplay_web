@@ -39,14 +39,14 @@ public class CfbCacheServiceTests
 
     private static readonly CfbSeasonWeekConfig DefaultSlate = new() {
         Id = 1, Season = 2026, IvLeagueWeekNumber = 5, InScopeIvLeague = true, WeekLabel = "Week 5", WeekStartDate = Today.AddDays(-1), WeekEndDate = Today.AddDays(1),
- ScoringFormat = ScoringFormat.Standard,
+        ScoringFormat = ScoringFormat.Standard, SpreadLockDatetime = DateTime.UtcNow.AddDays(-7),
     };
 
     // A separate, already-ENDED slate (fixed past calendar dates) for the settled-cache tests
     // below — DefaultSlate is deliberately always-active so it can't exercise the DB-first path.
     private static readonly CfbSeasonWeekConfig SettledSlate = new() {
         Id = 2, Season = 2025, IvLeagueWeekNumber = 4, InScopeIvLeague = true, WeekLabel = "Week 4", WeekStartDate = new DateOnly(2025, 9, 27), WeekEndDate = new DateOnly(2025, 9, 28),
- ScoringFormat = ScoringFormat.Standard,
+        ScoringFormat = ScoringFormat.Standard, SpreadLockDatetime = new DateTime(2025, 9, 26, 12, 0, 0, DateTimeKind.Utc),
     };
 
     public CfbCacheServiceTests()
@@ -57,6 +57,8 @@ public class CfbCacheServiceTests
         _currentSlateService.GetCurrentSlateAsync().Returns(DefaultSlateInfo);
         _cfbRepo.GetSlateByIdAsync(DefaultSlate.Id).Returns(DefaultSlate);
         _cfbRepo.GetSlateByIdAsync(SettledSlate.Id).Returns(SettledSlate);
+        // The poll finds the current slate's row in the slates it already loaded.
+        _cfbRepo.GetAllSlatesAsync().Returns([SettledSlate, DefaultSlate]);
         // Default: no persisted rows for any slate, so existing tests (which never seed the
         // repo) keep exercising the live-fetch branch exactly as before GetSlateScoresAsync
         // existed.
