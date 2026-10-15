@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Data;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Shared.Models;
@@ -161,8 +162,8 @@ public class DemoEspnCacheServiceTests
             Season = 2025,
             WeekId = 22,
             WeekLabel = "Super Bowl",
-            WeekType = "Super Bowl",
-            ScoringFormat = "Standard",
+            WeekType = WeekType.Playoff,
+            ScoringFormat = ScoringFormat.Standard,
             WeekStartDatetime = new DateTime(2026, 1, 25),
             WeekEndDatetime = new DateTime(2026, 1, 26),
             SpreadLockDatetime = new DateTime(2026, 1, 25),
@@ -208,14 +209,14 @@ public class DemoEspnCacheServiceTests
             GameTime = frozen.UtcDateTime.AddDays(-10),
         });
         db.NflSeasonWeekConfigs.Add(new Models.Data.NflSeasonWeekConfig {
-            Season = 2025, WeekId = 21, WeekLabel = "Conference Championship", WeekType = "Conference Championship",
-            ScoringFormat = "Standard",
+            Season = 2025, WeekId = 21, WeekLabel = "Conference Championship", WeekType = WeekType.Playoff,
+            ScoringFormat = ScoringFormat.Standard,
             WeekStartDatetime = frozen.UtcDateTime.AddDays(-10), WeekEndDatetime = frozen.UtcDateTime.AddDays(-3),
             SpreadLockDatetime = frozen.UtcDateTime.AddDays(-10),
         });
         db.NflSeasonWeekConfigs.Add(new Models.Data.NflSeasonWeekConfig {
-            Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "Super Bowl",
-            ScoringFormat = "Standard",
+            Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = WeekType.Playoff,
+            ScoringFormat = ScoringFormat.Standard,
             WeekStartDatetime = frozen.UtcDateTime.AddDays(10), WeekEndDatetime = frozen.UtcDateTime.AddDays(17),
             SpreadLockDatetime = frozen.UtcDateTime.AddDays(10),
         });

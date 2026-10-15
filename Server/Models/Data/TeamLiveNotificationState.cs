@@ -14,7 +14,7 @@ public class TeamLiveNotificationState {
     public int LeagueId { get; set; }
     public string Team { get; set; } = string.Empty;
     public PickType PickType { get; set; }
-    // The FK-scoping period value (NflSeasonWeekConfig.WeekId / CfbSlates row id) — matches
+    // The FK-scoping period value (NflSeasonWeekConfig.WeekId / CfbSeasonWeekConfigs row id) — matches
     // PickLiveNotificationState's implicit per-pick scoping (a pick row belongs to one period).
     public int Period { get; set; }
     public bool? LastNotifiedCovering { get; set; }

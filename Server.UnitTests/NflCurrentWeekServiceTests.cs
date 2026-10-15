@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -21,8 +22,8 @@ public class NflCurrentWeekServiceTests
         IsPostSeason = isPostSeason,
         RequiredPicks = requiredPicks,
         WeekLabel = $"Week {weekId}",
-        WeekType = "Regular",
-        ScoringFormat = "Standard",
+        WeekType = WeekType.RegularSeason,
+        ScoringFormat = ScoringFormat.Standard,
         WeekStartDatetime = start,
         WeekEndDatetime = end,
         SpreadLockDatetime = start,

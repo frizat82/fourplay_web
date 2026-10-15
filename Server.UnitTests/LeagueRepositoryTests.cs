@@ -331,7 +331,7 @@ public class LeagueRepositoryTests
         var factory = new DbContextFactoryStub(nameof(GetLeagueMemberCountAsync_SeasonAware_Cfb_CountsMemberWhoJoinedLaterOnTheSeasonsLastCalendarDay));
         var seedDb = factory.CreateDbContext();
         seedDb.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
-            Season = 2024, EspnWeekNumber = 1, IvLeagueWeekNumber = 1,
+            Season = 2024, IvLeagueWeekNumber = 1,
             WeekStartDate = new DateOnly(2024, 8, 20), WeekEndDate = new DateOnly(2025, 1, 15),
         });
         // Joined at 6pm UTC on the season's last calendar day — still that day, still in-season.
@@ -392,7 +392,7 @@ public class LeagueRepositoryTests
         await SeedNflSeasonAsync(factory, 2024, new DateTime(2024, 9, 1), new DateTime(2025, 2, 1));
         var seedDb = factory.CreateDbContext();
         seedDb.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
-            Season = 2024, EspnWeekNumber = 1, IvLeagueWeekNumber = 1,
+            Season = 2024, IvLeagueWeekNumber = 1,
             WeekStartDate = new DateOnly(2024, 8, 20), WeekEndDate = new DateOnly(2025, 1, 15),
         });
         seedDb.LeagueInfo.AddRange(

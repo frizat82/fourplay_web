@@ -1,4 +1,4 @@
-import type { CfbSlateDto } from '../types/league';
+import type { CfbSlateDto, NflCurrentWeekDto } from '../types/league';
 import type { Mock } from 'vitest';
 import type { Competition, EspnScores, Event } from '../types/espn';
 import type { NflPickDto, PickType, SpreadCalculationResponse, SpreadResponse } from '../types/picks';
@@ -213,7 +213,7 @@ export function createNflSeasonWeeks() {
 
 /** Control table's resolved "current week" answer (getNflCurrentWeek) — matches
  * createScores'/makeScores' fixture convention (season 2024 unless overridden). */
-export function createCurrentWeek(week: number, postSeason = false, season = 2024) {
+export function createCurrentWeek(week: number, postSeason = false, season = 2024): NflCurrentWeekDto {
   return {
     weekId: week, season, isPostSeason: postSeason,
     weekLabel: nflWeekLabel(week),

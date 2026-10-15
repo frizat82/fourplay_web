@@ -31,7 +31,7 @@ public class CfbSpreadJob(
             // distinct, explicit operation, not this job's default behavior.
             var slateInfo = await currentSlateService.GetCurrentSlateAsync();
             if (slateInfo is null) {
-                Log.Warning("CfbSpreadJob: no current slate found — run CfbSlateSeederJob first");
+                Log.Warning("CfbSpreadJob: no current slate found (no in-scope CfbSeasonWeekConfigs rows)");
                 await observer.RecordJobSuccessAsync(jobName, "No current slate found");
                 return;
             }
@@ -56,7 +56,7 @@ public class CfbSpreadJob(
             var scoreboard = await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true);
             if (scoreboard is null) {
                 throw new InvalidOperationException(
-                    $"CfbSpreadJob: ESPN fetch failed entirely for {slate.Label} (past lock time {slateInfo.SpreadLockDatetime}) — no scoreboard data retrieved");
+                    $"CfbSpreadJob: ESPN fetch failed entirely for {slate.WeekLabel} (past lock time {slateInfo.SpreadLockDatetime}) — no scoreboard data retrieved");
             }
 
             if (scoreboard.Events is not null) {
@@ -88,10 +88,10 @@ public class CfbSpreadJob(
             // relies on.
             if (spreads.Count == 0) {
                 throw new InvalidOperationException(
-                    $"CfbSpreadJob: {slate.Label} is past lock time {slateInfo.SpreadLockDatetime}, but zero spreads were saved");
+                    $"CfbSpreadJob: {slate.WeekLabel} is past lock time {slateInfo.SpreadLockDatetime}, but zero spreads were saved");
             }
 
-            await observer.RecordJobSuccessAsync(jobName, $"Saved {spreads.Count} spreads, {rankings.Count} rankings for {slate.Label}");
+            await observer.RecordJobSuccessAsync(jobName, $"Saved {spreads.Count} spreads, {rankings.Count} rankings for {slate.WeekLabel}");
         } catch (Exception ex) {
             await observer.RecordAndRethrowAsync(jobName, ex);
         }
@@ -99,9 +99,9 @@ public class CfbSpreadJob(
 
     private async Task ProcessEventsForSpreads(
         List<CfbSpreads> spreads,
-        CfbSlates slate,
+        CfbSeasonWeekConfig slate,
         IEnumerable<Event> events) {
-        var isCfp = CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat);
+        var isCfp = CfbSlateHelpers.IsCfpSlate(slate);
 
         foreach (var evt in events) {
             var comp = evt.Competitions.FirstOrDefault();

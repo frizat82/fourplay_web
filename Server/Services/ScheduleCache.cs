@@ -7,7 +7,7 @@ using Microsoft.Extensions.Caching.Memory;
 namespace FourPlayWebApp.Server.Services;
 
 /// <summary>
-/// In-memory cache for the schedule tables (NflSeasonWeekConfigs, CfbSlates, CfbSeasonWeekConfigs)
+/// In-memory cache for the schedule tables (NflSeasonWeekConfigs, CfbSeasonWeekConfigs)
 /// — shared by LeagueRepository (NFL) and CfbRepository (CFB). They're read on every score poll and
 /// most requests ("what week is it?") but change a few times a season; reading them from the DB
 /// every time was ~5k full-table reads a day and kept Neon from ever suspending. Each table is
@@ -18,7 +18,6 @@ namespace FourPlayWebApp.Server.Services;
 /// </summary>
 public static class ScheduleCache {
     public const string NflWeekConfigs = "schedule:nfl-week-configs";
-    public const string CfbSlates = "schedule:cfb-slates";
     public const string CfbWeekConfigs = "schedule:cfb-week-configs";
     public static readonly TimeSpan Ttl = TimeSpan.FromHours(1);
 
@@ -35,7 +34,7 @@ public static class ScheduleCache {
         }))!;
     }
 
-    // The three tables, each loaded whole (ordered) — shared by LeagueRepository and CfbRepository
+    // The two tables, each loaded whole (ordered) — shared by LeagueRepository and CfbRepository
     // so every reader of a table goes through the one cached copy.
     public static Task<IReadOnlyList<NflSeasonWeekConfig>> NflWeekConfigRowsAsync(IMemoryCache? cache, IDbContextFactory<ApplicationDbContext> factory) =>
         RowsAsync(cache, NflWeekConfigs, async () => {
@@ -43,16 +42,10 @@ public static class ScheduleCache {
             return await db.NflSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.WeekId).ToListAsync();
         });
 
-    public static Task<IReadOnlyList<CfbSlates>> CfbSlateRowsAsync(IMemoryCache? cache, IDbContextFactory<ApplicationDbContext> factory) =>
-        RowsAsync(cache, CfbSlates, async () => {
-            await using var db = await factory.CreateDbContextAsync();
-            return await db.CfbSlates.AsNoTracking().OrderBy(s => s.Season).ThenBy(s => s.SlateNumber).ToListAsync();
-        });
-
     public static Task<IReadOnlyList<CfbSeasonWeekConfig>> CfbWeekConfigRowsAsync(IMemoryCache? cache, IDbContextFactory<ApplicationDbContext> factory) =>
         RowsAsync(cache, CfbWeekConfigs, async () => {
             await using var db = await factory.CreateDbContextAsync();
-            return await db.CfbSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.EspnWeekNumber).ToListAsync();
+            return await db.CfbSeasonWeekConfigs.AsNoTracking().OrderBy(c => c.Season).ThenBy(c => c.WeekStartDate).ToListAsync();
         });
 
     // Shallow copies: these are flat rows (no navigation data loaded), so a caller changing a field

@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-10-15
+
+- CFB now runs off one season schedule table, the same shape as NFL's: each week says whether it counts for IV League, its round type (CFP weeks use ESPN's playoff feed) and its scoring format, and AP rankings are stored by our week number
+
 ## 2026-10-14
 
 - The week selector's weeks, postseason split and every week or round name now come from the season schedule table, and notifications use the same names (e.g. Wild Card Weekend, CFP Semifinals)

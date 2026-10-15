@@ -39,9 +39,6 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<int>("EspnEventId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("EspnWeekNumber")
-                        .HasColumnType("integer");
-
                     b.Property<int>("Season")
                         .HasColumnType("integer");
 
@@ -49,9 +46,12 @@ namespace FourPlayWebApp.Server.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("WeekNumber")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("Season", "EspnWeekNumber", "TeamAbbreviation")
+                    b.HasIndex("Season", "WeekNumber", "TeamAbbreviation")
                         .IsUnique();
 
                     b.ToTable("CfbRankings");
@@ -65,16 +65,13 @@ namespace FourPlayWebApp.Server.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("EspnWeekNumber")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("InScopeIvLeague")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsPostSeason")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("IvLeagueWeekNumber")
+                    b.Property<int?>("IvLeagueWeekNumber")
                         .HasColumnType("integer");
 
                     b.Property<string>("Notes")
@@ -109,61 +106,22 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Season", "EspnWeekNumber")
-                        .IsUnique();
-
                     b.HasIndex("Season", "IvLeagueWeekNumber")
                         .IsUnique()
-                        .HasFilter("\"IvLeagueWeekNumber\" <> 99");
+                        .HasFilter("\"IvLeagueWeekNumber\" IS NOT NULL");
 
                     b.ToTable("CfbSeasonWeekConfigs", t =>
                         {
-                            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_RequiredPicks", "\"RequiredPicks\" BETWEEN 1 AND 4 OR (\"IvLeagueWeekNumber\" = 99 AND \"RequiredPicks\" = 0)");
+                            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_InScope", "\"InScopeIvLeague\" = (\"IvLeagueWeekNumber\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_IsPostSeason", "\"IsPostSeason\" = (\"WeekType\" IN ('ConferenceChampionships', 'Playoff'))");
+
+                            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_RequiredPicks", "(\"InScopeIvLeague\" AND \"RequiredPicks\" BETWEEN 1 AND 4) OR (NOT \"InScopeIvLeague\" AND \"RequiredPicks\" = 0)");
+
+                            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_ScoringFormat", "(\"ScoringFormat\" = 'Standard' AND \"RequiredPicks\" = 4) OR (\"ScoringFormat\" = 'Divisional' AND \"RequiredPicks\" = 3) OR (\"ScoringFormat\" = 'Conference' AND \"RequiredPicks\" = 2) OR (\"ScoringFormat\" = 'Final' AND \"RequiredPicks\" = 1) OR (\"ScoringFormat\" = 'None' AND \"RequiredPicks\" = 0)");
 
                             t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_WeekLabel", "\"WeekLabel\" <> ''");
                         });
-                });
-
-            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.CfbSlates", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTimeOffset>("DateCreated")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamptz")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<DateOnly>("EndDate")
-                        .HasColumnType("date");
-
-                    b.Property<int?>("EspnWeekNumber")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("FirstGameUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ScoringFormat")
-                        .HasColumnType("text");
-
-                    b.Property<int>("Season")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SlateNumber")
-                        .HasColumnType("integer");
-
-                    b.Property<DateOnly>("StartDate")
-                        .HasColumnType("date");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Season", "SlateNumber")
-                        .IsUnique();
-
-                    b.ToTable("CfbSlates");
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.LeagueInfo", b =>
@@ -456,6 +414,11 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<DateTime?>("FirstGameOfWeekStartDatetime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("InScopeIvLeague")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("IsPostSeason")
                         .HasColumnType("boolean");
 
@@ -496,7 +459,11 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.ToTable("NflSeasonWeekConfigs", t =>
                         {
+                            t.HasCheckConstraint("CK_NflSeasonWeekConfigs_IsPostSeason", "\"IsPostSeason\" = (\"WeekType\" IN ('ConferenceChampionships', 'Playoff'))");
+
                             t.HasCheckConstraint("CK_NflSeasonWeekConfigs_RequiredPicks", "\"RequiredPicks\" BETWEEN 1 AND 4");
+
+                            t.HasCheckConstraint("CK_NflSeasonWeekConfigs_ScoringFormat", "(\"ScoringFormat\" = 'Standard' AND \"RequiredPicks\" = 4) OR (\"ScoringFormat\" = 'Divisional' AND \"RequiredPicks\" = 3) OR (\"ScoringFormat\" = 'Conference' AND \"RequiredPicks\" = 2) OR (\"ScoringFormat\" = 'Final' AND \"RequiredPicks\" = 1) OR (\"ScoringFormat\" = 'None' AND \"RequiredPicks\" = 0)");
                         });
                 });
 
@@ -1427,7 +1394,7 @@ namespace FourPlayWebApp.Server.Migrations
 
             modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbPicks", b =>
                 {
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSlates", null)
+                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSeasonWeekConfig", null)
                         .WithMany()
                         .HasForeignKey("CfbSlateId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -1448,7 +1415,7 @@ namespace FourPlayWebApp.Server.Migrations
 
             modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbScores", b =>
                 {
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSlates", null)
+                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSeasonWeekConfig", null)
                         .WithMany()
                         .HasForeignKey("CfbSlateId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -1457,7 +1424,7 @@ namespace FourPlayWebApp.Server.Migrations
 
             modelBuilder.Entity("FourPlayWebApp.Shared.Models.Data.CfbSpreads", b =>
                 {
-                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSlates", null)
+                    b.HasOne("FourPlayWebApp.Server.Models.Data.CfbSeasonWeekConfig", null)
                         .WithMany()
                         .HasForeignKey("CfbSlateId")
                         .OnDelete(DeleteBehavior.Restrict)

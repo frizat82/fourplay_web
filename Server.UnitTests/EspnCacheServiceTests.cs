@@ -22,16 +22,16 @@ public class EspnCacheServiceTests
     private readonly IMemoryCache _memoryCache = new MemoryCache(new MemoryCacheOptions());
 
     // Default week returned by the mock — tests that don't care about the specific week use this
-    private static readonly NflWeekInfo DefaultWeek = new(5, 2025, false, "Week 5", "Standard", new DateTime(2025, 10, 2, 18, 0, 0, DateTimeKind.Utc), 4);
+    private static readonly NflWeekInfo DefaultWeek = new(5, 2025, false, "Week 5", ScoringFormat.Standard, new DateTime(2025, 10, 2, 18, 0, 0, DateTimeKind.Utc), 4);
 
     private static NflSeasonWeekConfig BuildConfig(int weekId, int season, DateTime? start = null, DateTime? end = null) => new() {
         Id = weekId,
         Season = season,
         WeekId = weekId,
         WeekLabel = weekId > 18 ? "PostSeason Week" : $"Week {weekId}",
-        WeekType = weekId > 18 ? "Wild Card" : "Regular Season",
+        WeekType = weekId > 18 ? WeekType.Playoff : WeekType.RegularSeason,
         IsPostSeason = weekId > 18,
-        ScoringFormat = "Standard",
+        ScoringFormat = ScoringFormat.Standard,
         WeekStartDatetime = start ?? DateTime.UtcNow.AddDays(-1),
         WeekEndDatetime = end ?? DateTime.UtcNow.AddDays(1),
         SpreadLockDatetime = (start ?? DateTime.UtcNow.AddDays(-1)),
@@ -216,7 +216,7 @@ public class EspnCacheServiceTests
         // that's true, mirroring CfbLiveScoreFetcher's identical fix.
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> {
             new() {
-                Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = "Wild Card", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = WeekType.Playoff, ScoringFormat = ScoringFormat.Standard,
                 IsPostSeason = true, RequiredPicks = 3,
                 WeekStartDatetime = new DateTime(2026, 1, 8), WeekEndDatetime = new DateTime(2026, 1, 12),
                 SpreadLockDatetime = new DateTime(2026, 1, 8),
@@ -226,7 +226,7 @@ public class EspnCacheServiceTests
             // (nothing else to compare against), exempting it from the DB-first shortcut this
             // test exists to verify.
             new() {
-                Season = 2025, WeekId = 20, WeekLabel = "Divisional", WeekType = "Divisional", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 20, WeekLabel = "Divisional", WeekType = WeekType.Playoff, ScoringFormat = ScoringFormat.Standard,
                 IsPostSeason = true, RequiredPicks = 3,
                 WeekStartDatetime = new DateTime(2026, 1, 15), WeekEndDatetime = new DateTime(2026, 1, 19),
                 SpreadLockDatetime = new DateTime(2026, 1, 15),
@@ -265,7 +265,7 @@ public class EspnCacheServiceTests
         // Only one config row — with nothing else to compare against, the resolver trivially
         // treats it as "current" even though its window is long past.
         var config = new NflSeasonWeekConfig {
-            Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = "Wild Card", ScoringFormat = "Standard",
+            Season = 2025, WeekId = 19, WeekLabel = "Wild Card", WeekType = WeekType.Playoff, ScoringFormat = ScoringFormat.Standard,
             WeekStartDatetime = new DateTime(2026, 1, 8), WeekEndDatetime = new DateTime(2026, 1, 12),
             SpreadLockDatetime = new DateTime(2026, 1, 8),
         };
@@ -328,12 +328,12 @@ public class EspnCacheServiceTests
         // to compare against), exempting it from the DB-first shortcut this test exists to verify.
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> {
             new() {
-                Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
                 WeekStartDatetime = new DateTime(2025, 9, 4), WeekEndDatetime = new DateTime(2025, 9, 15),
                 SpreadLockDatetime = new DateTime(2025, 9, 4),
             },
             new() {
-                Season = 2025, WeekId = 2, WeekLabel = "Week 2", WeekType = "Regular Season", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 2, WeekLabel = "Week 2", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
                 WeekStartDatetime = new DateTime(2025, 9, 11), WeekEndDatetime = new DateTime(2025, 9, 22),
                 SpreadLockDatetime = new DateTime(2025, 9, 18),
             },
@@ -359,7 +359,7 @@ public class EspnCacheServiceTests
     {
         var now = DateTime.UtcNow;
         var config = new NflSeasonWeekConfig {
-            Season = 2026, WeekId = 3, WeekLabel = "Week 3", WeekType = "Regular Season", ScoringFormat = "Standard",
+            Season = 2026, WeekId = 3, WeekLabel = "Week 3", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
             WeekStartDatetime = now.AddDays(-1), WeekEndDatetime = now.AddDays(1),
         };
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> { config });
@@ -392,12 +392,12 @@ public class EspnCacheServiceTests
         _leagueRepo.GetNflScoresAsync(2025, 1).Returns(rows);
         _leagueRepo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> {
             new() {
-                Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
                 WeekStartDatetime = new DateTime(2025, 9, 4), WeekEndDatetime = new DateTime(2025, 9, 15),
                 SpreadLockDatetime = new DateTime(2025, 9, 4),
             },
             new() {
-                Season = 2025, WeekId = 2, WeekLabel = "Week 2", WeekType = "Regular Season", ScoringFormat = "Standard",
+                Season = 2025, WeekId = 2, WeekLabel = "Week 2", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
                 WeekStartDatetime = new DateTime(2025, 9, 11), WeekEndDatetime = new DateTime(2025, 9, 22),
                 SpreadLockDatetime = new DateTime(2025, 9, 18),
             },

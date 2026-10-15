@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -53,23 +54,23 @@ public class CfbSpreadJobTests
 
     private CfbSpreadJob BuildJob() => new(_fetcher, _oddsService, _repo, _currentSlateService, _timeProvider, _observer);
 
-    private static CfbSlates BuildSlate(int slateId = 1) => new()
+    private static CfbSeasonWeekConfig BuildSlate(int slateId = 1) => new()
     {
-        Id = slateId, Season = 2025, SlateNumber = 1,
-        Label = "Week 1", StartDate = new DateOnly(2025, 12, 19),
-        EndDate   = new DateOnly(2025, 12, 20),
-        EspnWeekNumber = 1,
-        ScoringFormat = "Spread",
+        Id = slateId, Season = 2025, IvLeagueWeekNumber = 1, InScopeIvLeague = true,
+        WeekLabel = "Week 1", WeekStartDate = new DateOnly(2025, 12, 19),
+        WeekEndDate   = new DateOnly(2025, 12, 20),
+
+        ScoringFormat = ScoringFormat.Standard,
     };
 
-    // Wires a CfbSlates entity as "the current slate" — both the CfbSlateInfo the current-slate
+    // Wires a CfbSeasonWeekConfig entity as "the current slate" — both the CfbSlateInfo the current-slate
     // service resolves to and the full entity GetSlateByIdAsync returns, matching how the job
     // now actually looks up its target slate (mirrors NflSpreadJob's single-week scope).
-    private void SetCurrentSlate(CfbSlates slate, DateTime? lockDatetime = null)
+    private void SetCurrentSlate(CfbSeasonWeekConfig slate, DateTime? lockDatetime = null)
     {
         _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
-            slate.Id, slate.Season, slate.SlateNumber, slate.Label,
-            slate.StartDate, slate.EndDate, slate.FirstGameUtc, lockDatetime ?? PastLockTime, slate.IsPostSeason, slate.RequiredPicks));
+            slate.Id, slate.Season, slate.SlateNumber, slate.WeekLabel,
+            slate.WeekStartDate, slate.WeekEndDate, lockDatetime ?? PastLockTime, slate.IsPostSeason, slate.RequiredPicks));
         _repo.GetSlateByIdAsync(slate.Id).Returns(slate);
     }
 
@@ -119,7 +120,7 @@ public class CfbSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>());
     }
 
     [Fact]
@@ -131,7 +132,7 @@ public class CfbSpreadJobTests
         // returning null, so reaching this means both mechanisms failed). Throwing lets the
         // existing JobFailureAlertListener/Discord alert pipeline actually fire.
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns((EspnScores?)null);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns((EspnScores?)null);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
@@ -143,7 +144,7 @@ public class CfbSpreadJobTests
     {
         var slate = BuildSlate();
         SetCurrentSlate(slate);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard());
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         await BuildJob().Execute(_context);
@@ -157,7 +158,7 @@ public class CfbSpreadJobTests
     {
         var slate = BuildSlate();
         SetCurrentSlate(slate);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU"));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU"));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds("-7.5", "+7.5", 52.5));
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -178,7 +179,7 @@ public class CfbSpreadJobTests
     public async Task Execute_WhenOddsUnavailable_SkipsGameAndThrowsSinceNoSpreadsSaved()
     {
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard());
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>(), 100).Returns((EspnCoreOddsItem?)null);
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>()).Returns((EspnCoreOddsApiResponse?)null);
 
@@ -191,7 +192,7 @@ public class CfbSpreadJobTests
     public async Task Execute_SkipsGame_WhenNotScheduled_AndThrowsSinceNoSpreadsSaved()
     {
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
 
@@ -200,18 +201,18 @@ public class CfbSpreadJobTests
 
     // ── IsLeagueEligible + CfbRanking persistence (frizat-9m0) ─────────────────
 
-    private static CfbSlates BuildCfpSlate(int slateId = 2) => new()
+    private static CfbSeasonWeekConfig BuildCfpSlate(int slateId = 2) => new()
     {
-        Id = slateId, Season = 2025, SlateNumber = 15,
-        Label = "CFP First Round", StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20),
-        EspnWeekNumber = 16, ScoringFormat = "NFLDivisional",
+        Id = slateId, Season = 2025, IvLeagueWeekNumber = 15, InScopeIvLeague = true,
+        WeekLabel = "CFP First Round", WeekStartDate = new DateOnly(2025, 12, 19), WeekEndDate = new DateOnly(2025, 12, 20),
+        WeekType = WeekType.Playoff, ScoringFormat = ScoringFormat.Divisional, RequiredPicks = 3,
     };
 
     [Fact]
     public async Task Execute_RegularSeason_RankedAndNotMidweek_SavesEligibleTrue()
     {
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99)); // Friday
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99)); // Friday
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -226,7 +227,7 @@ public class CfbSpreadJobTests
     public async Task Execute_RegularSeason_BothUnranked_SavesEligibleFalse()
     {
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -242,7 +243,7 @@ public class CfbSpreadJobTests
     {
         var tuesdayEt = new DateTimeOffset(2025, 9, 30, 23, 0, 0, TimeSpan.Zero); // Tue 7pm ET
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99, date: tuesdayEt));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 5, awayRank: 99, date: tuesdayEt));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -257,7 +258,7 @@ public class CfbSpreadJobTests
     public async Task Execute_CfpSlate_BothUnranked_SavesEligibleTrueRegardless()
     {
         SetCurrentSlate(BuildCfpSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbSpreads>? saved = null;
@@ -274,7 +275,7 @@ public class CfbSpreadJobTests
         // "Rankings" now means one row per (season, week, ranked team) — CuratedRank=99 (ESPN's
         // unranked sentinel) is not a rank, so it's never persisted at all, not even as a row.
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU", homeRank: 3, awayRank: 99));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU", homeRank: 3, awayRank: 99));
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         IEnumerable<CfbRanking>? saved = null;
@@ -297,7 +298,7 @@ public class CfbSpreadJobTests
         // it DID get, rather than losing that partial success just because the overall run is
         // also flagged as needing attention.
         SetCurrentSlate(BuildSlate());
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 3, awayRank: 99));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 3, awayRank: 99));
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>(), 100).Returns((EspnCoreOddsItem?)null);
         _oddsService.GetCfbEventsWithOddsAsync(Arg.Any<int>()).Returns((EspnCoreOddsApiResponse?)null);
 
@@ -318,7 +319,7 @@ public class CfbSpreadJobTests
 
         await BuildJob().Execute(_context);
 
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>());
         await _repo.DidNotReceive().UpsertAsync(Arg.Any<IEnumerable<CfbSpreads>>());
     }
 
@@ -341,7 +342,7 @@ public class CfbSpreadJobTests
         var forceMap = new JobDataMap();
         forceMap.Put("force", true);
         _context.MergedJobDataMap.Returns(forceMap);
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard());
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         await BuildJob().Execute(_context);
@@ -354,7 +355,7 @@ public class CfbSpreadJobTests
     {
         var slate = BuildSlate();
         SetCurrentSlate(slate); // defaults to PastLockTime
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard());
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard());
         _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
 
         await BuildJob().Execute(_context);

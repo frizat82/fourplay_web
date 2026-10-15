@@ -133,7 +133,7 @@ public class PicksTests
     private static INflCurrentWeekService BuildCurrentWeekService(int week = Week, int season = Season, int requiredPicks = 4)
     {
         var svc = Substitute.For<INflCurrentWeekService>();
-        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(week, season, false, "Week", "PickAgainstSpread", DateTime.UtcNow.AddDays(-1), requiredPicks));
+        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(week, season, false, "Week", ScoringFormat.Standard, DateTime.UtcNow.AddDays(-1), requiredPicks));
         return svc;
     }
 

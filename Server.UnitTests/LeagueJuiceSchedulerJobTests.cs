@@ -42,7 +42,7 @@ public class LeagueJuiceSchedulerJobTests
         new() { Id = id, LeagueName = $"League {id}", OwnerUserId = "owner", LeagueType = type };
 
     private static NflSeasonWeekConfig MakeNflWeek1(int season, DateTime firstGameUtc) => new() {
-        Season = season, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+        Season = season, WeekId = 1, WeekLabel = "Week 1", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
         FirstGameOfWeekStartDatetime = firstGameUtc,
     };
 

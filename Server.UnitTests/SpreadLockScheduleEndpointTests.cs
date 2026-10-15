@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Controllers;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Models.Identity;
@@ -40,7 +41,7 @@ public class SpreadLockScheduleEndpointTests
     {
         var repo = Substitute.For<ILeagueRepository>();
         var svc = Substitute.For<INflCurrentWeekService>();
-        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(3, 2026, false, "Week 3", "Standard", DateTime.UtcNow, 4));
+        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(3, 2026, false, "Week 3", ScoringFormat.Standard, DateTime.UtcNow, 4));
         repo.GetNflSeasonWeekConfigsAsync().Returns([
             new NflSeasonWeekConfig { Season = 2026, WeekId = 2, WeekLabel = "Week 2", SpreadLockDatetime = new DateTime(2026, 9, 10, 18, 0, 0, DateTimeKind.Utc) },
             new NflSeasonWeekConfig { Season = 2026, WeekId = 1, WeekLabel = "Week 1", SpreadLockDatetime = new DateTime(2026, 9, 3, 18, 0, 0, DateTimeKind.Utc) },
@@ -62,7 +63,7 @@ public class SpreadLockScheduleEndpointTests
     {
         var repo = Substitute.For<ILeagueRepository>();
         var svc = Substitute.For<INflCurrentWeekService>();
-        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(3, 2026, false, "Week 3", "Standard", DateTime.UtcNow, 4));
+        svc.GetCurrentWeekAsync().Returns(new NflWeekInfo(3, 2026, false, "Week 3", ScoringFormat.Standard, DateTime.UtcNow, 4));
         repo.GetNflSeasonWeekConfigsAsync().Returns([
             new NflSeasonWeekConfig { Season = 2026, WeekId = 19, WeekLabel = "Wild Card Weekend", IsPostSeason = true, RequiredPicks = 3 },
         ]);
@@ -99,9 +100,9 @@ public class SpreadLockScheduleEndpointTests
         return new CfbPicksController(repo, cfbRepo, leagueRepo);
     }
 
-    private static CfbSeasonWeekConfig MakeConfig(int ivWeek, string weekType, DateTime lock_, bool inScope = true) => new() {
-        Season = 2026, EspnWeekNumber = ivWeek, IvLeagueWeekNumber = ivWeek,
-        WeekType = weekType, WeekLabel = $"Week {ivWeek}", ScoringFormat = "Standard", InScopeIvLeague = inScope,
+    private static CfbSeasonWeekConfig MakeConfig(int ivWeek, WeekType weekType, DateTime lock_) => new() {
+        Season = 2026, IvLeagueWeekNumber = ivWeek,
+        WeekType = weekType, WeekLabel = $"Week {ivWeek}", ScoringFormat = ScoringFormat.Standard, InScopeIvLeague = true,
         SpreadLockDatetime = lock_,
     };
 
@@ -111,12 +112,12 @@ public class SpreadLockScheduleEndpointTests
         var cfbRepo = Substitute.For<ICfbRepository>();
         var svc = Substitute.For<ICfbCurrentSlateService>();
         svc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
-            1, 2026, 1, "Week 1", new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7), null, DateTime.UtcNow, false, 4));
-        var semis = MakeConfig(17, "FBS Playoff", new DateTime(2027, 1, 8, 12, 0, 0, DateTimeKind.Utc));
-        semis.ScoringFormat = "NFLConference";
+            1, 2026, 1, "Week 1", new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7), DateTime.UtcNow, false, 4));
+        var semis = MakeConfig(17, WeekType.Playoff, new DateTime(2027, 1, 8, 12, 0, 0, DateTimeKind.Utc));
+        semis.ScoringFormat = ScoringFormat.Conference;
         semis.IsPostSeason = true;
         semis.RequiredPicks = 2;
-        cfbRepo.GetWeekConfigsForSeasonAsync(2026).Returns([semis]);
+        cfbRepo.GetSlatesForSeasonAsync(2026).Returns([semis]);
 
         var result = await BuildCfbController(cfbRepo).GetSpreadLockSchedule(svc);
 
@@ -125,26 +126,25 @@ public class SpreadLockScheduleEndpointTests
         Assert.Equal(2, week.RequiredPicks);
     }
 
+    // Which rows are slates (in scope, in week order) is the repository's rule — the schedule
+    // serves exactly the season's slates.
     [Fact]
-    public async Task Cfb_GetSpreadLockSchedule_ReturnsOnlyInScopeWeeks_OrderedByWeek()
+    public async Task Cfb_GetSpreadLockSchedule_ServesTheSeasonsSlates()
     {
         var cfbRepo = Substitute.For<ICfbRepository>();
         var svc = Substitute.For<ICfbCurrentSlateService>();
         svc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
-            1, 2026, 1, "Week 1", new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7), null, DateTime.UtcNow, false, 4));
-        cfbRepo.GetWeekConfigsForSeasonAsync(2026).Returns([
-            MakeConfig(0, "Regular Season", new DateTime(2026, 8, 27, 12, 0, 0, DateTimeKind.Utc), inScope: false),
-            MakeConfig(2, "Regular Season", new DateTime(2026, 9, 10, 13, 0, 0, DateTimeKind.Utc)),
-            MakeConfig(1, "Regular Season", new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc)),
+            1, 2026, 1, "Week 1", new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 7), DateTime.UtcNow, false, 4));
+        cfbRepo.GetSlatesForSeasonAsync(2026).Returns([
+            MakeConfig(1, WeekType.RegularSeason, new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc)),
+            MakeConfig(2, WeekType.RegularSeason, new DateTime(2026, 9, 10, 13, 0, 0, DateTimeKind.Utc)),
         ]);
 
         var result = await BuildCfbController(cfbRepo).GetSpreadLockSchedule(svc);
 
         var ok = Assert.IsType<OkObjectResult>(result);
         var weeks = Assert.IsAssignableFrom<IEnumerable<SpreadLockWeekDto>>(ok.Value).ToList();
-        Assert.Equal(2, weeks.Count);
-        Assert.Equal("Week 1", weeks[0].WeekLabel);
-        Assert.Equal("Week 2", weeks[1].WeekLabel);
+        Assert.Equal(["Week 1", "Week 2"], weeks.Select(w => w.WeekLabel));
     }
 
     [Fact]

@@ -46,7 +46,7 @@ public class WeekResultNotificationServiceTests
     // The season's slates come from the strict per-season read, which fails loudly on a slate with
     // no control-table row instead of pushing a blank round name (frizat-d47).
     private void SetCfbSlateEnds(params (int Slate, DateOnly End)[] slates) =>
-        _cfbRepo.GetSlatesForSeasonAsync(2026).Returns(slates.Select(s => new CfbSlates { Season = 2026, SlateNumber = s.Slate, Label = $"Week {s.Slate}", EndDate = s.End }).ToList());
+        _cfbRepo.GetSlatesForSeasonAsync(2026).Returns(slates.Select(s => new CfbSeasonWeekConfig { Season = 2026, IvLeagueWeekNumber = s.Slate, WeekLabel = $"Week {s.Slate}", WeekEndDate = s.End, InScopeIvLeague = true }).ToList());
 
     private WeekResultNotificationService BuildService() => new(_repo, _cfbRepo, _nflLeaderboard, _cfbLeaderboard, _dispatcher, _espnCache, _cfbCache, new FakeTimeProvider(Now));
 
@@ -261,8 +261,8 @@ public class WeekResultNotificationServiceTests
     [Fact]
     public async Task CheckCfbWeekResultsAsync_PostseasonSlate_UsesTheRoundName()
     {
-        _cfbRepo.GetSlatesForSeasonAsync(2026).Returns(new List<CfbSlates> {
-            new() { Season = 2026, SlateNumber = 17, Label = "CFP Semifinals", EndDate = DateOnly.FromDateTime(Now.UtcDateTime.AddDays(3)) },
+        _cfbRepo.GetSlatesForSeasonAsync(2026).Returns(new List<CfbSeasonWeekConfig> {
+            new() { Season = 2026, IvLeagueWeekNumber = 17, InScopeIvLeague = true, WeekLabel = "CFP Semifinals", WeekEndDate = DateOnly.FromDateTime(Now.UtcDateTime.AddDays(3)) },
         });
         var league = League(2, LeagueType.Cfb);
         _repo.GetLeaguesByTypeAsync(LeagueType.Cfb).Returns(new List<LeagueInfo> { league });

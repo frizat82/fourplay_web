@@ -30,7 +30,8 @@ public class CfbScoresConfiguration : IEntityTypeConfiguration<CfbScores>
         // CfbSlateId was previously an unenforced "soft FK" — see CfbSpreadsConfiguration for the
         // full rationale (frizat-896 schema audit). Restrict protects real final-score history from
         // being silently orphaned by a bulk slate delete.
-        entity.HasOne<CfbSlates>()
+        // frizat-b4g: a slate IS an in-scope CfbSeasonWeekConfigs row.
+        entity.HasOne<CfbSeasonWeekConfig>()
             .WithMany()
             .HasForeignKey(e => e.CfbSlateId)
             .OnDelete(DeleteBehavior.Restrict);

@@ -35,7 +35,7 @@ public class CfbLeaderboardService(
             var juiceMapping = await juiceMappingTask;
             var slates = (await slatesTask).OrderBy(s => s.SlateNumber).ToList();
 
-            // CfbSlates is fully seeded for the whole season up front (CfbSlateSeederJob), unlike
+            // The CFB control table holds the whole season up front, unlike
             // NFL's NflScores rows, which only exist once a game is FINAL — so NFL's leaderboard
             // naturally stops at "now" for free, while CFB needs this explicit clamp to avoid
             // showing every future slate as a missed week. Uses the same shared "what's current"

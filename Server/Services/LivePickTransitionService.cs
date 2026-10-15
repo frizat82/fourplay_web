@@ -278,7 +278,7 @@ public class LivePickTransitionService(
 
     /// <param name="Season">Season year.</param>
     /// <param name="Id">The value FK-scoped repository calls key on — NflSeasonWeekConfig.WeekId
-    /// for NFL, CfbSlates' own DB row id for CFB.</param>
+    /// for NFL, the CfbSeasonWeekConfigs row id for CFB.</param>
     /// <param name="RequiredPicks">The period's control-table pick count (frizat-d47), which picks
     /// its tease tier (JuiceTiers.For).</param>
     private readonly record struct ResolvedPeriod(int Season, int Id, int RequiredPicks);

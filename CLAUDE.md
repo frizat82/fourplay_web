@@ -190,8 +190,8 @@ CFB uses an 18-slate season. Slate/ESPN week mappings and pick counts → run `/
 ### Backend Structure
 - `Server/Controllers/` — thin HTTP controllers; business logic in services
 - `Server/Services/` — `DemoDataSeeder`, `SpreadCalculatorService`, `LeaderboardService`, `EspnCacheService`, etc.
-- `Server/Jobs/` — Quartz.NET: `NflScoresJob`, `NflSpreadJob`, `CfbSlateSeederJob`, `CfbSpreadJob`, `CfbScoresJob`, `MissingPicksJob`
-- `Server/Data/ApplicationDbContext.cs` — key tables: `NflPicks/Spreads/Scores/Weeks`, `CfbSlates/SeasonWeekConfigs/Spreads/Scores/Picks`, `LeagueInfo`, `LeagueJuiceMapping`
+- `Server/Jobs/` — Quartz.NET: `NflScoresJob`, `NflSpreadJob`, `CfbSpreadJob`, `CfbScoresJob`, `MissingPicksJob`
+- `Server/Data/ApplicationDbContext.cs` — key tables: `NflSeasonWeekConfigs` / `CfbSeasonWeekConfigs` (one control table per sport, same shape — a CFB slate is an in-scope row), `NflPicks/Spreads/Scores/Weeks`, `CfbSpreads/Scores/Picks/Rankings`, `LeagueInfo`, `LeagueJuiceMapping`
 
 ### Frontend Structure
 - `src/pages/` — `PicksPage`, `ScoresPage`, `LeaderboardPage` (sport-agnostic via adapter)

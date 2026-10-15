@@ -4,11 +4,10 @@ using FourPlayWebApp.Shared.Models;
 namespace FourPlayWebApp.Server.Services.Interfaces;
 
 /// <summary>
-/// Resolves the live ESPN scoreboard for one CFB slate — CFP week=999 + date filter for postseason,
-/// full-slate date-range query (frizat-11t: slate.StartDate/EndDate, not ESPN's own week=N bucket)
-/// for regular season/conf-champs, no rank filter at ingestion (frizat-9m0 — eligibility is computed
-/// downstream). A slate missing EspnWeekNumber is a control-table seeding bug, not a case to fall
-/// back on — logs a warning and returns null. Extracted from
+/// Resolves the live ESPN scoreboard for one CFB slate (a control-table week) — ESPN's CFP endpoint +
+/// the week's date filter for a CFP round (WeekType Playoff), a date-range query over the week's
+/// dates (frizat-11t) for every other week, no rank filter at ingestion (frizat-9m0 — eligibility
+/// is computed downstream). Extracted from
 /// CfbScoresJob (frizat-703.6) so the DB-upsert jobs (CfbScoresJob, CfbSpreadJob) and
 /// CfbCacheService's live-serving path share one implementation instead of maintaining the
 /// CFP/ranked branching three times.
@@ -26,5 +25,5 @@ public interface ICfbLiveScoreFetcher {
     // ICfbCurrentSlateService.GetCurrentSlateAsync() DB round trip on every live fetch just to
     // re-derive a fact the caller already had. Only used here to decide whether to merge in the
     // replay-mode snapshot (see FetchForSlateAsync's own comment).
-    Task<EspnScores?> FetchForSlateAsync(CfbSlates slate, bool isCurrentSlate);
+    Task<EspnScores?> FetchForSlateAsync(CfbSeasonWeekConfig slate, bool isCurrentSlate);
 }

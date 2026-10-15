@@ -38,13 +38,13 @@ public class CfbRankingCaptureJobTests
 
     private CfbRankingCaptureJob BuildJob() => new(_fetcher, _repo, _timeProvider);
 
-    private static CfbSlates BuildSlate(int slateId = 1) => new()
+    private static CfbSeasonWeekConfig BuildSlate(int slateId = 1) => new()
     {
-        Id = slateId, Season = 2026, SlateNumber = 1,
-        Label = "Week 1", StartDate = new DateOnly(2026, 9, 1),
-        EndDate   = new DateOnly(2026, 9, 7),
-        EspnWeekNumber = 1,
-        ScoringFormat = "Spread",
+        Id = slateId, Season = 2026, IvLeagueWeekNumber = 1, InScopeIvLeague = true,
+        WeekLabel = "Week 1", WeekStartDate = new DateOnly(2026, 9, 1),
+        WeekEndDate   = new DateOnly(2026, 9, 7),
+
+        ScoringFormat = ScoringFormat.Standard,
     };
 
     private static EspnScores BuildScoreboard(
@@ -138,12 +138,12 @@ public class CfbRankingCaptureJobTests
         // games are all already final is a guaranteed zero-yield ESPN call — skip it entirely
         // rather than fetching and discarding.
         var pastSlate = BuildSlate();
-        pastSlate.EndDate = DateOnly.FromDateTime(FakeNow.UtcDateTime.AddDays(-1));
+        pastSlate.WeekEndDate = DateOnly.FromDateTime(FakeNow.UtcDateTime.AddDays(-1));
         _repo.GetSlatesForSeasonAsync(2026).Returns([pastSlate]);
 
         await BuildJob().Execute(_context);
 
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>());
         await _repo.DidNotReceive().AddRankingsAsync(Arg.Any<IEnumerable<CfbRanking>>());
     }
 
