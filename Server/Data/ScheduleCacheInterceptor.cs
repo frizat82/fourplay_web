@@ -17,7 +17,6 @@ namespace FourPlayWebApp.Server.Data;
 public sealed class ScheduleCacheInterceptor(IMemoryCache cache) : SaveChangesInterceptor {
     private static readonly Dictionary<Type, string> CacheKeys = new() {
         [typeof(NflSeasonWeekConfig)] = ScheduleCache.NflWeekConfigs,
-        [typeof(CfbSlates)] = ScheduleCache.CfbSlates,
         [typeof(CfbSeasonWeekConfig)] = ScheduleCache.CfbWeekConfigs,
     };
 

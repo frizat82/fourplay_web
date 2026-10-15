@@ -17,15 +17,14 @@ public class CfbSpreadsConfiguration : IEntityTypeConfiguration<CfbSpreads>
         // Natural key mirroring NflSpreadsConfiguration's (Season, NflWeek, HomeTeam) — a team
         // plays at most one game per slate, so (CfbSlateId, HomeTeam) uniquely identifies a game
         // without depending on an ESPN-specific id. CfbSlateId already encodes season via
-        // CfbSlates.Season, so a separate Season column isn't needed in this index.
+        // its control-table row's Season, so a separate Season column isn't needed in this index.
         entity.HasIndex(e => new { e.CfbSlateId, e.HomeTeam }).IsUnique();
 
         // CfbSlateId was previously an unenforced "soft FK" (indexed, joined against in queries,
-        // but no DB-level constraint) — frizat-896 schema audit. Restrict (not Cascade): CfbSlates
-        // rows are deleted in bulk by CfbSlateSeederJob's stale-slate cleanup with no check for
-        // whether real spread data already exists for them; Restrict turns a would-be silent
-        // orphan into a loud failure instead of quietly detaching real odds data from its slate.
-        entity.HasOne<CfbSlates>()
+        // but no DB-level constraint) — frizat-896 schema audit. Restrict (not Cascade): deleting a
+        // week that has real spread data fails loudly instead of quietly detaching the odds from it.
+        // frizat-b4g: a slate IS an in-scope CfbSeasonWeekConfigs row.
+        entity.HasOne<CfbSeasonWeekConfig>()
             .WithMany()
             .HasForeignKey(e => e.CfbSlateId)
             .OnDelete(DeleteBehavior.Restrict);

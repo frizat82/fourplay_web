@@ -7,13 +7,13 @@ public class CfbSpreadScheduleSource(ICfbRepository repo) : ISpreadScheduleSourc
         var allConfigsTask = repo.GetAllWeekConfigsAsync();
         var weeksWithDataTask = repo.GetWeeksWithSpreadDataAsync();
         await Task.WhenAll(allConfigsTask, weeksWithDataTask);
-        var configs = allConfigsTask.Result.Where(c => c.InScopeIvLeague && c.IvLeagueWeekNumber != 99);
+        var configs = allConfigsTask.Result.Where(c => c.InScopeIvLeague);
         var weeksWithData = weeksWithDataTask.Result;
 
         return configs.Select(cfg => new TimedTriggerCandidate(
             cfg.SpreadLockDatetime,
-            $"CFB Spreads {cfg.Season} Wk{cfg.IvLeagueWeekNumber}",
+            $"CFB Spreads {cfg.Season} Wk{cfg.SlateNumber}",
             $"CFB spreads for {cfg.WeekLabel} — scheduled lock time",
-            weeksWithData.Contains((cfg.Season, cfg.IvLeagueWeekNumber))));
+            weeksWithData.Contains((cfg.Season, cfg.SlateNumber))));
     }
 }

@@ -8,7 +8,6 @@ namespace FourPlayWebApp.Server.Jobs;
 public static class JobCategoryClassifier {
     private static readonly Dictionary<Type, (string Category, bool IsDynamic)> Map = new() {
         [typeof(UserManagerJob)] = ("System", false),
-        [typeof(CfbSlateSeederJob)] = ("CFB Slates", false),
         [typeof(CfbRankingCaptureJob)] = ("CFB Rankings", false),
         [typeof(NflScoresJob)] = ("NFL Scores", false),
         [typeof(CfbScoresJob)] = ("CFB Scores", false),

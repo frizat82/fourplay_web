@@ -13,31 +13,19 @@ namespace FourPlayWebApp.Server.UnitTests;
 // never resolve any season other than 2026/2025 without a code change.
 public class CfbCurrentSlateServiceTests
 {
-    private static CfbSlates Slate(int season, int slateNumber, DateOnly start, DateOnly end) => new() {
+    private static CfbSeasonWeekConfig Slate(int season, int slateNumber, DateOnly start, DateOnly end, DateTime? spreadLock = null) => new() {
         Id = season * 100 + slateNumber,
         Season = season,
-        SlateNumber = slateNumber,
-        Label = $"Slate {slateNumber}",
-        StartDate = start,
-        EndDate = end,
+        IvLeagueWeekNumber = slateNumber, InScopeIvLeague = true,
+        WeekLabel = $"Slate {slateNumber}",
+        WeekStartDate = start,
+        WeekEndDate = end,
+        SpreadLockDatetime = spreadLock ?? DateTime.UtcNow,
     };
 
-    private static CfbCurrentSlateService BuildService(List<CfbSlates> slates, CfbSeasonWeekConfig? matchingConfig = null, TimeProvider? timeProvider = null) {
+    private static CfbCurrentSlateService BuildService(List<CfbSeasonWeekConfig> slates, TimeProvider? timeProvider = null) {
         var repo = Substitute.For<ICfbRepository>();
         repo.GetAllSlatesAsync().Returns(slates);
-        // One config per slate (across all seasons), so whichever slate the resolver picks as
-        // "active" always has a matching CfbSeasonWeekConfig row — not just the first slate.
-        // GetAllWeekConfigsAsync (not the per-season method) is what the service calls now.
-        var allConfigs = slates.Select(s =>
-            matchingConfig is not null && matchingConfig.Season == s.Season && matchingConfig.IvLeagueWeekNumber == s.SlateNumber
-                ? matchingConfig
-                : new CfbSeasonWeekConfig {
-                    Season = s.Season,
-                    IvLeagueWeekNumber = s.SlateNumber,
-                    InScopeIvLeague = true,
-                    SpreadLockDatetime = DateTime.UtcNow,
-                }).ToList();
-        repo.GetAllWeekConfigsAsync().Returns(allConfigs);
         return new CfbCurrentSlateService(repo, timeProvider ?? TimeProvider.System);
     }
 
@@ -47,10 +35,9 @@ public class CfbCurrentSlateServiceTests
         // special-casing anywhere in the service — it must resolve purely from what's in
         // the DB.
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var config = new CfbSeasonWeekConfig { Season = 2030, IvLeagueWeekNumber = 1, InScopeIvLeague = true, SpreadLockDatetime = DateTime.UtcNow };
         var svc = BuildService([
             Slate(2030, 1, today.AddDays(-3), today.AddDays(4)),
-        ], config);
+        ]);
 
         var result = await svc.GetCurrentSlateAsync();
 
@@ -86,22 +73,16 @@ public class CfbCurrentSlateServiceTests
         Assert.Equal(4, result.SlateNumber);
     }
 
-    // frizat-9xg: a slate's own SpreadLockDatetime (from its matching CfbSeasonWeekConfig row)
-    // — not its calendar StartDate/EndDate — is what the resolver actually keys off. These two
-    // build the repo mock directly (not via BuildService's shared per-season config, which
-    // can't give two slates in the same season independently controlled spread-lock times).
+    // frizat-9xg: a slate's own SpreadLockDatetime — not its calendar StartDate/EndDate — is what
+    // the resolver actually keys off.
     [Fact]
     public async Task GetCurrentSlateAsync_StaysOnPreviousSlate_WhenNextSlatesSpreadLockIsMoreThanTwoDaysAway() {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var now = DateTime.UtcNow;
-        var slate3 = Slate(2026, 3, today.AddDays(-10), today.AddDays(-3));
-        var slate4 = Slate(2026, 4, today.AddDays(-3), today.AddDays(4)); // calendar-active right now
+        var slate3 = Slate(2026, 3, today.AddDays(-10), today.AddDays(-3), now.AddDays(-9));
+        var slate4 = Slate(2026, 4, today.AddDays(-3), today.AddDays(4), now.AddDays(5)); // calendar-active right now, lock 5 days out
         var repo = Substitute.For<ICfbRepository>();
-        repo.GetAllSlatesAsync().Returns(new List<CfbSlates> { slate3, slate4 });
-        repo.GetAllWeekConfigsAsync().Returns(new List<CfbSeasonWeekConfig> {
-            new() { Season = 2026, IvLeagueWeekNumber = 3, InScopeIvLeague = true, SpreadLockDatetime = now.AddDays(-9) }, // already started
-            new() { Season = 2026, IvLeagueWeekNumber = 4, InScopeIvLeague = true, SpreadLockDatetime = now.AddDays(5) },  // 5 days out
-        });
+        repo.GetAllSlatesAsync().Returns(new List<CfbSeasonWeekConfig> { slate3, slate4 });
 
         var result = await new CfbCurrentSlateService(repo, TimeProvider.System).GetCurrentSlateAsync();
 
@@ -112,40 +93,14 @@ public class CfbCurrentSlateServiceTests
     public async Task GetCurrentSlateAsync_EarlyActivatesNextSlate_WhenWithinTwoDaysOfItsSpreadLock() {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var now = DateTime.UtcNow;
-        var slate3 = Slate(2026, 3, today.AddDays(-10), today.AddDays(-3));
-        var slate4 = Slate(2026, 4, today.AddDays(3), today.AddDays(10)); // hasn't calendar-started yet
+        var slate3 = Slate(2026, 3, today.AddDays(-10), today.AddDays(-3), now.AddDays(-9));
+        var slate4 = Slate(2026, 4, today.AddDays(3), today.AddDays(10), now.AddDays(1)); // hasn't calendar-started yet, lock 1 day out
         var repo = Substitute.For<ICfbRepository>();
-        repo.GetAllSlatesAsync().Returns(new List<CfbSlates> { slate3, slate4 });
-        repo.GetAllWeekConfigsAsync().Returns(new List<CfbSeasonWeekConfig> {
-            new() { Season = 2026, IvLeagueWeekNumber = 3, InScopeIvLeague = true, SpreadLockDatetime = now.AddDays(-9) },
-            new() { Season = 2026, IvLeagueWeekNumber = 4, InScopeIvLeague = true, SpreadLockDatetime = now.AddDays(1) }, // only 1 day out
-        });
+        repo.GetAllSlatesAsync().Returns(new List<CfbSeasonWeekConfig> { slate3, slate4 });
 
         var result = await new CfbCurrentSlateService(repo, TimeProvider.System).GetCurrentSlateAsync();
 
         Assert.Equal(4, result!.SlateNumber);
-    }
-
-    // frizat-9xg /code-review: DemoDataSeeder legitimately seeds multiple rows with
-    // IvLeagueWeekNumber=99 in the same season (bye/dead weeks excluded from IV League scope —
-    // CfbSeasonWeekConfigConfiguration's unique index is filtered specifically to allow this).
-    // A naive Dictionary keyed on (Season, IvLeagueWeekNumber) with no filter throws
-    // "An item with the same key has already been added" the moment a season has 2+ such rows.
-    [Fact]
-    public async Task GetCurrentSlateAsync_DoesNotThrow_WhenSeasonHasMultipleOutOfScopeWeek99Rows() {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var slate = Slate(2026, 1, today.AddDays(-1), today.AddDays(1));
-        var repo = Substitute.For<ICfbRepository>();
-        repo.GetAllSlatesAsync().Returns(new List<CfbSlates> { slate });
-        repo.GetAllWeekConfigsAsync().Returns(new List<CfbSeasonWeekConfig> {
-            new() { Season = 2026, IvLeagueWeekNumber = 1, InScopeIvLeague = true, SpreadLockDatetime = DateTime.UtcNow.AddDays(-1) },
-            new() { Season = 2026, IvLeagueWeekNumber = 99, InScopeIvLeague = false, SpreadLockDatetime = DateTime.UtcNow }, // e.g. Army-Navy
-            new() { Season = 2026, IvLeagueWeekNumber = 99, InScopeIvLeague = false, SpreadLockDatetime = DateTime.UtcNow }, // e.g. bowl dead week
-        });
-
-        var result = await new CfbCurrentSlateService(repo, TimeProvider.System).GetCurrentSlateAsync();
-
-        Assert.Equal(1, result!.SlateNumber);
     }
 
     [Fact]
@@ -157,20 +112,6 @@ public class CfbCurrentSlateServiceTests
         Assert.Null(result);
     }
 
-    [Fact]
-    public async Task GetCurrentSlateAsync_Throws_WhenResolvedSlateHasNoMatchingWeekConfig() {
-        // Existing data-integrity invariant (unchanged by this refactor): every CfbSlates
-        // row must have a matching CfbSeasonWeekConfig row.
-        var repo = Substitute.For<ICfbRepository>();
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var slate = Slate(2026, 1, today.AddDays(-1), today.AddDays(1));
-        repo.GetAllSlatesAsync().Returns(new List<CfbSlates> { slate });
-        repo.GetAllWeekConfigsAsync().Returns(new List<CfbSeasonWeekConfig>());
-        var svc = new CfbCurrentSlateService(repo, TimeProvider.System);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.GetCurrentSlateAsync());
-    }
-
     // frizat-tf2: GetCurrentSlateAsync must resolve "current" against an injected TimeProvider
     // (used to freeze the clock in DEMO_MODE — see DemoDataSeeder.DemoFrozenNow), not the real
     // wall clock. Two slates are constructed so a real-clock read (long past both locks by now)
@@ -179,14 +120,10 @@ public class CfbCurrentSlateServiceTests
     public async Task GetCurrentSlateAsync_UsesInjectedClock_NotRealWallClock() {
         var frozen = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var today = DateOnly.FromDateTime(frozen.UtcDateTime);
-        var slate17 = Slate(2025, 17, today.AddDays(-10), today.AddDays(-3));
-        var slate18 = Slate(2025, 18, today.AddDays(10), today.AddDays(17));
+        var slate17 = Slate(2025, 17, today.AddDays(-10), today.AddDays(-3), frozen.UtcDateTime.AddDays(-10));
+        var slate18 = Slate(2025, 18, today.AddDays(10), today.AddDays(17), frozen.UtcDateTime.AddDays(10));
         var repo = Substitute.For<ICfbRepository>();
-        repo.GetAllSlatesAsync().Returns(new List<CfbSlates> { slate17, slate18 });
-        repo.GetAllWeekConfigsAsync().Returns(new List<CfbSeasonWeekConfig> {
-            new() { Season = 2025, IvLeagueWeekNumber = 17, InScopeIvLeague = true, SpreadLockDatetime = frozen.UtcDateTime.AddDays(-10) },
-            new() { Season = 2025, IvLeagueWeekNumber = 18, InScopeIvLeague = true, SpreadLockDatetime = frozen.UtcDateTime.AddDays(10) },
-        });
+        repo.GetAllSlatesAsync().Returns(new List<CfbSeasonWeekConfig> { slate17, slate18 });
 
         var result = await new CfbCurrentSlateService(repo, new FakeTimeProvider(frozen)).GetCurrentSlateAsync();
 

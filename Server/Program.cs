@@ -344,7 +344,6 @@ builder.Services.AddScoped<IJob, NflScoresJob>();
 builder.Services.AddScoped<IJob, NflSpreadJob>();
 builder.Services.AddScoped<IJob, NflSpreadSchedulerJob>();
 builder.Services.AddScoped<IJob, UserManagerJob>();
-builder.Services.AddScoped<IJob, CfbSlateSeederJob>();
 builder.Services.AddScoped<IJob, CfbSpreadSchedulerJob>();
 builder.Services.AddScoped<IJob, CfbRankingCaptureJob>();
 builder.Services.AddScoped<IJob, CfbSpreadJob>();
@@ -395,24 +394,6 @@ builder.Services.AddQuartz(q => {
     // against an ephemeral demo/replay stack — not just the ESPN-specific jobs below.
     if (!seedsDemoData)
     {
-        // CFB Slate Seeder — idempotent, runs Monday 5am CST to catch new seasons. Slate-seeding
-        // only — spread-lock trigger scheduling is CfbSpreadSchedulerJob below (frizat-pxy
-        // follow-on: structurally identical to NflSpreadSchedulerJob, its own cadence, not fused
-        // into this job).
-        // Was previously registered unconditionally (like UserManagerJob), on the theory that it
-        // only manages internal slate/date structure and never pulls live scores/spreads, so it
-        // was "safe" in demo mode. That was wrong: it still seeds the real *current* season's slate
-        // rows, and CfbCurrentSlateService's cross-season date-window resolver picks whichever
-        // season's window is "active" right now — once the real season's window opens, it silently
-        // shadows DemoDataSeeder's frozen demo-season data instead of falling back to it, breaking
-        // every CFB demo/e2e test that runs during that window. Moved inside this guard alongside
-        // its siblings, which exist for exactly this class of problem.
-        q.ScheduleJob<CfbSlateSeederJob>(trigger => trigger
-            .WithIdentity("CFB Slate Seeder Startup")
-            .WithDescription("Seeds CFB slate dates for the current season")
-            .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
-        );
-        q.ScheduleCstCronJob<CfbSlateSeederJob>("CFB Slate Seeder", "Seeds CFB slate dates for the current season", "0 0 5 ? * MON");
 
         // NFL Spreads — frizat-pxy: NflSpreadJob has no fixed trigger of its own anymore.
         // NflSpreadSchedulerJob reads NflSeasonWeekConfig.SpreadLockDatetime and registers a precise
@@ -465,8 +446,8 @@ builder.Services.AddQuartz(q => {
         q.ScheduleCstCronJob<CfbSpreadSchedulerJob>("CFB Spread Scheduler Daily", "Daily catch-up pass for CFB spread-lock triggers", "0 0 6 * * ?");
 
         // CFB Scores — Saturday noon, 4pm, 8pm, midnight CST + Sunday 6am/12:30pm/7:40pm + Monday
-        // 6am/1am-Tue CST. A CFB slate's own window can span the whole week (CfbSlates.StartDate/
-        // EndDate), not just Saturday, so this needs the same Sunday/Monday coverage NFL already
+        // 6am/1am-Tue CST. A CFB slate's own window can span the whole week (its control-table row's
+        // WeekStartDate/WeekEndDate), not just Saturday, so this needs the same Sunday/Monday coverage NFL already
         // has below for its Sunday late games + MNF — without it, a game that finishes Sunday
         // afternoon/evening or later sits unsynced until the following Saturday's noon run
         // (frizat-tf1: this is exactly what happened to a real user's CFB picks).

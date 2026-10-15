@@ -55,14 +55,12 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                 var currentSlateService = scope.ServiceProvider.GetRequiredService<ICfbCurrentSlateService>();
                 var cfbRepo = scope.ServiceProvider.GetRequiredService<ICfbRepository>();
 
-                // When to wake next once nothing is on: each slate's window and first kickoff —
-                // enough to catch a season starting. Spread-lock points are added once in season
-                // (BuildSlateWindows needs every slate's config row, and throws when one's missing).
+                // When to wake next once nothing is on: each slate's window — enough to catch a
+                // season starting. Spread-lock points are added once in season.
                 var slates = (await cfbRepo.GetAllSlatesAsync()).ToList();
                 var wakePoints = slates
-                    .SelectMany(s => new[] { s.StartDate.ToDateTime(TimeOnly.MinValue), s.EndDate.ToDateTime(TimeOnly.MaxValue) })
+                    .SelectMany(s => new[] { s.WeekStartDate.ToDateTime(TimeOnly.MinValue), s.WeekEndDate.ToDateTime(TimeOnly.MaxValue) })
                     .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)))
-                    .Concat(slates.Where(s => s.FirstGameUtc.HasValue).Select(s => s.FirstGameUtc!.Value))
                     .ToList();
 
                 // CfbCurrentSlateService always resolves *something* now (most-recently-completed
@@ -72,15 +70,16 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                 if (!await currentSlateService.IsSeasonActiveAsync()) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
 
                 wakePoints.AddRange(SeasonWindowResolver.ChangePoints(
-                        CfbCurrentSlateService.BuildSlateWindows(slates, await cfbRepo.GetAllWeekConfigsAsync()).Select(sw => sw.Window))
+                        CfbCurrentSlateService.BuildSlateWindows(slates).Select(sw => sw.Window))
                     .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc))));
 
                 var currentSlate = await currentSlateService.GetCurrentSlateAsync();
                 var slate = currentSlate is null ? null : await cfbRepo.GetSlateByIdAsync(currentSlate.Id);
                 if (slate is null) return new(_polled.Clear(), wakePoints, ExpectedGames: false);
-                // A slate has games once its first kickoff is known (a CFP round's matchups may not be yet).
+                // ExpectedGames stays false for CFB: a slate's games aren't known up front (a CFP
+                // round's matchups may not be set yet), so an empty scoreboard isn't an outage.
                 return new(_polled.Record(SlateCacheKey(slate.Id), await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true)),
-                    wakePoints, ExpectedGames: slate.FirstGameUtc.HasValue);
+                    wakePoints, ExpectedGames: false);
             }, DateTimeOffset.UtcNow),
             fingerprint: EspnScoresFingerprint.Compute,
             intervalSelector: current => _pollSchedule.NextInterval(current, DateTimeOffset.UtcNow),
@@ -110,24 +109,16 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
         var slate = await cfbRepo.GetSlateByIdAsync(slateId);
         if (slate is null) return null;
 
-        // A missing EspnWeekNumber is a control-table seeding bug, not a case to fall back on —
-        // mirrors CfbLiveScoreFetcher's identical guard, needed here too since FinalScoresEspnMapper.
-        // Build requires a real week number for the DB-first branch below.
-        if (!slate.EspnWeekNumber.HasValue) {
-            Log.Warning("CfbCacheService: slate {SlateId} has no EspnWeekNumber — skipping", slate.Id);
-            return null;
-        }
-
         var currentSlate = await currentSlateService.GetCurrentSlateAsync();
         var isCurrentSlate = currentSlate?.Id == slate.Id;
 
         return await _settledCache.GetOrBuildAsync(
-            cacheKey, isCurrentSlate, slate.EndDate.ToDateTime(TimeOnly.MaxValue),
+            cacheKey, isCurrentSlate, slate.WeekEndDate.ToDateTime(TimeOnly.MaxValue),
             buildFromRowsAsync: async () => {
                 var rows = (await cfbRepo.GetScoresForSlateAsync(slate.Id)).ToList();
                 if (rows.Count == 0) return null;
                 var games = rows.Select(FinalScoresEspnMapper.FromCfbScores);
-                return FinalScoresEspnMapper.Build(games, slate.Season, slate.EspnWeekNumber.Value, CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat));
+                return FinalScoresEspnMapper.Build(games, slate.Season, slate.SlateNumber, CfbSlateHelpers.IsCfpSlate(slate));
             },
             // isCurrentSlate is already resolved above — pass it through instead of letting the
             // fetcher re-derive it via a second ICfbCurrentSlateService.GetCurrentSlateAsync()

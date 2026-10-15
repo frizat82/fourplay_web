@@ -38,7 +38,7 @@ public class NflSpreadJobTests
     // happy-path tests.
     private static readonly DateTime PastLockTime = FakeNow.UtcDateTime.AddDays(-1);
     private static readonly DateTime FutureLockTime = FakeNow.UtcDateTime.AddDays(1);
-    private static readonly NflWeekInfo DefaultWeek = new(5, 2024, false, "Week 5", "Standard", PastLockTime, 4);
+    private static readonly NflWeekInfo DefaultWeek = new(5, 2024, false, "Week 5", ScoringFormat.Standard, PastLockTime, 4);
 
     public NflSpreadJobTests()
     {
@@ -67,8 +67,8 @@ public class NflSpreadJobTests
         Season = season,
         WeekId = weekId,
         WeekLabel = $"Week {weekId}",
-        WeekType = weekId > 18 ? "Wild Card" : "Regular Season",
-        ScoringFormat = "Standard",
+        WeekType = weekId > 18 ? WeekType.Playoff : WeekType.RegularSeason,
+        ScoringFormat = ScoringFormat.Standard,
         WeekStartDatetime = new DateTime(season, 11, 1, 0, 0, 0, DateTimeKind.Utc),
         WeekEndDatetime = new DateTime(season, 11, 10, 23, 59, 59, DateTimeKind.Utc),
     };
@@ -544,7 +544,7 @@ public class NflSpreadJobTests
     public async Task Execute_PostSeasonConferenceChampionshipWeek_IsNotTreatedAsByeWeek()
     {
         _nflCurrentWeekService.GetCurrentWeekAsync()
-            .Returns(new NflWeekInfo(21, 2024, true, "Conference Championship", "Standard", PastLockTime, 2));
+            .Returns(new NflWeekInfo(21, 2024, true, "Conference Championship", ScoringFormat.Standard, PastLockTime, 2));
         _repo.GetNflSeasonWeekConfigsAsync(2024).Returns(new List<NflSeasonWeekConfig> { BuildConfig(weekId: 21, season: 2024) });
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(weekNumber: 3, seasonType: (int)TypeOfSeason.PostSeason));
@@ -565,7 +565,7 @@ public class NflSpreadJobTests
     {
         // Wild Card: NflCurrentWeekService returns WeekId=19, IsPostSeason=true
         _nflCurrentWeekService.GetCurrentWeekAsync()
-            .Returns(new NflWeekInfo(19, 2024, true, "Wild Card Weekend", "Standard", PastLockTime, 3));
+            .Returns(new NflWeekInfo(19, 2024, true, "Wild Card Weekend", ScoringFormat.Standard, PastLockTime, 3));
         _repo.GetNflSeasonWeekConfigsAsync(2024).Returns(new List<NflSeasonWeekConfig> { BuildConfig(weekId: 19, season: 2024) });
         _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>())
                 .Returns(BuildScoreboard(weekNumber: 1, seasonType: (int)TypeOfSeason.PostSeason));
@@ -591,7 +591,7 @@ public class NflSpreadJobTests
     public async Task Execute_LockTimeInFuture_NoForce_SkipsWithoutFetching()
     {
         _nflCurrentWeekService.GetCurrentWeekAsync()
-            .Returns(new NflWeekInfo(5, 2024, false, "Week 5", "Standard", FutureLockTime, 4));
+            .Returns(new NflWeekInfo(5, 2024, false, "Week 5", ScoringFormat.Standard, FutureLockTime, 4));
 
         await BuildJob().Execute(_context);
 
@@ -603,7 +603,7 @@ public class NflSpreadJobTests
     public async Task Execute_LockTimeInFuture_Forced_WritesAnyway()
     {
         _nflCurrentWeekService.GetCurrentWeekAsync()
-            .Returns(new NflWeekInfo(5, 2024, false, "Week 5", "Standard", FutureLockTime, 4));
+            .Returns(new NflWeekInfo(5, 2024, false, "Week 5", ScoringFormat.Standard, FutureLockTime, 4));
         var forceMap = new JobDataMap();
         forceMap.Put("force", true);
         _context.MergedJobDataMap.Returns(forceMap);

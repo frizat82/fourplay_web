@@ -41,13 +41,13 @@ public class LeagueJuiceScheduleSourceTests
     };
 
     private static NflSeasonWeekConfig MakeNflWeek(int season, int weekId, DateTime firstGameUtc, int requiredPicks = 4) => new() {
-        Season = season, WeekId = weekId, WeekLabel = $"Week {weekId}", WeekType = "Regular Season", ScoringFormat = "Standard",
+        Season = season, WeekId = weekId, WeekLabel = $"Week {weekId}", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
         FirstGameOfWeekStartDatetime = firstGameUtc, RequiredPicks = requiredPicks,
     };
     private static NflSeasonWeekConfig MakeNflWeek1(int season, DateTime firstGameUtc) => MakeNflWeek(season, 1, firstGameUtc);
 
     private static CfbSeasonWeekConfig MakeCfbSlate(int season, int slateNumber, DateOnly startDate, int requiredPicks = 4) => new() {
-        Season = season, EspnWeekNumber = slateNumber, IvLeagueWeekNumber = slateNumber, WeekStartDate = startDate,
+        Season = season, IvLeagueWeekNumber = slateNumber, WeekStartDate = startDate,
         WeekEndDate = startDate.AddDays(6), InScopeIvLeague = true, RequiredPicks = requiredPicks,
     };
     private static CfbSeasonWeekConfig MakeCfbSlate1(int season, DateOnly startDate) => MakeCfbSlate(season, 1, startDate);
@@ -241,15 +241,14 @@ public class LeagueJuiceScheduleSourceTests
     }
 
     // /code-review: every other consumer of CfbSeasonWeekConfig (CfbSpreadScheduleSource,
-    // CfbSlateSeederJob, CfbPicksController) filters on InScopeIvLeague, not just
-    // IvLeagueWeekNumber != 99 — this must match, or a slate-1 row entered with scope not yet
-    // confirmed would still schedule Juice reminders/locks against it.
+    // CfbRepository's slate reads) filters on InScopeIvLeague — this must match, or a slate-1 row
+    // entered with scope not yet confirmed would still schedule Juice reminders/locks against it.
     [Fact]
     public async Task CfbSeason_ExcludedWhenSlate1RowIsNotInScopeIvLeague()
     {
         _cfbRepo.GetAllWeekConfigsAsync().Returns((IEnumerable<CfbSeasonWeekConfig>)new List<CfbSeasonWeekConfig> {
             new() {
-                Season = 2025, EspnWeekNumber = 1, IvLeagueWeekNumber = 1,
+                Season = 2025, IvLeagueWeekNumber = 1,
                 WeekStartDate = new DateOnly(2025, 8, 23), WeekEndDate = new DateOnly(2025, 8, 29),
                 InScopeIvLeague = false,
             },
@@ -381,7 +380,7 @@ public class LeagueJuiceScheduleSourceTests
     public void GetWeekLockTimeUtc_Cfb_IgnoresRowNotInScopeIvLeague() {
         var cfbConfigs = new[] {
             new CfbSeasonWeekConfig {
-                Season = 2025, EspnWeekNumber = 18, IvLeagueWeekNumber = 18,
+                Season = 2025, IvLeagueWeekNumber = 18,
                 WeekStartDate = new DateOnly(2026, 1, 12), WeekEndDate = new DateOnly(2026, 1, 18),
                 InScopeIvLeague = false,
             },

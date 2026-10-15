@@ -1,3 +1,4 @@
+using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
@@ -7,7 +8,7 @@ using Quartz.Impl.Matchers;
 
 namespace FourPlayWebApp.Server.UnitTests;
 
-// Moved out of CfbSlateSeederJobTests (frizat-pxy follow-on plan, Phase 2) — CFB's spread-trigger
+// CFB's spread-trigger
 // scheduling is now its own job, structurally identical to NflSpreadSchedulerJob, not fused into
 // slate seeding. See NflSpreadSchedulerJobTests for the sibling NFL coverage.
 public class CfbSpreadSchedulerJobTests
@@ -34,8 +35,8 @@ public class CfbSpreadSchedulerJobTests
 
     private static List<CfbSeasonWeekConfig> MakeConfigsWithLockTimes(params DateTime[] lockTimes) =>
         lockTimes.Select((lockTime, i) => new CfbSeasonWeekConfig {
-            Season = Season, EspnWeekNumber = i + 1, IvLeagueWeekNumber = i + 1,
-            WeekType = "Regular Season", ScoringFormat = "Standard", InScopeIvLeague = true,
+            Season = Season, IvLeagueWeekNumber = i + 1,
+            WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard, InScopeIvLeague = true,
             WeekStartDate = new DateOnly(2026, 9, 1), WeekEndDate = new DateOnly(2026, 9, 7),
             SpreadLockDatetime = lockTime,
         }).ToList();
@@ -107,8 +108,8 @@ public class CfbSpreadSchedulerJobTests
         // should keep working across a season rollover with no code change.
         var futureSeasonLockTime = DateTime.UtcNow.AddDays(3);
         var nextSeasonConfig = new CfbSeasonWeekConfig {
-            Season = Season + 1, EspnWeekNumber = 1, IvLeagueWeekNumber = 1,
-            WeekType = "Regular Season", ScoringFormat = "Standard", InScopeIvLeague = true,
+            Season = Season + 1, IvLeagueWeekNumber = 1,
+            WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard, InScopeIvLeague = true,
             WeekStartDate = new DateOnly(2027, 9, 1), WeekEndDate = new DateOnly(2027, 9, 7),
             SpreadLockDatetime = futureSeasonLockTime,
         };
@@ -123,13 +124,13 @@ public class CfbSpreadSchedulerJobTests
     }
 
     [Fact]
-    public async Task Execute_ExcludesOutOfScopeAndWeek99Configs()
+    public async Task Execute_ExcludesOutOfScopeConfigs()
     {
         var configs = new List<CfbSeasonWeekConfig> {
-            new() { Season = Season, EspnWeekNumber = 1, IvLeagueWeekNumber = 1, InScopeIvLeague = false,
-                WeekType = "Regular Season", ScoringFormat = "Standard", SpreadLockDatetime = DateTime.UtcNow.AddDays(3) },
-            new() { Season = Season, EspnWeekNumber = 99, IvLeagueWeekNumber = 99, InScopeIvLeague = true,
-                WeekType = "Regular Season", ScoringFormat = "Standard", SpreadLockDatetime = DateTime.UtcNow.AddDays(3) },
+            new() { Season = Season, IvLeagueWeekNumber = 1, InScopeIvLeague = false,
+                WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard, SpreadLockDatetime = DateTime.UtcNow.AddDays(3) },
+            new() { Season = Season, IvLeagueWeekNumber = null, InScopeIvLeague = false,
+                WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard, SpreadLockDatetime = DateTime.UtcNow.AddDays(3) },
         };
         _repo.GetAllWeekConfigsAsync().Returns(configs);
 

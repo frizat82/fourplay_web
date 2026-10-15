@@ -45,7 +45,8 @@ public class CfbPicksConfiguration : IEntityTypeConfiguration<CfbPicks>
             .HasForeignKey(e => e.LeagueId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        entity.HasOne<CfbSlates>()
+        // frizat-b4g: a slate IS an in-scope CfbSeasonWeekConfigs row.
+        entity.HasOne<CfbSeasonWeekConfig>()
             .WithMany()
             .HasForeignKey(e => e.CfbSlateId)
             .OnDelete(DeleteBehavior.Restrict);

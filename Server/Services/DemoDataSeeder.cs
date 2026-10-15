@@ -324,8 +324,8 @@ public class DemoDataSeeder(
     // Championship slate) to have already run.
     private async Task SeedReplayCfbSlateAsync()
     {
-        var slate = await db.CfbSlates.FirstOrDefaultAsync(s =>
-            s.Season == ReplayCfbSeason && s.SlateNumber == ReplayCfbSlateNumber);
+        var slate = await db.CfbSeasonWeekConfigs.FirstOrDefaultAsync(s =>
+            s.Season == ReplayCfbSeason && s.IvLeagueWeekNumber == ReplayCfbSlateNumber);
         if (slate is null)
         {
             Log.Warning("DemoDataSeeder: CFB Championship slate {Season}/{Slate} not found — skipping replay CFB seed", ReplayCfbSeason, ReplayCfbSlateNumber);
@@ -1045,54 +1045,15 @@ public class DemoDataSeeder(
         Log.Information("DemoDataSeeder: added all demo users to CFB Demo League");
     }
 
-    private const int CfbExpectedSlateCount = 18;
+    // frizat-b4g: a CFB slate IS an in-scope CfbSeasonWeekConfigs row — seeded by
+    // SeedCfbWeekConfigAsync; spreads/scores/picks point at those rows' ids.
+    private async Task<List<CfbSeasonWeekConfig>> SeedCfbSlatesAsync() =>
+        await db.CfbSeasonWeekConfigs
+            .Where(c => c.Season == CfbDemoSeason && c.InScopeIvLeague)
+            .OrderBy(c => c.IvLeagueWeekNumber)
+            .ToListAsync();
 
-    private async Task<List<CfbSlates>> SeedCfbSlatesAsync()
-    {
-        var existing = await db.CfbSlates.Where(s => s.Season == CfbDemoSeason).ToListAsync();
-        if (existing.Count >= CfbExpectedSlateCount) return existing;
-
-        // Remove stale partial seed and ALL dependent data (picks included) before re-seeding
-        if (existing.Count > 0) {
-            var staleIds = existing.Select(s => s.Id).ToList();
-            db.CfbPicks.RemoveRange(db.CfbPicks.Where(p => staleIds.Contains(p.CfbSlateId)));
-            db.CfbScores.RemoveRange(db.CfbScores.Where(s => staleIds.Contains(s.CfbSlateId)));
-            db.CfbSpreads.RemoveRange(db.CfbSpreads.Where(s => staleIds.Contains(s.CfbSlateId)));
-            db.CfbSlates.RemoveRange(existing);
-            await db.SaveChangesAsync();
-        }
-
-        var slates = new List<CfbSlates>
-        {
-            // Regular season weeks 1-13
-            new() { Season = CfbDemoSeason, SlateNumber =  1, EspnWeekNumber =  1, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  8, 23), EndDate = new DateOnly(2025,  8, 30) },
-            new() { Season = CfbDemoSeason, SlateNumber =  2, EspnWeekNumber =  2, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  8, 30), EndDate = new DateOnly(2025,  9,  6) },
-            new() { Season = CfbDemoSeason, SlateNumber =  3, EspnWeekNumber =  3, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  9,  6), EndDate = new DateOnly(2025,  9, 13) },
-            new() { Season = CfbDemoSeason, SlateNumber =  4, EspnWeekNumber =  4, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  9, 13), EndDate = new DateOnly(2025,  9, 20) },
-            new() { Season = CfbDemoSeason, SlateNumber =  5, EspnWeekNumber =  5, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  9, 20), EndDate = new DateOnly(2025,  9, 27) },
-            new() { Season = CfbDemoSeason, SlateNumber =  6, EspnWeekNumber =  6, ScoringFormat = "Standard",      StartDate = new DateOnly(2025,  9, 27), EndDate = new DateOnly(2025, 10,  4) },
-            new() { Season = CfbDemoSeason, SlateNumber =  7, EspnWeekNumber =  7, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 10,  4), EndDate = new DateOnly(2025, 10, 11) },
-            new() { Season = CfbDemoSeason, SlateNumber =  8, EspnWeekNumber =  8, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 10, 11), EndDate = new DateOnly(2025, 10, 18) },
-            new() { Season = CfbDemoSeason, SlateNumber =  9, EspnWeekNumber =  9, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 10, 18), EndDate = new DateOnly(2025, 10, 25) },
-            new() { Season = CfbDemoSeason, SlateNumber = 10, EspnWeekNumber = 10, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 10, 25), EndDate = new DateOnly(2025, 11,  1) },
-            new() { Season = CfbDemoSeason, SlateNumber = 11, EspnWeekNumber = 11, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 11,  1), EndDate = new DateOnly(2025, 11,  8) },
-            new() { Season = CfbDemoSeason, SlateNumber = 12, EspnWeekNumber = 12, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 11,  8), EndDate = new DateOnly(2025, 11, 15) },
-            new() { Season = CfbDemoSeason, SlateNumber = 13, EspnWeekNumber = 13, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 11, 15), EndDate = new DateOnly(2025, 11, 22) },
-            // Conference Championship Week (slate 14 — 4 picks, same as regular season)
-            new() { Season = CfbDemoSeason, SlateNumber = 14, EspnWeekNumber = 14, ScoringFormat = "Standard",      StartDate = new DateOnly(2025, 12,  5), EndDate = new DateOnly(2025, 12,  7) },
-            // CFP Postseason
-            new() { Season = CfbDemoSeason, SlateNumber = 15, EspnWeekNumber = 16, ScoringFormat = "NFLDivisional", StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20) },
-            new() { Season = CfbDemoSeason, SlateNumber = 16, EspnWeekNumber = 18, ScoringFormat = "NFLDivisional", StartDate = new DateOnly(2025, 12, 31), EndDate = new DateOnly(2026,  1,  1) },
-            new() { Season = CfbDemoSeason, SlateNumber = 17, EspnWeekNumber = 20, ScoringFormat = "NFLConference", StartDate = new DateOnly(2026,  1,  8), EndDate = new DateOnly(2026,  1,  9) },
-            new() { Season = CfbDemoSeason, SlateNumber = 18, EspnWeekNumber = 21, ScoringFormat = "NFLSuperBowl",  StartDate = new DateOnly(2026,  1, 19), EndDate = new DateOnly(2026,  1, 19) },
-        };
-        db.CfbSlates.AddRange(slates);
-        await db.SaveChangesAsync();
-        Log.Information("DemoDataSeeder: seeded {Count} CFB slates for {Season}", slates.Count, CfbDemoSeason);
-        return slates;
-    }
-
-    private async Task SeedCfbSpreadsAsync(List<CfbSlates> slates)
+    private async Task SeedCfbSpreadsAsync(List<CfbSeasonWeekConfig> slates)
     {
         if (await db.CfbSpreads.AnyAsync(s => slates.Select(sl => sl.Id).Contains(s.CfbSlateId)))
             return;
@@ -1130,7 +1091,7 @@ public class DemoDataSeeder(
         Log.Information("DemoDataSeeder: seeded {Count} CFB spreads (all slates)", spreads.Count);
     }
 
-    private async Task SeedCfbScoresAsync(List<CfbSlates> slates)
+    private async Task SeedCfbScoresAsync(List<CfbSeasonWeekConfig> slates)
     {
         if (await db.CfbScores.AnyAsync(s => slates.Select(sl => sl.Id).Contains(s.CfbSlateId)))
             return;
@@ -1264,7 +1225,7 @@ public class DemoDataSeeder(
         ["Eve"]    = true,   // IU
     };
 
-    private async Task SeedCfbPicksAsync(LeagueInfo? league, List<CfbSlates> slates)
+    private async Task SeedCfbPicksAsync(LeagueInfo? league, List<CfbSeasonWeekConfig> slates)
     {
         if (league == null) return;
         // 6 users × 65 picks each, except admin (frizat) who has no slate-18 pick — see
@@ -1420,36 +1381,36 @@ public class DemoDataSeeder(
 
         var configs = new List<CfbSeasonWeekConfig>
         {
-            // Regular season: ESPN weeks 1-13 → IV slates 1-13
-            new() { Season = CfbDemoSeason, EspnWeekNumber =  1, IvLeagueWeekNumber =  1, WeekType = "Regular Season",           WeekLabel = "Week 1", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  8, 23), WeekEndDate = new DateOnly(2025,  8, 30) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber =  2, IvLeagueWeekNumber =  2, WeekType = "Regular Season",           WeekLabel = "Week 2", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  8, 30), WeekEndDate = new DateOnly(2025,  9,  6) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber =  3, IvLeagueWeekNumber =  3, WeekType = "Regular Season",           WeekLabel = "Week 3", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9,  6), WeekEndDate = new DateOnly(2025,  9, 13) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber =  4, IvLeagueWeekNumber =  4, WeekType = "Regular Season",           WeekLabel = "Week 4", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9, 13), WeekEndDate = new DateOnly(2025,  9, 20) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber =  5, IvLeagueWeekNumber =  5, WeekType = "Regular Season",           WeekLabel = "Week 5", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9, 20), WeekEndDate = new DateOnly(2025,  9, 27) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber =  6, IvLeagueWeekNumber =  6, WeekType = "Regular Season",           WeekLabel = "Week 6", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9, 27), WeekEndDate = new DateOnly(2025, 10,  4) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber =  7, IvLeagueWeekNumber =  7, WeekType = "Regular Season",           WeekLabel = "Week 7", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10,  4), WeekEndDate = new DateOnly(2025, 10, 11) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber =  8, IvLeagueWeekNumber =  8, WeekType = "Regular Season",           WeekLabel = "Week 8", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10, 11), WeekEndDate = new DateOnly(2025, 10, 18) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber =  9, IvLeagueWeekNumber =  9, WeekType = "Regular Season",           WeekLabel = "Week 9", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10, 18), WeekEndDate = new DateOnly(2025, 10, 25) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 10, IvLeagueWeekNumber = 10, WeekType = "Regular Season",           WeekLabel = "Week 10", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10, 25), WeekEndDate = new DateOnly(2025, 11,  1) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 11, IvLeagueWeekNumber = 11, WeekType = "Regular Season",           WeekLabel = "Week 11", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11,  1), WeekEndDate = new DateOnly(2025, 11,  8) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 12, IvLeagueWeekNumber = 12, WeekType = "Regular Season",           WeekLabel = "Week 12", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11,  8), WeekEndDate = new DateOnly(2025, 11, 15) },
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 13, IvLeagueWeekNumber = 13, WeekType = "Regular Season",           WeekLabel = "Week 13", ScoringFormat = "Standard",      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11, 15), WeekEndDate = new DateOnly(2025, 11, 22) },
+            // Regular season: slates 1-13
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber =  1, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 1", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  8, 23), WeekEndDate = new DateOnly(2025,  8, 30) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber =  2, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 2", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  8, 30), WeekEndDate = new DateOnly(2025,  9,  6) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber =  3, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 3", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9,  6), WeekEndDate = new DateOnly(2025,  9, 13) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber =  4, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 4", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9, 13), WeekEndDate = new DateOnly(2025,  9, 20) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber =  5, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 5", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9, 20), WeekEndDate = new DateOnly(2025,  9, 27) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber =  6, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 6", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025,  9, 27), WeekEndDate = new DateOnly(2025, 10,  4) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber =  7, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 7", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10,  4), WeekEndDate = new DateOnly(2025, 10, 11) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber =  8, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 8", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10, 11), WeekEndDate = new DateOnly(2025, 10, 18) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber =  9, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 9", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10, 18), WeekEndDate = new DateOnly(2025, 10, 25) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 10, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 10", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 10, 25), WeekEndDate = new DateOnly(2025, 11,  1) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 11, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 11", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11,  1), WeekEndDate = new DateOnly(2025, 11,  8) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 12, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 12", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11,  8), WeekEndDate = new DateOnly(2025, 11, 15) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 13, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 13", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11, 15), WeekEndDate = new DateOnly(2025, 11, 22) },
             // ESPN week 14: Conference Championships → IV slate 14
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 14, IvLeagueWeekNumber = 14, WeekType = "Conference Championships", WeekLabel = "Conf. Championships", ScoringFormat = "Standard",      IsPostSeason = true,  RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12,  5), WeekEndDate = new DateOnly(2025, 12,  7) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 14, WeekType = WeekType.ConferenceChampionships, WeekLabel = "Conf. Championships", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = true,  RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12,  5), WeekEndDate = new DateOnly(2025, 12,  7) },
             // ESPN week 15: Army-Navy (excluded)
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 15, IvLeagueWeekNumber = 99, WeekType = "Regular Season",           WeekLabel = "Army-Navy", ScoringFormat = "NA",            IsPostSeason = false, RequiredPicks = 0, InScopeIvLeague = false, WeekStartDate = new DateOnly(2025, 12, 13), WeekEndDate = new DateOnly(2025, 12, 13), Notes = "Army-Navy" },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = null, WeekType = WeekType.RegularSeason,           WeekLabel = "Army-Navy", ScoringFormat = ScoringFormat.None,            IsPostSeason = false, RequiredPicks = 0, InScopeIvLeague = false, WeekStartDate = new DateOnly(2025, 12, 13), WeekEndDate = new DateOnly(2025, 12, 13), Notes = "Army-Navy" },
             // ESPN week 16: CFP First Round → IV slate 15
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 16, IvLeagueWeekNumber = 15, WeekType = "FBS Playoff",              WeekLabel = "CFP First Round", ScoringFormat = "NFLDivisional", IsPostSeason = true,  RequiredPicks = 3, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12, 19), WeekEndDate = new DateOnly(2025, 12, 20) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 15, WeekType = WeekType.Playoff,              WeekLabel = "CFP First Round", ScoringFormat = ScoringFormat.Divisional, IsPostSeason = true,  RequiredPicks = 3, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12, 19), WeekEndDate = new DateOnly(2025, 12, 20) },
             // ESPN week 17: dead gap (excluded)
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 17, IvLeagueWeekNumber = 99, WeekType = "Dead",                     WeekLabel = "Excluded", ScoringFormat = "NA",            IsPostSeason = false, RequiredPicks = 0, InScopeIvLeague = false, WeekStartDate = new DateOnly(2025, 12, 25), WeekEndDate = new DateOnly(2025, 12, 27) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = null, WeekType = WeekType.Dead,                     WeekLabel = "Excluded", ScoringFormat = ScoringFormat.None,            IsPostSeason = false, RequiredPicks = 0, InScopeIvLeague = false, WeekStartDate = new DateOnly(2025, 12, 25), WeekEndDate = new DateOnly(2025, 12, 27) },
             // ESPN week 18: CFP Quarterfinals → IV slate 16
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 18, IvLeagueWeekNumber = 16, WeekType = "FBS Playoff",              WeekLabel = "CFP Quarterfinals", ScoringFormat = "NFLDivisional", IsPostSeason = true,  RequiredPicks = 3, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12, 31), WeekEndDate = new DateOnly(2026,  1,  1) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 16, WeekType = WeekType.Playoff,              WeekLabel = "CFP Quarterfinals", ScoringFormat = ScoringFormat.Divisional, IsPostSeason = true,  RequiredPicks = 3, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12, 31), WeekEndDate = new DateOnly(2026,  1,  1) },
             // ESPN week 19: dead gap (excluded)
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 19, IvLeagueWeekNumber = 99, WeekType = "Dead",                     WeekLabel = "Excluded", ScoringFormat = "NA",            IsPostSeason = false, RequiredPicks = 0, InScopeIvLeague = false, WeekStartDate = new DateOnly(2026,  1,  3), WeekEndDate = new DateOnly(2026,  1,  5) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = null, WeekType = WeekType.Dead,                     WeekLabel = "Excluded", ScoringFormat = ScoringFormat.None,            IsPostSeason = false, RequiredPicks = 0, InScopeIvLeague = false, WeekStartDate = new DateOnly(2026,  1,  3), WeekEndDate = new DateOnly(2026,  1,  5) },
             // ESPN week 20: CFP Semifinals → IV slate 17
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 20, IvLeagueWeekNumber = 17, WeekType = "FBS Playoff",              WeekLabel = "CFP Semifinals", ScoringFormat = "NFLConference", IsPostSeason = true,  RequiredPicks = 2, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2026,  1,  8), WeekEndDate = new DateOnly(2026,  1,  9) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 17, WeekType = WeekType.Playoff,              WeekLabel = "CFP Semifinals", ScoringFormat = ScoringFormat.Conference, IsPostSeason = true,  RequiredPicks = 2, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2026,  1,  8), WeekEndDate = new DateOnly(2026,  1,  9) },
             // ESPN week 21: CFP Championship → IV slate 18
-            new() { Season = CfbDemoSeason, EspnWeekNumber = 21, IvLeagueWeekNumber = 18, WeekType = "FBS Playoff",              WeekLabel = "CFP Championship", ScoringFormat = "NFLSuperBowl",  IsPostSeason = true,  RequiredPicks = 1, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2026,  1, 19), WeekEndDate = new DateOnly(2026,  1, 19) },
+            new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 18, WeekType = WeekType.Playoff,              WeekLabel = "CFP Championship", ScoringFormat = ScoringFormat.Final,  IsPostSeason = true,  RequiredPicks = 1, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2026,  1, 19), WeekEndDate = new DateOnly(2026,  1, 19) },
         };
 
         // SpreadLockDatetime is required (NOT NULL) — demo rows don't need real-world accuracy,

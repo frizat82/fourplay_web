@@ -47,17 +47,16 @@ public class DemoCfbCacheService : ICfbCacheService
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync();
 
-        var slate = await db.CfbSlates.FirstOrDefaultAsync(s => s.Id == slateId);
-        if (slate is null || !slate.EspnWeekNumber.HasValue) return null;
+        var allSlates = await db.CfbSeasonWeekConfigs.Where(c => c.InScopeIvLeague).ToListAsync();
+        var slate = allSlates.FirstOrDefault(s => s.Id == slateId);
+        if (slate is null) return null;
 
-        var allSlates = await db.CfbSlates.ToListAsync();
-        var configs = await db.CfbSeasonWeekConfigs.ToListAsync();
-        var slateWindows = CfbCurrentSlateService.BuildSlateWindows(allSlates, configs);
+        var slateWindows = CfbCurrentSlateService.BuildSlateWindows(allSlates);
         var resolvedCurrent = SeasonWindowResolver.ResolveCurrentWeek(slateWindows.Select(sw => sw.Window), _timeProvider.GetUtcNow().UtcDateTime);
         var isCurrentSlate = resolvedCurrent is not null
             && resolvedCurrent.Value.Season == slate.Season
-            && resolvedCurrent.Value.Start == slate.StartDate.ToDateTime(TimeOnly.MinValue)
-            && resolvedCurrent.Value.End == slate.EndDate.ToDateTime(TimeOnly.MaxValue);
+            && resolvedCurrent.Value.Start == slate.WeekStartDate.ToDateTime(TimeOnly.MinValue)
+            && resolvedCurrent.Value.End == slate.WeekEndDate.ToDateTime(TimeOnly.MaxValue);
 
         if (isCurrentSlate) return _scores;
 
@@ -65,7 +64,7 @@ public class DemoCfbCacheService : ICfbCacheService
         if (rows.Count == 0) return null;
 
         var games = rows.Select(FinalScoresEspnMapper.FromCfbScores);
-        return FinalScoresEspnMapper.Build(games, slate.Season, slate.EspnWeekNumber.Value, CfbSlateHelpers.IsCfpSlate(slate.ScoringFormat));
+        return FinalScoresEspnMapper.Build(games, slate.Season, slate.SlateNumber, CfbSlateHelpers.IsCfpSlate(slate));
     }
 
     // No-op: demo data is a frozen fixture, never refreshed by a live CfbScoresJob upsert.

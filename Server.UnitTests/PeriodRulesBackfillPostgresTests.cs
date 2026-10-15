@@ -27,12 +27,12 @@ public class PeriodRulesBackfillPostgresTests(PostgresFixture postgres) {
         await using var db = postgres.OpenDb();
         var rows = await db.CfbSeasonWeekConfigs.AsNoTracking().ToListAsync();
 
-        Assert.Contains(rows, r => r.IvLeagueWeekNumber == 99);
+        Assert.Contains(rows, r => r.IvLeagueWeekNumber == null);
         Assert.All(rows, r => Assert.Equal(
-            r.IvLeagueWeekNumber == 99
+            r.IvLeagueWeekNumber == null
                 ? (false, 0) // not an IV League week
                 // Postseason (O/U offered, the Postseason selector) starts at Conference Championships (14).
-                : (r.IvLeagueWeekNumber >= 14, TestWeekConfigs.CfbRequiredPicks(r.IvLeagueWeekNumber)),
+                : (r.IvLeagueWeekNumber >= 14, TestWeekConfigs.CfbRequiredPicks(r.IvLeagueWeekNumber!.Value)),
             (r.IsPostSeason, r.RequiredPicks)));
     }
 
@@ -41,7 +41,7 @@ public class PeriodRulesBackfillPostgresTests(PostgresFixture postgres) {
     [Fact]
     public async Task Migration_BackfillsEveryCfbRowsWeekLabel() {
         await using var db = postgres.OpenDb();
-        var rows = await db.CfbSeasonWeekConfigs.AsNoTracking().Where(c => c.IvLeagueWeekNumber != 99).ToListAsync();
+        var rows = await db.CfbSeasonWeekConfigs.AsNoTracking().Where(c => c.IvLeagueWeekNumber != null).ToListAsync();
 
         Assert.NotEmpty(rows);
         Assert.All(rows, r => Assert.Equal(r.IvLeagueWeekNumber switch {
@@ -71,7 +71,7 @@ public class PeriodRulesBackfillPostgresTests(PostgresFixture postgres) {
     [Fact]
     public async Task Cfb_RequiredPicks_ZeroIsOnlyAllowedOnExcludedWeeks() {
         await using var db = postgres.OpenDb();
-        var excluded = await db.CfbSeasonWeekConfigs.FirstAsync(c => c.IvLeagueWeekNumber == 99);
+        var excluded = await db.CfbSeasonWeekConfigs.FirstAsync(c => c.IvLeagueWeekNumber == null);
         Assert.Equal(0, excluded.RequiredPicks); // excluded weeks legitimately carry 0
 
         var round = await db.CfbSeasonWeekConfigs.FirstAsync(c => c.IvLeagueWeekNumber == 1);

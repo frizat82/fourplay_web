@@ -32,7 +32,7 @@ public class ReplayCacheServiceTests {
     [Fact]
     public async Task GetWeekScoresAsync_ServesTheSnapshot_OnlyForTheControlTablesCurrentWeek() {
         var currentWeek = Substitute.For<INflCurrentWeekService>();
-        currentWeek.GetCurrentWeekAsync().Returns(new NflWeekInfo(22, 2025, true, "Super Bowl LX", "Standard", default, 1));
+        currentWeek.GetCurrentWeekAsync().Returns(new NflWeekInfo(22, 2025, true, "Super Bowl LX", ScoringFormat.Standard, default, 1));
         var snapshot = Snapshot("2025");
         snapshot.Week = new Week { Number = 5 }; // ESPN's raw number for that week — must be irrelevant
         var svc = new ReplayCacheService([snapshot], currentWeek);

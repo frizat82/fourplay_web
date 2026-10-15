@@ -32,7 +32,7 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
         // while we're still deep in the prior season's off-season; without this check the job
         // would keep hitting ESPN for a not-yet-started or long-finished season.
         var windows = slates.Select(s => new SeasonWindowResolver.Window(
-            s.Season, s.StartDate.ToDateTime(TimeOnly.MinValue), s.EndDate.ToDateTime(TimeOnly.MaxValue)));
+            s.Season, s.WeekStartDate.ToDateTime(TimeOnly.MinValue), s.WeekEndDate.ToDateTime(TimeOnly.MaxValue)));
         if (!SeasonWindowResolver.IsSeasonActive(windows, DateTime.UtcNow)) {
             Log.Information("CfbScoresJob: season {Season} not currently active, skipping ESPN fetch", Season);
             return;
@@ -107,7 +107,7 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
         weekResultNotificationError?.Throw();
     }
 
-    private static void AppendScores(List<CfbScores> scores, FourPlayWebApp.Server.Models.Data.CfbSlates slate, IEnumerable<FourPlayWebApp.Shared.Models.Event> events) {
+    private static void AppendScores(List<CfbScores> scores, FourPlayWebApp.Server.Models.Data.CfbSeasonWeekConfig slate, IEnumerable<FourPlayWebApp.Shared.Models.Event> events) {
         foreach (var evt in events) {
             var comp = evt.Competitions.FirstOrDefault();
             if (comp is null) continue;

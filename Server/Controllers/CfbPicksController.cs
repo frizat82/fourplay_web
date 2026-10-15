@@ -45,7 +45,9 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
 
     [HttpGet("slates/{season}")]
     public async Task<IActionResult> GetSlates(int season) =>
-        Ok(await cfbRepo.GetSlatesForSeasonAsync(season));
+        Ok((await cfbRepo.GetSlatesForSeasonAsync(season))
+            .Select(s => new CfbSlateDto(s.Id, s.Season, s.SlateNumber, s.WeekLabel, s.WeekStartDate, s.WeekEndDate, s.IsPostSeason, s.RequiredPicks))
+            .ToList());
 
     // frizat-9m0: the full FBS slate is persisted for audit (see CfbSpreadJob), but only
     // league-eligible games (ranked-either-side or CFP, excluding MAC Tue/Wed) are ever served —
@@ -75,9 +77,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
             // CfbRanking — read it back here rather than this endpoint keeping its own second
             // copy (that duplication is exactly what caused a real bug: an earlier version of
             // this PR denormalized rank onto CfbSpreads and its upsert forgot to keep it updated).
-            var rankingsTask = slate.EspnWeekNumber is int espnWeek
-                ? cfbRepo.GetLatestRankingsForWeekAsync(slate.Season, espnWeek)
-                : Task.FromResult(new Dictionary<string, int>());
+            var rankingsTask = cfbRepo.GetLatestRankingsForWeekAsync(slate.Season, slate.SlateNumber);
             await Task.WhenAll(juiceMappingTask, rankingsTask);
 
             var juiceMapping = juiceMappingTask.Result ?? new LeagueJuiceMapping();

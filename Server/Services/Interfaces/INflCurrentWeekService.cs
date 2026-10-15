@@ -1,9 +1,11 @@
+using FourPlayWebApp.Shared.Models.Enum;
+
 namespace FourPlayWebApp.Server.Services.Interfaces;
 
 // No EspnWeek field — every consumer (backend and frontend) now routes purely by WeekId (our
 // own control table), never ESPN's own numbering. See frizat-3nv.
 // IsPostSeason/RequiredPicks are the week's control-table row values (frizat-d47).
-public record NflWeekInfo(int WeekId, int Season, bool IsPostSeason, string WeekLabel, string ScoringFormat, DateTime SpreadLockDatetime, int RequiredPicks);
+public record NflWeekInfo(int WeekId, int Season, bool IsPostSeason, string WeekLabel, ScoringFormat ScoringFormat, DateTime SpreadLockDatetime, int RequiredPicks);
 
 public interface INflCurrentWeekService {
     Task<NflWeekInfo> GetCurrentWeekAsync();

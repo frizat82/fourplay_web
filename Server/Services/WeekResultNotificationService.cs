@@ -44,7 +44,7 @@ public class WeekResultNotificationService(
             async () => (await cfbRepository.GetSlatesForSeasonAsync(season))
                 .GroupBy(s => s.SlateNumber)
                 .ToDictionary(g => g.Key, g => new Period(
-                    new DateTimeOffset(g.Max(s => s.EndDate).ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero), g.First().Label)),
+                    new DateTimeOffset(g.Max(s => s.WeekEndDate).ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero), g.First().WeekLabel)),
             cfbScores.GetScoresAsync, league => cfbLeaderboardService.BuildLeaderboard(league.Id, season));
 
     private async Task<int> CheckWeekResultsAsync(LeagueType sport, int season, string sportLabel,

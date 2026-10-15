@@ -33,19 +33,19 @@ public class CfbCacheServiceTests
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     private static readonly CfbSlateInfo DefaultSlateInfo = new(
-        Id: 1, Season: 2026, SlateNumber: 5, Label: "Week 5", StartDate: Today.AddDays(-1), EndDate: Today.AddDays(1), FirstGameUtc: null,
+        Id: 1, Season: 2026, SlateNumber: 5, Label: "Week 5", StartDate: Today.AddDays(-1), EndDate: Today.AddDays(1),
         SpreadLockDatetime: DateTime.UtcNow.AddDays(-7), IsPostSeason: false, RequiredPicks: 4);
 
-    private static readonly CfbSlates DefaultSlate = new() {
-        Id = 1, Season = 2026, SlateNumber = 5, Label = "Week 5", StartDate = Today.AddDays(-1), EndDate = Today.AddDays(1),
-        EspnWeekNumber = 5, ScoringFormat = "Spread",
+    private static readonly CfbSeasonWeekConfig DefaultSlate = new() {
+        Id = 1, Season = 2026, IvLeagueWeekNumber = 5, InScopeIvLeague = true, WeekLabel = "Week 5", WeekStartDate = Today.AddDays(-1), WeekEndDate = Today.AddDays(1),
+ ScoringFormat = ScoringFormat.Standard,
     };
 
     // A separate, already-ENDED slate (fixed past calendar dates) for the settled-cache tests
     // below — DefaultSlate is deliberately always-active so it can't exercise the DB-first path.
-    private static readonly CfbSlates SettledSlate = new() {
-        Id = 2, Season = 2025, SlateNumber = 4, Label = "Week 4", StartDate = new DateOnly(2025, 9, 27), EndDate = new DateOnly(2025, 9, 28),
-        EspnWeekNumber = 4, ScoringFormat = "Spread",
+    private static readonly CfbSeasonWeekConfig SettledSlate = new() {
+        Id = 2, Season = 2025, IvLeagueWeekNumber = 4, InScopeIvLeague = true, WeekLabel = "Week 4", WeekStartDate = new DateOnly(2025, 9, 27), WeekEndDate = new DateOnly(2025, 9, 28),
+ ScoringFormat = ScoringFormat.Standard,
     };
 
     public CfbCacheServiceTests()
@@ -108,13 +108,13 @@ public class CfbCacheServiceTests
         await Task.Delay(300);
 
         Assert.Null(await svc.GetScoresAsync());
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>());
     }
 
     [Fact]
     public async Task GetScoresAsync_ResolvesFullSlateEntity_ThenFetches()
     {
-        _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == DefaultSlate.Id), Arg.Any<bool>()).Returns(BuildScoreboard());
+        _fetcher.FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == DefaultSlate.Id), Arg.Any<bool>()).Returns(BuildScoreboard());
 
         await using var svc = BuildService(initialDelay: TimeSpan.FromMilliseconds(50));
         await WaitForScoresChangedAsync(svc);
@@ -128,7 +128,7 @@ public class CfbCacheServiceTests
     public async Task ScoresChanged_Fires_WhenLiveScoreChanges()
     {
         int fireCount = 0;
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeScore: 14, awayScore: 7));
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeScore: 14, awayScore: 7));
 
         await using var svc = BuildService(initialDelay: TimeSpan.FromMilliseconds(50));
         svc.ScoresChanged += () => Interlocked.Increment(ref fireCount);
@@ -151,13 +151,13 @@ public class CfbCacheServiceTests
         await Task.Delay(300);
 
         Assert.Null(await svc.GetScoresAsync());
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>());
     }
 
     [Fact]
     public async Task GetScoresAsync_WhenFetcherReturnsNull_ReturnsNull()
     {
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns((EspnScores?)null);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns((EspnScores?)null);
 
         await using var svc = BuildService(TimeSpan.FromMinutes(5));
         await Task.Delay(300);
@@ -185,7 +185,7 @@ public class CfbCacheServiceTests
         Assert.Equal("OSU", home.Team.Abbreviation);
         Assert.Equal(28, home.Score);
         Assert.Equal(TypeName.StatusFinal, comp.Status.Type.Name);
-        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>());
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>());
     }
 
     // frizat: cfbAdapter.ts's current-slate path now always calls this endpoint for whichever
@@ -200,10 +200,10 @@ public class CfbCacheServiceTests
         };
         _cfbRepo.GetScoresForSlateAsync(SettledSlate.Id).Returns((IEnumerable<CfbScores>)rows);
         _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(
-            SettledSlate.Id, SettledSlate.Season, SettledSlate.SlateNumber, SettledSlate.Label,
-            SettledSlate.StartDate, SettledSlate.EndDate, null, DateTime.UtcNow, SettledSlate.IsPostSeason, SettledSlate.RequiredPicks));
+            SettledSlate.Id, SettledSlate.Season, SettledSlate.SlateNumber, SettledSlate.WeekLabel,
+            SettledSlate.WeekStartDate, SettledSlate.WeekEndDate, DateTime.UtcNow, SettledSlate.IsPostSeason, SettledSlate.RequiredPicks));
         var espnScores = BuildScoreboard();
-        _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == SettledSlate.Id), Arg.Any<bool>()).Returns(espnScores);
+        _fetcher.FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == SettledSlate.Id), Arg.Any<bool>()).Returns(espnScores);
 
         await using var svc = BuildService(TimeSpan.FromMinutes(5));
         var result = await svc.GetSlateScoresAsync(SettledSlate.Id);
@@ -211,53 +211,30 @@ public class CfbCacheServiceTests
         Assert.Same(espnScores, result);
         // isCurrentSlate must be the already-resolved true, not re-derived by the fetcher (which
         // no longer has the means to — it takes this as a parameter now, frizat-d0t).
-        await _fetcher.Received(1).FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == SettledSlate.Id), isCurrentSlate: true);
+        await _fetcher.Received(1).FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == SettledSlate.Id), isCurrentSlate: true);
     }
 
     [Fact]
     public async Task GetSlateScoresAsync_WhenDbHasNoRowsForTheSlate_FallsBackToFetcher()
     {
         var espnScores = BuildScoreboard();
-        _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == DefaultSlate.Id), Arg.Any<bool>()).Returns(espnScores);
+        _fetcher.FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == DefaultSlate.Id), Arg.Any<bool>()).Returns(espnScores);
 
         await using var svc = BuildService(TimeSpan.FromMinutes(5));
         var result = await svc.GetSlateScoresAsync(DefaultSlate.Id);
 
         Assert.Same(espnScores, result);
         // DefaultSlate.Id matches the constructor's default GetCurrentSlateAsync() setup — true.
-        await _fetcher.Received(1).FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == DefaultSlate.Id), isCurrentSlate: true);
+        await _fetcher.Received(1).FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == DefaultSlate.Id), isCurrentSlate: true);
     }
 
     [Fact]
     public async Task GetSlateScoresAsync_WhenNoSlateMatchesTheRequestedId_ReturnsNull_NeverCallsFetcher()
     {
-        _cfbRepo.GetSlateByIdAsync(999).Returns((CfbSlates?)null);
+        _cfbRepo.GetSlateByIdAsync(999).Returns((CfbSeasonWeekConfig?)null);
 
         await using var svc = BuildService(TimeSpan.FromMinutes(5));
         var result = await svc.GetSlateScoresAsync(999);
-
-        Assert.Null(result);
-        await _fetcher.DidNotReceiveWithAnyArgs().FetchForSlateAsync(default!, default!);
-    }
-
-    // /code-review caught the DB-first branch silently defaulting a missing EspnWeekNumber to
-    // week 0 instead of applying the same guard the ESPN-fallback path already used — even with
-    // persisted rows present, a slate with no week number is a data-integrity problem, not
-    // something to paper over.
-    [Fact]
-    public async Task GetSlateScoresAsync_MissingEspnWeekNumber_ReturnsNull_EvenWithPersistedRows()
-    {
-        var slate = new CfbSlates {
-            Id = 3, Season = 2025, SlateNumber = 1, Label = "Week 1", StartDate = new DateOnly(2025, 12, 19), EndDate = new DateOnly(2025, 12, 20), EspnWeekNumber = null,
-        };
-        _cfbRepo.GetSlateByIdAsync(slate.Id).Returns(slate);
-        var rows = new List<CfbScores> {
-            new() { Id = 1, CfbSlateId = slate.Id, HomeTeam = "OSU", AwayTeam = "NEB", HomeTeamScore = 28, AwayTeamScore = 14, GameStatus = TypeName.StatusFinal, GameTime = new DateTimeOffset(2025, 12, 19, 18, 0, 0, TimeSpan.Zero) },
-        };
-        _cfbRepo.GetScoresForSlateAsync(slate.Id).Returns((IEnumerable<CfbScores>)rows);
-
-        await using var svc = BuildService(TimeSpan.FromMinutes(5));
-        var result = await svc.GetSlateScoresAsync(slate.Id);
 
         Assert.Null(result);
         await _fetcher.DidNotReceiveWithAnyArgs().FetchForSlateAsync(default!, default!);
@@ -310,14 +287,14 @@ public class CfbCacheServiceTests
     public async Task GetSlateScoresAsync_ForTheSlateThePollerHolds_ReturnsThePolledSnapshot_WithoutAnotherEspnCall()
     {
         var polled = BuildScoreboard();
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()).Returns(polled);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(polled);
 
         await using var svc = BuildService(initialDelay: TimeSpan.FromMilliseconds(50));
         await WaitForScoresChangedAsync(svc);
         var result = await svc.GetSlateScoresAsync(DefaultSlate.Id);
 
         Assert.Same(polled, result);
-        await _fetcher.Received(1).FetchForSlateAsync(Arg.Any<CfbSlates>(), Arg.Any<bool>()); // the poll's own fetch only
+        await _fetcher.Received(1).FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()); // the poll's own fetch only
     }
 
     [Fact]
@@ -325,8 +302,8 @@ public class CfbCacheServiceTests
     {
         var polled = BuildScoreboard();
         var other = BuildScoreboard(homeScore: 3);
-        _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == DefaultSlate.Id), Arg.Any<bool>()).Returns(polled);
-        _fetcher.FetchForSlateAsync(Arg.Is<CfbSlates>(s => s.Id == SettledSlate.Id), Arg.Any<bool>()).Returns(other);
+        _fetcher.FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == DefaultSlate.Id), Arg.Any<bool>()).Returns(polled);
+        _fetcher.FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == SettledSlate.Id), Arg.Any<bool>()).Returns(other);
 
         await using var svc = BuildService(initialDelay: TimeSpan.FromMilliseconds(50));
         await WaitForScoresChangedAsync(svc);

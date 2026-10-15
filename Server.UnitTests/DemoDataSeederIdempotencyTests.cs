@@ -74,7 +74,7 @@ public class DemoDataSeederIdempotencyTests : IClassFixture<PostgresSeederFixtur
         db.NflScores.RemoveRange(await db.NflScores.Where(s => s.Season == DemoSeason).ToListAsync());
         db.NflSpreads.RemoveRange(await db.NflSpreads.Where(s => s.Season == DemoSeason).ToListAsync());
         db.NflWeeks.RemoveRange(await db.NflWeeks.Where(w => w.Season == DemoSeason).ToListAsync());
-        db.CfbSlates.RemoveRange(await db.CfbSlates.Where(c => c.Season == DemoSeason).ToListAsync());
+        db.CfbSeasonWeekConfigs.RemoveRange(await db.CfbSeasonWeekConfigs.Where(c => c.Season == DemoSeason).ToListAsync());
         db.LeagueInfo.RemoveRange(await db.LeagueInfo.ToListAsync());
         db.Users.RemoveRange(await db.Users.Where(u => u.Id == AdminId).ToListAsync());
         await db.SaveChangesAsync();
@@ -194,12 +194,11 @@ public class DemoDataSeederIdempotencyTests : IClassFixture<PostgresSeederFixtur
             Season = DemoSeason, NflWeek = 18,
             StartDate = DateTimeOffset.UtcNow, EndDate = DateTimeOffset.UtcNow.AddDays(6),
         });
-        db.CfbSlates.Add(new CfbSlates
-        {
-            Season = DemoSeason, SlateNumber = 1,
-            Label = "Week 1", StartDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(6)),
-        });
+        db.CfbSeasonWeekConfigs.Add(new CfbSeasonWeekConfig {
+            Season = DemoSeason, IvLeagueWeekNumber = 1,
+            WeekLabel = "Week 1", WeekStartDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            WeekEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(6)), InScopeIvLeague = true,
+            WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard, RequiredPicks = 4 });
         await db.SaveChangesAsync();
 
         // Act
@@ -210,7 +209,7 @@ public class DemoDataSeederIdempotencyTests : IClassFixture<PostgresSeederFixtur
         await using var verify = OpenDb();
         Assert.True(await verify.NflWeeks.AnyAsync(w => w.Season == DemoSeason && w.NflWeek == 18),
             "Week 18 (live/current week) should not be wiped by historical seeder");
-        Assert.True(await verify.CfbSlates.AnyAsync(c => c.Season == DemoSeason),
+        Assert.True(await verify.CfbSeasonWeekConfigs.AnyAsync(c => c.Season == DemoSeason),
             "CFB slates should not be touched by NFL historical seeder");
     }
 }

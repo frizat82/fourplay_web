@@ -1,13 +1,14 @@
+using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
+using FourPlayWebApp.Shared.Models.Enum;
 
 namespace FourPlayWebApp.Server.Jobs;
 
 internal static class CfbSlateHelpers {
-    // True for CFP postseason rounds (ESPN seasontype=3), false for regular season/conf-champs
-    // (seasontype=2) — callers use this to pick which ICfbApiService method to call.
-    public static bool IsCfpSlate(string? scoringFormat) =>
-        scoringFormat is "NFLDivisional" or "NFLConference" or "NFLSuperBowl";
+    // A CFP round is a control-table week whose WeekType is Playoff (frizat-b4g) — its games come
+    // from ESPN's CFP endpoint, kept to the week's dates; every other week is a plain date fetch.
+    public static bool IsCfpSlate(CfbSeasonWeekConfig slate) => slate.WeekType == WeekType.Playoff;
 
     // True when at least one team in the game is ranked in the AP Top 25 (curatedRank 1-25).
     // ESPN uses 99 for unranked teams. One input to CfbSpreads.IsLeagueEligible (frizat-9m0) —

@@ -218,7 +218,7 @@ public class LeagueOwnershipTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
         repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
-            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
                 FirstGameOfWeekStartDatetime = new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc) },
         });
 
@@ -238,7 +238,7 @@ public class LeagueOwnershipTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5, StartWeek = 1 });
         repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
-            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
                 FirstGameOfWeekStartDatetime = new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc) },
         });
 
@@ -278,9 +278,9 @@ public class LeagueOwnershipTests
         // This league's own StartWeek is already 3 (e.g. auto-defaulted at creation, mid-season).
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5, StartWeek = 3 });
         repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
-            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
                 FirstGameOfWeekStartDatetime = new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc) }, // in the past
-            new() { Season = 2025, WeekId = 3, WeekLabel = "Week 3", WeekType = "Regular Season", ScoringFormat = "Standard",
+            new() { Season = 2025, WeekId = 3, WeekLabel = "Week 3", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
                 FirstGameOfWeekStartDatetime = new DateTime(2099, 9, 18, 20, 20, 0, DateTimeKind.Utc) }, // far future
         });
 
@@ -299,7 +299,7 @@ public class LeagueOwnershipTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5, StartWeek = 3 });
         repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
-            new() { Season = 2025, WeekId = 3, WeekLabel = "Week 3", WeekType = "Regular Season", ScoringFormat = "Standard",
+            new() { Season = 2025, WeekId = 3, WeekLabel = "Week 3", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
                 FirstGameOfWeekStartDatetime = new DateTime(2025, 9, 18, 20, 20, 0, DateTimeKind.Utc) }, // in the past
         });
 
@@ -333,7 +333,7 @@ public class LeagueOwnershipTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
         repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
-            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = "Regular Season", ScoringFormat = "Standard",
+            new() { Season = 2025, WeekId = 1, WeekLabel = "Week 1", WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard,
                 FirstGameOfWeekStartDatetime = new DateTime(2025, 9, 4, 20, 20, 0, DateTimeKind.Utc) },
         });
 
@@ -353,7 +353,7 @@ public class LeagueOwnershipTests
         repo.GetLeagueInfoAsync(1).Returns(new LeagueInfo { Id = 1, OwnerUserId = OwnerId, LeagueName = "L", LeagueType = LeagueType.Nfl });
         repo.GetLeagueJuiceMappingAsync(1, 2025).Returns(new LeagueJuiceMapping { Id = 5, LeagueId = 1, Season = 2025, Juice = 13, JuiceDivisional = 10, JuiceConference = 6, WeeklyCost = 5 });
         repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
-            new() { Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "Super Bowl", ScoringFormat = "Standard", RequiredPicks = 1, IsPostSeason = true,
+            new() { Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = WeekType.Playoff, ScoringFormat = ScoringFormat.Standard, RequiredPicks = 1, IsPostSeason = true,
                 FirstGameOfWeekStartDatetime = new DateTime(2026, 2, 8, 23, 30, 0, DateTimeKind.Utc) },
         });
 
@@ -372,7 +372,7 @@ public class LeagueOwnershipTests
         // Super Bowl config row exists but is set far in the future — WeeklyCost lock hasn't hit
         // yet either way, and Season 2025's WEEK 1 has no config row at all here, so tease is open.
         repo.GetNflSeasonWeekConfigsAsync(2025).Returns(new List<NflSeasonWeekConfig> {
-            new() { Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = "Super Bowl", ScoringFormat = "Standard", RequiredPicks = 1, IsPostSeason = true,
+            new() { Season = 2025, WeekId = 22, WeekLabel = "Super Bowl", WeekType = WeekType.Playoff, ScoringFormat = ScoringFormat.Standard, RequiredPicks = 1, IsPostSeason = true,
                 FirstGameOfWeekStartDatetime = new DateTime(2099, 2, 8, 23, 30, 0, DateTimeKind.Utc) },
         });
 
@@ -749,7 +749,7 @@ public class LeagueOwnershipTests
         repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl }));
         var nflWeekSvc = Substitute.For<INflCurrentWeekService>();
         nflWeekSvc.IsSeasonActiveAsync().Returns(true);
-        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(3, 2025, false, "Week 3", "Standard", DateTime.UtcNow, 4));
+        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(3, 2025, false, "Week 3", ScoringFormat.Standard, DateTime.UtcNow, 4));
 
         var dto = new LeagueCreateDto("L", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
         var result = await ctrl.CreateLeague(dto, nflWeekSvc, Substitute.For<ICfbCurrentSlateService>());
@@ -768,7 +768,7 @@ public class LeagueOwnershipTests
         var cfbSlateSvc = Substitute.For<ICfbCurrentSlateService>();
         cfbSlateSvc.IsSeasonActiveAsync().Returns(true);
         cfbSlateSvc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(1, 2025, 4, "Slate 4",
-            new DateOnly(2025, 9, 20), new DateOnly(2025, 9, 26), null, new DateTime(2025, 9, 20, 12, 0, 0, DateTimeKind.Utc), false, 4));
+            new DateOnly(2025, 9, 20), new DateOnly(2025, 9, 26), new DateTime(2025, 9, 20, 12, 0, 0, DateTimeKind.Utc), false, 4));
 
         var dto = new LeagueCreateDto("L", LeagueType.Cfb, OwnerId, 2025, 13, 10, 6, 5);
         var result = await ctrl.CreateLeague(dto, Substitute.For<INflCurrentWeekService>(), cfbSlateSvc);
@@ -804,7 +804,7 @@ public class LeagueOwnershipTests
         var nflWeekSvc = Substitute.For<INflCurrentWeekService>();
         nflWeekSvc.IsSeasonActiveAsync().Returns(true);
         // "Now" resolves to 2024's season, but this league is explicitly being created for 2025.
-        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(18, 2024, false, "Week 18", "Standard", DateTime.UtcNow, 4));
+        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(18, 2024, false, "Week 18", ScoringFormat.Standard, DateTime.UtcNow, 4));
 
         var dto = new LeagueCreateDto("L", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
         var result = await ctrl.CreateLeague(dto, nflWeekSvc, Substitute.For<ICfbCurrentSlateService>());
@@ -821,7 +821,7 @@ public class LeagueOwnershipTests
         repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl }));
         var nflWeekSvc = Substitute.For<INflCurrentWeekService>();
         nflWeekSvc.IsSeasonActiveAsync().Returns(true);
-        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(9, 2025, false, "Week 9", "Standard", DateTime.UtcNow, 4));
+        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(9, 2025, false, "Week 9", ScoringFormat.Standard, DateTime.UtcNow, 4));
 
         var dto = new LeagueCreateDto("L", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
         var result = await ctrl.CreateLeague(dto, nflWeekSvc, Substitute.For<ICfbCurrentSlateService>());
