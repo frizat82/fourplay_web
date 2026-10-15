@@ -55,8 +55,7 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceProvider service
         var scoreboard = await cfbApi.GetCfpGamesAsync();
         if (scoreboard?.Events is null) return null;
 
-        var events = GameHelpers.FilterEventsToDateWindow(scoreboard.Events,
-            slate.WeekStartDate.ToDateTime(TimeOnly.MinValue), slate.WeekEndDate.ToDateTime(TimeOnly.MaxValue));
+        var events = GameHelpers.FilterEventsToDateWindow(scoreboard.Events, slate.StartUtc, slate.EndUtc);
 
         return events.Length == 0 ? null : GameHelpers.WithEvents(scoreboard, events);
     }
@@ -79,8 +78,7 @@ public class CfbLiveScoreFetcher(ICfbApiService cfbApi, IServiceProvider service
         var scoreboard = await cfbApi.GetScoresByDateRangeAsync(slate.WeekStartDate, slate.WeekEndDate);
         if (scoreboard?.Events is null) return null;
 
-        var events = GameHelpers.FilterEventsToDateWindow(scoreboard.Events,
-            slate.WeekStartDate.ToDateTime(TimeOnly.MinValue), slate.WeekEndDate.ToDateTime(TimeOnly.MaxValue));
+        var events = GameHelpers.FilterEventsToDateWindow(scoreboard.Events, slate.StartUtc, slate.EndUtc);
 
         return events.Length == 0 ? null : GameHelpers.WithEvents(scoreboard, events);
     }

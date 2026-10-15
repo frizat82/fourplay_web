@@ -13,7 +13,7 @@ namespace FourPlayWebApp.Server.Migrations
     /// - InScopeIvLeague is the one skip flag: a skipped CFB week has no week number (was 99);
     ///   NFL rows get the same flag (all in scope).
     /// - WeekType/ScoringFormat become the shared enums' names on both tables; ScoringFormat is
-    ///   checked against RequiredPicks.
+    ///   checked against RequiredPicks, and IsPostSeason against WeekType.
     /// - The ESPN week number column on the CFB control table is dropped.
     /// Every mapping CASE has no ELSE: an unexpected value becomes NULL on a NOT NULL column and
     /// fails the migration loudly instead of guessing.
@@ -135,6 +135,14 @@ namespace FourPlayWebApp.Server.Migrations
                 unique: true,
                 filter: "\"IvLeagueWeekNumber\" IS NOT NULL");
 
+            // A week's postseason flag matches its WeekType (frizat-b4g), on both tables.
+            foreach (var table in new[] { "NflSeasonWeekConfigs", "CfbSeasonWeekConfigs" })
+            {
+                migrationBuilder.AddCheckConstraint(
+                    name: $"CK_{table}_IsPostSeason",
+                    table: table,
+                    sql: "\"IsPostSeason\" = (\"WeekType\" IN ('ConferenceChampionships', 'Playoff'))");
+            }
             migrationBuilder.AddCheckConstraint(
                 name: "CK_NflSeasonWeekConfigs_ScoringFormat",
                 table: "NflSeasonWeekConfigs",
@@ -191,6 +199,8 @@ namespace FourPlayWebApp.Server.Migrations
             migrationBuilder.DropForeignKey(name: "FK_CfbSpreads_CfbSeasonWeekConfigs_CfbSlateId", table: "CfbSpreads");
 
             migrationBuilder.DropCheckConstraint(name: "CK_NflSeasonWeekConfigs_ScoringFormat", table: "NflSeasonWeekConfigs");
+            migrationBuilder.DropCheckConstraint(name: "CK_NflSeasonWeekConfigs_IsPostSeason", table: "NflSeasonWeekConfigs");
+            migrationBuilder.DropCheckConstraint(name: "CK_CfbSeasonWeekConfigs_IsPostSeason", table: "CfbSeasonWeekConfigs");
             migrationBuilder.DropCheckConstraint(name: "CK_CfbSeasonWeekConfigs_InScope", table: "CfbSeasonWeekConfigs");
             migrationBuilder.DropCheckConstraint(name: "CK_CfbSeasonWeekConfigs_RequiredPicks", table: "CfbSeasonWeekConfigs");
             migrationBuilder.DropCheckConstraint(name: "CK_CfbSeasonWeekConfigs_ScoringFormat", table: "CfbSeasonWeekConfigs");

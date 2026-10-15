@@ -50,6 +50,7 @@ public class CfbPicksControllerTests
     private static CfbSeasonWeekConfig MakeSlate(int id = 1, int slateNumber = 1, int requiredPicks = 4) => new()
     {
         Id = id, Season = 2025, IvLeagueWeekNumber = slateNumber, InScopeIvLeague = true, WeekLabel = "Week 1", RequiredPicks = requiredPicks,
+        ScoringFormat = TestWeekConfigs.ScoringFormatFor(requiredPicks),
     };
 
     /// <summary>

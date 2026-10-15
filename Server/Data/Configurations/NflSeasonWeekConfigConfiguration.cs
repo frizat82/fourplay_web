@@ -8,9 +8,7 @@ public class NflSeasonWeekConfigConfiguration : IEntityTypeConfiguration<NflSeas
 {
     public void Configure(EntityTypeBuilder<NflSeasonWeekConfig> entity)
     {
-        // frizat-b4g: shared enums, stored by name (same values as CfbSeasonWeekConfigs).
-        entity.Property(e => e.WeekType).HasConversion<string>();
-        entity.Property(e => e.ScoringFormat).HasConversion<string>();
+        WeekRuleChecks.Configure(entity, "NflSeasonWeekConfigs");
         entity.Property(e => e.InScopeIvLeague).HasDefaultValue(true);
 
         entity.ToTable(t => {
@@ -18,7 +16,6 @@ public class NflSeasonWeekConfigConfiguration : IEntityTypeConfiguration<NflSeas
             // insert instead of silently changing a week's cap. Every NFL round asks for 1-4 picks —
             // 0 would cap every submission at nothing and score every member a win.
             t.HasCheckConstraint("CK_NflSeasonWeekConfigs_RequiredPicks", "\"RequiredPicks\" BETWEEN 1 AND 4");
-            t.HasCheckConstraint("CK_NflSeasonWeekConfigs_ScoringFormat", WeekRuleChecks.ScoringFormatMatchesRequiredPicks);
         });
     }
 }

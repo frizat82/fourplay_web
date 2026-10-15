@@ -117,6 +117,8 @@ namespace FourPlayWebApp.Server.Migrations
                         {
                             t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_InScope", "\"InScopeIvLeague\" = (\"IvLeagueWeekNumber\" IS NOT NULL)");
 
+                            t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_IsPostSeason", "\"IsPostSeason\" = (\"WeekType\" IN ('ConferenceChampionships', 'Playoff'))");
+
                             t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_RequiredPicks", "(\"InScopeIvLeague\" AND \"RequiredPicks\" BETWEEN 1 AND 4) OR (NOT \"InScopeIvLeague\" AND \"RequiredPicks\" = 0)");
 
                             t.HasCheckConstraint("CK_CfbSeasonWeekConfigs_ScoringFormat", "(\"ScoringFormat\" = 'Standard' AND \"RequiredPicks\" = 4) OR (\"ScoringFormat\" = 'Divisional' AND \"RequiredPicks\" = 3) OR (\"ScoringFormat\" = 'Conference' AND \"RequiredPicks\" = 2) OR (\"ScoringFormat\" = 'Final' AND \"RequiredPicks\" = 1) OR (\"ScoringFormat\" = 'None' AND \"RequiredPicks\" = 0)");
@@ -460,6 +462,8 @@ namespace FourPlayWebApp.Server.Migrations
 
                     b.ToTable("NflSeasonWeekConfigs", t =>
                         {
+                            t.HasCheckConstraint("CK_NflSeasonWeekConfigs_IsPostSeason", "\"IsPostSeason\" = (\"WeekType\" IN ('ConferenceChampionships', 'Playoff'))");
+
                             t.HasCheckConstraint("CK_NflSeasonWeekConfigs_RequiredPicks", "\"RequiredPicks\" BETWEEN 1 AND 4");
 
                             t.HasCheckConstraint("CK_NflSeasonWeekConfigs_ScoringFormat", "(\"ScoringFormat\" = 'Standard' AND \"RequiredPicks\" = 4) OR (\"ScoringFormat\" = 'Divisional' AND \"RequiredPicks\" = 3) OR (\"ScoringFormat\" = 'Conference' AND \"RequiredPicks\" = 2) OR (\"ScoringFormat\" = 'Final' AND \"RequiredPicks\" = 1) OR (\"ScoringFormat\" = 'None' AND \"RequiredPicks\" = 0)");

@@ -6,21 +6,18 @@ namespace FourPlayWebApp.Server.Services;
 
 public class CfbCurrentSlateService(ICfbRepository repo, [FromKeyedServices(CurrentWeekClock.Key)] TimeProvider timeProvider) : ICfbCurrentSlateService {
     public async Task<CfbSlateInfo?> GetCurrentSlateAsync() {
-        var now = timeProvider.GetUtcNow().UtcDateTime;
-        var slateWindows = BuildSlateWindows(await repo.GetAllSlatesAsync());
+        var active = ResolveCurrentSlate(await repo.GetAllSlatesAsync(), timeProvider.GetUtcNow().UtcDateTime);
+        return active is null ? null : CfbSlateInfo.From(active);
+    }
 
-        // frizat-9xg: most recent slate whose own spread grab has passed, unless we're within
-        // 2 days of the next slate's spread grab — see SeasonWindowResolver for the shared
-        // NFL/CFB logic (applies identically across a season boundary, no special case here).
+    // frizat-9xg: most recent slate whose own spread grab has passed, unless we're within
+    // 2 days of the next slate's spread grab — see SeasonWindowResolver for the shared
+    // NFL/CFB logic (applies identically across a season boundary, no special case here).
+    // Shared with DemoCfbCacheService (frizat-d0t), so both resolve "current" the same way.
+    public static CfbSeasonWeekConfig? ResolveCurrentSlate(IEnumerable<CfbSeasonWeekConfig> slates, DateTime now) {
+        var slateWindows = BuildSlateWindows(slates);
         var resolved = SeasonWindowResolver.ResolveCurrentWeek(slateWindows.Select(sw => sw.Window), now);
-        if (resolved is null) return null;
-
-        var (active, _) = slateWindows.First(sw => sw.Window.Season == resolved.Value.Season
-            && sw.Window.Start == resolved.Value.Start && sw.Window.End == resolved.Value.End);
-
-        return new CfbSlateInfo(active.Id, active.Season, active.SlateNumber, active.WeekLabel,
-            active.WeekStartDate, active.WeekEndDate, active.SpreadLockDatetime,
-            active.IsPostSeason, active.RequiredPicks);
+        return resolved is null ? null : slateWindows.First(sw => sw.Window == resolved.Value).Slate;
     }
 
     // frizat-d0t: shared so DemoCfbCacheService resolves "is this the current slate" the SAME way
@@ -29,13 +26,11 @@ public class CfbCurrentSlateService(ICfbRepository repo, [FromKeyedServices(Curr
     public static List<(CfbSeasonWeekConfig Slate, SeasonWindowResolver.WeekWindow Window)> BuildSlateWindows(
         IEnumerable<CfbSeasonWeekConfig> slates) =>
         slates.Select(s => (s, new SeasonWindowResolver.WeekWindow(
-            s.Season, s.WeekStartDate.ToDateTime(TimeOnly.MinValue), s.WeekEndDate.ToDateTime(TimeOnly.MaxValue),
-            s.SpreadLockDatetime))).ToList();
+            s.Season, s.StartUtc, s.EndUtc, s.SpreadLockDatetime))).ToList();
 
     public async Task<bool> IsSeasonActiveAsync() {
         var slates = await repo.GetAllSlatesAsync();
-        var windows = slates.Select(s => new SeasonWindowResolver.Window(
-            s.Season, s.WeekStartDate.ToDateTime(TimeOnly.MinValue), s.WeekEndDate.ToDateTime(TimeOnly.MaxValue)));
+        var windows = slates.Select(s => new SeasonWindowResolver.Window(s.Season, s.StartUtc, s.EndUtc));
         return SeasonWindowResolver.IsSeasonActive(windows, timeProvider.GetUtcNow().UtcDateTime);
     }
 }

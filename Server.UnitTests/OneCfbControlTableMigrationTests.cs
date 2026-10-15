@@ -165,6 +165,24 @@ public class OneCfbControlTableMigrationTests(OneCfbControlTableMigrationFixture
         });
     }
 
+    // A week's postseason flag and its ScoringFormat can't drift from its WeekType / pick count,
+    // on either table.
+    [Fact]
+    public async Task RuleColumns_ThatDisagree_AreRejectedByTheDatabase() {
+        await using (var db = f.OpenDb()) {
+            (await db.NflSeasonWeekConfigs.FirstAsync(r => r.WeekId == 1)).IsPostSeason = true;
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+        await using (var db = f.OpenDb()) {
+            (await db.CfbSeasonWeekConfigs.FirstAsync(r => r.IvLeagueWeekNumber == 17)).IsPostSeason = false;
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+        await using (var db = f.OpenDb()) {
+            (await db.CfbSeasonWeekConfigs.FirstAsync(r => r.IvLeagueWeekNumber == 17)).ScoringFormat = ScoringFormat.Standard;
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+    }
+
     [Fact]
     public async Task CfbSlatesTable_IsGone() {
         await using var db = f.OpenDb();

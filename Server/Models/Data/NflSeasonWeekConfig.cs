@@ -2,7 +2,7 @@ using FourPlayWebApp.Shared.Models.Enum;
 
 namespace FourPlayWebApp.Server.Models.Data;
 
-public class NflSeasonWeekConfig {
+public class NflSeasonWeekConfig : IControlTableWeek {
     public int Id { get; set; }
     public int Season { get; set; }
     public int WeekId { get; set; }          // canonical 1-22 (1-18 regular, 19=WC, 20=Div, 21=CC, 22=SB)

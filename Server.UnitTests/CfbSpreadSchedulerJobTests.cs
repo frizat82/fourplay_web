@@ -45,7 +45,7 @@ public class CfbSpreadSchedulerJobTests
     public async Task Execute_FutureLockTime_SchedulesCfbSpreadTrigger()
     {
         var lockTime = DateTime.UtcNow.AddDays(3);
-        _repo.GetAllWeekConfigsAsync().Returns(MakeConfigsWithLockTimes(lockTime));
+        _repo.GetAllSlatesAsync().Returns(MakeConfigsWithLockTimes(lockTime));
 
         await BuildJob().Execute(_context);
 
@@ -58,7 +58,7 @@ public class CfbSpreadSchedulerJobTests
     [Fact]
     public async Task Execute_PastLockTime_NoData_FiresNowAsCatchUp()
     {
-        _repo.GetAllWeekConfigsAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(-1)));
+        _repo.GetAllSlatesAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(-1)));
 
         await BuildJob().Execute(_context);
 
@@ -71,7 +71,7 @@ public class CfbSpreadSchedulerJobTests
     [Fact]
     public async Task Execute_PastLockTime_HasData_Skipped()
     {
-        _repo.GetAllWeekConfigsAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(-1)));
+        _repo.GetAllSlatesAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(-1)));
         _repo.GetWeeksWithSpreadDataAsync().Returns(new HashSet<(int, int)> { (Season, 1) });
 
         await BuildJob().Execute(_context);
@@ -82,7 +82,7 @@ public class CfbSpreadSchedulerJobTests
     [Fact]
     public async Task Execute_WhenTriggerAlreadyScheduled_IsIdempotent()
     {
-        _repo.GetAllWeekConfigsAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(3)));
+        _repo.GetAllSlatesAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(3)));
         _scheduler.GetJobKeys(Arg.Any<GroupMatcher<JobKey>>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<JobKey> { new($"CFB Spreads {Season} Wk1") });
 
@@ -94,7 +94,7 @@ public class CfbSpreadSchedulerJobTests
     [Fact]
     public async Task Execute_MultipleFutureWeeks_SchedulesTriggerForEach()
     {
-        _repo.GetAllWeekConfigsAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(3), DateTime.UtcNow.AddDays(10)));
+        _repo.GetAllSlatesAsync().Returns(MakeConfigsWithLockTimes(DateTime.UtcNow.AddDays(3), DateTime.UtcNow.AddDays(10)));
 
         await BuildJob().Execute(_context);
 
@@ -113,7 +113,7 @@ public class CfbSpreadSchedulerJobTests
             WeekStartDate = new DateOnly(2027, 9, 1), WeekEndDate = new DateOnly(2027, 9, 7),
             SpreadLockDatetime = futureSeasonLockTime,
         };
-        _repo.GetAllWeekConfigsAsync().Returns([nextSeasonConfig]);
+        _repo.GetAllSlatesAsync().Returns([nextSeasonConfig]);
 
         await BuildJob().Execute(_context);
 
@@ -123,19 +123,4 @@ public class CfbSpreadSchedulerJobTests
             Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Execute_ExcludesOutOfScopeConfigs()
-    {
-        var configs = new List<CfbSeasonWeekConfig> {
-            new() { Season = Season, IvLeagueWeekNumber = 1, InScopeIvLeague = false,
-                WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard, SpreadLockDatetime = DateTime.UtcNow.AddDays(3) },
-            new() { Season = Season, IvLeagueWeekNumber = null, InScopeIvLeague = false,
-                WeekType = WeekType.RegularSeason, ScoringFormat = ScoringFormat.Standard, SpreadLockDatetime = DateTime.UtcNow.AddDays(3) },
-        };
-        _repo.GetAllWeekConfigsAsync().Returns(configs);
-
-        await BuildJob().Execute(_context);
-
-        await _scheduler.DidNotReceive().ScheduleJob(Arg.Any<IJobDetail>(), Arg.Any<ITrigger>(), Arg.Any<CancellationToken>());
-    }
 }

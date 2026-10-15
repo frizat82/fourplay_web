@@ -8,7 +8,7 @@ namespace FourPlayWebApp.Server.Models.Data;
 /// (frizat-b4g): an in-scope row IS a slate. CfbSpreads/CfbScores/CfbPicks point at its Id
 /// (their CfbSlateId). Same shape as <see cref="NflSeasonWeekConfig"/>.
 /// </summary>
-public class CfbSeasonWeekConfig {
+public class CfbSeasonWeekConfig : IControlTableWeek {
     public int Id { get; set; }
     public int Season { get; set; }
     // Our CFB week = the slate number (1-18). Null for a week we don't bet on (InScopeIvLeague false).
@@ -31,4 +31,8 @@ public class CfbSeasonWeekConfig {
     [NotMapped]
     public int SlateNumber => IvLeagueWeekNumber
         ?? throw new InvalidOperationException($"CfbSeasonWeekConfigs {Id} (season {Season}) is not an in-scope week and has no slate number.");
+
+    // The week's window in UTC: from the start of its first day to the end of its last.
+    [NotMapped] public DateTime StartUtc => WeekStartDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+    [NotMapped] public DateTime EndUtc => WeekEndDate.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
 }

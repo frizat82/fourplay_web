@@ -61,10 +61,11 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
     public async Task<HashSet<(int Season, int Week)>> GetWeeksWithSpreadDataAsync() {
         await using var db = await dbFactory.CreateDbContextAsync();
         var pairs = await db.CfbSpreads
-            .Join(db.CfbSeasonWeekConfigs, s => s.CfbSlateId, c => c.Id, (s, c) => new { c.Season, c.IvLeagueWeekNumber })
+            .Join(db.CfbSeasonWeekConfigs.Where(c => c.IvLeagueWeekNumber != null), s => s.CfbSlateId, c => c.Id,
+                (s, c) => new { c.Season, Week = c.IvLeagueWeekNumber!.Value })
             .Distinct()
             .ToListAsync();
-        return pairs.Select(p => (p.Season, p.IvLeagueWeekNumber!.Value)).ToHashSet();
+        return pairs.Select(p => (p.Season, p.Week)).ToHashSet();
     }
 
     public async Task<IEnumerable<CfbSpreads>> GetSpreadsForSlateAsync(int cfbSlateId) {

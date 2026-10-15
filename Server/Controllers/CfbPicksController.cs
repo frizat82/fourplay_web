@@ -35,10 +35,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
         var current = await currentSlateService.GetCurrentSlateAsync();
         if (current is null) return Ok(Array.Empty<SpreadLockWeekDto>());
 
-        var configs = await cfbRepo.GetWeekConfigsForSeasonAsync(current.Season);
-        var schedule = configs
-            .Where(c => c.InScopeIvLeague)
-            .OrderBy(c => c.IvLeagueWeekNumber)
+        var schedule = (await cfbRepo.GetSlatesForSeasonAsync(current.Season))
             .Select(c => new SpreadLockWeekDto(c.WeekLabel, c.SpreadLockDatetime, c.IsPostSeason, c.RequiredPicks));
         return Ok(schedule);
     }
@@ -46,7 +43,7 @@ public class CfbPicksController(ICfbPicksRepository repo, ICfbRepository cfbRepo
     [HttpGet("slates/{season}")]
     public async Task<IActionResult> GetSlates(int season) =>
         Ok((await cfbRepo.GetSlatesForSeasonAsync(season))
-            .Select(s => new CfbSlateDto(s.Id, s.Season, s.SlateNumber, s.WeekLabel, s.WeekStartDate, s.WeekEndDate, s.IsPostSeason, s.RequiredPicks))
+            .Select(CfbSlateInfo.From)
             .ToList());
 
     // frizat-9m0: the full FBS slate is persisted for audit (see CfbSpreadJob), but only

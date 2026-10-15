@@ -59,8 +59,8 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
                 // season starting. Spread-lock points are added once in season.
                 var slates = (await cfbRepo.GetAllSlatesAsync()).ToList();
                 var wakePoints = slates
-                    .SelectMany(s => new[] { s.WeekStartDate.ToDateTime(TimeOnly.MinValue), s.WeekEndDate.ToDateTime(TimeOnly.MaxValue) })
-                    .Select(t => new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)))
+                    .SelectMany(s => new[] { s.StartUtc, s.EndUtc })
+                    .Select(t => new DateTimeOffset(t))
                     .ToList();
 
                 // CfbCurrentSlateService always resolves *something* now (most-recently-completed
@@ -113,7 +113,7 @@ public class CfbCacheService : ICfbCacheService, IAsyncDisposable
         var isCurrentSlate = currentSlate?.Id == slate.Id;
 
         return await _settledCache.GetOrBuildAsync(
-            cacheKey, isCurrentSlate, slate.WeekEndDate.ToDateTime(TimeOnly.MaxValue),
+            cacheKey, isCurrentSlate, slate.EndUtc,
             buildFromRowsAsync: async () => {
                 var rows = (await cfbRepo.GetScoresForSlateAsync(slate.Id)).ToList();
                 if (rows.Count == 0) return null;

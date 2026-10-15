@@ -115,7 +115,7 @@ public class DemoDataSeeder(
         await SeedCfbLeagueMembersAsync(cfbLeague);
         await SeedLeagueJuiceMappingAsync(cfbLeague);
         await SeedCfbWeekConfigAsync();
-        var slates = await SeedCfbSlatesAsync();
+        var slates = await LoadCfbDemoSlatesAsync();
         await SeedCfbSpreadsAsync(slates);
         await SeedCfbScoresAsync(slates);
         await SeedCfbPicksAsync(cfbLeague, slates);
@@ -1047,7 +1047,7 @@ public class DemoDataSeeder(
 
     // frizat-b4g: a CFB slate IS an in-scope CfbSeasonWeekConfigs row — seeded by
     // SeedCfbWeekConfigAsync; spreads/scores/picks point at those rows' ids.
-    private async Task<List<CfbSeasonWeekConfig>> SeedCfbSlatesAsync() =>
+    private async Task<List<CfbSeasonWeekConfig>> LoadCfbDemoSlatesAsync() =>
         await db.CfbSeasonWeekConfigs
             .Where(c => c.Season == CfbDemoSeason && c.InScopeIvLeague)
             .OrderBy(c => c.IvLeagueWeekNumber)
@@ -1395,21 +1395,21 @@ public class DemoDataSeeder(
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 11, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 11", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11,  1), WeekEndDate = new DateOnly(2025, 11,  8) },
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 12, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 12", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11,  8), WeekEndDate = new DateOnly(2025, 11, 15) },
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 13, WeekType = WeekType.RegularSeason,           WeekLabel = "Week 13", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = false, RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 11, 15), WeekEndDate = new DateOnly(2025, 11, 22) },
-            // ESPN week 14: Conference Championships → IV slate 14
+            // Conference Championships → slate 14
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 14, WeekType = WeekType.ConferenceChampionships, WeekLabel = "Conf. Championships", ScoringFormat = ScoringFormat.Standard,      IsPostSeason = true,  RequiredPicks = 4, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12,  5), WeekEndDate = new DateOnly(2025, 12,  7) },
-            // ESPN week 15: Army-Navy (excluded)
+            // Army-Navy (excluded)
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = null, WeekType = WeekType.RegularSeason,           WeekLabel = "Army-Navy", ScoringFormat = ScoringFormat.None,            IsPostSeason = false, RequiredPicks = 0, InScopeIvLeague = false, WeekStartDate = new DateOnly(2025, 12, 13), WeekEndDate = new DateOnly(2025, 12, 13), Notes = "Army-Navy" },
-            // ESPN week 16: CFP First Round → IV slate 15
+            // CFP First Round → slate 15
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 15, WeekType = WeekType.Playoff,              WeekLabel = "CFP First Round", ScoringFormat = ScoringFormat.Divisional, IsPostSeason = true,  RequiredPicks = 3, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12, 19), WeekEndDate = new DateOnly(2025, 12, 20) },
-            // ESPN week 17: dead gap (excluded)
+            // dead gap (excluded)
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = null, WeekType = WeekType.Dead,                     WeekLabel = "Excluded", ScoringFormat = ScoringFormat.None,            IsPostSeason = false, RequiredPicks = 0, InScopeIvLeague = false, WeekStartDate = new DateOnly(2025, 12, 25), WeekEndDate = new DateOnly(2025, 12, 27) },
-            // ESPN week 18: CFP Quarterfinals → IV slate 16
+            // CFP Quarterfinals → slate 16
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 16, WeekType = WeekType.Playoff,              WeekLabel = "CFP Quarterfinals", ScoringFormat = ScoringFormat.Divisional, IsPostSeason = true,  RequiredPicks = 3, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2025, 12, 31), WeekEndDate = new DateOnly(2026,  1,  1) },
-            // ESPN week 19: dead gap (excluded)
+            // dead gap (excluded)
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = null, WeekType = WeekType.Dead,                     WeekLabel = "Excluded", ScoringFormat = ScoringFormat.None,            IsPostSeason = false, RequiredPicks = 0, InScopeIvLeague = false, WeekStartDate = new DateOnly(2026,  1,  3), WeekEndDate = new DateOnly(2026,  1,  5) },
-            // ESPN week 20: CFP Semifinals → IV slate 17
+            // CFP Semifinals → slate 17
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 17, WeekType = WeekType.Playoff,              WeekLabel = "CFP Semifinals", ScoringFormat = ScoringFormat.Conference, IsPostSeason = true,  RequiredPicks = 2, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2026,  1,  8), WeekEndDate = new DateOnly(2026,  1,  9) },
-            // ESPN week 21: CFP Championship → IV slate 18
+            // CFP Championship → slate 18
             new() { Season = CfbDemoSeason, IvLeagueWeekNumber = 18, WeekType = WeekType.Playoff,              WeekLabel = "CFP Championship", ScoringFormat = ScoringFormat.Final,  IsPostSeason = true,  RequiredPicks = 1, InScopeIvLeague = true,  WeekStartDate = new DateOnly(2026,  1, 19), WeekEndDate = new DateOnly(2026,  1, 19) },
         };
 
