@@ -45,10 +45,6 @@ export default function AdminJobManagerPage() {
     }
     return grouped;
   }, [jobs]);
-  // Only per-league jobs (Juice Reminder/Lock) carry a league, and mid-season they've all fired —
-  // so the column only appears while one is listed, not as a column of dashes.
-  const showLeague = jobs.some((job) => job.leagueName);
-  const columnCount = showLeague ? 7 : 6;
 
   const loadJobs = async () => {
     setLoading(true);
@@ -162,7 +158,7 @@ export default function AdminJobManagerPage() {
             <TableHead>
               <TableRow>
                 <TableCell sx={stickyColumnSx}>Job Name</TableCell>
-                {showLeague && <TableCell>League</TableCell>}
+                <TableCell>League</TableCell>
                 <TableCell>Description</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Next Run</TableCell>
@@ -174,14 +170,14 @@ export default function AdminJobManagerPage() {
               {[...jobsByCategory.entries()].map(([category, categoryJobs]) => (
                 <Fragment key={category}>
                   <TableRow>
-                    <TableCell colSpan={columnCount} sx={{ bgcolor: 'action.hover', fontWeight: 600 }}>
+                    <TableCell colSpan={7} sx={{ bgcolor: 'action.hover', fontWeight: 600 }}>
                       {category}
                     </TableCell>
                   </TableRow>
                   {categoryJobs.map((job) => (
                     <TableRow key={job.jobName}>
                       <TableCell sx={stickyColumnSx}>{job.jobName}</TableCell>
-                      {showLeague && <TableCell>{job.leagueName ?? '—'}</TableCell>}
+                      <TableCell>{job.leagueNames.length > 0 ? job.leagueNames.join(', ') : '—'}</TableCell>
                       <TableCell>{job.description}</TableCell>
                       <TableCell>
                         <Chip size="small" label={job.status} color={getStatusColor(job.status)} />
@@ -197,7 +193,7 @@ export default function AdminJobManagerPage() {
               ))}
               {jobs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={columnCount} align="center">No jobs to show.</TableCell>
+                  <TableCell colSpan={7} align="center">No jobs to show.</TableCell>
                 </TableRow>
               )}
             </TableBody>

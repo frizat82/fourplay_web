@@ -3,6 +3,7 @@ using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -327,16 +328,16 @@ public class JobManagerControllerTests
         var job = Assert.Single(result);
         Assert.Equal("Remind league 6 owner to configure Juice for season 2026", job.Description);
         Assert.Equal(6, job.LeagueId);
-        Assert.Equal("Sunday Funday", job.LeagueName);
+        Assert.Equal(new[] { "Sunday Funday" }, job.LeagueNames);
         Assert.Equal("Juice", job.Category);
         Assert.True(job.IsDynamic);
     }
 
     [Fact]
-    public async Task GetAllJobsStatusAsync_JuiceReminderJob_UnknownLeagueId_LeagueNameIsNull()
+    public async Task GetAllJobsStatusAsync_JuiceReminderJob_UnknownLeagueId_HasNoLeagueNames()
     {
         // League was deleted (frizat-ugs pruning) or its data hasn't been fetched yet — must not
-        // throw, just leave LeagueName unresolved.
+        // throw, just leave the league unresolved.
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
         leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo>());
         SetupJobOfType<LeagueJuiceReminderJob>(scheduler, "Juice Reminder 6-2026",
@@ -347,14 +348,64 @@ public class JobManagerControllerTests
 
         var job = Assert.Single(result);
         Assert.Equal(6, job.LeagueId);
-        Assert.Null(job.LeagueName);
+        Assert.Empty(job.LeagueNames);
+    }
+
+    // A sport-wide job (scores, spreads, rankings, the spread schedulers) affects every league of
+    // that sport — the League column lists them, not a dash.
+    [Theory]
+    [InlineData(typeof(NflScoresJob), new[] { "Office Pool", "Sunday Funday" })]
+    [InlineData(typeof(NflSpreadJob), new[] { "Office Pool", "Sunday Funday" })]
+    [InlineData(typeof(NflSpreadSchedulerJob), new[] { "Office Pool", "Sunday Funday" })]
+    [InlineData(typeof(CfbScoresJob), new[] { "Saturday Crew" })]
+    [InlineData(typeof(CfbSpreadJob), new[] { "Saturday Crew" })]
+    [InlineData(typeof(CfbSpreadSchedulerJob), new[] { "Saturday Crew" })]
+    [InlineData(typeof(CfbRankingCaptureJob), new[] { "Saturday Crew" })]
+    public async Task GetAllJobsStatusAsync_SportWideJob_ListsEveryLeagueOfThatSport(Type jobType, string[] expected)
+    {
+        var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
+        leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo> {
+            new() { Id = 1, LeagueName = "Sunday Funday", OwnerUserId = "u1", LeagueType = LeagueType.Nfl },
+            new() { Id = 2, LeagueName = "Saturday Crew", OwnerUserId = "u1", LeagueType = LeagueType.Cfb },
+            new() { Id = 3, LeagueName = "Office Pool", OwnerUserId = "u2", LeagueType = LeagueType.Nfl },
+        });
+        SetupJobOfType(jobType, scheduler, "Some Job", "desc");
+
+        var job = Assert.Single(await controller.GetAllJobsStatusAsync());
+
+        Assert.Equal(expected, job.LeagueNames);
+    }
+
+    [Fact]
+    public async Task GetAllJobsStatusAsync_SystemJob_HasNoLeagues()
+    {
+        var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
+        leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo> {
+            new() { Id = 1, LeagueName = "Sunday Funday", OwnerUserId = "u1", LeagueType = LeagueType.Nfl },
+        });
+        SetupJobOfType<UserManagerJob>(scheduler, "User Manager", "Manages initial user admin");
+
+        var job = Assert.Single(await controller.GetAllJobsStatusAsync());
+
+        Assert.Empty(job.LeagueNames);
     }
 
     // frizat: GetNextSpreadJobAsync (below) is [Authorize]-only, no admin role — it's on the hot
-    // path for every logged-in user's picks page via SpreadRelease.tsx. GetAllJobsStatusAsync must
-    // not pay for the league join when nothing in the batch actually references a league.
+    // path for every logged-in user's picks page via SpreadRelease.tsx. It must never pay for the
+    // league lookup the admin list does, even though spread jobs now list their leagues there.
     [Fact]
-    public async Task GetAllJobsStatusAsync_NoJobReferencesALeague_NeverCallsLeagueRepo()
+    public async Task GetNextSpreadJobAsync_NeverLoadsLeagues()
+    {
+        var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: false);
+        SetupJobOfType<NflSpreadJob>(scheduler, "NFL Spreads 2026 Wk7", "desc");
+
+        await controller.GetNextSpreadJobAsync("nfl");
+
+        await leagueRepo.DidNotReceive().GetAllLeaguesAsync();
+    }
+
+    [Fact]
+    public async Task GetAllJobsStatusAsync_NoJobReferencesALeagueOrSport_NeverCallsLeagueRepo()
     {
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
         SetupJobOfType<UserManagerJob>(scheduler, "User Manager", "Manages initial user admin");
@@ -378,7 +429,11 @@ public class JobManagerControllerTests
     }
 
     private static void SetupJobOfType<TJob>(IScheduler scheduler, string name, string? description,
-        Dictionary<string, string>? jobData = null) where TJob : IJob {
+        Dictionary<string, string>? jobData = null) where TJob : IJob =>
+        SetupJobOfType(typeof(TJob), scheduler, name, description, jobData);
+
+    private static void SetupJobOfType(Type jobType, IScheduler scheduler, string name, string? description,
+        Dictionary<string, string>? jobData = null) {
         var groupName = "DEFAULT";
         var jobKey = new JobKey(name);
         scheduler.GetJobGroupNames().Returns(new List<string> { groupName });
@@ -386,7 +441,7 @@ public class JobManagerControllerTests
         scheduler.GetCurrentlyExecutingJobs().Returns(new List<IJobExecutionContext>());
         scheduler.GetTriggerState(Arg.Any<TriggerKey>()).Returns(TriggerState.Normal);
 
-        var builder = JobBuilder.Create<TJob>().WithIdentity(jobKey).WithDescription(description);
+        var builder = JobBuilder.Create(jobType).WithIdentity(jobKey).WithDescription(description);
         if (jobData is not null) {
             var map = new JobDataMap();
             foreach (var (key, value) in jobData) map.Put(key, value);

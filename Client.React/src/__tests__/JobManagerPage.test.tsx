@@ -29,6 +29,7 @@ function makeJob(overrides: Partial<JobStatusResponse> = {}): JobStatusResponse 
     lastMessage: null,
     category: 'System',
     isDynamic: false,
+    leagueNames: [],
     ...overrides,
   };
 }
@@ -67,27 +68,22 @@ describe('AdminJobManagerPage', () => {
     expect(screen.getByText('Juice', { exact: true })).toBeInTheDocument();
   });
 
-  // Only the per-league Juice Reminder/Lock jobs carry a league, and mid-season those have all
-  // fired — a League column on every other job was a column of dashes.
-  it('hides the League column when no listed job belongs to a league', async () => {
-    mockedGetAllJobsStatus.mockResolvedValue([makeJob({ jobName: 'User Manager' })]);
-
-    render(<AdminJobManagerPage />);
-
-    expect(await screen.findByText('User Manager')).toBeInTheDocument();
-    expect(screen.queryByRole('columnheader', { name: 'League' })).not.toBeInTheDocument();
-  });
-
-  it("shows the League column, with each league job's league, when any job belongs to one", async () => {
+  // The League column lists the leagues each job affects: every league of a sport-wide job's
+  // sport, a per-league job's one league, a dash for system jobs.
+  it('lists the leagues each job affects in the League column', async () => {
     mockedGetAllJobsStatus.mockResolvedValue([
+      makeJob({ jobName: 'NFL Scores', category: 'Scores', leagueNames: ['Office Pool', 'Sunday Funday'] }),
+      makeJob({ jobName: 'Juice Lock 6-2026', category: 'Juice', isDynamic: true, leagueId: 6, leagueNames: ['Sunday Funday'] }),
       makeJob({ jobName: 'User Manager' }),
-      makeJob({ jobName: 'Juice Lock 6-2026', category: 'Juice', isDynamic: true, leagueId: 6, leagueName: 'Office Pool' }),
     ]);
 
     render(<AdminJobManagerPage />);
 
     expect(await screen.findByRole('columnheader', { name: 'League' })).toBeInTheDocument();
-    expect(screen.getByText('Office Pool')).toBeInTheDocument();
+    const cellsOf = (job: string) => screen.getByRole('cell', { name: job }).closest('tr')!.querySelectorAll('td');
+    expect(cellsOf('NFL Scores')[1]).toHaveTextContent('Office Pool, Sunday Funday');
+    expect(cellsOf('Juice Lock 6-2026')[1]).toHaveTextContent('Sunday Funday');
+    expect(cellsOf('User Manager')[1]).toHaveTextContent('—');
   });
 
   // Regression: a single generically-labeled "Run Scores Job" button previously ran NFL's job

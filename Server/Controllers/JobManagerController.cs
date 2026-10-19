@@ -1,5 +1,6 @@
 ﻿using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Quartz;
@@ -51,8 +52,38 @@ namespace FourPlayWebApp.Server.Controllers {
         [Authorize(Roles = "Administrator")]
         [HttpGet("get-jobs")]
         public async Task<IEnumerable<JobStatusResponse>> GetAllJobsStatusAsync() {
+            var jobs = await ListJobsAsync();
+
+            // The leagues each job affects: a per-league job's own league, or every league of a
+            // sport-wide job's sport. Only loaded here, for the admin list — never on the hot
+            // path (GetNextSpreadJobAsync, every user's picks page) — and only when some job
+            // actually references a league or sport.
+            if (jobs.Any(j => j.Status.LeagueId.HasValue || j.Sport.HasValue)) {
+                var leagues = await leagueRepo.GetAllLeaguesAsync();
+                var byId = leagues.ToDictionary(l => l.Id, l => l.LeagueName);
+                var bySport = leagues.ToLookup(l => l.LeagueType, l => l.LeagueName);
+                foreach (var (status, sport) in jobs) {
+                    if (status.LeagueId is { } leagueId) {
+                        if (byId.TryGetValue(leagueId, out var name)) status.LeagueNames = [name];
+                    } else if (sport is { } leagueType) {
+                        status.LeagueNames = bySport[leagueType].Order(StringComparer.OrdinalIgnoreCase).ToList();
+                    }
+                }
+            }
+
+            // Soonest-to-run first within a category, never-scheduled last. Not by name: per-week
+            // jobs are named "... Wk{n}", and as text "Wk10".."Wk19" sort before "Wk7" — the
+            // Job Manager's first NFL spread row read as week 10 while week 7 was up next.
+            return jobs.Select(j => j.Status)
+                .OrderBy(j => j.Category)
+                .ThenBy(j => j.NextRun ?? DateTimeOffset.MaxValue)
+                .ThenBy(j => j.JobName);
+        }
+
+        /// <summary>Every scheduled job's status (no league names, no ordering), and its sport if sport-wide.</summary>
+        private async Task<List<(JobStatusResponse Status, LeagueType? Sport)>> ListJobsAsync() {
             var scheduler = await schedulerFactory.GetScheduler();
-            var jobStatuses = new List<JobStatusResponse>();
+            var jobStatuses = new List<(JobStatusResponse Status, LeagueType? Sport)>();
 
             // fetch observer info once and index by job name for quick lookup
             var observerInfos = (await observer.GetAllJobInfosAsync())
@@ -71,7 +102,7 @@ namespace FourPlayWebApp.Server.Controllers {
                     // time — see ScoresJobs): show the one that fires next.
                     var trigger = (await scheduler.GetTriggersOfJob(jobKey))
                         .MinBy(t => t.GetNextFireTimeUtc() ?? DateTimeOffset.MaxValue);
-                    var (category, isDynamic) = JobCategoryClassifier.Classify(jobDetail.JobType);
+                    var (category, isDynamic, sport) = JobCategoryClassifier.Classify(jobDetail.JobType);
 
                     var status = new JobStatusResponse {
                         JobName = jobDetail.Key.Name,
@@ -89,31 +120,11 @@ namespace FourPlayWebApp.Server.Controllers {
                         status.LastMessage = info.LastMessage;
                     }
 
-                    jobStatuses.Add(status);
+                    jobStatuses.Add((status, sport));
                 }
             }
 
-            // Only Juice Reminder/Lock jobs carry a LeagueId — this endpoint is also on the hot
-            // path for every logged-in user via GetNextSpreadJobAsync below (not admin-gated), so
-            // the league join only runs when a job in THIS batch actually references one, not on
-            // every call.
-            var referencedLeagueIds = jobStatuses.Where(j => j.LeagueId.HasValue).Select(j => j.LeagueId!.Value).ToHashSet();
-            if (referencedLeagueIds.Count > 0) {
-                var leagueNames = (await leagueRepo.GetAllLeaguesAsync())
-                    .Where(l => referencedLeagueIds.Contains(l.Id))
-                    .ToDictionary(l => l.Id, l => l.LeagueName);
-                foreach (var status in jobStatuses.Where(j => j.LeagueId.HasValue)) {
-                    if (leagueNames.TryGetValue(status.LeagueId!.Value, out var leagueName)) status.LeagueName = leagueName;
-                }
-            }
-
-            // Soonest-to-run first within a category, never-scheduled last. Not by name: per-week
-            // jobs are named "... Wk{n}", and as text "Wk10".."Wk19" sort before "Wk7" — the
-            // Job Manager's first NFL spread row read as week 10 while week 7 was up next.
-            return jobStatuses
-                .OrderBy(j => j.Category)
-                .ThenBy(j => j.NextRun ?? DateTimeOffset.MaxValue)
-                .ThenBy(j => j.JobName);
+            return jobStatuses;
         }
 
         private static int? TryGetLeagueId(IJobDetail jobDetail) {
@@ -123,7 +134,7 @@ namespace FourPlayWebApp.Server.Controllers {
         [Authorize]
         [HttpGet("get-next-spread-job")]
         public async Task<DateTimeOffset?> GetNextSpreadJobAsync([FromQuery] string? sport = null) {
-            var allJobs = await GetAllJobsStatusAsync();
+            var allJobs = (await ListJobsAsync()).Select(j => j.Status);
 
             // "Spreads " (plural, trailing space) matches only the per-week triggers registered by
             // NflSpreadSchedulerJob/CfbSpreadSchedulerJob ("NFL Spreads {season} Wk{n}" / "CFB Spreads
@@ -182,7 +193,7 @@ namespace FourPlayWebApp.Server.Controllers {
         private async Task<IActionResult> TriggerSoonestJobAsync(string jobNamePrefix, string sportLabel, bool force) {
             try {
                 var scheduler = await schedulerFactory.GetScheduler();
-                var allJobs = await GetAllJobsStatusAsync();
+                var allJobs = (await ListJobsAsync()).Select(j => j.Status);
                 var jobName = allJobs
                     .Where(job => job.JobName.StartsWith(jobNamePrefix, StringComparison.OrdinalIgnoreCase) && job.NextRun is not null)
                     .MinBy(job => job.NextRun);
