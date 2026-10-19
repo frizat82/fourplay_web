@@ -54,22 +54,15 @@ namespace FourPlayWebApp.Server.Controllers {
         public async Task<IEnumerable<JobStatusResponse>> GetAllJobsStatusAsync() {
             var jobs = await ListJobsAsync();
 
-            // The leagues each job affects: a per-league job's own league, or every league of a
-            // sport-wide job's sport. Only loaded here, for the admin list — never on the hot
-            // path (GetNextSpreadJobAsync, every user's picks page) — and only when some job
-            // actually references a league or sport.
-            if (jobs.Any(j => j.Status.LeagueId.HasValue || j.Sport.HasValue)) {
-                var leagues = await leagueRepo.GetAllLeaguesAsync();
-                var byId = leagues.ToDictionary(l => l.Id, l => l.LeagueName);
-                var bySport = leagues.ToLookup(l => l.LeagueType, l => l.LeagueName);
-                foreach (var (status, sport) in jobs) {
-                    if (status.LeagueId is { } leagueId) {
-                        if (byId.TryGetValue(leagueId, out var name)) status.LeagueNames = [name];
-                    } else if (sport is { } leagueType) {
-                        status.LeagueNames = bySport[leagueType].Order(StringComparer.OrdinalIgnoreCase).ToList();
-                    }
-                }
+            // The sport each job is for. Sport-wide jobs know theirs from the job type; a per-league
+            // job (Juice Reminder/Lock) takes its league's, so leagues are only loaded when one is
+            // listed — and never on the hot path (GetNextSpreadJobAsync, every user's picks page).
+            if (jobs.Any(j => j.Status.LeagueId.HasValue)) {
+                var leagueSports = (await leagueRepo.GetAllLeaguesAsync()).ToDictionary(l => l.Id, l => l.LeagueType);
+                jobs = jobs.Select(j => j.Status.LeagueId is { } id && leagueSports.TryGetValue(id, out var sport)
+                    ? (j.Status, sport) : j).ToList();
             }
+            foreach (var (status, sport) in jobs) status.Sport = sport is { } s ? SportLabel(s) : null;
 
             // Soonest-to-run first within a category, never-scheduled last. Not by name: per-week
             // jobs are named "... Wk{n}", and as text "Wk10".."Wk19" sort before "Wk7" — the
@@ -126,6 +119,8 @@ namespace FourPlayWebApp.Server.Controllers {
 
             return jobStatuses;
         }
+
+        private static string SportLabel(LeagueType sport) => sport == LeagueType.Cfb ? "CFB" : "NFL";
 
         private static int? TryGetLeagueId(IJobDetail jobDetail) {
             if (jobDetail.JobDataMap is null || !jobDetail.JobDataMap.ContainsKey(LeagueJuiceJobData.LeagueIdKey)) return null;

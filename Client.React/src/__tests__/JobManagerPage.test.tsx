@@ -29,7 +29,7 @@ function makeJob(overrides: Partial<JobStatusResponse> = {}): JobStatusResponse 
     lastMessage: null,
     category: 'System',
     isDynamic: false,
-    leagueNames: [],
+    sport: null,
     ...overrides,
   };
 }
@@ -68,12 +68,11 @@ describe('AdminJobManagerPage', () => {
     expect(screen.getByText('Juice', { exact: true })).toBeInTheDocument();
   });
 
-  // The League column lists the leagues each job affects: every league of a sport-wide job's
-  // sport, a per-league job's one league, a dash for system jobs.
-  it('lists the leagues each job affects in the League column', async () => {
+  // The League column is the sport a job is for — NFL or CFB — never a user league's name.
+  it('shows NFL or CFB in the League column, and a dash for system jobs', async () => {
     mockedGetAllJobsStatus.mockResolvedValue([
-      makeJob({ jobName: 'NFL Scores', category: 'Scores', leagueNames: ['Office Pool', 'Sunday Funday'] }),
-      makeJob({ jobName: 'Juice Lock 6-2026', category: 'Juice', isDynamic: true, leagueId: 6, leagueNames: ['Sunday Funday'] }),
+      makeJob({ jobName: 'NFL Scores', category: 'Scores', sport: 'NFL' }),
+      makeJob({ jobName: 'Juice Lock 6-2026', category: 'Juice', isDynamic: true, leagueId: 6, sport: 'CFB' }),
       makeJob({ jobName: 'User Manager' }),
     ]);
 
@@ -81,9 +80,9 @@ describe('AdminJobManagerPage', () => {
 
     expect(await screen.findByRole('columnheader', { name: 'League' })).toBeInTheDocument();
     const cellsOf = (job: string) => screen.getByRole('cell', { name: job }).closest('tr')!.querySelectorAll('td');
-    expect(cellsOf('NFL Scores')[1]).toHaveTextContent('Office Pool, Sunday Funday');
-    expect(cellsOf('Juice Lock 6-2026')[1]).toHaveTextContent('Sunday Funday');
-    expect(cellsOf('User Manager')[1]).toHaveTextContent('—');
+    expect(cellsOf('NFL Scores')[1]).toHaveTextContent(/^NFL$/);
+    expect(cellsOf('Juice Lock 6-2026')[1]).toHaveTextContent(/^CFB$/);
+    expect(cellsOf('User Manager')[1]).toHaveTextContent(/^—$/);
   });
 
   // Regression: a single generically-labeled "Run Scores Job" button previously ran NFL's job

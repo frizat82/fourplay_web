@@ -312,12 +312,16 @@ public class JobManagerControllerTests
     // count. Description now substitutes the actual league name; Category/IsDynamic (from
     // JobCategoryClassifier) let the admin UI group jobs and hide the noisy per-league/per-week set.
 
-    [Fact]
-    public async Task GetAllJobsStatusAsync_JuiceReminderJob_ResolvesLeagueIdToName()
+    // The admin list's League column is the sport a job is for — NFL or CFB — never a user
+    // league's name. A per-league juice job is for its league's sport.
+    [Theory]
+    [InlineData(LeagueType.Nfl, "NFL")]
+    [InlineData(LeagueType.Cfb, "CFB")]
+    public async Task GetAllJobsStatusAsync_JuiceReminderJob_ShowsItsLeaguesSport(LeagueType leagueType, string expected)
     {
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
         leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo> {
-            new() { Id = 6, LeagueName = "Sunday Funday", OwnerUserId = "u1" },
+            new() { Id = 6, LeagueName = "Sunday Funday", OwnerUserId = "u1", LeagueType = leagueType },
         });
         SetupJobOfType<LeagueJuiceReminderJob>(scheduler, "Juice Reminder 6-2026",
             "Remind league 6 owner to configure Juice for season 2026",
@@ -328,16 +332,16 @@ public class JobManagerControllerTests
         var job = Assert.Single(result);
         Assert.Equal("Remind league 6 owner to configure Juice for season 2026", job.Description);
         Assert.Equal(6, job.LeagueId);
-        Assert.Equal(new[] { "Sunday Funday" }, job.LeagueNames);
+        Assert.Equal(expected, job.Sport);
         Assert.Equal("Juice", job.Category);
         Assert.True(job.IsDynamic);
     }
 
     [Fact]
-    public async Task GetAllJobsStatusAsync_JuiceReminderJob_UnknownLeagueId_HasNoLeagueNames()
+    public async Task GetAllJobsStatusAsync_JuiceReminderJob_UnknownLeagueId_HasNoSport()
     {
         // League was deleted (frizat-ugs pruning) or its data hasn't been fetched yet — must not
-        // throw, just leave the league unresolved.
+        // throw, just leave the sport unresolved.
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
         leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo>());
         SetupJobOfType<LeagueJuiceReminderJob>(scheduler, "Juice Reminder 6-2026",
@@ -348,56 +352,50 @@ public class JobManagerControllerTests
 
         var job = Assert.Single(result);
         Assert.Equal(6, job.LeagueId);
-        Assert.Empty(job.LeagueNames);
+        Assert.Null(job.Sport);
     }
 
-    // A sport-wide job (scores, spreads, rankings, the spread schedulers) affects every league of
-    // that sport — the League column lists them, not a dash.
+    // Scores, spreads, the spread schedulers and rankings are each for one sport — known from the
+    // job type alone, no league lookup.
     [Theory]
-    [InlineData(typeof(NflScoresJob), new[] { "Office Pool", "Sunday Funday" })]
-    [InlineData(typeof(NflSpreadJob), new[] { "Office Pool", "Sunday Funday" })]
-    [InlineData(typeof(NflSpreadSchedulerJob), new[] { "Office Pool", "Sunday Funday" })]
-    [InlineData(typeof(CfbScoresJob), new[] { "Saturday Crew" })]
-    [InlineData(typeof(CfbSpreadJob), new[] { "Saturday Crew" })]
-    [InlineData(typeof(CfbSpreadSchedulerJob), new[] { "Saturday Crew" })]
-    [InlineData(typeof(CfbRankingCaptureJob), new[] { "Saturday Crew" })]
-    public async Task GetAllJobsStatusAsync_SportWideJob_ListsEveryLeagueOfThatSport(Type jobType, string[] expected)
+    [InlineData(typeof(NflScoresJob), "NFL")]
+    [InlineData(typeof(NflSpreadJob), "NFL")]
+    [InlineData(typeof(NflSpreadSchedulerJob), "NFL")]
+    [InlineData(typeof(CfbScoresJob), "CFB")]
+    [InlineData(typeof(CfbSpreadJob), "CFB")]
+    [InlineData(typeof(CfbSpreadSchedulerJob), "CFB")]
+    [InlineData(typeof(CfbRankingCaptureJob), "CFB")]
+    public async Task GetAllJobsStatusAsync_SportWideJob_ShowsItsSport_WithoutLoadingLeagues(Type jobType, string expected)
     {
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
-        leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo> {
-            new() { Id = 1, LeagueName = "Sunday Funday", OwnerUserId = "u1", LeagueType = LeagueType.Nfl },
-            new() { Id = 2, LeagueName = "Saturday Crew", OwnerUserId = "u1", LeagueType = LeagueType.Cfb },
-            new() { Id = 3, LeagueName = "Office Pool", OwnerUserId = "u2", LeagueType = LeagueType.Nfl },
-        });
         SetupJobOfType(jobType, scheduler, "Some Job", "desc");
 
         var job = Assert.Single(await controller.GetAllJobsStatusAsync());
 
-        Assert.Equal(expected, job.LeagueNames);
+        Assert.Equal(expected, job.Sport);
+        await leagueRepo.DidNotReceive().GetAllLeaguesAsync();
     }
 
     [Fact]
-    public async Task GetAllJobsStatusAsync_SystemJob_HasNoLeagues()
+    public async Task GetAllJobsStatusAsync_SystemJob_HasNoSport()
     {
-        var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
-        leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo> {
-            new() { Id = 1, LeagueName = "Sunday Funday", OwnerUserId = "u1", LeagueType = LeagueType.Nfl },
-        });
+        var (_, scheduler, _, _, controller) = BuildSutWithLeagueRepo(isAdmin: true);
         SetupJobOfType<UserManagerJob>(scheduler, "User Manager", "Manages initial user admin");
 
         var job = Assert.Single(await controller.GetAllJobsStatusAsync());
 
-        Assert.Empty(job.LeagueNames);
+        Assert.Null(job.Sport);
     }
 
     // frizat: GetNextSpreadJobAsync (below) is [Authorize]-only, no admin role — it's on the hot
     // path for every logged-in user's picks page via SpreadRelease.tsx. It must never pay for the
-    // league lookup the admin list does, even though spread jobs now list their leagues there.
+    // league lookup the admin list does for juice jobs.
     [Fact]
     public async Task GetNextSpreadJobAsync_NeverLoadsLeagues()
     {
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: false);
-        SetupJobOfType<NflSpreadJob>(scheduler, "NFL Spreads 2026 Wk7", "desc");
+        SetupJobOfType<LeagueJuiceReminderJob>(scheduler, "Juice Reminder 6-2026", "desc",
+            jobData: new Dictionary<string, string> { ["LeagueId"] = "6" });
 
         await controller.GetNextSpreadJobAsync("nfl");
 
@@ -405,7 +403,7 @@ public class JobManagerControllerTests
     }
 
     [Fact]
-    public async Task GetAllJobsStatusAsync_NoJobReferencesALeagueOrSport_NeverCallsLeagueRepo()
+    public async Task GetAllJobsStatusAsync_NoJobReferencesALeague_NeverCallsLeagueRepo()
     {
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
         SetupJobOfType<UserManagerJob>(scheduler, "User Manager", "Manages initial user admin");
