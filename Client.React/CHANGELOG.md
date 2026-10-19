@@ -6,6 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-10-19
 
+- The server now runs on .NET 10 (the current long-term-support release) instead of .NET 9, with EF Core 10 and the matching Postgres driver; no behavior change
 - The app now moves to the next week (NFL and college) 1 day before its spread lock instead of 2, so a week stays current until its last game — Thanksgiving week's early Wednesday lock had cut off the previous week's Monday-night game
 - A league created mid-season now defaults its Start Week to the first week that isn't over yet (NFL and college), never to one that has already been played
 - Results, standings and money now update within a minute or two of each game going final (NFL and college), instead of waiting for the next scheduled scores check — a 3:25 kickoff no longer waits until 7:40pm, or a Sunday night game until 1am

@@ -1,0 +1,7 @@
+# Local build output must never reach the image: a copied obj/project.assets.json points at the
+# host's NuGet cache and breaks `dotnet publish --no-restore` inside the container.
+**/bin/
+**/obj/
+**/node_modules/
+.git/
+Client.React/

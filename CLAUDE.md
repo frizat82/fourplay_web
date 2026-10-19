@@ -169,7 +169,7 @@ npm run test:e2e:replay               # replay integration tests — backend nee
 ## Architecture
 
 ### Stack
-- **Backend**: ASP.NET Core 9 + EF Core + ASP.NET Identity + Quartz.NET + Serilog
+- **Backend**: ASP.NET Core 10 (.NET 10 LTS) + EF Core + ASP.NET Identity + Quartz.NET + Serilog
 - **Frontend**: React 19 + Vite + MUI v7 + React Router v7
 - **Database**: PostgreSQL (local Docker for dev, Neon for prod)
 - **Auth**: JWT in HttpOnly cookies (`AuthToken`) + refresh token rotation

@@ -1,5 +1,5 @@
 # Stage 1: build
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy project files first for layer caching
@@ -20,12 +20,11 @@ RUN dotnet publish Server/FourPlayWebApp.Server.csproj \
     --no-restore
 
 # Stage 2: runtime
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# Non-root user for security
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
-USER appuser
+# Non-root: the image's built-in app user (.NET 8+; the 10.0 images are Ubuntu-based)
+USER $APP_UID
 
 COPY --from=build /app/publish .
 
