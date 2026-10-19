@@ -17,8 +17,8 @@ public class JobStatusResponse {
     public bool IsDynamic { get; set; }
     // Present only for Juice Reminder/Lock jobs (from the job's JobDataMap).
     public int? LeagueId { get; set; }
-    // The leagues this job affects, by name: a per-league job's one league, or every league of a
-    // sport-wide job's sport (scores, spreads, rankings). Empty for system jobs. Resolved
-    // server-side so the frontend never pattern-matches ids back out of Description's free text.
-    public List<string> LeagueNames { get; set; } = [];
+    // Which sport the job is for, "NFL" or "CFB" (the admin Job Manager's League column): a
+    // sport-wide job's own sport (scores, spreads, rankings), or a per-league job's league's
+    // sport. Null for system jobs, and for a per-league job whose league no longer exists.
+    public string? Sport { get; set; }
 }

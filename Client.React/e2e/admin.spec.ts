@@ -26,7 +26,9 @@ test.describe('Admin pages (administrator role)', () => {
 
     await expect(page.getByText('Juice Reminder 6-2026')).toBeVisible();
     await expect(page.getByText('Remind league 6 owner to configure Juice for season 2026')).toBeVisible();
-    await expect(page.getByRole('cell', { name: 'Sunday Funday' })).toBeVisible();
+    // League column: the sport the job is for, never a user league's name.
+    await expect(page.getByRole('cell', { name: 'NFL', exact: true })).toHaveCount(2);
+    await expect(page.getByRole('cell', { name: 'Sunday Funday' })).toHaveCount(0);
   });
 
   // -----------------------------------------------------------------------

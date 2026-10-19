@@ -371,7 +371,7 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
             lastMessage: null,
             category: 'NFL Scores',
             isDynamic: false,
-            leagueNames: ['Office Pool', 'Test League'],
+            sport: 'NFL',
           },
           {
             jobName: 'Juice Reminder 6-2026',
@@ -385,7 +385,7 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
             category: 'Juice',
             isDynamic: true,
             leagueId: 6,
-            leagueNames: ['Sunday Funday'],
+            sport: 'NFL',
           },
         ]),
       });
