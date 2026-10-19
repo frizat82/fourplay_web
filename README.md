@@ -6,7 +6,7 @@ A fantasy sports picks app for NFL and other leagues. Players make weekly spread
 
 | Layer | Tech |
 |---|---|
-| Backend | ASP.NET Core 9, EF Core, ASP.NET Identity, Quartz.NET, Serilog |
+| Backend | ASP.NET Core 10, EF Core, ASP.NET Identity, Quartz.NET, Serilog |
 | Frontend | React 19, Vite, MUI v7, React Query, React Hook Form, Zod |
 | Database | PostgreSQL (Neon) |
 | Auth | JWT (HttpOnly cookies), refresh token rotation |
@@ -49,7 +49,7 @@ fourplay/
 
 ### Prerequisites
 
-- .NET 9 SDK
+- .NET 10 SDK
 - Node.js 22+
 - PostgreSQL (or use Neon free tier)
 
