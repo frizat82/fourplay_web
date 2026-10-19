@@ -67,6 +67,29 @@ describe('AdminJobManagerPage', () => {
     expect(screen.getByText('Juice', { exact: true })).toBeInTheDocument();
   });
 
+  // Only the per-league Juice Reminder/Lock jobs carry a league, and mid-season those have all
+  // fired — a League column on every other job was a column of dashes.
+  it('hides the League column when no listed job belongs to a league', async () => {
+    mockedGetAllJobsStatus.mockResolvedValue([makeJob({ jobName: 'User Manager' })]);
+
+    render(<AdminJobManagerPage />);
+
+    expect(await screen.findByText('User Manager')).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'League' })).not.toBeInTheDocument();
+  });
+
+  it("shows the League column, with each league job's league, when any job belongs to one", async () => {
+    mockedGetAllJobsStatus.mockResolvedValue([
+      makeJob({ jobName: 'User Manager' }),
+      makeJob({ jobName: 'Juice Lock 6-2026', category: 'Juice', isDynamic: true, leagueId: 6, leagueName: 'Office Pool' }),
+    ]);
+
+    render(<AdminJobManagerPage />);
+
+    expect(await screen.findByRole('columnheader', { name: 'League' })).toBeInTheDocument();
+    expect(screen.getByText('Office Pool')).toBeInTheDocument();
+  });
+
   // Regression: a single generically-labeled "Run Scores Job" button previously ran NFL's job
   // only, with no way to trigger CFB's scores/spreads jobs from this page at all — a real prod
   // admin mix-up (clicked expecting it to cover CFB, it silently only ran NFL). Each sport now
