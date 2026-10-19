@@ -81,7 +81,7 @@ public class NflCurrentWeekServiceTests
     // by accident the way the other cases here do (their fixtures set SpreadLockDatetime ==
     // WeekStartDatetime).
     [Fact]
-    public async Task GetCurrentWeekAsync_StaysOnPreviousWeek_WhenNextWeeksSpreadLockIsMoreThanTwoDaysAway() {
+    public async Task GetCurrentWeekAsync_StaysOnPreviousWeek_WhenNextWeeksSpreadLockIsMoreThanOneDayAway() {
         var now = DateTime.UtcNow;
         var week4 = Config(2026, 4, now.AddDays(-10), now.AddDays(-3));
         week4.SpreadLockDatetime = now.AddDays(-9); // already started
@@ -94,16 +94,32 @@ public class NflCurrentWeekServiceTests
     }
 
     [Fact]
-    public async Task GetCurrentWeekAsync_EarlyActivatesNextWeek_WhenWithinTwoDaysOfItsSpreadLock() {
+    public async Task GetCurrentWeekAsync_EarlyActivatesNextWeek_WhenWithinOneDayOfItsSpreadLock() {
         var now = DateTime.UtcNow;
         var week4 = Config(2026, 4, now.AddDays(-10), now.AddDays(-3));
         week4.SpreadLockDatetime = now.AddDays(-9);
         var week5 = Config(2026, 5, now.AddDays(3), now.AddDays(10)); // hasn't calendar-started yet
-        week5.SpreadLockDatetime = now.AddDays(1); // but its spread grab is only 1 day out
+        week5.SpreadLockDatetime = now.AddHours(12); // but its spread grab is only 12 hours out
 
         var result = await BuildService([week4, week5]).GetCurrentWeekAsync();
 
         Assert.Equal(5, result.WeekId);
+    }
+
+    // A league started now begins with the first week of its season that isn't over yet — not the
+    // "current" week, which can still be last week for a day after its Monday-night game.
+    [Fact]
+    public async Task GetFirstUnfinishedWeekAsync_SkipsAWeekThatsOver_EvenWhileItsStillCurrent() {
+        var now = DateTime.UtcNow;
+        var week4 = Config(2026, 4, now.AddDays(-7), now.AddHours(-10)); // ended last night
+        week4.SpreadLockDatetime = now.AddDays(-5);
+        var week5 = Config(2026, 5, now.AddHours(-10), now.AddDays(6));
+        week5.SpreadLockDatetime = now.AddDays(2); // still "current": week 4
+        var svc = BuildService([week5, week4, Config(2025, 22, now.AddDays(-200), now.AddDays(-190))]);
+
+        Assert.Equal(4, (await svc.GetCurrentWeekAsync()).WeekId);
+        Assert.Equal(5, (await svc.GetFirstUnfinishedWeekAsync(2026))!.WeekId);
+        Assert.Null(await svc.GetFirstUnfinishedWeekAsync(2025));
     }
 
     // frizat-3nv: NflWeekInfo no longer carries an EspnWeek field at all — nothing on the

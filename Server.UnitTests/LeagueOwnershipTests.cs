@@ -166,7 +166,7 @@ public class LeagueOwnershipTests
     // CreateLeague's Start Week default needs both current-week services — unconfigured
     // substitutes default IsSeasonActiveAsync() to false (NSubstitute's bool default), so
     // ResolveInitialStartWeekAsync short-circuits to 1 without ever calling
-    // GetCurrentWeekAsync/GetCurrentSlateAsync, matching every existing CreateLeague test's
+    // GetFirstUnfinishedWeekAsync/GetFirstUnfinishedSlateAsync, matching every existing CreateLeague test's
     // implicit expectation (StartWeek = 1) unless a test configures these explicitly.
     private static (INflCurrentWeekService NflWeek, ICfbCurrentSlateService CfbSlate) StubCurrentWeekServices() =>
         (Substitute.For<INflCurrentWeekService>(), Substitute.For<ICfbCurrentSlateService>());
@@ -742,14 +742,14 @@ public class LeagueOwnershipTests
     // Pts/Start Week frozen forever at the wrong value — see LeagueController.ResolveInitialStartWeekAsync) ──
 
     [Fact]
-    public async Task CreateLeague_DefaultsStartWeekToCurrentNflWeek_WhenSeasonAlreadyActive()
+    public async Task CreateLeague_DefaultsStartWeekToTheFirstUnfinishedNflWeek_WhenSeasonAlreadyActive()
     {
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
         repo.LeagueExistsAsync(Arg.Any<string>()).Returns(false);
         repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl }));
         var nflWeekSvc = Substitute.For<INflCurrentWeekService>();
         nflWeekSvc.IsSeasonActiveAsync().Returns(true);
-        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(3, 2025, false, "Week 3", ScoringFormat.Standard, DateTime.UtcNow, 4));
+        nflWeekSvc.GetFirstUnfinishedWeekAsync(2025).Returns(new NflWeekInfo(3, 2025, false, "Week 3", ScoringFormat.Standard, DateTime.UtcNow, 4));
 
         var dto = new LeagueCreateDto("L", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
         var result = await ctrl.CreateLeague(dto, nflWeekSvc, Substitute.For<ICfbCurrentSlateService>());
@@ -759,7 +759,7 @@ public class LeagueOwnershipTests
     }
 
     [Fact]
-    public async Task CreateLeague_DefaultsStartWeekToCurrentCfbSlate_WhenSeasonAlreadyActive()
+    public async Task CreateLeague_DefaultsStartWeekToTheFirstUnfinishedCfbSlate_WhenSeasonAlreadyActive()
     {
         var (ctrl, repo) = BuildControllerWithRepo(BuildPrincipal(OwnerId));
         ctrl.ControllerContext.HttpContext.Request.Headers.Origin = "https://cfb.ivleague.xyz";
@@ -767,7 +767,7 @@ public class LeagueOwnershipTests
         repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Cfb }));
         var cfbSlateSvc = Substitute.For<ICfbCurrentSlateService>();
         cfbSlateSvc.IsSeasonActiveAsync().Returns(true);
-        cfbSlateSvc.GetCurrentSlateAsync().Returns(new CfbSlateInfo(1, 2025, 4, "Slate 4",
+        cfbSlateSvc.GetFirstUnfinishedSlateAsync(2025).Returns(new CfbSlateInfo(1, 2025, 4, "Slate 4",
             new DateOnly(2025, 9, 20), new DateOnly(2025, 9, 26), new DateTime(2025, 9, 20, 12, 0, 0, DateTimeKind.Utc), false, 4));
 
         var dto = new LeagueCreateDto("L", LeagueType.Cfb, OwnerId, 2025, 13, 10, 6, 5);
@@ -792,7 +792,7 @@ public class LeagueOwnershipTests
         Assert.IsType<OkObjectResult>(result);
         await repo.Received(1).AddLeagueJuiceMappingAsync(Arg.Is<LeagueJuiceMapping>(m => m.StartWeek == 1));
         // Never even asked for the current week — IsSeasonActiveAsync's false already settled it.
-        await nflWeekSvc.DidNotReceive().GetCurrentWeekAsync();
+        await nflWeekSvc.DidNotReceive().GetFirstUnfinishedWeekAsync(Arg.Any<int>());
     }
 
     [Fact]
@@ -803,8 +803,9 @@ public class LeagueOwnershipTests
         repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl }));
         var nflWeekSvc = Substitute.For<INflCurrentWeekService>();
         nflWeekSvc.IsSeasonActiveAsync().Returns(true);
-        // "Now" resolves to 2024's season, but this league is explicitly being created for 2025.
-        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(18, 2024, false, "Week 18", ScoringFormat.Standard, DateTime.UtcNow, 4));
+        // A 2024 season is on, but this league is being created for 2025, which has no weeks
+        // on record yet — the service returns no unfinished 2025 week.
+        nflWeekSvc.GetFirstUnfinishedWeekAsync(2025).Returns((NflWeekInfo?)null);
 
         var dto = new LeagueCreateDto("L", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
         var result = await ctrl.CreateLeague(dto, nflWeekSvc, Substitute.For<ICfbCurrentSlateService>());
@@ -821,7 +822,7 @@ public class LeagueOwnershipTests
         repo.AddLeagueInfoAsync(Arg.Any<LeagueInfo>()).Returns(Task.FromResult(new LeagueInfo { Id = 42, LeagueName = "L", OwnerUserId = OwnerId, LeagueType = LeagueType.Nfl }));
         var nflWeekSvc = Substitute.For<INflCurrentWeekService>();
         nflWeekSvc.IsSeasonActiveAsync().Returns(true);
-        nflWeekSvc.GetCurrentWeekAsync().Returns(new NflWeekInfo(9, 2025, false, "Week 9", ScoringFormat.Standard, DateTime.UtcNow, 4));
+        nflWeekSvc.GetFirstUnfinishedWeekAsync(2025).Returns(new NflWeekInfo(9, 2025, false, "Week 9", ScoringFormat.Standard, DateTime.UtcNow, 4));
 
         var dto = new LeagueCreateDto("L", LeagueType.Nfl, OwnerId, 2025, 13, 10, 6, 5);
         var result = await ctrl.CreateLeague(dto, nflWeekSvc, Substitute.For<ICfbCurrentSlateService>());

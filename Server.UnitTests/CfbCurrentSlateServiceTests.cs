@@ -76,7 +76,7 @@ public class CfbCurrentSlateServiceTests
     // frizat-9xg: a slate's own SpreadLockDatetime — not its calendar StartDate/EndDate — is what
     // the resolver actually keys off.
     [Fact]
-    public async Task GetCurrentSlateAsync_StaysOnPreviousSlate_WhenNextSlatesSpreadLockIsMoreThanTwoDaysAway() {
+    public async Task GetCurrentSlateAsync_StaysOnPreviousSlate_WhenNextSlatesSpreadLockIsMoreThanOneDayAway() {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var now = DateTime.UtcNow;
         var slate3 = Slate(2026, 3, today.AddDays(-10), today.AddDays(-3), now.AddDays(-9));
@@ -90,17 +90,32 @@ public class CfbCurrentSlateServiceTests
     }
 
     [Fact]
-    public async Task GetCurrentSlateAsync_EarlyActivatesNextSlate_WhenWithinTwoDaysOfItsSpreadLock() {
+    public async Task GetCurrentSlateAsync_EarlyActivatesNextSlate_WhenWithinOneDayOfItsSpreadLock() {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var now = DateTime.UtcNow;
         var slate3 = Slate(2026, 3, today.AddDays(-10), today.AddDays(-3), now.AddDays(-9));
-        var slate4 = Slate(2026, 4, today.AddDays(3), today.AddDays(10), now.AddDays(1)); // hasn't calendar-started yet, lock 1 day out
+        var slate4 = Slate(2026, 4, today.AddDays(3), today.AddDays(10), now.AddHours(12)); // hasn't calendar-started yet, lock 12 hours out
         var repo = Substitute.For<ICfbRepository>();
         repo.GetAllSlatesAsync().Returns(new List<CfbSeasonWeekConfig> { slate3, slate4 });
 
         var result = await new CfbCurrentSlateService(repo, TimeProvider.System).GetCurrentSlateAsync();
 
         Assert.Equal(4, result!.SlateNumber);
+    }
+
+    // Mirrors NflCurrentWeekServiceTests: a league started now begins with the first slate of its
+    // season that isn't over yet, even while the finished one is still "current".
+    [Fact]
+    public async Task GetFirstUnfinishedSlateAsync_SkipsASlateThatsOver_EvenWhileItsStillCurrent() {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+        var slate3 = Slate(2026, 3, today.AddDays(-7), today.AddDays(-1), now.AddDays(-5)); // ended yesterday
+        var slate4 = Slate(2026, 4, today, today.AddDays(6), now.AddDays(2)); // still "current": slate 3
+        var svc = BuildService([slate4, slate3]);
+
+        Assert.Equal(3, (await svc.GetCurrentSlateAsync())!.SlateNumber);
+        Assert.Equal(4, (await svc.GetFirstUnfinishedSlateAsync(2026))!.SlateNumber);
+        Assert.Null(await svc.GetFirstUnfinishedSlateAsync(2025));
     }
 
     [Fact]

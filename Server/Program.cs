@@ -324,7 +324,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 // season with no data. Replay mode is NOT exempt from this: its own NflSeasonWeekConfigs row
 // (SeedReplayGameSpreadAsync) used to self-heal relative to the real clock specifically so it would
 // always resolve as current, but SeasonWindowResolver's early-activation rule can still jump ahead
-// to a real, unseeded future season's window the moment real wall-clock comes within 2 days of
+// to a real, unseeded future season's window the moment real wall-clock comes within 1 day of
 // it — regardless of how recently the replay row's own lock passed (the same bug this fix already
 // closed for regular demo mode, one call site later). SeedReplayGameSpreadAsync now anchors that
 // row to this same frozen clock instead, so both sides of the "what's current" check agree
