@@ -2,7 +2,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy project files first for layer caching
+# Copy project files first for layer caching (Directory.Build.props carries the target framework
+# and package version every .csproj uses; global.json pins the SDK band)
+COPY Directory.Build.props global.json ./
 COPY Shared/FourPlayWebApp.Shared.csproj Shared/
 COPY Server/FourPlayWebApp.Server.csproj Server/
 RUN dotnet restore Server/FourPlayWebApp.Server.csproj
@@ -28,7 +30,6 @@ USER $APP_UID
 
 COPY --from=build /app/publish .
 
-ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "FourPlayWebApp.Server.dll"]
