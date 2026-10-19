@@ -7,8 +7,8 @@ namespace FourPlayWebApp.Server.Jobs;
 // registers (Juice Reminder/Lock per league+season, NFL/CFB Spreads per week) — everything else is
 // a fixed scheduler/cron job registered once in Program.cs. Kept here (not Shared) since it needs
 // the concrete job Types, which live in this assembly.
-// Sport is set for sport-wide jobs — they affect every league of that sport (the Job Manager's
-// League column lists them); per-league and system jobs have none.
+// Sport is set for sport-wide jobs (the Job Manager's League column shows it as NFL/CFB);
+// per-league jobs take their league's sport instead, and system jobs have none.
 public static class JobCategoryClassifier {
     public record Classification(string Category, bool IsDynamic, LeagueType? Sport = null);
 

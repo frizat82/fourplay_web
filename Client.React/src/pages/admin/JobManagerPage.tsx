@@ -177,7 +177,7 @@ export default function AdminJobManagerPage() {
                   {categoryJobs.map((job) => (
                     <TableRow key={job.jobName}>
                       <TableCell sx={stickyColumnSx}>{job.jobName}</TableCell>
-                      <TableCell>{job.leagueNames.length > 0 ? job.leagueNames.join(', ') : '—'}</TableCell>
+                      <TableCell>{job.sport ?? '—'}</TableCell>
                       <TableCell>{job.description}</TableCell>
                       <TableCell>
                         <Chip size="small" label={job.status} color={getStatusColor(job.status)} />
