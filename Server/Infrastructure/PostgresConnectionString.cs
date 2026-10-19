@@ -1,35 +1,46 @@
+using Npgsql;
+
 namespace FourPlayWebApp.Server.Infrastructure;
 
 internal static class PostgresConnectionString
 {
     /// <summary>
-    /// Neon (and most managed Postgres providers) hand out postgres://-style URLs; Npgsql wants
-    /// Host=...;Port=...;... key=value form. Converts when needed, passes through unchanged
-    /// otherwise (e.g. local Docker Postgres already uses key=value).
+    /// The Npgsql connection string for the app and EF design-time, from either a postgres:// URL
+    /// (what Neon and most managed providers hand out) or a key=value string (local Docker
+    /// Postgres) — written out by Npgsql's builder, so keys come back in its canonical form.
+    /// GSS (Kerberos) encryption is turned off unless the string asks for a specific mode: Neon and
+    /// local Postgres never use it, and at Npgsql's default (Prefer) the first connection tries to
+    /// load libgssapi_krb5, which the .NET 10 runtime image doesn't ship — an error line on every boot.
     /// </summary>
     internal static string Normalize(string raw)
     {
-        if (!raw.StartsWith("postgres://") && !raw.StartsWith("postgresql://"))
-            return raw;
+        var builder = raw.StartsWith("postgres://") || raw.StartsWith("postgresql://")
+            ? FromUrl(new Uri(raw))
+            : new NpgsqlConnectionStringBuilder(raw);
+        if (builder.GssEncryptionMode == GssEncryptionMode.Prefer)
+            builder.GssEncryptionMode = GssEncryptionMode.Disable;
+        return builder.ConnectionString;
+    }
 
-        var uri = new Uri(raw);
-        var userInfo = uri.UserInfo.Split(':');
-        var username = userInfo[0];
-        var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty;
-        var host = uri.Host;
-        var port = uri.Port > 0 ? uri.Port : 5432;
-        var database = uri.AbsolutePath.TrimStart('/');
-        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        var sslMode = query["sslmode"] ?? "Prefer";
-        var npgsqlSsl = sslMode.ToLowerInvariant() switch {
-            "require"     => "Require",
-            "verify-ca"   => "VerifyCA",
-            "verify-full" => "VerifyFull",
-            "disable"     => "Disable",
-            _             => "Prefer"
+    private static NpgsqlConnectionStringBuilder FromUrl(Uri uri)
+    {
+        var userInfo = uri.UserInfo.Split(':', 2);
+        var sslMode = System.Web.HttpUtility.ParseQueryString(uri.Query)["sslmode"]?.ToLowerInvariant() switch {
+            "require"     => SslMode.Require,
+            "verify-ca"   => SslMode.VerifyCA,
+            "verify-full" => SslMode.VerifyFull,
+            "disable"     => SslMode.Disable,
+            _             => SslMode.Prefer,
         };
-        // Only trust-cert for Require/Prefer — VerifyCA/VerifyFull must validate the chain
-        var trustCert = npgsqlSsl is "Require" or "Prefer" ? ";Trust Server Certificate=true" : string.Empty;
-        return $"Host={host};Port={port};Username={username};Password={password};Database={database};SSL Mode={npgsqlSsl}{trustCert}";
+        return new NpgsqlConnectionStringBuilder {
+            Host = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 5432,
+            Username = Uri.UnescapeDataString(userInfo[0]),
+            Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty,
+            Database = uri.AbsolutePath.TrimStart('/'),
+            // Require/Prefer encrypt without validating the certificate; VerifyCA/VerifyFull validate
+            // the chain (Npgsql 6+ — so no "Trust Server Certificate", which is now a no-op).
+            SslMode = sslMode,
+        };
     }
 }

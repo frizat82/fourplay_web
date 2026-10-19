@@ -6,7 +6,7 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build server",
-      "program": "${workspaceFolder}/Server/bin/Debug/net9.0/FourPlayWebApp.Server.dll",
+      "program": "${workspaceFolder}/Server/bin/Debug/net10.0/FourPlayWebApp.Server.dll",
       "cwd": "${workspaceFolder}/Server",
       "stopAtEntry": false,
       "serverReadyAction": {

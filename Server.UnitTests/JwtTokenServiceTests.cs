@@ -5,6 +5,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -241,5 +243,32 @@ public class JwtTokenServiceTests
         // ValidateToken should return a non-null principal for a valid token
         var principal = svc.ValidateToken(token);
         Assert.NotNull(principal);
+    }
+
+    // frizat-501: JwtBearer 8+ validates with JsonWebTokenHandler, not the JwtSecurityTokenHandler
+    // that writes our tokens (which shortens claim names: nameid / unique_name / role). The app
+    // reads ClaimTypes.NameIdentifier everywhere and [Authorize(Roles = "Administrator")] gates
+    // admin endpoints, so a token we issue must come back with the standard claim types through
+    // the handler the middleware actually uses, configured the way Program.cs leaves it.
+    [Fact]
+    public async Task IssuedToken_ReadByTheJwtBearerMiddlewaresHandler_KeepsUserIdNameAndRole()
+    {
+        var (svc, userManager) = BuildService();
+        var user = BuildUser("user-42", "alice");
+        userManager.GetRolesAsync(user).Returns(new List<string> { "Administrator" });
+        var (token, _) = await svc.GenerateAccessTokenAsync(user);
+
+        var options = new JwtBearerOptions(); // MapInboundClaims and TokenHandlers at their defaults, as in Program.cs
+        var handler = Assert.Single(options.TokenHandlers);
+        var result = await handler.ValidateTokenAsync(token, new TokenValidationParameters {
+            ValidIssuer = TestIssuer, ValidAudience = TestAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestKey)),
+        });
+
+        Assert.True(result.IsValid, result.Exception?.Message);
+        var principal = new ClaimsPrincipal(result.ClaimsIdentity);
+        Assert.Equal("user-42", principal.FindFirstValue(ClaimTypes.NameIdentifier));
+        Assert.Equal("alice", principal.FindFirstValue(ClaimTypes.Name));
+        Assert.True(principal.IsInRole("Administrator"));
     }
 }
