@@ -3,6 +3,7 @@ using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Server.Services.Repositories.Interfaces;
+using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -158,61 +159,39 @@ public class JobManagerControllerTests
         Assert.IsType<NotFoundResult>(result);
     }
 
-    // ── Functional: RunCfbScores happy path ───────────────────────────────────
-    // frizat-11t: the old fixed "CFB Scores Job" JobKey has never existed — CfbScoresJob is
-    // registered under 5 separately-keyed cron triggers ("CFB Scores Sat Noon"/"Sat 4pm"/"Sat
-    // 8pm"/"Sat Midnight"/"Sun 6am"), same shape as RunCfbSpreads' per-week jobs. Must find one via
-    // the same soonest-job lookup, not a hardcoded key that silently 400s every time it's clicked.
+    // ── Functional: RunScores / RunCfbScores ──────────────────────────────────
+    // Each sport's scores job is one job key with all its fixed times as triggers (so Quartz's
+    // [DisallowConcurrentExecution] keeps every run, scheduled or on-final, one at a time). "Run
+    // now" runs that key; demo stacks never register it, so it's a 404 there.
 
-    [Fact]
-    public async Task RunCfbScores_ReturnsOk_WhenSchedulerSucceeds()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunScores_RunsThatSportsScoresJob(bool cfb)
     {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        SetupSchedulerWithJobs(scheduler, ("CFB Scores Sat Noon", DateTimeOffset.UtcNow.AddDays(1)));
-        scheduler.TriggerJob(new JobKey("CFB Scores Sat Noon")).Returns(Task.CompletedTask);
+        var (_, scheduler, _, controller) = BuildSut(isAdmin: true);
+        var key = cfb ? ScoresJobs.Cfb : ScoresJobs.Nfl;
+        scheduler.CheckExists(key).Returns(true);
 
-        var result = await controller.RunCfbScores();
+        var result = cfb ? await controller.RunCfbScores() : await controller.RunScores();
 
         Assert.IsType<OkObjectResult>(result);
-        await scheduler.Received(1).TriggerJob(new JobKey("CFB Scores Sat Noon"));
+        await scheduler.Received(1).TriggerJob(key);
+        await scheduler.DidNotReceive().TriggerJob(cfb ? ScoresJobs.Nfl : ScoresJobs.Cfb);
     }
 
-    [Fact]
-    public async Task RunCfbScores_ReturnsNotFound_WhenNoCfbScoresJobExists()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunScores_ReturnsNotFound_WhenTheScoresJobIsNotRegistered(bool cfb)
     {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        scheduler.GetJobGroupNames().Returns(new List<string>());
+        var (_, scheduler, _, controller) = BuildSut(isAdmin: true);
+        scheduler.CheckExists(Arg.Any<JobKey>()).Returns(false);
 
-        var result = await controller.RunCfbScores();
+        var result = cfb ? await controller.RunCfbScores() : await controller.RunScores();
 
         Assert.IsType<NotFoundResult>(result);
-    }
-
-    [Fact]
-    public async Task RunCfbScores_IgnoresNflJobs()
-    {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        SetupSchedulerWithJobs(scheduler, ("NFL Scores Thu 10am", DateTimeOffset.UtcNow.AddDays(1)));
-
-        var result = await controller.RunCfbScores();
-
-        Assert.IsType<NotFoundResult>(result);
-    }
-
-    [Fact]
-    public async Task RunCfbScores_PicksSoonestJob_NotArbitraryMatch()
-    {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        SetupSchedulerWithJobs(scheduler,
-            ("CFB Scores Sun 6am", DateTimeOffset.UtcNow.AddDays(2)),
-            ("CFB Scores Sat Noon", DateTimeOffset.UtcNow.AddDays(1)));
-        scheduler.TriggerJob(new JobKey("CFB Scores Sat Noon")).Returns(Task.CompletedTask);
-
-        var result = await controller.RunCfbScores();
-
-        Assert.IsType<OkObjectResult>(result);
-        await scheduler.Received(1).TriggerJob(new JobKey("CFB Scores Sat Noon"));
-        await scheduler.DidNotReceive().TriggerJob(new JobKey("CFB Scores Sun 6am"));
+        await scheduler.DidNotReceive().TriggerJob(Arg.Any<JobKey>());
     }
 
     // ── Functional: DeleteJob happy path ──────────────────────────────────────
@@ -328,69 +307,6 @@ public class JobManagerControllerTests
         Assert.IsType<NotFoundResult>(result);
     }
 
-    // ── Functional: RunScores ─────────────────────────────────────────────────
-    // frizat-11t: the old unscoped Contains("Scores") lookup could pick either sport's job
-    // depending on enumeration order — NFL and CFB scores jobs are BOTH registered under multiple
-    // separately-keyed cron triggers whose names all contain "Scores" ("NFL Scores Thu 10am" /
-    // "CFB Scores Sat Noon" etc). Must be scoped to "NFL Scores " and pick the soonest, same as
-    // RunCfbScores/RunSpreads/RunCfbSpreads.
-
-    [Fact]
-    public async Task RunScores_ReturnsNotFound_WhenNoScoresJobExists()
-    {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        scheduler.GetJobGroupNames().Returns(new List<string>());
-
-        var result = await controller.RunScores();
-
-        Assert.IsType<NotFoundResult>(result);
-    }
-
-    [Fact]
-    public async Task RunScores_ReturnsOk_WhenSchedulerSucceeds()
-    {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        SetupSchedulerWithJobs(scheduler, ("NFL Scores Thu 10am", DateTimeOffset.UtcNow.AddDays(1)));
-        scheduler.TriggerJob(new JobKey("NFL Scores Thu 10am")).Returns(Task.CompletedTask);
-
-        var result = await controller.RunScores();
-
-        Assert.IsType<OkObjectResult>(result);
-        await scheduler.Received(1).TriggerJob(new JobKey("NFL Scores Thu 10am"));
-    }
-
-    [Fact]
-    public async Task RunScores_IgnoresCfbJobs_EvenWhenSooner()
-    {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        SetupSchedulerWithJobs(scheduler,
-            ("CFB Scores Sat Noon", DateTimeOffset.UtcNow.AddHours(1)),
-            ("NFL Scores Thu 10am", DateTimeOffset.UtcNow.AddDays(1)));
-        scheduler.TriggerJob(new JobKey("NFL Scores Thu 10am")).Returns(Task.CompletedTask);
-
-        var result = await controller.RunScores();
-
-        Assert.IsType<OkObjectResult>(result);
-        await scheduler.Received(1).TriggerJob(new JobKey("NFL Scores Thu 10am"));
-        await scheduler.DidNotReceive().TriggerJob(new JobKey("CFB Scores Sat Noon"));
-    }
-
-    [Fact]
-    public async Task RunScores_PicksSoonestJob_NotArbitraryMatch()
-    {
-        var (factory, scheduler, observer, controller) = BuildSut(isAdmin: true);
-        SetupSchedulerWithJobs(scheduler,
-            ("NFL Scores Tue 1am", DateTimeOffset.UtcNow.AddDays(5)),
-            ("NFL Scores Thu 10am", DateTimeOffset.UtcNow.AddDays(1)));
-        scheduler.TriggerJob(new JobKey("NFL Scores Thu 10am")).Returns(Task.CompletedTask);
-
-        var result = await controller.RunScores();
-
-        Assert.IsType<OkObjectResult>(result);
-        await scheduler.Received(1).TriggerJob(new JobKey("NFL Scores Thu 10am"));
-        await scheduler.DidNotReceive().TriggerJob(new JobKey("NFL Scores Tue 1am"));
-    }
-
     // ── Functional: GetAllJobsStatusAsync — category/description enrichment ───
     // frizat: "Juice-Reminder-6" was reported unreadable — 6 is a raw league DB id, not a league
     // count. Description now substitutes the actual league name; Category/IsDynamic (from
@@ -412,16 +328,16 @@ public class JobManagerControllerTests
         var job = Assert.Single(result);
         Assert.Equal("Remind league 6 owner to configure Juice for season 2026", job.Description);
         Assert.Equal(6, job.LeagueId);
-        Assert.Equal("Sunday Funday", job.LeagueName);
+        Assert.Equal(new[] { "Sunday Funday" }, job.LeagueNames);
         Assert.Equal("Juice", job.Category);
         Assert.True(job.IsDynamic);
     }
 
     [Fact]
-    public async Task GetAllJobsStatusAsync_JuiceReminderJob_UnknownLeagueId_LeagueNameIsNull()
+    public async Task GetAllJobsStatusAsync_JuiceReminderJob_UnknownLeagueId_HasNoLeagueNames()
     {
         // League was deleted (frizat-ugs pruning) or its data hasn't been fetched yet — must not
-        // throw, just leave LeagueName unresolved.
+        // throw, just leave the league unresolved.
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
         leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo>());
         SetupJobOfType<LeagueJuiceReminderJob>(scheduler, "Juice Reminder 6-2026",
@@ -432,14 +348,64 @@ public class JobManagerControllerTests
 
         var job = Assert.Single(result);
         Assert.Equal(6, job.LeagueId);
-        Assert.Null(job.LeagueName);
+        Assert.Empty(job.LeagueNames);
+    }
+
+    // A sport-wide job (scores, spreads, rankings, the spread schedulers) affects every league of
+    // that sport — the League column lists them, not a dash.
+    [Theory]
+    [InlineData(typeof(NflScoresJob), new[] { "Office Pool", "Sunday Funday" })]
+    [InlineData(typeof(NflSpreadJob), new[] { "Office Pool", "Sunday Funday" })]
+    [InlineData(typeof(NflSpreadSchedulerJob), new[] { "Office Pool", "Sunday Funday" })]
+    [InlineData(typeof(CfbScoresJob), new[] { "Saturday Crew" })]
+    [InlineData(typeof(CfbSpreadJob), new[] { "Saturday Crew" })]
+    [InlineData(typeof(CfbSpreadSchedulerJob), new[] { "Saturday Crew" })]
+    [InlineData(typeof(CfbRankingCaptureJob), new[] { "Saturday Crew" })]
+    public async Task GetAllJobsStatusAsync_SportWideJob_ListsEveryLeagueOfThatSport(Type jobType, string[] expected)
+    {
+        var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
+        leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo> {
+            new() { Id = 1, LeagueName = "Sunday Funday", OwnerUserId = "u1", LeagueType = LeagueType.Nfl },
+            new() { Id = 2, LeagueName = "Saturday Crew", OwnerUserId = "u1", LeagueType = LeagueType.Cfb },
+            new() { Id = 3, LeagueName = "Office Pool", OwnerUserId = "u2", LeagueType = LeagueType.Nfl },
+        });
+        SetupJobOfType(jobType, scheduler, "Some Job", "desc");
+
+        var job = Assert.Single(await controller.GetAllJobsStatusAsync());
+
+        Assert.Equal(expected, job.LeagueNames);
+    }
+
+    [Fact]
+    public async Task GetAllJobsStatusAsync_SystemJob_HasNoLeagues()
+    {
+        var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
+        leagueRepo.GetAllLeaguesAsync().Returns(new List<LeagueInfo> {
+            new() { Id = 1, LeagueName = "Sunday Funday", OwnerUserId = "u1", LeagueType = LeagueType.Nfl },
+        });
+        SetupJobOfType<UserManagerJob>(scheduler, "User Manager", "Manages initial user admin");
+
+        var job = Assert.Single(await controller.GetAllJobsStatusAsync());
+
+        Assert.Empty(job.LeagueNames);
     }
 
     // frizat: GetNextSpreadJobAsync (below) is [Authorize]-only, no admin role — it's on the hot
-    // path for every logged-in user's picks page via SpreadRelease.tsx. GetAllJobsStatusAsync must
-    // not pay for the league join when nothing in the batch actually references a league.
+    // path for every logged-in user's picks page via SpreadRelease.tsx. It must never pay for the
+    // league lookup the admin list does, even though spread jobs now list their leagues there.
     [Fact]
-    public async Task GetAllJobsStatusAsync_NoJobReferencesALeague_NeverCallsLeagueRepo()
+    public async Task GetNextSpreadJobAsync_NeverLoadsLeagues()
+    {
+        var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: false);
+        SetupJobOfType<NflSpreadJob>(scheduler, "NFL Spreads 2026 Wk7", "desc");
+
+        await controller.GetNextSpreadJobAsync("nfl");
+
+        await leagueRepo.DidNotReceive().GetAllLeaguesAsync();
+    }
+
+    [Fact]
+    public async Task GetAllJobsStatusAsync_NoJobReferencesALeagueOrSport_NeverCallsLeagueRepo()
     {
         var (_, scheduler, _, leagueRepo, controller) = BuildSutWithLeagueRepo(isAdmin: true);
         SetupJobOfType<UserManagerJob>(scheduler, "User Manager", "Manages initial user admin");
@@ -463,7 +429,11 @@ public class JobManagerControllerTests
     }
 
     private static void SetupJobOfType<TJob>(IScheduler scheduler, string name, string? description,
-        Dictionary<string, string>? jobData = null) where TJob : IJob {
+        Dictionary<string, string>? jobData = null) where TJob : IJob =>
+        SetupJobOfType(typeof(TJob), scheduler, name, description, jobData);
+
+    private static void SetupJobOfType(Type jobType, IScheduler scheduler, string name, string? description,
+        Dictionary<string, string>? jobData = null) {
         var groupName = "DEFAULT";
         var jobKey = new JobKey(name);
         scheduler.GetJobGroupNames().Returns(new List<string> { groupName });
@@ -471,7 +441,7 @@ public class JobManagerControllerTests
         scheduler.GetCurrentlyExecutingJobs().Returns(new List<IJobExecutionContext>());
         scheduler.GetTriggerState(Arg.Any<TriggerKey>()).Returns(TriggerState.Normal);
 
-        var builder = JobBuilder.Create<TJob>().WithIdentity(jobKey).WithDescription(description);
+        var builder = JobBuilder.Create(jobType).WithIdentity(jobKey).WithDescription(description);
         if (jobData is not null) {
             var map = new JobDataMap();
             foreach (var (key, value) in jobData) map.Put(key, value);
@@ -546,6 +516,48 @@ public class JobManagerControllerTests
             trigger.GetNextFireTimeUtc().Returns(nextRun);
             scheduler.GetTriggersOfJob(jobKey).Returns(new List<ITrigger> { trigger });
         }
+    }
+
+    // ── GetAllJobsStatusAsync — order within a category ───────────────────
+    // Per-week spread jobs are named "NFL Spreads 2026 Wk{n}": sorted by name, "Wk10".."Wk19" all
+    // land before "Wk7", so the Job Manager's first NFL spread row read as week 10 while week 7
+    // was the one actually up next. Within a category, soonest-to-run first; never-scheduled last.
+    [Fact]
+    public async Task GetAllJobsStatusAsync_WithinACategory_ListsSoonestNextRunFirst_NotByName()
+    {
+        var (_, scheduler, _, controller) = BuildSut(isAdmin: true);
+        var now = DateTimeOffset.UtcNow;
+        SetupSchedulerWithJobs(scheduler,
+            ("NFL Spreads 2026 Wk10", now.AddDays(25)),
+            ("NFL Spreads 2026 Wk7", now.AddDays(4)),
+            ("NFL Spreads 2026 Wk8", now.AddDays(11)),
+            ("NFL Spreads Not Scheduled", null));
+
+        var names = (await controller.GetAllJobsStatusAsync()).Select(j => j.JobName).ToList();
+
+        Assert.Equal(new[] { "NFL Spreads 2026 Wk7", "NFL Spreads 2026 Wk8", "NFL Spreads 2026 Wk10", "NFL Spreads Not Scheduled" }, names);
+    }
+
+    // One job, several fixed times: its row shows the soonest of them, and that trigger's state.
+    [Fact]
+    public async Task GetAllJobsStatusAsync_JobWithSeveralTriggers_ShowsTheSoonestNextRun()
+    {
+        var (_, scheduler, _, controller) = BuildSut(isAdmin: true);
+        var now = DateTimeOffset.UtcNow;
+        SetupSchedulerWithJobs(scheduler, ("NFL Scores", now.AddDays(3)));
+        var later = Substitute.For<ITrigger>();
+        later.GetNextFireTimeUtc().Returns(now.AddDays(3));
+        later.Key.Returns(new TriggerKey("NFL Scores Tue 1am"));
+        var sooner = Substitute.For<ITrigger>();
+        sooner.GetNextFireTimeUtc().Returns(now.AddHours(2));
+        sooner.Key.Returns(new TriggerKey("NFL Scores Sun 4:30pm"));
+        scheduler.GetTriggersOfJob(new JobKey("NFL Scores")).Returns(new List<ITrigger> { later, sooner });
+        scheduler.GetTriggerState(new TriggerKey("NFL Scores Sun 4:30pm")).Returns(TriggerState.Paused);
+
+        var job = Assert.Single(await controller.GetAllJobsStatusAsync());
+
+        Assert.Equal(now.AddHours(2), job.NextRun);
+        Assert.Equal(nameof(TriggerState.Paused), job.Status);
     }
 
     // ── GetNextSpreadJobAsync — sport scoping (frizat-9e7) ──────────────────

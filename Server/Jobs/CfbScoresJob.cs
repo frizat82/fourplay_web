@@ -45,6 +45,10 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
         // comment), and every slate in this loop can be compared against the same single
         // resolution instead of each triggering its own GetCurrentSlateAsync() DB round trip.
         var currentSlate = await currentSlateService.GetCurrentSlateAsync();
+        // A run FinalScoresWatcher queued only needs the slate the game just ended in (mirrors
+        // NflScoresJob). Between slates there's none to narrow to, so it sweeps them all.
+        if (ScoresJobs.IsCurrentWeekOnly(context) && currentSlate is not null)
+            slates = slates.Where(s => s.Id == currentSlate.Id).ToList();
 
         var failedSlates = 0;
         foreach (var slate in slates) {
@@ -101,8 +105,10 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
         // worth the existing Quartz job-failure alert, distinct from the ordinary "zero NEW final
         // games this run" case (most runs, most slates) which is not an error. Mirrors
         // NflScoresJob's identical distinction.
-        if (failedSlates == slates.Count)
+        if (slates.Count > 0 && failedSlates == slates.Count) {
+            await ScoresJobs.RetryFailedOnFinalRunAsync(context);
             throw new InvalidOperationException("CfbScoresJob: every slate's ESPN fetch failed this run — see prior warnings for individual errors.");
+        }
         weekResultNotificationError?.Throw();
     }
 

@@ -7,9 +7,8 @@ namespace FourPlayWebApp.Server.Services.Interfaces;
 /// differing only in what/how each sport fetches (ICfbLiveScoreFetcher's CFP/ranked-team logic
 /// vs NFL's plain week query).
 /// </summary>
-public interface ICfbCacheService
+public interface ICfbCacheService : ILiveScoresSource
 {
-    Task<EspnScores?> GetScoresAsync();
     // Live/settled CFB scores for a SPECIFIC (typically non-current) slate — mirrors
     // IEspnCacheService.GetWeekScoresAsync(season, nflWeek) exactly (frizat-d0t unification):
     // settled slates are served from a cached DB reconstruction, everything else live-fetched.
@@ -18,5 +17,4 @@ public interface ICfbCacheService
     // immediately instead of waiting for a process restart — mirrors
     // IEspnCacheService.InvalidateWeekCache.
     void InvalidateSlateCache(int slateId);
-    event Action? ScoresChanged;
 }

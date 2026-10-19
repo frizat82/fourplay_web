@@ -101,6 +101,114 @@ public class NflScoresJobTests
     }
 
     // -----------------------------------------------------------------------
+    // Runs FinalScoresWatcher queues the moment a game ends
+    // -----------------------------------------------------------------------
+
+    // The game that just went final is in the current week, so that run only refetches the
+    // current week — plus the week before it, so a boundary game (Monday night, past midnight UTC)
+    // that also matches the current week's window is still filed under the earlier week (see the
+    // TwoAdjacentWeeks test below). Not every week of the season (~150 ESPN calls) per final.
+    // The fixed times still sweep the whole season.
+    [Fact]
+    public async Task Execute_CurrentWeekOnly_FetchesJustTheCurrentAndPreviousWeek()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> { BuildConfig(1, _year), BuildConfig(2, _year), BuildConfig(3, _year) });
+        GivenCurrentWeek(3);
+        GivenCurrentWeekOnlyRun();
+
+        await BuildJob().Execute(_context);
+
+        await _fetcher.Received(1).FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 2));
+        await _fetcher.Received(1).FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 3));
+        await _fetcher.DidNotReceive().FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 1));
+    }
+
+    // Last Monday night's game also matches this week's date window — a current-week-only run
+    // must not save it as a phantom final in this week.
+    [Fact]
+    public async Task Execute_CurrentWeekOnly_ABoundaryGameFromLastWeek_StaysInLastWeek()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> { BuildConfig(1, _year), BuildConfig(2, _year) });
+        GivenCurrentWeek(2);
+        GivenCurrentWeekOnlyRun();
+        var boundaryGame = BuildWeekScores(_year, isFinal: true, homeAbbr: "KC", awayAbbr: "BUF");
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(boundaryGame);
+        List<NflScores>? captured = null;
+        _repo.When(r => r.UpsertNflScoresAsync(Arg.Any<List<NflScores>>()))
+             .Do(ci => captured = ci.Arg<List<NflScores>>());
+
+        await BuildJob().Execute(_context);
+
+        Assert.Equal(1, Assert.Single(captured!).NflWeek);
+    }
+
+    // That run is the only quick save for the game that just ended: if ESPN fails it, queue it
+    // again shortly (a few times) rather than leave the result for the next fixed time.
+    [Fact]
+    public async Task Execute_CurrentWeekOnly_WhenEspnFails_QueuesARetry()
+    {
+        GivenCurrentWeekOnlyRun();
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).ThrowsAsync(new HttpRequestException("ESPN down"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        var retry = Assert.Single(ScheduledRetries());
+        Assert.Equal(ScoresJobs.OnFinalGroup, retry.Key.Group);
+        Assert.Equal(ScoresJobs.Nfl, retry.JobKey);
+        Assert.Equal(2, retry.JobDataMap.GetInt(ScoresJobs.AttemptKey));
+    }
+
+    [Fact]
+    public async Task Execute_CurrentWeekOnly_OnTheLastAttempt_DoesNotRetryAgain()
+    {
+        GivenCurrentWeekOnlyRun(attempt: ScoresJobs.MaxOnFinalAttempts);
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).ThrowsAsync(new HttpRequestException("ESPN down"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        Assert.Empty(ScheduledRetries());
+    }
+
+    // A fixed-time run already sweeps everything; its failure alerts and the next one retries.
+    [Fact]
+    public async Task Execute_ScheduledRun_WhenEspnFails_DoesNotQueueARetry()
+    {
+        _context.Scheduler.Returns(Substitute.For<IScheduler>());
+        _context.JobDetail.Returns(JobBuilder.Create<NflScoresJob>().WithIdentity(ScoresJobs.Nfl).Build());
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).ThrowsAsync(new HttpRequestException("ESPN down"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        Assert.Empty(ScheduledRetries());
+    }
+
+    private void GivenCurrentWeek(int weekId) =>
+        _currentWeekService.GetCurrentWeekAsync().Returns(new NflWeekInfo(
+            WeekId: weekId, Season: _year, IsPostSeason: false,
+            WeekLabel: $"Week {weekId}", ScoringFormat: ScoringFormat.Standard, SpreadLockDatetime: DateTime.UtcNow.AddDays(-1), RequiredPicks: 4));
+
+    private void GivenCurrentWeekOnlyRun(int attempt = 1)
+    {
+        _context.MergedJobDataMap.Returns(new JobDataMap { { ScoresJobs.CurrentWeekOnlyKey, true }, { ScoresJobs.AttemptKey, attempt } });
+        _context.JobDetail.Returns(JobBuilder.Create<NflScoresJob>().WithIdentity(ScoresJobs.Nfl).Build());
+        _context.Scheduler.Returns(Substitute.For<IScheduler>());
+    }
+
+    private List<ITrigger> ScheduledRetries() => _context.Scheduler.ReceivedCalls()
+        .Where(c => c.GetMethodInfo().Name == nameof(IScheduler.ScheduleJob))
+        .Select(c => c.GetArguments()[0]).OfType<ITrigger>().ToList();
+
+    [Fact]
+    public async Task Execute_ScheduledRun_StillFetchesEveryWeekOfTheSeason()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> { BuildConfig(1, _year), BuildConfig(2, _year) });
+
+        await BuildJob().Execute(_context);
+
+        await _fetcher.Received(2).FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>());
+    }
+
+    // -----------------------------------------------------------------------
     // Off-season gate
     // -----------------------------------------------------------------------
 

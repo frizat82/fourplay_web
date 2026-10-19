@@ -29,8 +29,9 @@ export default function AdminJobManagerPage() {
   const [jobRunning, setJobRunning] = useState(false);
   const toast = useToast();
 
-  // Backend already returns jobs ordered by Category then JobName — group in that order rather
-  // than re-sorting, so category order stays server-controlled in one place. Every job (fixed
+  // Backend already returns jobs ordered by Category, then soonest next run (never-scheduled
+  // last), then JobName — group in that order rather than re-sorting, so category order stays
+  // server-controlled in one place. Every job (fixed
   // scheduler/cron jobs and the per-league/per-week ones TimedTriggerScheduler registers
   // dynamically — Juice Reminder/Lock, NFL/CFB Spreads) is always shown: a "hide dynamic jobs"
   // toggle previously defaulted this list to only fixed jobs, which hid the only place an admin
@@ -176,7 +177,7 @@ export default function AdminJobManagerPage() {
                   {categoryJobs.map((job) => (
                     <TableRow key={job.jobName}>
                       <TableCell sx={stickyColumnSx}>{job.jobName}</TableCell>
-                      <TableCell>{job.leagueName ?? '—'}</TableCell>
+                      <TableCell>{job.leagueNames.length > 0 ? job.leagueNames.join(', ') : '—'}</TableCell>
                       <TableCell>{job.description}</TableCell>
                       <TableCell>
                         <Chip size="small" label={job.status} color={getStatusColor(job.status)} />

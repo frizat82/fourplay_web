@@ -56,7 +56,8 @@ export interface JobStatusResponse {
   category: string;
   isDynamic: boolean;
   leagueId?: number | null;
-  leagueName?: string | null;
+  /** Leagues this job affects: a per-league job's one, every league of a sport-wide job's sport, none for system jobs. */
+  leagueNames: string[];
 }
 
 export interface InvitationDto {
