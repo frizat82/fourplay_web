@@ -1,13 +1,24 @@
+using Npgsql;
+
 namespace FourPlayWebApp.Server.Infrastructure;
 
 internal static class PostgresConnectionString
 {
     /// <summary>
+    /// The Npgsql connection string for the app and EF design-time: <see cref="ToKeyValue"/>, with
+    /// GSS (Kerberos) encryption off. Neon and local Postgres never use it, and at Npgsql's default
+    /// (Prefer) the first connection tries to load libgssapi_krb5, which the .NET 10 runtime image
+    /// doesn't ship — an error line on every boot.
+    /// </summary>
+    internal static string Normalize(string raw) =>
+        new NpgsqlConnectionStringBuilder(ToKeyValue(raw)) { GssEncryptionMode = GssEncryptionMode.Disable }.ConnectionString;
+
+    /// <summary>
     /// Neon (and most managed Postgres providers) hand out postgres://-style URLs; Npgsql wants
     /// Host=...;Port=...;... key=value form. Converts when needed, passes through unchanged
     /// otherwise (e.g. local Docker Postgres already uses key=value).
     /// </summary>
-    internal static string Normalize(string raw)
+    private static string ToKeyValue(string raw)
     {
         if (!raw.StartsWith("postgres://") && !raw.StartsWith("postgresql://"))
             return raw;
