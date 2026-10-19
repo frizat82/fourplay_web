@@ -76,6 +76,39 @@ public class CfbScoresJobTests
         await _fetcher.Received(2).FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>());
     }
 
+    // Mirrors NflScoresJobTests: a failed on-final run queues a retry; a fixed-time one doesn't.
+    [Theory]
+    [InlineData(true, 1, true)]
+    [InlineData(true, ScoresJobs.MaxOnFinalAttempts, false)]
+    [InlineData(false, 1, false)]
+    public async Task Execute_WhenEspnFails_RetriesOnlyAnOnFinalRunWithAttemptsLeft(bool currentWeekOnly, int attempt, bool expectRetry)
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns(new List<CfbSeasonWeekConfig> { BuildSlate() });
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns<EspnScores?>(_ => throw new HttpRequestException("ESPN down"));
+        var scheduler = Substitute.For<IScheduler>();
+        _context.Scheduler.Returns(scheduler);
+        _context.JobDetail.Returns(JobBuilder.Create<CfbScoresJob>().WithIdentity(ScoresJobs.Cfb).Build());
+        _context.MergedJobDataMap.Returns(currentWeekOnly
+            ? new JobDataMap { { ScoresJobs.CurrentWeekOnlyKey, true }, { ScoresJobs.AttemptKey, attempt } }
+            : new JobDataMap());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        var retries = scheduler.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IScheduler.ScheduleJob))
+            .Select(c => c.GetArguments()[0]).OfType<ITrigger>().ToList();
+        if (expectRetry)
+        {
+            var retry = Assert.Single(retries);
+            Assert.Equal(ScoresJobs.Cfb, retry.JobKey);
+            Assert.Equal(attempt + 1, retry.JobDataMap.GetInt(ScoresJobs.AttemptKey));
+        }
+        else
+        {
+            Assert.Empty(retries);
+        }
+    }
+
     // Dates relative to "now" (not a fixed calendar date) so this slate is always "currently
     // active" for the SeasonWindowResolver-based gate CfbScoresJob now checks before fetching —
     // tests below that care about score-parsing/upsert behavior shouldn't also have to fight an

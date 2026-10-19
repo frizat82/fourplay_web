@@ -16,7 +16,8 @@ namespace FourPlayWebApp.Server.Services;
 /// it queues one run of that sport's scores job (ScoresJobs), scoped to the current week/slate,
 /// starting BatchDelay later so games ending a minute apart share it. While that run hasn't
 /// started, further finals need nothing: it reads ESPN fresh when it starts. The fixed-time
-/// triggers stay as the full-season backstop.
+/// triggers stay as the full-season backstop. If ESPN fails that run, the job retries it
+/// (ScoresJobs.RetryFailedOnFinalRunAsync).
 /// </summary>
 public class FinalScoresWatcher(
     IEspnCacheService espnCache,
@@ -48,12 +49,7 @@ public class FinalScoresWatcher(
         if (await scheduler.CheckExists(job, stoppingToken) && !await HasQueuedRunAsync(scheduler, job, stoppingToken))
         {
             logger.LogInformation("FinalScoresWatcher: {Sport} game went final, saving scores in {Delay}", sport, BatchDelay);
-            await scheduler.ScheduleJob(TriggerBuilder.Create()
-                .WithIdentity(Guid.NewGuid().ToString("N"), ScoresJobs.OnFinalGroup)
-                .ForJob(job)
-                .UsingJobData(ScoresJobs.CurrentWeekOnlyKey, true)
-                .StartAt(DateTimeOffset.UtcNow + BatchDelay)
-                .Build(), stoppingToken);
+            await scheduler.ScheduleJob(ScoresJobs.OnFinalRun(job, BatchDelay), stoppingToken);
         }
         // Only after the run is queued: a failed check leaves the final "new" for next time.
         seen.UnionWith(finals);

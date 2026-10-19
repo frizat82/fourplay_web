@@ -105,8 +105,10 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
         // worth the existing Quartz job-failure alert, distinct from the ordinary "zero NEW final
         // games this run" case (most runs, most slates) which is not an error. Mirrors
         // NflScoresJob's identical distinction.
-        if (slates.Count > 0 && failedSlates == slates.Count)
+        if (slates.Count > 0 && failedSlates == slates.Count) {
+            await ScoresJobs.RetryFailedOnFinalRunAsync(context);
             throw new InvalidOperationException("CfbScoresJob: every slate's ESPN fetch failed this run — see prior warnings for individual errors.");
+        }
         weekResultNotificationError?.Throw();
     }
 

@@ -50,10 +50,13 @@ public class NflScoresJob(
             var currentWeek = await currentWeekService.GetCurrentWeekAsync();
             // allConfigs (above) already holds every season on record — filter in memory instead
             // of a second DB round trip for what's already in hand.
-            // A run FinalScoresWatcher queued only needs the week the game just ended in.
+            // A run FinalScoresWatcher queued only needs the week the game just ended in — plus
+            // the week before, so a boundary game (see seenGames below) that also matches this
+            // week's window is still claimed by the earlier week first, never saved under this one.
             var currentWeekOnly = ScoresJobs.IsCurrentWeekOnly(context);
             var configs = allConfigs
-                .Where(c => c.Season == currentWeek.Season && (!currentWeekOnly || c.WeekId == currentWeek.WeekId))
+                .Where(c => c.Season == currentWeek.Season
+                    && (!currentWeekOnly || c.WeekId == currentWeek.WeekId || c.WeekId == currentWeek.WeekId - 1))
                 .ToList();
 
             var scoreList = new List<NflScores>();
@@ -138,8 +141,10 @@ public class NflScoresJob(
         // that must still happen) — a genuinely dead ESPN this run is a real infrastructure
         // problem worth the existing Quartz job-failure alert, distinct from the ordinary "zero
         // NEW final games this run" case (most runs, most weeks) which is not an error.
-        if (allWeeksFailed)
+        if (allWeeksFailed) {
+            await ScoresJobs.RetryFailedOnFinalRunAsync(context);
             throw new InvalidOperationException("NflScoresJob: every week's ESPN fetch failed this run — see prior warnings for individual errors.");
+        }
         weekResultNotificationError?.Throw();
     }
 }
