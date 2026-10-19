@@ -51,6 +51,16 @@ public static class SeasonWindowResolver {
         return lastStarted ?? next;
     }
 
+    // The first week/slate of a season that isn't over yet — the one being played, or the next one
+    // once it's over. Unlike ResolveCurrentWeek there's no early-activation lead: a week lasts until
+    // its own End (Monday night), and the day after, "current" can still be that week while it has
+    // nothing left to pick. What a league started right now should begin with.
+    public static WeekWindow? FirstUnfinishedWeek(IEnumerable<WeekWindow> windows, int season, DateTime now) =>
+        windows.Where(w => w.Season == season && w.End > now)
+            .OrderBy(w => w.Start)
+            .Select(w => (WeekWindow?)w)
+            .FirstOrDefault();
+
     // Every instant at which ResolveCurrentWeek or IsSeasonActive can give a different answer:
     // each window's Start/End, its SpreadLockDatetime, and the early-activation point before it.
     // The score pollers sleep between games and wake at these (ScorePollSchedule), so a week

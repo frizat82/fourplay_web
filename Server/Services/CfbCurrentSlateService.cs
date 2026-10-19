@@ -30,6 +30,12 @@ public class CfbCurrentSlateService(ICfbRepository repo, [FromKeyedServices(Curr
         slates.Select(s => (s, new SeasonWindowResolver.WeekWindow(
             s.Season, s.StartUtc, s.EndUtc, s.SpreadLockDatetime))).ToList();
 
+    public async Task<CfbSlateInfo?> GetFirstUnfinishedSlateAsync(int season) {
+        var slateWindows = BuildSlateWindows(await repo.GetAllSlatesAsync());
+        var resolved = SeasonWindowResolver.FirstUnfinishedWeek(slateWindows.Select(sw => sw.Window), season, timeProvider.GetUtcNow().UtcDateTime);
+        return resolved is { } w ? slateWindows.First(sw => sw.Window == w).Slate.ToSlateInfo() : null;
+    }
+
     public async Task<bool> IsSeasonActiveAsync() {
         var slates = await repo.GetAllSlatesAsync();
         var windows = slates.Select(s => new SeasonWindowResolver.Window(s.Season, s.StartUtc, s.EndUtc));

@@ -122,6 +122,34 @@ public class SeasonWindowResolverTests
         Assert.Equal(week12, SeasonWindowResolver.ResolveCurrentWeek(windows, new DateTime(2026, 11, 24, 15, 0, 0, DateTimeKind.Utc)));
     }
 
+    // FirstUnfinishedWeek: the week a league started now should begin with — the week still being
+    // played, or the next one once it's over. A week lasts until its own End (Monday night), with
+    // no early-activation lead: on the Tuesday after Monday night, "current" can still be the old
+    // week (its next lock is days out), but the old week has nothing left to pick.
+    [Fact]
+    public void FirstUnfinishedWeek_IsTheWeekBeingPlayed_UntilItsEnd_ThenTheNextOne()
+    {
+        var week2 = WeekWindow(2026, new DateTime(2026, 9, 15, 5, 0, 0, DateTimeKind.Utc), new DateTime(2026, 9, 22, 4, 59, 59, DateTimeKind.Utc), new DateTime(2026, 9, 17, 14, 15, 0, DateTimeKind.Utc));
+        var week3 = WeekWindow(2026, new DateTime(2026, 9, 22, 5, 0, 0, DateTimeKind.Utc), new DateTime(2026, 9, 29, 4, 59, 59, DateTimeKind.Utc), new DateTime(2026, 9, 24, 14, 15, 0, DateTimeKind.Utc));
+        var windows = new[] { week3, week2 }; // order doesn't matter
+
+        Assert.Equal(week2, SeasonWindowResolver.FirstUnfinishedWeek(windows, 2026, new DateTime(2026, 9, 21, 2, 0, 0, DateTimeKind.Utc))); // Monday night
+        var tuesday = new DateTime(2026, 9, 22, 14, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(week2, SeasonWindowResolver.ResolveCurrentWeek(windows, tuesday)); // still "current"...
+        Assert.Equal(week3, SeasonWindowResolver.FirstUnfinishedWeek(windows, 2026, tuesday)); // ...but over
+    }
+
+    [Fact]
+    public void FirstUnfinishedWeek_OnlyLooksAtTheRequestedSeason_AndIsNullOnceItsOver()
+    {
+        var last2025 = WeekWindow(2025, new DateTime(2026, 2, 3), new DateTime(2026, 2, 10), new DateTime(2026, 2, 5));
+        var first2026 = WeekWindow(2026, new DateTime(2026, 9, 8), new DateTime(2026, 9, 15), new DateTime(2026, 9, 10));
+        var now = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.Null(SeasonWindowResolver.FirstUnfinishedWeek([last2025, first2026], 2025, now));
+        Assert.Equal(first2026, SeasonWindowResolver.FirstUnfinishedWeek([last2025, first2026], 2026, now));
+    }
+
     [Fact]
     public void ResolveCurrentWeek_SeasonBoundaryTransition_BehavesIdenticallyToInSeasonTransition()
     {
@@ -193,7 +221,7 @@ public class SeasonWindowResolverTests
     {
         // Bootstrap case (app's very first-ever season, before any spread has ever been
         // grabbed) — preserves the original "soonest upcoming" fallback regardless of the
-        // 2-day proximity rule, since there is no "last started" window to prefer instead.
+        // 1-day proximity rule, since there is no "last started" window to prefer instead.
         var now = new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc);
         var windows = new[]
         {
