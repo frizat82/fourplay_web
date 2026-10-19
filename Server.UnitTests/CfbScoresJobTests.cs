@@ -43,6 +43,72 @@ public class CfbScoresJobTests
 
     private CfbScoresJob BuildJob() => new(_fetcher, _repo, _cfbCacheService, _currentSlateService, _weekResultNotificationService);
 
+    // Mirrors NflScoresJobTests: a run FinalScoresWatcher queues refetches only the current
+    // slate — a full CFB sweep is 18 slates of full-FBS scoreboards, and a Saturday has dozens of
+    // finals. The fixed times still sweep every slate.
+    [Fact]
+    public async Task Execute_CurrentWeekOnly_FetchesJustTheCurrentSlate()
+    {
+        var current = BuildSlate();
+        current.Id = 2;
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns(new List<CfbSeasonWeekConfig> { BuildSlate(), current });
+        _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(2, 2025, 2, "Week 2",
+            current.WeekStartDate, current.WeekEndDate, DateTime.UtcNow.AddDays(-1), false, 4));
+        _context.MergedJobDataMap.Returns(new JobDataMap { { ScoresJobs.CurrentWeekOnlyKey, true } });
+
+        await BuildJob().Execute(_context);
+
+        await _fetcher.Received(1).FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == 2), true);
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == 1), Arg.Any<bool>());
+    }
+
+    // No current slate to narrow to (between slates) — fall back to the full sweep, not nothing.
+    [Fact]
+    public async Task Execute_CurrentWeekOnly_WithNoCurrentSlate_FetchesEverySlate()
+    {
+        var second = BuildSlate();
+        second.Id = 2;
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns(new List<CfbSeasonWeekConfig> { BuildSlate(), second });
+        _context.MergedJobDataMap.Returns(new JobDataMap { { ScoresJobs.CurrentWeekOnlyKey, true } });
+
+        await BuildJob().Execute(_context);
+
+        await _fetcher.Received(2).FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>());
+    }
+
+    // Mirrors NflScoresJobTests: a failed on-final run queues a retry; a fixed-time one doesn't.
+    [Theory]
+    [InlineData(true, 1, true)]
+    [InlineData(true, ScoresJobs.MaxOnFinalAttempts, false)]
+    [InlineData(false, 1, false)]
+    public async Task Execute_WhenEspnFails_RetriesOnlyAnOnFinalRunWithAttemptsLeft(bool currentWeekOnly, int attempt, bool expectRetry)
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns(new List<CfbSeasonWeekConfig> { BuildSlate() });
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns<EspnScores?>(_ => throw new HttpRequestException("ESPN down"));
+        var scheduler = Substitute.For<IScheduler>();
+        _context.Scheduler.Returns(scheduler);
+        _context.JobDetail.Returns(JobBuilder.Create<CfbScoresJob>().WithIdentity(ScoresJobs.Cfb).Build());
+        _context.MergedJobDataMap.Returns(currentWeekOnly
+            ? new JobDataMap { { ScoresJobs.CurrentWeekOnlyKey, true }, { ScoresJobs.AttemptKey, attempt } }
+            : new JobDataMap());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        var retries = scheduler.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IScheduler.ScheduleJob))
+            .Select(c => c.GetArguments()[0]).OfType<ITrigger>().ToList();
+        if (expectRetry)
+        {
+            var retry = Assert.Single(retries);
+            Assert.Equal(ScoresJobs.Cfb, retry.JobKey);
+            Assert.Equal(attempt + 1, retry.JobDataMap.GetInt(ScoresJobs.AttemptKey));
+        }
+        else
+        {
+            Assert.Empty(retries);
+        }
+    }
+
     // Dates relative to "now" (not a fixed calendar date) so this slate is always "currently
     // active" for the SeasonWindowResolver-based gate CfbScoresJob now checks before fetching —
     // tests below that care about score-parsing/upsert behavior shouldn't also have to fight an

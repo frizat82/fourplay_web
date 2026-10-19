@@ -297,6 +297,9 @@ builder.Services.AddScoped<IPickLiveNotificationStateService, PickLiveNotificati
 builder.Services.AddScoped<ITeamLiveNotificationStateService, TeamLiveNotificationStateService>();
 builder.Services.AddScoped<ILivePickTransitionService, LivePickTransitionService>();
 builder.Services.AddHostedService<LivePickNotificationWatcher>();
+// Saves final scores the moment a game ends (both sports) — see FinalScoresWatcher. Registered
+// unconditionally; it checks the scores jobs exist, which demo stacks never register.
+builder.Services.AddHostedService<FinalScoresWatcher>();
 
 builder.Services.AddScoped<ISpreadCalculatorProvider, SpreadCalculatorProvider>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
@@ -406,14 +409,17 @@ builder.Services.AddQuartz(q => {
         );
         q.ScheduleCstCronJob<NflSpreadSchedulerJob>("NFL Spread Scheduler Daily", "Daily catch-up pass for NFL spread-lock triggers", "0 0 6 * * ?");
 
-        // NFL Scores
-        q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Thu 10am", "Fetches NFL scores Thursday morning at 10am CST", "0 0 10 ? * THU");
-        q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Fri 1am", "Fetches NFL scores early Friday at 1am CST", "0 0 1 ? * FRI");
-        q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Sun 12:30pm", "Fetches NFL scores just before Sunday early games at 12:30pm CST", "0 30 12 ? * SUN");
-        q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Sun 4:30pm", "Fetches NFL scores during Sunday late games at 4:30pm CST", "0 30 16 ? * SUN");
-        q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Sun 7:40pm", "Fetches NFL scores during Sunday evening games at 7:40pm CST", "0 40 19 ? * SUN");
-        q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Mon 1am", "Fetches NFL scores early Monday after SNF at 1am CST", "0 0 1 ? * MON");
-        q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Tue 1am", "Fetches NFL scores early Tuesday after MNF at 1am CST", "0 0 1 ? * TUE");
+        // NFL Scores — one job, these fixed times as its triggers (see ScoresJobs). FinalScoresWatcher
+        // also queues a run the moment an NFL game goes final, so results and money update right
+        // after each game; these times are the full-season backstop.
+        q.ScheduleCstCronJob<NflScoresJob>(ScoresJobs.Nfl, "Fetches and saves NFL final scores",
+            ("NFL Scores Thu 10am", "Fetches NFL scores Thursday morning at 10am CST", "0 0 10 ? * THU"),
+            ("NFL Scores Fri 1am", "Fetches NFL scores early Friday at 1am CST", "0 0 1 ? * FRI"),
+            ("NFL Scores Sun 12:30pm", "Fetches NFL scores just before Sunday early games at 12:30pm CST", "0 30 12 ? * SUN"),
+            ("NFL Scores Sun 4:30pm", "Fetches NFL scores during Sunday late games at 4:30pm CST", "0 30 16 ? * SUN"),
+            ("NFL Scores Sun 7:40pm", "Fetches NFL scores during Sunday evening games at 7:40pm CST", "0 40 19 ? * SUN"),
+            ("NFL Scores Mon 1am", "Fetches NFL scores early Monday after SNF at 1am CST", "0 0 1 ? * MON"),
+            ("NFL Scores Tue 1am", "Fetches NFL scores early Tuesday after MNF at 1am CST", "0 0 1 ? * TUE"));
 
         // CFB Rankings — CFB-only, no NFL equivalent (rank/eligibility is a CFB-specific concept).
         // Same cadence as the slate seeder: capture rankings as soon as a week's schedule is known,
@@ -458,15 +464,17 @@ builder.Services.AddQuartz(q => {
         // (confirmed: a real Week 1 2026 Monday-night game) had nothing scheduled to ever fetch
         // its final score — the next trigger wasn't until the following Saturday's slate, by which
         // point the app had already resolved "current slate" to the next week entirely.
-        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat Noon", "Fetches CFB scores at Saturday noon kickoff window", "0 0 12 ? * SAT");
-        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat 4pm", "Fetches CFB scores at Saturday afternoon kickoff window", "0 0 16 ? * SAT");
-        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat 8pm", "Fetches CFB scores at Saturday evening kickoff window", "0 0 20 ? * SAT");
-        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sat Midnight", "Fetches CFB final scores late Saturday night", "0 0 0 ? * SUN");
-        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 6am", "Fetches CFB overnight final scores Sunday morning", "0 0 6 ? * SUN");
-        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 12:30pm", "Fetches CFB scores at Sunday early kickoff window", "0 30 12 ? * SUN");
-        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 7:40pm", "Fetches CFB scores at Sunday evening kickoff window", "0 40 19 ? * SUN");
-        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Mon 6am", "Fetches CFB final scores that finished late Sunday night/Monday", "0 0 6 ? * MON");
-        q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Tue 1am", "Fetches CFB scores that finished late Monday night, mirrors NFL's post-MNF fetch", "0 0 1 ? * TUE");
+        // Same shape as NFL Scores above: one job, FinalScoresWatcher queues runs as games end.
+        q.ScheduleCstCronJob<CfbScoresJob>(ScoresJobs.Cfb, "Fetches and saves CFB final scores",
+            ("CFB Scores Sat Noon", "Fetches CFB scores at Saturday noon kickoff window", "0 0 12 ? * SAT"),
+            ("CFB Scores Sat 4pm", "Fetches CFB scores at Saturday afternoon kickoff window", "0 0 16 ? * SAT"),
+            ("CFB Scores Sat 8pm", "Fetches CFB scores at Saturday evening kickoff window", "0 0 20 ? * SAT"),
+            ("CFB Scores Sat Midnight", "Fetches CFB final scores late Saturday night", "0 0 0 ? * SUN"),
+            ("CFB Scores Sun 6am", "Fetches CFB overnight final scores Sunday morning", "0 0 6 ? * SUN"),
+            ("CFB Scores Sun 12:30pm", "Fetches CFB scores at Sunday early kickoff window", "0 30 12 ? * SUN"),
+            ("CFB Scores Sun 7:40pm", "Fetches CFB scores at Sunday evening kickoff window", "0 40 19 ? * SUN"),
+            ("CFB Scores Mon 6am", "Fetches CFB final scores that finished late Sunday night/Monday", "0 0 6 ? * MON"),
+            ("CFB Scores Tue 1am", "Fetches CFB scores that finished late Monday night, mirrors NFL's post-MNF fetch", "0 0 1 ? * TUE"));
 
         // Week-result push notifications (frizat-tgk Phase 2): no separate guessed-time cron here
         // — NflScoresJob/CfbScoresJob already call IWeekResultNotificationService directly, right

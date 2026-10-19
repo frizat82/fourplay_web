@@ -44,4 +44,27 @@ public class QuartzJobExtensionsTests
         Assert.NotNull(trigger);
         Assert.Equal("Runs early Friday", trigger.Description);
     }
+
+    // One job, several fixed times: every time is a trigger on the same job key, so
+    // [DisallowConcurrentExecution] covers all of them (see ScoresJobs).
+    [Fact]
+    public async Task ScheduleCstCronJob_SeveralTimes_AreAllTriggersOfOneDurableJob()
+    {
+        var job = new JobKey("Stub Scores");
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddQuartz(q => q.ScheduleCstCronJob<StubJob>(job, "Stub job",
+            ("Stub Sun 4:30pm", "Sunday late", "0 30 16 ? * SUN"),
+            ("Stub Mon 1am", "After SNF", "0 0 1 ? * MON")));
+        var scheduler = await services.BuildServiceProvider().GetRequiredService<ISchedulerFactory>().GetScheduler();
+
+        var detail = await scheduler.GetJobDetail(job);
+        var triggers = (await scheduler.GetTriggersOfJob(job)).Cast<ICronTrigger>().ToList();
+
+        Assert.NotNull(detail);
+        Assert.True(detail.Durable);
+        Assert.Equal(new[] { "Stub Mon 1am", "Stub Sun 4:30pm" }, triggers.Select(t => t.Key.Name).Order());
+        Assert.All(triggers, t => Assert.Equal(TimeZoneInfo.FindSystemTimeZoneById("America/Chicago"), t.TimeZone));
+        Assert.Contains(triggers, t => t.CronExpressionString == "0 30 16 ? * SUN" && t.Description == "Sunday late");
+    }
 }
