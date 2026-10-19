@@ -1,8 +1,8 @@
-using System.Threading.Channels;
+using FourPlayWebApp.Server.Jobs;
 using FourPlayWebApp.Server.Services.Interfaces;
 using FourPlayWebApp.Shared.Helpers;
 using FourPlayWebApp.Shared.Models;
-using Microsoft.Extensions.Hosting;
+using FourPlayWebApp.Shared.Models.Enum;
 using Quartz;
 
 namespace FourPlayWebApp.Server.Services;
@@ -12,117 +12,58 @@ namespace FourPlayWebApp.Server.Services;
 /// times left gaps of hours on a Sunday — a 3:25pm kickoff's final waited for the 7:40pm run, a
 /// Sunday-night game's for 1am — and results, the leaderboard and the money ride on saved finals.
 ///
-/// Listens to both live caches' ScoresChanged events (they fire on every ~15s poll while a game
-/// is on). When the scoreboard shows a game final that this process hasn't seen final before, it
-/// triggers that sport's trigger-less "... Scores On Final" job (Program.cs). The job reads ESPN
-/// fresh and upserts every final, so one run catches every game that ended since the last one.
-/// The fixed-time triggers stay as a backstop. One implementation for both sports — the only
-/// sport-specific part is which cache and which job key (CLAUDE.md's NFL/CFB sharing rule).
+/// When a sport's live scoreboard shows a game final that this process hasn't seen final before,
+/// it queues one run of that sport's scores job (ScoresJobs), scoped to the current week/slate,
+/// starting BatchDelay later so games ending a minute apart share it. While that run hasn't
+/// started, further finals need nothing: it reads ESPN fresh when it starts. The fixed-time
+/// triggers stay as the full-season backstop.
 /// </summary>
-public class FinalScoresWatcher : BackgroundService
+public class FinalScoresWatcher(
+    IEspnCacheService espnCache,
+    ICfbCacheService cfbCache,
+    ISchedulerFactory schedulerFactory,
+    IConfiguration configuration,
+    ILogger<FinalScoresWatcher> logger)
+    // Kill switch: turn off without a deploy; the fixed-time scores triggers still run.
+    : ScoresChangedWatcher(espnCache, cfbCache, configuration, "FINAL_SCORES_WATCHER_ENABLED", logger)
 {
-    public const string NflJobName = "NFL Scores On Final";
-    public const string CfbJobName = "CFB Scores On Final";
+    public static readonly TimeSpan BatchDelay = TimeSpan.FromMinutes(1);
 
-    private readonly ISchedulerFactory _schedulerFactory;
-    private readonly ILogger<FinalScoresWatcher> _logger;
-    private readonly bool _enabled;
-    private readonly SportFeed[] _feeds;
-
-    public FinalScoresWatcher(
-        IEspnCacheService espnCache,
-        ICfbCacheService cfbCache,
-        ISchedulerFactory schedulerFactory,
-        IConfiguration configuration,
-        ILogger<FinalScoresWatcher> logger)
+    /// <summary>Games this process has already seen final (and queued a save for), per sport.</summary>
+    private readonly Dictionary<LeagueType, HashSet<string>> _seenFinal = new()
     {
-        _schedulerFactory = schedulerFactory;
-        _logger = logger;
-        // Kill switch: turn off without a deploy; the fixed-time scores triggers still run.
-        _enabled = configuration.GetValue("FINAL_SCORES_WATCHER_ENABLED", true);
-        _feeds =
-        [
-            new SportFeed("NFL", new JobKey(NflJobName), espnCache.GetScoresAsync,
-                h => espnCache.ScoresChanged += h, h => espnCache.ScoresChanged -= h),
-            new SportFeed("CFB", new JobKey(CfbJobName), cfbCache.GetScoresAsync,
-                h => cfbCache.ScoresChanged += h, h => cfbCache.ScoresChanged -= h),
-        ];
-    }
+        [LeagueType.Nfl] = [],
+        [LeagueType.Cfb] = [],
+    };
 
-    public override Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task OnScoresChangedAsync(LeagueType sport, ILiveScoresSource source, CancellationToken stoppingToken)
     {
-        if (_enabled)
+        var seen = _seenFinal[sport];
+        var finals = FinalGameIds(await source.GetScoresAsync());
+        if (finals.IsSubsetOf(seen)) return;
+
+        var job = sport == LeagueType.Cfb ? ScoresJobs.Cfb : ScoresJobs.Nfl;
+        var scheduler = await schedulerFactory.GetScheduler(stoppingToken);
+        // Demo/replay stacks never register the scores jobs — their data is seeded.
+        if (await scheduler.CheckExists(job, stoppingToken) && !await HasQueuedRunAsync(scheduler, job, stoppingToken))
         {
-            foreach (var feed in _feeds) feed.Subscribe();
+            logger.LogInformation("FinalScoresWatcher: {Sport} game went final, saving scores in {Delay}", sport, BatchDelay);
+            await scheduler.ScheduleJob(TriggerBuilder.Create()
+                .WithIdentity(Guid.NewGuid().ToString("N"), ScoresJobs.OnFinalGroup)
+                .ForJob(job)
+                .UsingJobData(ScoresJobs.CurrentWeekOnlyKey, true)
+                .StartAt(DateTimeOffset.UtcNow + BatchDelay)
+                .Build(), stoppingToken);
         }
-        else
-        {
-            _logger.LogInformation("FinalScoresWatcher disabled via FINAL_SCORES_WATCHER_ENABLED=false");
-        }
-        return base.StartAsync(cancellationToken);
+        // Only after the run is queued: a failed check leaves the final "new" for next time.
+        seen.UnionWith(finals);
     }
 
-    public override Task StopAsync(CancellationToken cancellationToken)
-    {
-        foreach (var feed in _feeds) feed.Unsubscribe();
-        return base.StopAsync(cancellationToken);
-    }
-
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        _enabled ? Task.WhenAll(_feeds.Select(feed => DrainAsync(feed, stoppingToken))) : Task.CompletedTask;
-
-    private async Task DrainAsync(SportFeed feed, CancellationToken stoppingToken)
-    {
-        // ScoresChanged fires inside the cache's poll loop, so the handler only signals; a burst of
-        // polls coalesces into one pending check (capacity-1 channel).
-        await foreach (var _ in feed.Signal.Reader.ReadAllAsync(stoppingToken))
-        {
-            try
-            {
-                var finals = FinalGameIds(await feed.GetScoresAsync());
-                if (finals.IsSubsetOf(feed.SeenFinal)) continue;
-
-                var scheduler = await _schedulerFactory.GetScheduler(stoppingToken);
-                // Demo/replay stacks never register the scores jobs — their data is seeded.
-                if (await scheduler.CheckExists(feed.JobKey, stoppingToken))
-                {
-                    _logger.LogInformation("FinalScoresWatcher: {Sport} game went final, saving scores now", feed.Sport);
-                    await scheduler.TriggerJob(feed.JobKey, stoppingToken);
-                }
-                // Only after the run is queued: a failed check leaves the final "new" for next time.
-                feed.SeenFinal.UnionWith(finals);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // The next poll's signal retries; the fixed-time triggers are the backstop.
-                _logger.LogWarning(ex, "FinalScoresWatcher: {Sport} check failed, will retry on the next poll", feed.Sport);
-            }
-        }
-    }
-
-    private sealed class SportFeed(
-        string sport,
-        JobKey jobKey,
-        Func<Task<EspnScores?>> getScores,
-        Action<Action> subscribe,
-        Action<Action> unsubscribe)
-    {
-        public string Sport { get; } = sport;
-        /// <summary>Games this process has already seen final (and queued a save for).</summary>
-        public HashSet<string> SeenFinal { get; } = [];
-        public JobKey JobKey { get; } = jobKey;
-        public Channel<bool> Signal { get; } = Channel.CreateBounded<bool>(
-            new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite });
-
-        public Task<EspnScores?> GetScoresAsync() => getScores();
-        public void Subscribe() => subscribe(OnScoresChanged);
-        public void Unsubscribe() => unsubscribe(OnScoresChanged);
-        private void OnScoresChanged() => Signal.Writer.TryWrite(true);
-    }
+    // A queued run that hasn't started yet. One that already fired has no next fire time, and may
+    // have read ESPN before this final — so it doesn't count.
+    private static async Task<bool> HasQueuedRunAsync(IScheduler scheduler, JobKey job, CancellationToken cancellationToken) =>
+        (await scheduler.GetTriggersOfJob(job, cancellationToken))
+            .Any(t => t.Key.Group == ScoresJobs.OnFinalGroup && t.GetNextFireTimeUtc() is not null);
 
     private static HashSet<string> FinalGameIds(EspnScores? scores) =>
         (scores?.Events ?? [])

@@ -43,35 +43,37 @@ public class CfbScoresJobTests
 
     private CfbScoresJob BuildJob() => new(_fetcher, _repo, _cfbCacheService, _currentSlateService, _weekResultNotificationService);
 
-    // [DisallowConcurrentExecution] only stops one job KEY overlapping itself — every fixed time is
-    // its own key, and FinalScoresWatcher runs a separate "CFB Scores On Final" key the moment a
-    // game ends. Two runs saving the same finals at once would race on CfbScores' unique index.
+    // Mirrors NflScoresJobTests: a run FinalScoresWatcher queues refetches only the current
+    // slate — a full CFB sweep is 18 slates of full-FBS scoreboards, and a Saturday has dozens of
+    // finals. The fixed times still sweep every slate.
     [Fact]
-    public async Task Execute_TwoRunsAtOnce_TheSecondWaitsForTheFirstToFinish()
+    public async Task Execute_CurrentWeekOnly_FetchesJustTheCurrentSlate()
     {
-        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns(new List<CfbSeasonWeekConfig> { BuildSlate() });
-        var firstFetchBlocked = new TaskCompletionSource();
-        var release = new TaskCompletionSource();
-        var fetches = 0;
-        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(async _ =>
-        {
-            if (Interlocked.Increment(ref fetches) == 1)
-            {
-                firstFetchBlocked.SetResult();
-                await release.Task;
-            }
-            return (EspnScores?)null;
-        });
+        var current = BuildSlate();
+        current.Id = 2;
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns(new List<CfbSeasonWeekConfig> { BuildSlate(), current });
+        _currentSlateService.GetCurrentSlateAsync().Returns(new CfbSlateInfo(2, 2025, 2, "Week 2",
+            current.WeekStartDate, current.WeekEndDate, DateTime.UtcNow.AddDays(-1), false, 4));
+        _context.MergedJobDataMap.Returns(new JobDataMap { { ScoresJobs.CurrentWeekOnlyKey, true } });
 
-        var first = BuildJob().Execute(_context);
-        await firstFetchBlocked.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var second = BuildJob().Execute(_context);
-        await Task.Delay(200);
-        Assert.Equal(1, Volatile.Read(ref fetches)); // still waiting on the first run
+        await BuildJob().Execute(_context);
 
-        release.SetResult();
-        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(2, Volatile.Read(ref fetches));
+        await _fetcher.Received(1).FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == 2), true);
+        await _fetcher.DidNotReceive().FetchForSlateAsync(Arg.Is<CfbSeasonWeekConfig>(s => s.Id == 1), Arg.Any<bool>());
+    }
+
+    // No current slate to narrow to (between slates) — fall back to the full sweep, not nothing.
+    [Fact]
+    public async Task Execute_CurrentWeekOnly_WithNoCurrentSlate_FetchesEverySlate()
+    {
+        var second = BuildSlate();
+        second.Id = 2;
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns(new List<CfbSeasonWeekConfig> { BuildSlate(), second });
+        _context.MergedJobDataMap.Returns(new JobDataMap { { ScoresJobs.CurrentWeekOnlyKey, true } });
+
+        await BuildJob().Execute(_context);
+
+        await _fetcher.Received(2).FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>());
     }
 
     // Dates relative to "now" (not a fixed calendar date) so this slate is always "currently

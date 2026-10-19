@@ -24,11 +24,7 @@ public class NflScoresJob(
     INflCurrentWeekService currentWeekService,
     IEspnCacheService espnCacheService,
     IWeekResultNotificationService weekResultNotificationService) : IJob {
-    // One run at a time across every trigger — see JobRunGate.
-    public Task Execute(IJobExecutionContext context) =>
-        JobRunGate<NflScoresJob>.RunAsync(() => RunAsync(context), context.CancellationToken);
-
-    private async Task RunAsync(IJobExecutionContext context) {
+    public async Task Execute(IJobExecutionContext context) {
         // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
         using var freshEspn = EspnDayCache.Fresh();
         Log.Information("Grabbing NFL scores at {Time}", DateTime.UtcNow);
@@ -54,7 +50,11 @@ public class NflScoresJob(
             var currentWeek = await currentWeekService.GetCurrentWeekAsync();
             // allConfigs (above) already holds every season on record — filter in memory instead
             // of a second DB round trip for what's already in hand.
-            var configs = allConfigs.Where(c => c.Season == currentWeek.Season).ToList();
+            // A run FinalScoresWatcher queued only needs the week the game just ended in.
+            var currentWeekOnly = ScoresJobs.IsCurrentWeekOnly(context);
+            var configs = allConfigs
+                .Where(c => c.Season == currentWeek.Season && (!currentWeekOnly || c.WeekId == currentWeek.WeekId))
+                .ToList();
 
             var scoreList = new List<NflScores>();
             // /code-review: a config's own window is compared to a game's kickoff by calendar

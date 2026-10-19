@@ -16,11 +16,7 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
     // CFB seasons run Aug–Jan; the season year is the calendar year the fall games start.
     private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;
 
-    // One run at a time across every trigger — see JobRunGate.
-    public Task Execute(IJobExecutionContext context) =>
-        JobRunGate<CfbScoresJob>.RunAsync(() => RunAsync(context), context.CancellationToken);
-
-    private async Task RunAsync(IJobExecutionContext context) {
+    public async Task Execute(IJobExecutionContext context) {
         // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
         using var freshEspn = EspnDayCache.Fresh();
         Log.Information("CfbScoresJob: fetching CFB scores at {Time}", DateTime.UtcNow);
@@ -49,6 +45,10 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
         // comment), and every slate in this loop can be compared against the same single
         // resolution instead of each triggering its own GetCurrentSlateAsync() DB round trip.
         var currentSlate = await currentSlateService.GetCurrentSlateAsync();
+        // A run FinalScoresWatcher queued only needs the slate the game just ended in (mirrors
+        // NflScoresJob). Between slates there's none to narrow to, so it sweeps them all.
+        if (ScoresJobs.IsCurrentWeekOnly(context) && currentSlate is not null)
+            slates = slates.Where(s => s.Id == currentSlate.Id).ToList();
 
         var failedSlates = 0;
         foreach (var slate in slates) {
@@ -105,7 +105,7 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
         // worth the existing Quartz job-failure alert, distinct from the ordinary "zero NEW final
         // games this run" case (most runs, most slates) which is not an error. Mirrors
         // NflScoresJob's identical distinction.
-        if (failedSlates == slates.Count)
+        if (slates.Count > 0 && failedSlates == slates.Count)
             throw new InvalidOperationException("CfbScoresJob: every slate's ESPN fetch failed this run — see prior warnings for individual errors.");
         weekResultNotificationError?.Throw();
     }

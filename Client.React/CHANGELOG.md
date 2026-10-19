@@ -7,7 +7,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 ## 2026-10-19
 
 - Results, standings and money now update within a minute or two of each game going final (NFL and college), instead of waiting for the next scheduled scores check — a 3:25 kickoff no longer waits until 7:40pm, or a Sunday night game until 1am
-- Admin Job Manager lists each category's jobs soonest-first, so the next NFL spread job shows as the upcoming week instead of week 10
+- Admin Job Manager lists each category's jobs soonest-first, so the next NFL spread job shows as the upcoming week instead of week 10, and shows one NFL Scores and one CFB Scores row (next run across all their times) instead of one row per time
 
 ## 2026-10-15
 

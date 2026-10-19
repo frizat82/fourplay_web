@@ -101,37 +101,35 @@ public class NflScoresJobTests
     }
 
     // -----------------------------------------------------------------------
-    // One run at a time across every trigger
+    // Runs FinalScoresWatcher queues the moment a game ends
     // -----------------------------------------------------------------------
 
-    // [DisallowConcurrentExecution] only stops one job KEY overlapping itself — every fixed time is
-    // its own key, and FinalScoresWatcher runs a separate "NFL Scores On Final" key the moment a
-    // game ends. Two runs saving the same finals at once would race on NflScores' unique index.
+    // The game that just went final is in the current week, so that run only refetches the
+    // current week — not every week of the season (~150 ESPN calls), once per final. The fixed
+    // times still sweep the whole season.
     [Fact]
-    public async Task Execute_TwoRunsAtOnce_TheSecondWaitsForTheFirstToFinish()
+    public async Task Execute_CurrentWeekOnly_FetchesJustTheCurrentWeek()
     {
-        var firstFetchBlocked = new TaskCompletionSource();
-        var release = new TaskCompletionSource();
-        var fetches = 0;
-        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(async _ =>
-        {
-            if (Interlocked.Increment(ref fetches) == 1)
-            {
-                firstFetchBlocked.SetResult();
-                await release.Task;
-            }
-            return (EspnScores?)null;
-        });
+        _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> { BuildConfig(1, _year), BuildConfig(2, _year) });
+        _currentWeekService.GetCurrentWeekAsync().Returns(new NflWeekInfo(
+            WeekId: 2, Season: _year, IsPostSeason: false,
+            WeekLabel: "Week 2", ScoringFormat: ScoringFormat.Standard, SpreadLockDatetime: DateTime.UtcNow.AddDays(-1), RequiredPicks: 4));
+        _context.MergedJobDataMap.Returns(new JobDataMap { { ScoresJobs.CurrentWeekOnlyKey, true } });
 
-        var first = BuildJob().Execute(_context);
-        await firstFetchBlocked.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var second = BuildJob().Execute(_context);
-        await Task.Delay(200);
-        Assert.Equal(1, Volatile.Read(ref fetches)); // still waiting on the first run
+        await BuildJob().Execute(_context);
 
-        release.SetResult();
-        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(2, Volatile.Read(ref fetches));
+        await _fetcher.Received(1).FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 2));
+        await _fetcher.DidNotReceive().FetchForWeekAsync(Arg.Is<NflSeasonWeekConfig>(c => c.WeekId == 1));
+    }
+
+    [Fact]
+    public async Task Execute_ScheduledRun_StillFetchesEveryWeekOfTheSeason()
+    {
+        _repo.GetNflSeasonWeekConfigsAsync().Returns(new List<NflSeasonWeekConfig> { BuildConfig(1, _year), BuildConfig(2, _year) });
+
+        await BuildJob().Execute(_context);
+
+        await _fetcher.Received(2).FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>());
     }
 
     // -----------------------------------------------------------------------
