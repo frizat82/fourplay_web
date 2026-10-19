@@ -16,7 +16,11 @@ public class CfbScoresJob(ICfbLiveScoreFetcher fetcher, ICfbRepository repo, ICf
     // CFB seasons run Aug–Jan; the season year is the calendar year the fall games start.
     private static int Season => DateTime.UtcNow.Month >= 8 ? DateTime.UtcNow.Year : DateTime.UtcNow.Year - 1;
 
-    public async Task Execute(IJobExecutionContext context) {
+    // One run at a time across every trigger — see JobRunGate.
+    public Task Execute(IJobExecutionContext context) =>
+        JobRunGate<CfbScoresJob>.RunAsync(() => RunAsync(context), context.CancellationToken);
+
+    private async Task RunAsync(IJobExecutionContext context) {
         // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
         using var freshEspn = EspnDayCache.Fresh();
         Log.Information("CfbScoresJob: fetching CFB scores at {Time}", DateTime.UtcNow);

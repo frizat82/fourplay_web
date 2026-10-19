@@ -297,6 +297,9 @@ builder.Services.AddScoped<IPickLiveNotificationStateService, PickLiveNotificati
 builder.Services.AddScoped<ITeamLiveNotificationStateService, TeamLiveNotificationStateService>();
 builder.Services.AddScoped<ILivePickTransitionService, LivePickTransitionService>();
 builder.Services.AddHostedService<LivePickNotificationWatcher>();
+// Saves final scores the moment a game ends (both sports) — see FinalScoresWatcher. Registered
+// unconditionally; it checks the "... Scores On Final" jobs exist, which demo stacks never register.
+builder.Services.AddHostedService<FinalScoresWatcher>();
 
 builder.Services.AddScoped<ISpreadCalculatorProvider, SpreadCalculatorProvider>();
 builder.Services.AddSingleton<ILeaderboardService, LeaderboardService>();
@@ -414,6 +417,14 @@ builder.Services.AddQuartz(q => {
         q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Sun 7:40pm", "Fetches NFL scores during Sunday evening games at 7:40pm CST", "0 40 19 ? * SUN");
         q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Mon 1am", "Fetches NFL scores early Monday after SNF at 1am CST", "0 0 1 ? * MON");
         q.ScheduleCstCronJob<NflScoresJob>("NFL Scores Tue 1am", "Fetches NFL scores early Tuesday after MNF at 1am CST", "0 0 1 ? * TUE");
+        // No schedule of its own: FinalScoresWatcher runs it the moment an NFL game goes final, so
+        // results and money update right after each game instead of at the next time above (a
+        // 3:25pm kickoff's final used to wait for 7:40pm, Sunday night's for 1am). The fixed times
+        // above stay as the backstop. JobRunGate keeps it from overlapping one of them.
+        q.AddJob<NflScoresJob>(job => job
+            .WithIdentity(FinalScoresWatcher.NflJobName)
+            .WithDescription("Saves NFL scores the moment a game goes final (run by FinalScoresWatcher)")
+            .StoreDurably());
 
         // CFB Rankings — CFB-only, no NFL equivalent (rank/eligibility is a CFB-specific concept).
         // Same cadence as the slate seeder: capture rankings as soon as a week's schedule is known,
@@ -467,6 +478,11 @@ builder.Services.AddQuartz(q => {
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Sun 7:40pm", "Fetches CFB scores at Sunday evening kickoff window", "0 40 19 ? * SUN");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Mon 6am", "Fetches CFB final scores that finished late Sunday night/Monday", "0 0 6 ? * MON");
         q.ScheduleCstCronJob<CfbScoresJob>("CFB Scores Tue 1am", "Fetches CFB scores that finished late Monday night, mirrors NFL's post-MNF fetch", "0 0 1 ? * TUE");
+        // Mirrors "NFL Scores On Final" above: run by FinalScoresWatcher when a CFB game goes final.
+        q.AddJob<CfbScoresJob>(job => job
+            .WithIdentity(FinalScoresWatcher.CfbJobName)
+            .WithDescription("Saves CFB scores the moment a game goes final (run by FinalScoresWatcher)")
+            .StoreDurably());
 
         // Week-result push notifications (frizat-tgk Phase 2): no separate guessed-time cron here
         // — NflScoresJob/CfbScoresJob already call IWeekResultNotificationService directly, right

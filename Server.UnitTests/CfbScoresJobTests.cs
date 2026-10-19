@@ -43,6 +43,37 @@ public class CfbScoresJobTests
 
     private CfbScoresJob BuildJob() => new(_fetcher, _repo, _cfbCacheService, _currentSlateService, _weekResultNotificationService);
 
+    // [DisallowConcurrentExecution] only stops one job KEY overlapping itself — every fixed time is
+    // its own key, and FinalScoresWatcher runs a separate "CFB Scores On Final" key the moment a
+    // game ends. Two runs saving the same finals at once would race on CfbScores' unique index.
+    [Fact]
+    public async Task Execute_TwoRunsAtOnce_TheSecondWaitsForTheFirstToFinish()
+    {
+        _repo.GetSlatesForSeasonAsync(Arg.Any<int>()).Returns(new List<CfbSeasonWeekConfig> { BuildSlate() });
+        var firstFetchBlocked = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        var fetches = 0;
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(async _ =>
+        {
+            if (Interlocked.Increment(ref fetches) == 1)
+            {
+                firstFetchBlocked.SetResult();
+                await release.Task;
+            }
+            return (EspnScores?)null;
+        });
+
+        var first = BuildJob().Execute(_context);
+        await firstFetchBlocked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var second = BuildJob().Execute(_context);
+        await Task.Delay(200);
+        Assert.Equal(1, Volatile.Read(ref fetches)); // still waiting on the first run
+
+        release.SetResult();
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(2, Volatile.Read(ref fetches));
+    }
+
     // Dates relative to "now" (not a fixed calendar date) so this slate is always "currently
     // active" for the SeasonWindowResolver-based gate CfbScoresJob now checks before fetching —
     // tests below that care about score-parsing/upsert behavior shouldn't also have to fight an

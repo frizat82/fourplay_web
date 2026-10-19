@@ -4,6 +4,11 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-10-19
+
+- Results, standings and money now update within a minute or two of each game going final (NFL and college), instead of waiting for the next scheduled scores check — a 3:25 kickoff no longer waits until 7:40pm, or a Sunday night game until 1am
+- Admin Job Manager lists each category's jobs soonest-first, so the next NFL spread job shows as the upcoming week instead of week 10
+
 ## 2026-10-15
 
 - CFB now runs off one season schedule table, the same shape as NFL's: each week says whether it counts for IV League, its round type (CFP weeks use ESPN's playoff feed) and its scoring format, and AP rankings are stored by our week number

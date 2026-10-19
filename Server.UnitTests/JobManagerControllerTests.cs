@@ -548,6 +548,26 @@ public class JobManagerControllerTests
         }
     }
 
+    // ── GetAllJobsStatusAsync — order within a category ───────────────────
+    // Per-week spread jobs are named "NFL Spreads 2026 Wk{n}": sorted by name, "Wk10".."Wk19" all
+    // land before "Wk7", so the Job Manager's first NFL spread row read as week 10 while week 7
+    // was the one actually up next. Within a category, soonest-to-run first; never-scheduled last.
+    [Fact]
+    public async Task GetAllJobsStatusAsync_WithinACategory_ListsSoonestNextRunFirst_NotByName()
+    {
+        var (_, scheduler, _, controller) = BuildSut(isAdmin: true);
+        var now = DateTimeOffset.UtcNow;
+        SetupSchedulerWithJobs(scheduler,
+            ("NFL Spreads 2026 Wk10", now.AddDays(25)),
+            ("NFL Spreads 2026 Wk7", now.AddDays(4)),
+            ("NFL Spreads 2026 Wk8", now.AddDays(11)),
+            ("NFL Spreads Not Scheduled", null));
+
+        var names = (await controller.GetAllJobsStatusAsync()).Select(j => j.JobName).ToList();
+
+        Assert.Equal(new[] { "NFL Spreads 2026 Wk7", "NFL Spreads 2026 Wk8", "NFL Spreads 2026 Wk10", "NFL Spreads Not Scheduled" }, names);
+    }
+
     // ── GetNextSpreadJobAsync — sport scoping (frizat-9e7) ──────────────────
 
     [Fact]

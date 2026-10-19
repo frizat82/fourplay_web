@@ -120,7 +120,13 @@ namespace FourPlayWebApp.Server.Controllers {
                 }
             }
 
-            return jobStatuses.OrderBy(j => j.Category).ThenBy(j => j.JobName);
+            // Soonest-to-run first within a category, never-scheduled last. Not by name: per-week
+            // jobs are named "... Wk{n}", and as text "Wk10".."Wk19" sort before "Wk7" — the
+            // Job Manager's first NFL spread row read as week 10 while week 7 was up next.
+            return jobStatuses
+                .OrderBy(j => j.Category)
+                .ThenBy(j => j.NextRun ?? DateTimeOffset.MaxValue)
+                .ThenBy(j => j.JobName);
         }
 
         private static int? TryGetLeagueId(IJobDetail jobDetail) {

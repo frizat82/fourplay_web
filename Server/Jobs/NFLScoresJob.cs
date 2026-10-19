@@ -24,7 +24,11 @@ public class NflScoresJob(
     INflCurrentWeekService currentWeekService,
     IEspnCacheService espnCacheService,
     IWeekResultNotificationService weekResultNotificationService) : IJob {
-    public async Task Execute(IJobExecutionContext context) {
+    // One run at a time across every trigger — see JobRunGate.
+    public Task Execute(IJobExecutionContext context) =>
+        JobRunGate<NflScoresJob>.RunAsync(() => RunAsync(context), context.CancellationToken);
+
+    private async Task RunAsync(IJobExecutionContext context) {
         // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
         using var freshEspn = EspnDayCache.Fresh();
         Log.Information("Grabbing NFL scores at {Time}", DateTime.UtcNow);
