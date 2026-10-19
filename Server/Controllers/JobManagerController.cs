@@ -73,7 +73,7 @@ namespace FourPlayWebApp.Server.Controllers {
                 .ThenBy(j => j.JobName);
         }
 
-        /// <summary>Every scheduled job's status (no league names, no ordering), and its sport if sport-wide.</summary>
+        /// <summary>Every scheduled job's status (Sport not yet set, no ordering), and its sport if sport-wide.</summary>
         private async Task<List<(JobStatusResponse Status, LeagueType? Sport)>> ListJobsAsync() {
             var scheduler = await schedulerFactory.GetScheduler();
             var jobStatuses = new List<(JobStatusResponse Status, LeagueType? Sport)>();
