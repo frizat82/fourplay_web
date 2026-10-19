@@ -13,7 +13,7 @@ public class CfbCurrentSlateService(ICfbRepository repo, [FromKeyedServices(Curr
     }
 
     // frizat-9xg: most recent slate whose own spread grab has passed, unless we're within
-    // 2 days of the next slate's spread grab — see SeasonWindowResolver for the shared
+    // 1 day of the next slate's spread grab — see SeasonWindowResolver for the shared
     // NFL/CFB logic (applies identically across a season boundary, no special case here).
     // Shared with DemoCfbCacheService (frizat-d0t), so both resolve "current" the same way.
     public static CfbSeasonWeekConfig? ResolveCurrentSlate(IEnumerable<CfbSeasonWeekConfig> slates, DateTime now) {

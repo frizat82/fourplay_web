@@ -17,7 +17,11 @@ public static class SeasonWindowResolver {
     // frizat-9xg: don't switch "current" to a window until we're this close to ITS OWN spread
     // grab — otherwise the moment a new week's (or season's) calendar window begins, the UI
     // jumps to a week with no odds/results yet while the previous week still has real data.
-    private static readonly TimeSpan EarlyActivationWindow = TimeSpan.FromDays(2);
+    // One day, not two: Thanksgiving week locks on Wednesday, and two days before that was Monday
+    // morning — the app moved on before the previous week's Monday-night game was played, so the
+    // live scoreboard stopped watching it. A day before any 2026 NFL/CFB lock is always after the
+    // previous week's last game.
+    private static readonly TimeSpan EarlyActivationWindow = TimeSpan.FromDays(1);
 
     // WEEK-LEVEL: "which specific week/slate should the UI treat as current?" — fine-grained,
     // used for UI defaults, the spread-lock schedule, and the spread-scheduling jobs.
