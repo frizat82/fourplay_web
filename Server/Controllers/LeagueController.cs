@@ -785,24 +785,26 @@ public class LeagueController(
     }
 
     // A league created after its own sport's season has already started defaults its Start Week
-    // to whatever week/slate is happening right now, instead of always defaulting to 1 (full
-    // season) — a commissioner setting up a pool mid-season shouldn't be stuck requiring picks for
-    // weeks that were already played before their league existed. Falls back to 1 when the season
-    // isn't active (preseason or off-season) or the currently-active week belongs to a different
-    // season than the one being created for — both cases where 1 is already correct and nothing
-    // needs excluding. Clamped to 5 (Juice's own StartWeek range) rather than rejecting creation
-    // outright for a league started deep into the season — best effort, matching the existing
-    // 1-5 validation in UpdateLeagueJuice.
+    // to the first week/slate of that season that isn't over yet, instead of always defaulting to 1
+    // (full season) — a commissioner setting up a pool mid-season shouldn't be stuck requiring
+    // picks for weeks that were already played before their league existed. Not the "current"
+    // week: that can still be last week for a day after its Monday-night game, and a league started
+    // then would begin on a week nobody can pick — a forced push that doubles the first real
+    // week's cost, and Start Week can't be changed once its week has locked. Falls back to 1 when
+    // the season isn't active (preseason or off-season) or has no unfinished week on record (e.g.
+    // a league created for next season). Clamped to 5 (Juice's own StartWeek range) rather than
+    // rejecting creation outright for a league started deep into the season — best effort,
+    // matching the existing 1-5 validation in UpdateLeagueJuice.
     private static async Task<int> ResolveInitialStartWeekAsync(LeagueType leagueType, int season,
             INflCurrentWeekService nflWeekService, ICfbCurrentSlateService cfbSlateService) {
         if (leagueType == LeagueType.Cfb) {
             if (!await cfbSlateService.IsSeasonActiveAsync()) return 1;
-            var slate = await cfbSlateService.GetCurrentSlateAsync();
-            return slate is not null && slate.Season == season ? Math.Clamp(slate.SlateNumber, 1, 5) : 1;
+            var slate = await cfbSlateService.GetFirstUnfinishedSlateAsync(season);
+            return slate is null ? 1 : Math.Clamp(slate.SlateNumber, 1, 5);
         }
         if (!await nflWeekService.IsSeasonActiveAsync()) return 1;
-        var week = await nflWeekService.GetCurrentWeekAsync();
-        return week.Season == season ? Math.Clamp(week.WeekId, 1, 5) : 1;
+        var week = await nflWeekService.GetFirstUnfinishedWeekAsync(season);
+        return week is null ? 1 : Math.Clamp(week.WeekId, 1, 5);
     }
 
     // Prefers Origin (sent on every state-changing fetch, including same-origin ones — see

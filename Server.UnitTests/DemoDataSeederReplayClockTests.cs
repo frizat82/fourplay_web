@@ -13,7 +13,7 @@ namespace FourPlayWebApp.Server.UnitTests;
 
 // frizat-tf2: SeedReplayGameSpreadAsync used to self-heal its NflSeasonWeekConfigs row relative to
 // the real wall clock so SeasonWindowResolver would always resolve it as "current" — but that
-// broke the instant real wall-clock came within 2 days of a REAL, unseeded future season's own
+// broke the instant real wall-clock came within the early-activation window (then 2 days, now 1) of a REAL, unseeded future season's own
 // SpreadLockDatetime (SeasonWindowResolver's early-activation rule doesn't care how recently the
 // replay row's own lock passed — confirmed by replay-nfl.spec.ts's "Pick IND" button failing in CI
 // once real time crossed that threshold). This regression test locks in the fix: the row's window

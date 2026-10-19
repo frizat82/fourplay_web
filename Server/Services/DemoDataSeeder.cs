@@ -263,7 +263,7 @@ public class DemoDataSeeder(
 
         // frizat-tf2: this row's dates used to self-heal relative to real DateTimeOffset.UtcNow so
         // SeasonWindowResolver would always pick it as "current" regardless of wall-clock time —
-        // but that assumption broke the moment real wall-clock came within 2 days of the REAL
+        // but that assumption broke the moment real wall-clock came within 1 day of the REAL
         // (migration-seeded, unseeded-by-demo) next season's own SpreadLockDatetime: the resolver's
         // early-activation rule (SeasonWindowResolver) jumps to that real future window the instant
         // it's within range, regardless of how recently this row's own lock passed. That's the same

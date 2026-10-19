@@ -18,7 +18,7 @@ public class SeasonWindowResolverTests
     // -----------------------------------------------------------------------
     // ResolveCurrentWeek — week-level (frizat-9xg): "current" is the most recent window
     // whose own SpreadLockDatetime has passed (real odds/results exist), UNLESS we're
-    // within 2 days of the NEXT window's own SpreadLockDatetime, in which case that next
+    // within 1 day of the NEXT window's own SpreadLockDatetime, in which case that next
     // window becomes current early — even before its own calendar Start, and even before
     // it has any odds posted yet (the frontend's SpreadRelease/selector fix handles that
     // display state). Applies identically whether "next" is a later week in the same
@@ -26,7 +26,7 @@ public class SeasonWindowResolverTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void ResolveCurrentWeek_ReturnsLastStartedWindow_WhenMoreThanTwoDaysBeforeNextSpreadLock()
+    public void ResolveCurrentWeek_ReturnsLastStartedWindow_WhenMoreThanOneDayBeforeNextSpreadLock()
     {
         var now = new DateTime(2026, 9, 12, 12, 0, 0, DateTimeKind.Utc); // 5 days before week 2's spread lock
         var windows = new[]
@@ -41,9 +41,9 @@ public class SeasonWindowResolverTests
     }
 
     [Fact]
-    public void ResolveCurrentWeek_ReturnsNextWindow_WhenWithinTwoDaysOfItsSpreadLock()
+    public void ResolveCurrentWeek_ReturnsNextWindow_WhenWithinOneDayOfItsSpreadLock()
     {
-        var now = new DateTime(2026, 9, 15, 12, 0, 0, DateTimeKind.Utc); // 1.x days before week 2's spread lock
+        var now = new DateTime(2026, 9, 16, 12, 0, 0, DateTimeKind.Utc); // 12h before week 2's spread lock
         var windows = new[]
         {
             WeekWindow(2026, new DateTime(2026, 9, 8), new DateTime(2026, 9, 15), new DateTime(2026, 9, 9)),
@@ -56,10 +56,10 @@ public class SeasonWindowResolverTests
     }
 
     [Fact]
-    public void ResolveCurrentWeek_ReturnsNextWindow_ExactlyAtTwoDayBoundary()
+    public void ResolveCurrentWeek_ReturnsNextWindow_ExactlyAtOneDayBoundary()
     {
         var nextSpreadLock = new DateTime(2026, 9, 17, 0, 0, 0, DateTimeKind.Utc);
-        var now = nextSpreadLock.AddDays(-2); // exactly at the boundary — inclusive
+        var now = nextSpreadLock.AddDays(-1); // exactly at the boundary — inclusive
         var windows = new[]
         {
             WeekWindow(2026, new DateTime(2026, 9, 8), new DateTime(2026, 9, 15), new DateTime(2026, 9, 9)),
@@ -72,10 +72,10 @@ public class SeasonWindowResolverTests
     }
 
     [Fact]
-    public void ResolveCurrentWeek_ReturnsLastStartedWindow_OneTickBeforeTwoDayBoundary()
+    public void ResolveCurrentWeek_ReturnsLastStartedWindow_OneTickBeforeOneDayBoundary()
     {
         var nextSpreadLock = new DateTime(2026, 9, 17, 0, 0, 0, DateTimeKind.Utc);
-        var now = nextSpreadLock.AddDays(-2).AddTicks(-1); // one tick short of the boundary
+        var now = nextSpreadLock.AddDays(-1).AddTicks(-1); // one tick short of the boundary
         var windows = new[]
         {
             WeekWindow(2026, new DateTime(2026, 9, 8), new DateTime(2026, 9, 15), new DateTime(2026, 9, 9)),
@@ -87,11 +87,74 @@ public class SeasonWindowResolverTests
         Assert.Equal(windows[0], result);
     }
 
+    // 1.5 days before the next lock is no longer "early" — it was under the old 2-day rule.
+    [Fact]
+    public void ResolveCurrentWeek_StaysOnLastStartedWindow_OneAndAHalfDaysBeforeNextSpreadLock()
+    {
+        var now = new DateTime(2026, 9, 15, 12, 0, 0, DateTimeKind.Utc);
+        var windows = new[]
+        {
+            WeekWindow(2026, new DateTime(2026, 9, 8), new DateTime(2026, 9, 15), new DateTime(2026, 9, 9)),
+            WeekWindow(2026, new DateTime(2026, 9, 15), new DateTime(2026, 9, 22), new DateTime(2026, 9, 17)),
+        };
+
+        Assert.Equal(windows[0], SeasonWindowResolver.ResolveCurrentWeek(windows, now));
+    }
+
+    // Thanksgiving: NFL week 12 locks Wednesday (real 2026 prod rows), a day earlier than usual.
+    // Under a 2-day lead the app moved to week 12 Monday morning, before week 11's Monday-night
+    // game — so the live scoreboard stopped watching it and its final waited for the 1am backstop.
+    // A week must stay current until its last game (Monday night) is over.
+    [Fact]
+    public void ResolveCurrentWeek_ThanksgivingWeek_StaysOnWeek11ThroughMondayNight()
+    {
+        var week11 = WeekWindow(2026, new DateTime(2026, 11, 17, 5, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 11, 24, 4, 59, 59, DateTimeKind.Utc), new DateTime(2026, 11, 19, 15, 14, 59, DateTimeKind.Utc));
+        var week12 = WeekWindow(2026, new DateTime(2026, 11, 24, 5, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 12, 1, 4, 59, 59, DateTimeKind.Utc), new DateTime(2026, 11, 25, 15, 0, 0, DateTimeKind.Utc));
+        var windows = new[] { week11, week12 };
+
+        var mondayNightKickoff = new DateTime(2026, 11, 24, 1, 15, 0, DateTimeKind.Utc); // Mon 8:15pm ET
+        var mondayNightFinal = new DateTime(2026, 11, 24, 4, 30, 0, DateTimeKind.Utc);
+        Assert.Equal(week11, SeasonWindowResolver.ResolveCurrentWeek(windows, mondayNightKickoff));
+        Assert.Equal(week11, SeasonWindowResolver.ResolveCurrentWeek(windows, mondayNightFinal));
+        // ...then week 12 the day before its own lock, Tuesday morning.
+        Assert.Equal(week12, SeasonWindowResolver.ResolveCurrentWeek(windows, new DateTime(2026, 11, 24, 15, 0, 0, DateTimeKind.Utc)));
+    }
+
+    // FirstUnfinishedWeek: the week a league started now should begin with — the week still being
+    // played, or the next one once it's over. A week lasts until its own End (Monday night), with
+    // no early-activation lead: on the Tuesday after Monday night, "current" can still be the old
+    // week (its next lock is days out), but the old week has nothing left to pick.
+    [Fact]
+    public void FirstUnfinishedWeek_IsTheWeekBeingPlayed_UntilItsEnd_ThenTheNextOne()
+    {
+        var week2 = WeekWindow(2026, new DateTime(2026, 9, 15, 5, 0, 0, DateTimeKind.Utc), new DateTime(2026, 9, 22, 4, 59, 59, DateTimeKind.Utc), new DateTime(2026, 9, 17, 14, 15, 0, DateTimeKind.Utc));
+        var week3 = WeekWindow(2026, new DateTime(2026, 9, 22, 5, 0, 0, DateTimeKind.Utc), new DateTime(2026, 9, 29, 4, 59, 59, DateTimeKind.Utc), new DateTime(2026, 9, 24, 14, 15, 0, DateTimeKind.Utc));
+        var windows = new[] { week3, week2 }; // order doesn't matter
+
+        Assert.Equal(week2, SeasonWindowResolver.FirstUnfinishedWeek(windows, 2026, new DateTime(2026, 9, 21, 2, 0, 0, DateTimeKind.Utc))); // Monday night
+        var tuesday = new DateTime(2026, 9, 22, 14, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(week2, SeasonWindowResolver.ResolveCurrentWeek(windows, tuesday)); // still "current"...
+        Assert.Equal(week3, SeasonWindowResolver.FirstUnfinishedWeek(windows, 2026, tuesday)); // ...but over
+    }
+
+    [Fact]
+    public void FirstUnfinishedWeek_OnlyLooksAtTheRequestedSeason_AndIsNullOnceItsOver()
+    {
+        var last2025 = WeekWindow(2025, new DateTime(2026, 2, 3), new DateTime(2026, 2, 10), new DateTime(2026, 2, 5));
+        var first2026 = WeekWindow(2026, new DateTime(2026, 9, 8), new DateTime(2026, 9, 15), new DateTime(2026, 9, 10));
+        var now = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.Null(SeasonWindowResolver.FirstUnfinishedWeek([last2025, first2026], 2025, now));
+        Assert.Equal(first2026, SeasonWindowResolver.FirstUnfinishedWeek([last2025, first2026], 2026, now));
+    }
+
     [Fact]
     public void ResolveCurrentWeek_SeasonBoundaryTransition_BehavesIdenticallyToInSeasonTransition()
     {
         // Real prod shape: 2025 season's last window (Super Bowl) ended months ago; 2026
-        // week 1's spread lock is still >2 days out — must show 2025's last window, exactly
+        // week 1's spread lock is still >1 day out — must show 2025's last window, exactly
         // like an ordinary in-season week-to-week gap. No season-aware branching.
         var now = new DateTime(2026, 8, 27, 12, 0, 0, DateTimeKind.Utc);
         var windows = new[]
@@ -104,8 +167,8 @@ public class SeasonWindowResolverTests
 
         Assert.Equal(windows[0], result);
 
-        // Now within 2 days of the new season's week 1 spread lock — same rule flips it over.
-        var closeNow = new DateTime(2026, 9, 7, 12, 0, 0, DateTimeKind.Utc);
+        // Now within 1 day of the new season's week 1 spread lock — same rule flips it over.
+        var closeNow = new DateTime(2026, 9, 8, 12, 0, 0, DateTimeKind.Utc);
         Assert.Equal(windows[1], SeasonWindowResolver.ResolveCurrentWeek(windows, closeNow));
     }
 
@@ -158,7 +221,7 @@ public class SeasonWindowResolverTests
     {
         // Bootstrap case (app's very first-ever season, before any spread has ever been
         // grabbed) — preserves the original "soonest upcoming" fallback regardless of the
-        // 2-day proximity rule, since there is no "last started" window to prefer instead.
+        // 1-day proximity rule, since there is no "last started" window to prefer instead.
         var now = new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc);
         var windows = new[]
         {
@@ -282,7 +345,7 @@ public class SeasonWindowResolverTests
         var start = new DateTime(2026, 9, 22, 0, 0, 0, DateTimeKind.Utc);
         var end = start.AddDays(7);
         var spreadLock = start.AddDays(1);
-        Assert.Equal([spreadLock.AddDays(-2), start, spreadLock, end],
+        Assert.Equal([spreadLock.AddDays(-1), start, spreadLock, end],
             SeasonWindowResolver.ChangePoints([WeekWindow(2026, start, end, spreadLock)]).Order());
     }
 

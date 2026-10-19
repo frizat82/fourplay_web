@@ -107,7 +107,7 @@ public class EspnCacheService : IEspnCacheService, IAsyncDisposable
         // calendar window already looks "ended" by SettledScoreCache's own buffer below —
         // SeasonWindowResolver can legitimately keep an old window as "current" well past its
         // nominal end (e.g. the off-season bootstrap case: showing last season's Super Bowl
-        // until 2 days before the next season's first spread grab), and the frontend's
+        // until 1 day before the next season's first spread grab), and the frontend's
         // current-week path (nflAdapter.ts) now always calls this endpoint for that resolved
         // week. Skipping this check would silently serve the "genuinely historical" DB-final-
         // score reconstruction below (no live situation/clock data) for the week the UI is

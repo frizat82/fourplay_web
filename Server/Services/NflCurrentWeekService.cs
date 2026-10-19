@@ -9,16 +9,24 @@ public class NflCurrentWeekService(ILeagueRepository repo, [FromKeyedServices(Cu
         var configs = await repo.GetNflSeasonWeekConfigsAsync();
 
         // frizat-9xg: most recent week whose own spread grab has passed, unless we're within
-        // 2 days of the next week's spread grab — see SeasonWindowResolver for the shared
+        // 1 day of the next week's spread grab — see SeasonWindowResolver for the shared
         // NFL/CFB logic (applies identically across a season boundary, no special case here).
-        var windows = configs.Select(c => new SeasonWindowResolver.WeekWindow(c.Season, c.WeekStartDatetime, c.WeekEndDatetime, c.SpreadLockDatetime));
-        var resolved = SeasonWindowResolver.ResolveCurrentWeek(windows, now)
+        var resolved = SeasonWindowResolver.ResolveCurrentWeek(Windows(configs), now)
             ?? throw new InvalidOperationException("No NflSeasonWeekConfig rows exist — cannot resolve a current week.");
 
         var config = configs.First(c => c.Season == resolved.Season
             && c.WeekStartDatetime == resolved.Start && c.WeekEndDatetime == resolved.End);
         return ToWeekInfo(config);
     }
+
+    public async Task<NflWeekInfo?> GetFirstUnfinishedWeekAsync(int season) {
+        var configs = await repo.GetNflSeasonWeekConfigsAsync();
+        var resolved = SeasonWindowResolver.FirstUnfinishedWeek(Windows(configs), season, timeProvider.GetUtcNow().UtcDateTime);
+        return resolved is { } w ? ToWeekInfo(configs.First(c => c.Season == w.Season && c.WeekStartDatetime == w.Start && c.WeekEndDatetime == w.End)) : null;
+    }
+
+    private static IEnumerable<SeasonWindowResolver.WeekWindow> Windows(IEnumerable<Models.Data.NflSeasonWeekConfig> configs) =>
+        configs.Select(c => new SeasonWindowResolver.WeekWindow(c.Season, c.WeekStartDatetime, c.WeekEndDatetime, c.SpreadLockDatetime));
 
     public async Task<bool> IsSeasonActiveAsync() {
         var configs = await repo.GetNflSeasonWeekConfigsAsync();

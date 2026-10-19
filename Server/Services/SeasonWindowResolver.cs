@@ -17,7 +17,11 @@ public static class SeasonWindowResolver {
     // frizat-9xg: don't switch "current" to a window until we're this close to ITS OWN spread
     // grab — otherwise the moment a new week's (or season's) calendar window begins, the UI
     // jumps to a week with no odds/results yet while the previous week still has real data.
-    private static readonly TimeSpan EarlyActivationWindow = TimeSpan.FromDays(2);
+    // One day, not two: Thanksgiving week locks on Wednesday, and two days before that was Monday
+    // morning — the app moved on before the previous week's Monday-night game was played, so the
+    // live scoreboard stopped watching it. A day before any 2026 NFL/CFB lock is always after the
+    // previous week's last game.
+    private static readonly TimeSpan EarlyActivationWindow = TimeSpan.FromDays(1);
 
     // WEEK-LEVEL: "which specific week/slate should the UI treat as current?" — fine-grained,
     // used for UI defaults, the spread-lock schedule, and the spread-scheduling jobs.
@@ -46,6 +50,16 @@ public static class SeasonWindowResolver {
         // back to the soonest upcoming window regardless of the early-activation proximity.
         return lastStarted ?? next;
     }
+
+    // The first week/slate of a season that isn't over yet — the one being played, or the next one
+    // once it's over. Unlike ResolveCurrentWeek there's no early-activation lead: a week lasts until
+    // its own End (Monday night), and the day after, "current" can still be that week while it has
+    // nothing left to pick. What a league started right now should begin with.
+    public static WeekWindow? FirstUnfinishedWeek(IEnumerable<WeekWindow> windows, int season, DateTime now) =>
+        windows.Where(w => w.Season == season && w.End > now)
+            .OrderBy(w => w.Start)
+            .Select(w => (WeekWindow?)w)
+            .FirstOrDefault();
 
     // Every instant at which ResolveCurrentWeek or IsSeasonActive can give a different answer:
     // each window's Start/End, its SpreadLockDatetime, and the early-activation point before it.

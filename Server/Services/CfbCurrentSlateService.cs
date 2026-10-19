@@ -13,7 +13,7 @@ public class CfbCurrentSlateService(ICfbRepository repo, [FromKeyedServices(Curr
     }
 
     // frizat-9xg: most recent slate whose own spread grab has passed, unless we're within
-    // 2 days of the next slate's spread grab — see SeasonWindowResolver for the shared
+    // 1 day of the next slate's spread grab — see SeasonWindowResolver for the shared
     // NFL/CFB logic (applies identically across a season boundary, no special case here).
     // Shared with DemoCfbCacheService (frizat-d0t), so both resolve "current" the same way.
     public static CfbSeasonWeekConfig? ResolveCurrentSlate(IEnumerable<CfbSeasonWeekConfig> slates, DateTime now) {
@@ -29,6 +29,12 @@ public class CfbCurrentSlateService(ICfbRepository repo, [FromKeyedServices(Curr
         IEnumerable<CfbSeasonWeekConfig> slates) =>
         slates.Select(s => (s, new SeasonWindowResolver.WeekWindow(
             s.Season, s.StartUtc, s.EndUtc, s.SpreadLockDatetime))).ToList();
+
+    public async Task<CfbSlateInfo?> GetFirstUnfinishedSlateAsync(int season) {
+        var slateWindows = BuildSlateWindows(await repo.GetAllSlatesAsync());
+        var resolved = SeasonWindowResolver.FirstUnfinishedWeek(slateWindows.Select(sw => sw.Window), season, timeProvider.GetUtcNow().UtcDateTime);
+        return resolved is { } w ? slateWindows.First(sw => sw.Window == w).Slate.ToSlateInfo() : null;
+    }
 
     public async Task<bool> IsSeasonActiveAsync() {
         var slates = await repo.GetAllSlatesAsync();
