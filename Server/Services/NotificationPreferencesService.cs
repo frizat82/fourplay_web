@@ -58,6 +58,15 @@ public class NotificationPreferencesService(IDbContextFactory<ApplicationDbConte
             p.NotifyOthersCoveringDuringGame || p.NotifyOthersCoveringAtFinal);
     }
 
+    public async Task<List<string>> GetSpreadsPostedUserIdsAsync(LeagueType sport)
+    {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.NotificationPreferences.AsNoTracking()
+            .Where(p => p.Sport == sport && p.NotifySpreadsPosted)
+            .Select(p => p.UserId)
+            .ToListAsync();
+    }
+
     private static NotificationPreferencesDto ToDto(NotificationPreferences p) => new()
     {
         NotifyMineBloodyDuringGame = p.NotifyMineBloodyDuringGame,

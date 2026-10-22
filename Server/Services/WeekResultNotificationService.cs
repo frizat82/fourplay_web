@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using FourPlayWebApp.Shared.Helpers;
+using FourPlayWebApp.Shared.Helpers.Extensions;
 using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Server.Services.Interfaces;
@@ -30,7 +31,7 @@ public class WeekResultNotificationService(
     private sealed record Period(DateTimeOffset End, string Label);
 
     public Task<int> CheckNflWeekResultsAsync(int season) =>
-        CheckWeekResultsAsync(LeagueType.Nfl, season, "NFL",
+        CheckWeekResultsAsync(LeagueType.Nfl, season,
             async () => (await leagueRepository.GetNflSeasonWeekConfigsAsync(season))
                 .GroupBy(c => c.WeekId)
                 .ToDictionary(g => g.Key, g => new Period(
@@ -38,14 +39,14 @@ public class WeekResultNotificationService(
             nflScores.GetScoresAsync, league => nflLeaderboardService.BuildLeaderboard(league.Id, season));
 
     public Task<int> CheckCfbWeekResultsAsync(int season) =>
-        CheckWeekResultsAsync(LeagueType.Cfb, season, "CFB",
+        CheckWeekResultsAsync(LeagueType.Cfb, season,
             // Per-season read: fails loudly on a slate with no control-table row rather than
             // pushing a blank round name.
             async () => (await cfbRepository.GetSlatesForSeasonAsync(season))
                 .ToDictionary(s => s.SlateNumber, s => new Period(new DateTimeOffset(s.EndUtc), s.WeekLabel)),
             cfbScores.GetScoresAsync, league => cfbLeaderboardService.BuildLeaderboard(league.Id, season));
 
-    private async Task<int> CheckWeekResultsAsync(LeagueType sport, int season, string sportLabel,
+    private async Task<int> CheckWeekResultsAsync(LeagueType sport, int season,
         Func<Task<Dictionary<int, Period>>> getPeriods,
         Func<Task<EspnScores?>> getScores, Func<LeagueInfo, Task<List<LeaderboardModel>>> buildLeaderboard)
     {
@@ -55,7 +56,7 @@ public class WeekResultNotificationService(
         var now = clock.GetUtcNow();
         // A week with no schedule row is treated as stale — never pushed (so it never needs a label).
         bool IsPushable(int week) => periods.TryGetValue(week, out var p) && now <= p.End + PushWindowAfterPeriodEnd;
-        string periodLabel(int week) => $"{sportLabel} {periods[week].Label}";
+        string periodLabel(int week) => $"{sport.Label()} {periods[week].Label}";
         // The just-decided week is the one the live scoreboard holds; any team missing from it
         // (an older week catching up) falls back to its abbreviation.
         var teamNames = GameHelpers.GetTeamDisplayNames(await getScores());

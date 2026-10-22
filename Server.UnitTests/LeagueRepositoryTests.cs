@@ -642,4 +642,16 @@ public class LeagueRepositoryTests
 
         Assert.Equal(["u1", "u2"], picks.Select(p => p.UserId).Order());
     }
+
+    // Each sport's week gets its "spreads are up" push once, however often its spread job re-runs.
+    [Fact]
+    public async Task TryRecordSpreadsPostedNotificationAsync_RecordsEachSportsWeekOnce()
+    {
+        var repo = new LeagueRepository(new DbContextFactoryStub(nameof(TryRecordSpreadsPostedNotificationAsync_RecordsEachSportsWeekOnce)));
+
+        Assert.True(await repo.TryRecordSpreadsPostedNotificationAsync(LeagueType.Nfl, 2026, 8));
+        Assert.False(await repo.TryRecordSpreadsPostedNotificationAsync(LeagueType.Nfl, 2026, 8));
+        Assert.True(await repo.TryRecordSpreadsPostedNotificationAsync(LeagueType.Cfb, 2026, 8));
+        Assert.True(await repo.TryRecordSpreadsPostedNotificationAsync(LeagueType.Nfl, 2026, 9));
+    }
 }

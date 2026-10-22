@@ -162,10 +162,30 @@ public class NotificationPreferencesServiceTests
             await using (var seed = SqliteTestDb.Open(db))
                 await SqliteTestDb.SeedUser(seed, "alice");
 
-            await new NotificationPreferencesService(factory).UpsertAsync("alice", LeagueType.Cfb, new NotificationPreferencesDto { NotifySpreadsPosted = true });
+            var service = new NotificationPreferencesService(factory);
+            await service.UpsertAsync("alice", LeagueType.Cfb, new NotificationPreferencesDto { NotifySpreadsPosted = true });
 
-            Assert.True((await new NotificationPreferencesService(factory).GetAsync("alice", LeagueType.Cfb)).NotifySpreadsPosted);
-            Assert.False((await new NotificationPreferencesService(factory).GetAsync("alice", LeagueType.Nfl)).NotifySpreadsPosted);
+            Assert.True((await service.GetAsync("alice", LeagueType.Cfb)).NotifySpreadsPosted);
+            Assert.False((await service.GetAsync("alice", LeagueType.Nfl)).NotifySpreadsPosted);
+        });
+    }
+
+    [Fact]
+    public async Task GetSpreadsPostedUserIdsAsync_ReturnsOnlyThatSportsOptedInUsers()
+    {
+        var db = nameof(GetSpreadsPostedUserIdsAsync_ReturnsOnlyThatSportsOptedInUsers);
+        await SqliteTestDb.WithDb(db, async factory =>
+        {
+            await using (var seed = SqliteTestDb.Open(db))
+                foreach (var user in new[] { "alice", "bob", "carlos" })
+                    await SqliteTestDb.SeedUser(seed, user);
+            var service = new NotificationPreferencesService(factory);
+            await service.UpsertAsync("alice", LeagueType.Nfl, new NotificationPreferencesDto { NotifySpreadsPosted = true });
+            await service.UpsertAsync("bob", LeagueType.Nfl, new NotificationPreferencesDto { NotifyWeekResult = true });
+            await service.UpsertAsync("carlos", LeagueType.Cfb, new NotificationPreferencesDto { NotifySpreadsPosted = true });
+
+            Assert.Equal(["alice"], await service.GetSpreadsPostedUserIdsAsync(LeagueType.Nfl));
+            Assert.Equal(["carlos"], await service.GetSpreadsPostedUserIdsAsync(LeagueType.Cfb));
         });
     }
 }
