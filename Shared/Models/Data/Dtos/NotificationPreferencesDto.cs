@@ -13,4 +13,5 @@ public class NotificationPreferencesDto
     public bool NotifyOthersCoveringAtFinal { get; set; }
 
     public bool NotifyWeekResult { get; set; }
+    public bool NotifySpreadsPosted { get; set; }
 }

@@ -1,4 +1,5 @@
-﻿using FourPlayWebApp.Shared.Models;
+﻿using FourPlayWebApp.Shared.Helpers.Extensions;
+using FourPlayWebApp.Shared.Models;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
 using FourPlayWebApp.Shared.Models.Enum;
 using Microsoft.AspNetCore.Authorization;
@@ -62,7 +63,7 @@ namespace FourPlayWebApp.Server.Controllers {
                 jobs = jobs.Select(j => j.Status.LeagueId is { } id && leagueSports.TryGetValue(id, out var sport)
                     ? (j.Status, sport) : j).ToList();
             }
-            foreach (var (status, sport) in jobs) status.Sport = sport is { } s ? SportLabel(s) : null;
+            foreach (var (status, sport) in jobs) status.Sport = sport is { } s ? s.Label() : null;
 
             // Soonest-to-run first within a category, never-scheduled last. Not by name: per-week
             // jobs are named "... Wk{n}", and as text "Wk10".."Wk19" sort before "Wk7" — the
@@ -119,8 +120,6 @@ namespace FourPlayWebApp.Server.Controllers {
 
             return jobStatuses;
         }
-
-        private static string SportLabel(LeagueType sport) => sport == LeagueType.Cfb ? "CFB" : "NFL";
 
         private static int? TryGetLeagueId(IJobDetail jobDetail) {
             if (jobDetail.JobDataMap is null || !jobDetail.JobDataMap.ContainsKey(LeagueJuiceJobData.LeagueIdKey)) return null;

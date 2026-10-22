@@ -17,7 +17,8 @@ public class CfbSpreadJob(
     ICfbRepository repo,
     ICfbCurrentSlateService currentSlateService,
     TimeProvider timeProvider,
-    IJobObserverService observer) : IJob {
+    IJobObserverService observer,
+    ISpreadsPostedNotificationService spreadsPosted) : IJob {
     public async Task Execute(IJobExecutionContext context) {
         // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
         using var freshEspn = EspnDayCache.Fresh();
@@ -87,6 +88,7 @@ public class CfbSpreadJob(
                     $"CfbSpreadJob: {slate.WeekLabel} is past lock time {slateInfo.SpreadLockDatetime}, but zero spreads were saved");
             }
 
+            await spreadsPosted.NotifyAsync(LeagueType.Cfb, slateInfo.Season, slateInfo.SlateNumber, slate.WeekLabel, slateInfo.SpreadLockDatetime);
             await observer.RecordJobSuccessAsync(jobName, $"Saved {spreads.Count} spreads, {rankings.Count} rankings for {slate.WeekLabel}");
         } catch (Exception ex) {
             await observer.RecordAndRethrowAsync(jobName, ex);

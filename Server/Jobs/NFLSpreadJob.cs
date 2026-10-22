@@ -16,7 +16,8 @@ public class NflSpreadJob(
     ILeagueRepository leagueRepository,
     INflCurrentWeekService nflCurrentWeekService,
     TimeProvider timeProvider,
-    IJobObserverService observer)
+    IJobObserverService observer,
+    ISpreadsPostedNotificationService spreadsPosted)
     : IJob {
     public async Task Execute(IJobExecutionContext context) {
         // This job persists what it reads, so it always reads ESPN fresh (see EspnDayCache).
@@ -90,6 +91,7 @@ public class NflSpreadJob(
             Log.Information("Load NFL Spreads at {Time}", DateTime.UtcNow);
             await leagueRepository.UpsertAsync(spreads);
             Log.Information("NFL Spreads Complete at {Time}", DateTime.UtcNow);
+            await spreadsPosted.NotifyAsync(LeagueType.Nfl, currentWeek.Season, currentWeek.WeekId, currentWeek.WeekLabel, currentWeek.SpreadLockDatetime);
             await observer.RecordJobSuccessAsync(jobName, $"Saved {spreads.Count} spreads for {currentWeek.WeekLabel}");
         } catch (Exception ex) {
             await observer.RecordAndRethrowAsync(jobName, ex);

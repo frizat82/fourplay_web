@@ -21,6 +21,7 @@ public class NotificationPreferences {
     public bool NotifyOthersCoveringAtFinal { get; set; }
 
     public bool NotifyWeekResult { get; set; }
+    public bool NotifySpreadsPosted { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -16,4 +16,7 @@ public interface INotificationPreferencesService
     /// should let the watcher skip all other work for a recompute tick.
     /// </summary>
     Task<bool> AnyLiveNotificationPreferenceEnabledAsync();
+
+    /// <summary>Every user who turned on "spreads are up" for this sport.</summary>
+    Task<List<string>> GetSpreadsPostedUserIdsAsync(LeagueType sport);
 }

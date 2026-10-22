@@ -41,6 +41,7 @@ const schema = z.object({
   notifyOthersCoveringDuringGame: z.boolean(),
   notifyOthersCoveringAtFinal: z.boolean(),
   notifyWeekResult: z.boolean(),
+  notifySpreadsPosted: z.boolean(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -55,11 +56,14 @@ const DEFAULT_VALUES: FormValues = {
   notifyOthersCoveringDuringGame: false,
   notifyOthersCoveringAtFinal: false,
   notifyWeekResult: false,
+  notifySpreadsPosted: false,
 };
 
 type PushStatus = 'checking' | 'unsupported' | 'ios-not-installed' | 'disabled' | 'enabled';
 
-type ToggleFieldName = Exclude<keyof FormValues, 'notifyWeekResult'>;
+type SingleToggleName = 'notifyWeekResult' | 'notifySpreadsPosted';
+
+type ToggleFieldName = Exclude<keyof FormValues, SingleToggleName>;
 
 type FieldPair = [ToggleFieldName, ToggleFieldName];
 
@@ -89,6 +93,20 @@ const SECTIONS: {
       { outcome: 'Covering', fields: ['notifyOthersCoveringDuringGame', 'notifyOthersCoveringAtFinal'], description: "When someone else's pick is winning against the spread" },
       { outcome: 'Bloody', fields: ['notifyOthersBloodyDuringGame', 'notifyOthersBloodyAtFinal'], description: "When someone else's pick is losing against the spread" },
     ],
+  },
+];
+
+// One switch, one preference.
+const SINGLE_TOGGLES: { name: SingleToggleName; label: string; description: string }[] = [
+  {
+    name: 'notifyWeekResult',
+    label: 'Notify me when my week is final',
+    description: 'One push once every game in your week is decided — "You Won the Week!" or naming the pick that lost it.',
+  },
+  {
+    name: 'notifySpreadsPosted',
+    label: 'Notify me when spreads are up',
+    description: "One push when the week's spreads are posted and picks open.",
   },
 ];
 
@@ -294,22 +312,23 @@ export default function NotificationsSettingsPage() {
                 );
               })}
 
-              <div>
-                <Controller
-                  name="notifyWeekResult"
-                  control={control}
-                  render={({ field }) => (
-                    <FormControlLabel
-                      control={<Switch checked={field.value ?? false} onChange={(e) => field.onChange(e.target.checked)} />}
-                      label="Notify me when my week is final"
-                    />
-                  )}
-                />
-                <Typography variant="body2" color="text.secondary">
-                  One push once every game in your week is decided — "You Won the Week!" or naming the pick that
-                  lost it.
-                </Typography>
-              </div>
+              {SINGLE_TOGGLES.map(({ name, label, description }) => (
+                <div key={name}>
+                  <Controller
+                    name={name}
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={<Switch checked={field.value ?? false} onChange={(e) => field.onChange(e.target.checked)} />}
+                        label={label}
+                      />
+                    )}
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    {description}
+                  </Typography>
+                </div>
+              ))}
             </Stack>
 
             <Button variant="contained" type="submit" disabled={isLoading || isSubmitting} sx={{ mt: 3 }}>

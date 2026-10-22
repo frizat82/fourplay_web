@@ -72,6 +72,8 @@ public interface ILeagueRepository : ISpreadRepository<NflSpreads> {
     Task AddLeagueJuiceMappingAsync(LeagueJuiceMapping mapping);
     Task RecordJuiceReminderSentAsync(int leagueId, int season);
     Task RecordWeekResultNotificationsSentAsync(IEnumerable<(string UserId, int Week)> entries, int leagueId, int season);
+    /// <summary>Records this sport's week as having had its "spreads are up" push; false if it already had.</summary>
+    Task<bool> TryRecordSpreadsPostedNotificationAsync(LeagueType sport, int season, int week);
     Task AddNflScoresAsync(IEnumerable<NflScores> scores);
     Task AddNflSpreadsAsync(IEnumerable<NflSpreads> spreads);
     Task AddNflPicksAsync(IEnumerable<NflPicks> picks);

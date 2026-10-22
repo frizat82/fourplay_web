@@ -138,6 +138,7 @@ export async function setupRoutes(page: Page, options: SetupRoutesOptions = {}):
           notifyOthersCoveringDuringGame: false,
           notifyOthersCoveringAtFinal: false,
           notifyWeekResult: false,
+          notifySpreadsPosted: false,
         }),
       });
       return;

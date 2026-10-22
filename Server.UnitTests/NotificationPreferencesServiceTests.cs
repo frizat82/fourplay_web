@@ -152,4 +152,40 @@ public class NotificationPreferencesServiceTests
             Assert.True((await service.GetAsync("alice", LeagueType.Nfl)).NotifyMineBloodyDuringGame);
         });
     }
+
+    [Fact]
+    public async Task UpsertAsync_SavesTheSpreadsPostedSetting()
+    {
+        var db = nameof(UpsertAsync_SavesTheSpreadsPostedSetting);
+        await SqliteTestDb.WithDb(db, async factory =>
+        {
+            await using (var seed = SqliteTestDb.Open(db))
+                await SqliteTestDb.SeedUser(seed, "alice");
+
+            var service = new NotificationPreferencesService(factory);
+            await service.UpsertAsync("alice", LeagueType.Cfb, new NotificationPreferencesDto { NotifySpreadsPosted = true });
+
+            Assert.True((await service.GetAsync("alice", LeagueType.Cfb)).NotifySpreadsPosted);
+            Assert.False((await service.GetAsync("alice", LeagueType.Nfl)).NotifySpreadsPosted);
+        });
+    }
+
+    [Fact]
+    public async Task GetSpreadsPostedUserIdsAsync_ReturnsOnlyThatSportsOptedInUsers()
+    {
+        var db = nameof(GetSpreadsPostedUserIdsAsync_ReturnsOnlyThatSportsOptedInUsers);
+        await SqliteTestDb.WithDb(db, async factory =>
+        {
+            await using (var seed = SqliteTestDb.Open(db))
+                foreach (var user in new[] { "alice", "bob", "carlos" })
+                    await SqliteTestDb.SeedUser(seed, user);
+            var service = new NotificationPreferencesService(factory);
+            await service.UpsertAsync("alice", LeagueType.Nfl, new NotificationPreferencesDto { NotifySpreadsPosted = true });
+            await service.UpsertAsync("bob", LeagueType.Nfl, new NotificationPreferencesDto { NotifyWeekResult = true });
+            await service.UpsertAsync("carlos", LeagueType.Cfb, new NotificationPreferencesDto { NotifySpreadsPosted = true });
+
+            Assert.Equal(["alice"], await service.GetSpreadsPostedUserIdsAsync(LeagueType.Nfl));
+            Assert.Equal(["carlos"], await service.GetSpreadsPostedUserIdsAsync(LeagueType.Cfb));
+        });
+    }
 }
