@@ -5,6 +5,7 @@ Notable changes to IV League, most recent first. For admins — see the version 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
 ## 2026-10-22
+- Fixed the "A new version is available" banner that never went away after tapping Refresh (installed app on Android): it now compares against the website's own deployed build, not the separately deployed backend.
 - New opt-in push in Notifications settings: "Notify me when spreads are up" sends one push naming the sport and week as soon as that week's spreads post, to members of a league in that sport (NFL and CFB each have their own setting).
 
 - Spread release card leads with when spreads drop (e.g. Thu 9:15 AM) and how long until then, with a live mm:ss countdown in the last hour — no more frozen seconds digit

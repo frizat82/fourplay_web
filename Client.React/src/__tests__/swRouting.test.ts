@@ -59,6 +59,11 @@ describe('classifyRequest', () => {
     expect(r.classifyRequest(req('/api/espn/scores', { mode: 'navigate' }), ORIGIN)).toBe('passthrough');
   });
 
+  // The update banner's version check must always see the live deploy, never a saved copy.
+  it("never caches the website's version.json", () => {
+    expect(r.classifyRequest(req('/version.json'), ORIGIN)).toBe('passthrough');
+  });
+
   it('leaves everything else alone', () => {
     expect(r.classifyRequest(req('/sw.js'), ORIGIN)).toBe('passthrough');
     expect(r.classifyRequest(req('/manifest.json'), ORIGIN)).toBe('passthrough');
