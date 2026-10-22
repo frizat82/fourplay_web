@@ -4,6 +4,10 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-10-22
+
+- Spread release card leads with when spreads drop (e.g. Thu 9:15 AM) and how long until then, with a live mm:ss countdown in the last hour — no more frozen seconds digit
+
 ## 2026-10-19
 
 - The server now runs on .NET 10 (the current long-term-support release) instead of .NET 9, with EF Core 10 and the matching Postgres driver; no behavior change
