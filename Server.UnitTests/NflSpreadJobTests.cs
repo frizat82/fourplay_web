@@ -24,6 +24,7 @@ public class NflSpreadJobTests
     private readonly IJobExecutionContext _context;
     private readonly TimeProvider _timeProvider;
     private readonly IJobObserverService _observer;
+    private readonly ISpreadsPostedNotificationService _spreadsPosted = Substitute.For<ISpreadsPostedNotificationService>();
 
     // Fixed, controlled "now" — not tied to the real wall clock, so lock-time boundary tests are
     // deterministic regardless of when the suite actually runs.
@@ -73,7 +74,7 @@ public class NflSpreadJobTests
         WeekEndDatetime = new DateTime(season, 11, 10, 23, 59, 59, DateTimeKind.Utc),
     };
 
-    private NflSpreadJob BuildJob() => new(_oddsService, _fetcher, _repo, _nflCurrentWeekService, _timeProvider, _observer);
+    private NflSpreadJob BuildJob() => new(_oddsService, _fetcher, _repo, _nflCurrentWeekService, _timeProvider, _observer, _spreadsPosted);
 
     // -----------------------------------------------------------------------
     // Helper builders
@@ -642,5 +643,30 @@ public class NflSpreadJobTests
         await BuildJob().Execute(_context);
 
         await _repo.Received(1).UpsertAsync(Arg.Is<List<NflSpreads>>(l => l.Count > 0));
+    }
+
+    // -----------------------------------------------------------------------
+    // "Spreads are up" push
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Execute_WhenSpreadsSaved_NotifiesThatTheWeeksSpreadsAreUp()
+    {
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(BuildScoreboard());
+        _oddsService.GetEventsWithOddsAsync(401547605, (int)EspnOddsProviders.DraftKings).Returns(BuildOddsItem());
+
+        await BuildJob().Execute(_context);
+
+        await _spreadsPosted.Received(1).NotifyAsync(LeagueType.Nfl, 2024, 5, "Week 5", PastLockTime);
+    }
+
+    [Fact]
+    public async Task Execute_WhenNoSpreadsSaved_DoesNotNotify()
+    {
+        _fetcher.FetchForWeekAsync(Arg.Any<NflSeasonWeekConfig>()).Returns(BuildScoreboard(statusName: TypeName.StatusFinal));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        await _spreadsPosted.DidNotReceiveWithAnyArgs().NotifyAsync(default, default, default, default!, default);
     }
 }

@@ -5,7 +5,7 @@ import { isNetworkError } from '../utils/apiError';
 // after this instead, so callers can offer a retry rather than an endless blank loading state.
 // Writes get no timeout: one the server already completed must not be reported as failed (the
 // user would think their picks weren't saved and resubmit).
-const READ_TIMEOUT_MS = 15_000;
+export const READ_TIMEOUT_MS = 15_000;
 
 let isRefreshing = false;
 let refreshPromise: Promise<void> | null = null;

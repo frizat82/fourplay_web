@@ -8,6 +8,7 @@ export interface NotificationPreferencesDto {
   notifyOthersCoveringDuringGame: boolean;
   notifyOthersCoveringAtFinal: boolean;
   notifyWeekResult: boolean;
+  notifySpreadsPosted: boolean;
 }
 
 export interface PushSubscriptionRequestDto {

@@ -2,12 +2,12 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 
-vi.mock('../api/version', () => ({ getVersion: vi.fn() }));
+vi.mock('../api/version', () => ({ getDeployedVersion: vi.fn() }));
 
-import { getVersion } from '../api/version';
+import { getDeployedVersion } from '../api/version';
 import { useVersionCheck } from '../utils/useVersionCheck';
 
-const mockedGetVersion = vi.mocked(getVersion);
+const mockedGetVersion = vi.mocked(getDeployedVersion);
 
 function renderWithClient() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
@@ -26,8 +26,8 @@ describe('useVersionCheck', () => {
     vi.unstubAllEnvs();
   });
 
-  it('shows no banner when client SHA matches server SHA', async () => {
-    mockedGetVersion.mockResolvedValue({ sha: 'client-sha-123', env: 'Production', timestamp: '2026-01-01T00:00:00Z' });
+  it('shows no banner when this build is the deployed build', async () => {
+    mockedGetVersion.mockResolvedValue({ sha: 'client-sha-123'});
 
     const { result } = renderWithClient();
 
@@ -35,8 +35,8 @@ describe('useVersionCheck', () => {
     expect(result.current.mismatch).toBe(false);
   });
 
-  it('sets mismatch flag when server SHA differs from client SHA', async () => {
-    mockedGetVersion.mockResolvedValue({ sha: 'server-sha-456', env: 'Production', timestamp: '2026-01-01T00:00:00Z' });
+  it('sets mismatch flag when a newer build is deployed', async () => {
+    mockedGetVersion.mockResolvedValue({ sha: 'server-sha-456'});
 
     const { result } = renderWithClient();
 
@@ -44,7 +44,7 @@ describe('useVersionCheck', () => {
   });
 
   it('does not re-trigger after mismatch already detected', async () => {
-    mockedGetVersion.mockResolvedValue({ sha: 'server-sha-456', env: 'Production', timestamp: '2026-01-01T00:00:00Z' });
+    mockedGetVersion.mockResolvedValue({ sha: 'server-sha-456'});
 
     const { result } = renderWithClient();
     await waitFor(() => expect(result.current.mismatch).toBe(true));
@@ -77,7 +77,7 @@ describe('useVersionCheck', () => {
   });
 
   it('immediately re-checks when the document becomes visible again', async () => {
-    mockedGetVersion.mockResolvedValue({ sha: 'client-sha-123', env: 'Production', timestamp: '2026-01-01T00:00:00Z' });
+    mockedGetVersion.mockResolvedValue({ sha: 'client-sha-123'});
     renderWithClient();
     await waitFor(() => expect(mockedGetVersion).toHaveBeenCalledTimes(1));
 
@@ -88,7 +88,7 @@ describe('useVersionCheck', () => {
   });
 
   it('does not re-check on a visibility change while the document is hidden', async () => {
-    mockedGetVersion.mockResolvedValue({ sha: 'client-sha-123', env: 'Production', timestamp: '2026-01-01T00:00:00Z' });
+    mockedGetVersion.mockResolvedValue({ sha: 'client-sha-123'});
     renderWithClient();
     await waitFor(() => expect(mockedGetVersion).toHaveBeenCalledTimes(1));
 
@@ -103,7 +103,7 @@ describe('useVersionCheck', () => {
   });
 
   it('does not re-check on visibility change once a mismatch is already latched', async () => {
-    mockedGetVersion.mockResolvedValue({ sha: 'server-sha-456', env: 'Production', timestamp: '2026-01-01T00:00:00Z' });
+    mockedGetVersion.mockResolvedValue({ sha: 'server-sha-456'});
     const { result } = renderWithClient();
     await waitFor(() => expect(result.current.mismatch).toBe(true));
 

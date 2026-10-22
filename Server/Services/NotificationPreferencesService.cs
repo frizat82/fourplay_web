@@ -41,6 +41,7 @@ public class NotificationPreferencesService(IDbContextFactory<ApplicationDbConte
         existing.NotifyOthersCoveringDuringGame = preferences.NotifyOthersCoveringDuringGame;
         existing.NotifyOthersCoveringAtFinal = preferences.NotifyOthersCoveringAtFinal;
         existing.NotifyWeekResult = preferences.NotifyWeekResult;
+        existing.NotifySpreadsPosted = preferences.NotifySpreadsPosted;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync();
@@ -57,6 +58,16 @@ public class NotificationPreferencesService(IDbContextFactory<ApplicationDbConte
             p.NotifyOthersCoveringDuringGame || p.NotifyOthersCoveringAtFinal);
     }
 
+    public async Task<List<string>> GetSpreadsPostedUserIdsAsync(LeagueType sport)
+    {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        return await db.NotificationPreferences.AsNoTracking()
+            .Where(p => p.Sport == sport && p.NotifySpreadsPosted)
+            .Where(p => db.LeagueUserMapping.Any(m => m.UserId == p.UserId && m.IsActive && m.League.LeagueType == sport))
+            .Select(p => p.UserId)
+            .ToListAsync();
+    }
+
     private static NotificationPreferencesDto ToDto(NotificationPreferences p) => new()
     {
         NotifyMineBloodyDuringGame = p.NotifyMineBloodyDuringGame,
@@ -68,5 +79,6 @@ public class NotificationPreferencesService(IDbContextFactory<ApplicationDbConte
         NotifyOthersCoveringDuringGame = p.NotifyOthersCoveringDuringGame,
         NotifyOthersCoveringAtFinal = p.NotifyOthersCoveringAtFinal,
         NotifyWeekResult = p.NotifyWeekResult,
+        NotifySpreadsPosted = p.NotifySpreadsPosted,
     };
 }

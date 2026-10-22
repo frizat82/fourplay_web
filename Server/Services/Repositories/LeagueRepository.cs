@@ -464,6 +464,21 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
         await db.SaveChangesAsync();
     }
 
+    public async Task<bool> TryRecordSpreadsPostedNotificationAsync(LeagueType sport, int season, int week) {
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        if (await db.SpreadsPostedNotificationSent.AnyAsync(r => r.Sport == sport && r.Season == season && r.Week == week))
+            return false;
+        db.SpreadsPostedNotificationSent.Add(new SpreadsPostedNotificationSent { Sport = sport, Season = season, Week = week });
+        try {
+            await db.SaveChangesAsync();
+            return true;
+        } catch (DbUpdateException) {
+            // Two runs for the same week raced (e.g. an admin re-run alongside the scheduled one);
+            // the unique index let exactly one record it.
+            return false;
+        }
+    }
+
     public async Task AddNflScoresAsync(IEnumerable<NflScores> scores) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
         await db.NflScores.AddRangeAsync(scores);

@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getVersion } from '../api/version';
+import { getDeployedVersion } from '../api/version';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
- * Polls /api/version and compares it against the client build's own baked-in SHA
- * (VITE_APP_VERSION, injected at build time — see vite.config.ts). Once a mismatch is observed,
+ * Polls the website's deployed version.json and compares it against this build's own baked-in SHA
+ * (VITE_APP_VERSION, injected at build time — see vite.config.ts, which writes both). Once a mismatch is observed,
  * refetchInterval reads it straight from the query's own cached state and returns `false`, so
  * polling stops on its own — the cached (mismatched) result is what keeps `mismatch` true for the
  * rest of the session, with no separate latch ref/state needed. VITE_APP_VERSION is unset in
@@ -17,7 +17,7 @@ export function useVersionCheck() {
 
   const { data, refetch } = useQuery({
     queryKey: ['version-check'],
-    queryFn: getVersion,
+    queryFn: getDeployedVersion,
     enabled: !!clientSha,
     refetchInterval: (query) => {
       const latest = query.state.data;

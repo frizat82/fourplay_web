@@ -17,7 +17,7 @@ namespace FourPlayWebApp.Server.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.8")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -532,6 +532,9 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<bool>("NotifyOthersCoveringDuringGame")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("NotifySpreadsPosted")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("NotifyWeekResult")
                         .HasColumnType("boolean");
 
@@ -642,6 +645,36 @@ namespace FourPlayWebApp.Server.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("PushSubscriptions");
+                });
+
+            modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.SpreadsPostedNotificationSent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Season")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamptz")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("Sport")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Week")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Sport", "Season", "Week")
+                        .IsUnique();
+
+                    b.ToTable("SpreadsPostedNotificationSent");
                 });
 
             modelBuilder.Entity("FourPlayWebApp.Server.Models.Data.TeamLiveNotificationState", b =>
