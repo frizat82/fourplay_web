@@ -1,3 +1,4 @@
+using FourPlayWebApp.Server.Models.Data;
 using FourPlayWebApp.Shared.Models.Enum;
 using FourPlayWebApp.Server.Services;
 using FourPlayWebApp.Shared.Models.Data.Dtos;
@@ -170,19 +171,40 @@ public class NotificationPreferencesServiceTests
         });
     }
 
+    // Only people actually playing that sport get "spreads are up": opted in for the sport AND an
+    // active member of at least one league of that sport.
     [Fact]
-    public async Task GetSpreadsPostedUserIdsAsync_ReturnsOnlyThatSportsOptedInUsers()
+    public async Task GetSpreadsPostedUserIdsAsync_ReturnsOptedInActiveMembersOfThatSportsLeagues()
     {
-        var db = nameof(GetSpreadsPostedUserIdsAsync_ReturnsOnlyThatSportsOptedInUsers);
+        var db = nameof(GetSpreadsPostedUserIdsAsync_ReturnsOptedInActiveMembersOfThatSportsLeagues);
         await SqliteTestDb.WithDb(db, async factory =>
         {
+            string[] users = ["alice", "bob", "carlos", "dana", "eve", "frank"];
             await using (var seed = SqliteTestDb.Open(db))
-                foreach (var user in new[] { "alice", "bob", "carlos" })
+            {
+                foreach (var user in users)
                     await SqliteTestDb.SeedUser(seed, user);
+                var nfl = new LeagueInfo { LeagueName = "NFL league", OwnerUserId = "alice", LeagueType = LeagueType.Nfl };
+                var cfb = new LeagueInfo { LeagueName = "CFB league", OwnerUserId = "carlos", LeagueType = LeagueType.Cfb };
+                seed.LeagueInfo.AddRange(nfl, cfb);
+                await seed.SaveChangesAsync();
+                seed.LeagueUserMapping.AddRange(
+                    new LeagueUserMapping { LeagueId = nfl.Id, UserId = "alice" },
+                    new LeagueUserMapping { LeagueId = nfl.Id, UserId = "bob" },
+                    new LeagueUserMapping { LeagueId = cfb.Id, UserId = "carlos" },
+                    new LeagueUserMapping { LeagueId = nfl.Id, UserId = "eve", IsActive = false },
+                    new LeagueUserMapping { LeagueId = nfl.Id, UserId = "frank" });
+                await seed.SaveChangesAsync();
+            }
+
             var service = new NotificationPreferencesService(factory);
-            await service.UpsertAsync("alice", LeagueType.Nfl, new NotificationPreferencesDto { NotifySpreadsPosted = true });
-            await service.UpsertAsync("bob", LeagueType.Nfl, new NotificationPreferencesDto { NotifyWeekResult = true });
-            await service.UpsertAsync("carlos", LeagueType.Cfb, new NotificationPreferencesDto { NotifySpreadsPosted = true });
+            var spreadsOn = new NotificationPreferencesDto { NotifySpreadsPosted = true };
+            await service.UpsertAsync("alice", LeagueType.Nfl, spreadsOn);                                       // NFL member: yes
+            await service.UpsertAsync("bob", LeagueType.Nfl, new NotificationPreferencesDto { NotifyWeekResult = true }); // not opted in
+            await service.UpsertAsync("carlos", LeagueType.Cfb, spreadsOn);                                      // CFB member: yes
+            await service.UpsertAsync("dana", LeagueType.Nfl, spreadsOn);                                        // in no league
+            await service.UpsertAsync("eve", LeagueType.Nfl, spreadsOn);                                         // removed from her league
+            await service.UpsertAsync("frank", LeagueType.Cfb, spreadsOn);                                       // CFB on, but only in an NFL league
 
             Assert.Equal(["alice"], await service.GetSpreadsPostedUserIdsAsync(LeagueType.Nfl));
             Assert.Equal(["carlos"], await service.GetSpreadsPostedUserIdsAsync(LeagueType.Cfb));

@@ -63,6 +63,8 @@ public class NotificationPreferencesService(IDbContextFactory<ApplicationDbConte
         await using var db = await dbContextFactory.CreateDbContextAsync();
         return await db.NotificationPreferences.AsNoTracking()
             .Where(p => p.Sport == sport && p.NotifySpreadsPosted)
+            // Only people playing that sport: an active member of at least one of its leagues.
+            .Where(p => db.LeagueUserMapping.Any(m => m.UserId == p.UserId && m.IsActive && m.League.LeagueType == sport))
             .Select(p => p.UserId)
             .ToListAsync();
     }
