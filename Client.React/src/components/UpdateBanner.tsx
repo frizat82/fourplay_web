@@ -13,21 +13,6 @@ interface UpdateBannerProps {
 // phones) and safely resolves to 0 everywhere else, so this can't regress a device without one.
 const snackbarSx = { top: 'calc(var(--safe-inset-top) + 24px)' } as const;
 
-// The service worker's saved page (public/sw-routing.js SHELL_CACHE). A reload that stalls on a
-// weak signal is served that saved copy — the old build — so the banner would come straight back.
-// Dropping it first makes the reload wait for the new page. Build files stay cached (hashed).
-const SHELL_CACHE_PREFIX = 'ivl-shell-';
-
-async function reloadToNewVersion() {
-  try {
-    const keys = await caches.keys();
-    await Promise.all(keys.filter((key) => key.startsWith(SHELL_CACHE_PREFIX)).map((key) => caches.delete(key)));
-  } catch {
-    // No cache API, or it's blocked: a plain reload is still the best we can do.
-  }
-  window.location.reload();
-}
-
 export default function UpdateBanner({ mismatch }: UpdateBannerProps) {
   if (!mismatch) return null;
 
@@ -36,7 +21,7 @@ export default function UpdateBanner({ mismatch }: UpdateBannerProps) {
       <Alert
         severity="info"
         action={
-          <Button color="inherit" size="small" onClick={() => void reloadToNewVersion()}>
+          <Button color="inherit" size="small" onClick={() => window.location.reload()}>
             Refresh
           </Button>
         }

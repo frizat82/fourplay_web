@@ -1,6 +1,5 @@
 import type { DeployedVersion } from '../types/version';
-
-const TIMEOUT_MS = 15_000;
+import { READ_TIMEOUT_MS } from './http';
 
 /**
  * The website's currently deployed build, from the version.json the build writes next to the page
@@ -12,10 +11,9 @@ const TIMEOUT_MS = 15_000;
  * would latch the banner on for good.
  */
 export async function getDeployedVersion(): Promise<DeployedVersion> {
-  const response = await fetch('/version.json', { cache: 'no-store', signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const response = await fetch('/version.json', { cache: 'no-store', signal: AbortSignal.timeout(READ_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`version.json: ${response.status}`);
-  const body: unknown = await response.json();
-  const sha = (body as Partial<DeployedVersion> | null)?.sha;
+  const sha = ((await response.json()) as { sha?: unknown } | null)?.sha;
   if (typeof sha !== 'string' || sha === '') throw new Error('version.json: no sha');
   return { sha };
 }

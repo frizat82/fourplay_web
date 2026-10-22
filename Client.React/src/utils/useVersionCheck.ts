@@ -6,8 +6,7 @@ const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
  * Polls the website's deployed version.json and compares it against this build's own baked-in SHA
- * (VITE_APP_VERSION, injected at build time — see vite.config.ts, which writes both). Never the
- * backend's SHA: it deploys separately, so a mismatch there is something Refresh can't fix. Once a mismatch is observed,
+ * (VITE_APP_VERSION, injected at build time — see vite.config.ts, which writes both). Once a mismatch is observed,
  * refetchInterval reads it straight from the query's own cached state and returns `false`, so
  * polling stops on its own — the cached (mismatched) result is what keeps `mismatch` true for the
  * rest of the session, with no separate latch ref/state needed. VITE_APP_VERSION is unset in
