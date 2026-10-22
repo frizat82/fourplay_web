@@ -184,16 +184,11 @@ public class NotificationPreferencesServiceTests
             {
                 foreach (var user in users)
                     await SqliteTestDb.SeedUser(seed, user);
-                var nfl = new LeagueInfo { LeagueName = "NFL league", OwnerUserId = "alice", LeagueType = LeagueType.Nfl };
-                var cfb = new LeagueInfo { LeagueName = "CFB league", OwnerUserId = "carlos", LeagueType = LeagueType.Cfb };
-                seed.LeagueInfo.AddRange(nfl, cfb);
-                await seed.SaveChangesAsync();
-                seed.LeagueUserMapping.AddRange(
-                    new LeagueUserMapping { LeagueId = nfl.Id, UserId = "alice" },
-                    new LeagueUserMapping { LeagueId = nfl.Id, UserId = "bob" },
-                    new LeagueUserMapping { LeagueId = cfb.Id, UserId = "carlos" },
-                    new LeagueUserMapping { LeagueId = nfl.Id, UserId = "eve", IsActive = false },
-                    new LeagueUserMapping { LeagueId = nfl.Id, UserId = "frank" });
+                seed.LeagueInfo.AddRange(
+                    new LeagueInfo { LeagueName = "NFL league", OwnerUserId = "alice", LeagueType = LeagueType.Nfl, LeagueUserMappings = [
+                        new() { UserId = "alice" }, new() { UserId = "bob" }, new() { UserId = "eve", IsActive = false }, new() { UserId = "frank" }] },
+                    new LeagueInfo { LeagueName = "CFB league", OwnerUserId = "carlos", LeagueType = LeagueType.Cfb, LeagueUserMappings = [
+                        new() { UserId = "carlos" }] });
                 await seed.SaveChangesAsync();
             }
 
