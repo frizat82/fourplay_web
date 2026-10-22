@@ -1,29 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Paper, Typography } from '@mui/material';
 import { getNextSpreadJob } from '../services/spreadRelease';
+import { formatReleaseWhen, formatTimeUntil } from '../utils/releaseTime';
 
-function formatCountdown(diffMs: number) {
-  if (diffMs <= 0) return 'Available now';
-  const totalSeconds = Math.floor(diffMs / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const padded = (value: number) => value.toString().padStart(2, '0');
-  const timePart = `${padded(hours)}:${padded(minutes)}:${padded(seconds)}`;
-  return days > 0 ? `${days}d ${timePart}` : timePart;
-}
+const HOUR_MS = 60 * 60 * 1000;
 
 export default function SpreadRelease({ sport }: { sport: 'nfl' | 'cfb' }) {
   const [loading, setLoading] = useState(true);
   const [nextSpreadJob, setNextSpreadJob] = useState<string | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState('Loading...');
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       const result = await getNextSpreadJob(sport === 'cfb' ? 'CFB' : 'NFL');
       setNextSpreadJob(result ?? null);
+      setNow(new Date()); // the first frame measures from load, not from mount
       setLoading(false);
     };
     void load();
@@ -34,16 +26,17 @@ export default function SpreadRelease({ sport }: { sport: 'nfl' | 'cfb' }) {
   // NFL and CFB run independent spread schedules (CFB may release next week while NFL's next
   // release is 2+ weeks out) — the scheduled date is useful information regardless of how far
   // away it is, so it always renders rather than being hidden past some fixed "is this soon
-  // enough" cutoff. Self-adjusting tick rate: a countdown weeks out doesn't need a per-second
-  // re-render just to keep its seconds digit live — only tick every second once under an hour
-  // remains, otherwise once a minute is plenty.
+  // enough" cutoff. Self-adjusting tick rate: over an hour out the card shows no seconds (see
+  // formatTimeUntil), so once a minute is plenty; inside the last hour it's a live mm:ss clock.
   useEffect(() => {
     if (!targetDate) return;
     let timeoutId: ReturnType<typeof setTimeout>;
     const tick = () => {
-      const diff = targetDate.getTime() - new Date().getTime();
-      setTimeRemaining(formatCountdown(diff));
-      const nextDelayMs = diff > 60 * 60 * 1000 ? 60_000 : 1000;
+      const current = new Date();
+      setNow(current);
+      const diff = targetDate.getTime() - current.getTime();
+      // Never sleep past the one-hour mark, so the live clock starts right at 59:59.
+      const nextDelayMs = diff > HOUR_MS ? Math.min(60_000, diff - HOUR_MS) : 1000;
       timeoutId = setTimeout(tick, nextDelayMs);
     };
     tick();
@@ -51,6 +44,8 @@ export default function SpreadRelease({ sport }: { sport: 'nfl' | 'cfb' }) {
   }, [targetDate]);
 
   if (loading) return null;
+  const msUntil = targetDate ? targetDate.getTime() - now.getTime() : 0;
+  const lastHour = msUntil > 0 && msUntil < HOUR_MS;
 
   if (!targetDate) {
     return (
@@ -79,13 +74,19 @@ export default function SpreadRelease({ sport }: { sport: 'nfl' | 'cfb' }) {
       }}
     >
       <Typography variant="overline" sx={{ letterSpacing: 2 }} color="text.secondary">
-        Next Spread Reload
+        Spreads drop
       </Typography>
-      <Typography variant="h3" sx={{ fontWeight: 700, mt: 1 }} color="text.primary">
-        {timeRemaining}
+      <Typography variant="h4" component="p" sx={{ fontWeight: 700, mt: 1 }} color="text.primary">
+        {formatReleaseWhen(targetDate, now)}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        Scheduled for {targetDate!.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}
+      {/* Inside the last hour it's a live mm:ss clock — worth showing bigger. */}
+      <Typography
+        variant={lastHour ? 'h5' : 'body1'}
+        component="p"
+        color="text.secondary"
+        sx={{ mt: 1, fontVariantNumeric: 'tabular-nums' }}
+      >
+        {formatTimeUntil(msUntil)}
       </Typography>
     </Paper>
   );
