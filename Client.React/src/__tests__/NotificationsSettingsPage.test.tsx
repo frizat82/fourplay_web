@@ -46,6 +46,7 @@ const ALL_OFF: NotificationPreferencesDto = {
   notifyOthersCoveringDuringGame: false,
   notifyOthersCoveringAtFinal: false,
   notifyWeekResult: false,
+  notifySpreadsPosted: false,
 };
 
 describe('NotificationsSettingsPage', () => {
@@ -117,6 +118,7 @@ describe('NotificationsSettingsPage', () => {
       notifyOthersCoveringDuringGame: true,
       notifyOthersCoveringAtFinal: true,
       notifyWeekResult: true,
+      notifySpreadsPosted: true,
     };
     mockedGetPreferences.mockResolvedValue(allOn);
     mockedPutPreferences.mockResolvedValue(allOn);
@@ -161,8 +163,8 @@ describe('NotificationsSettingsPage', () => {
       }
     }
     expect(screen.queryAllByLabelText(/during game|at final/i)).toHaveLength(0);
-    // 3 top-level toggles + 2 per section's Advanced = 7 switches total.
-    expect(screen.getAllByRole('switch', { hidden: true })).toHaveLength(7);
+    // 4 top-level toggles + 2 per section's Advanced = 8 switches total.
+    expect(screen.getAllByRole('switch', { hidden: true })).toHaveLength(8);
   });
 
   it("loads this app's sport's own settings and says which sport they apply to", async () => {
@@ -172,6 +174,31 @@ describe('NotificationsSettingsPage', () => {
 
     await waitFor(() => expect(mockedGetPreferences).toHaveBeenCalledWith('CFB'));
     expect(screen.getByText(/only apply to the college football app/i)).toBeInTheDocument();
+  });
+
+  it('reflects a loaded "spreads are up" preference', async () => {
+    mockedGetPreferences.mockResolvedValue({ ...ALL_OFF, notifySpreadsPosted: true });
+
+    render(<NotificationsSettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/notify me when spreads are up/i)).toBeChecked();
+    });
+  });
+
+  it('turning on "spreads are up" saves only that preference', async () => {
+    mockedGetPreferences.mockResolvedValue(ALL_OFF);
+    mockedPutPreferences.mockResolvedValue(ALL_OFF);
+
+    render(<NotificationsSettingsPage />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /save preferences/i })).not.toBeDisabled());
+
+    await userEvent.click(screen.getByLabelText(/notify me when spreads are up/i));
+    await userEvent.click(screen.getByRole('button', { name: /save preferences/i }));
+
+    await waitFor(() => {
+      expect(mockedPutPreferences).toHaveBeenCalledWith('CFB', { ...ALL_OFF, notifySpreadsPosted: true });
+    });
   });
 
   it('shows an error toast when saving fails', async () => {

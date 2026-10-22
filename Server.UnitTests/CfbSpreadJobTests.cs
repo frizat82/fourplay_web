@@ -25,6 +25,7 @@ public class CfbSpreadJobTests
     private readonly IJobExecutionContext _context;
     private readonly TimeProvider _timeProvider;
     private readonly IJobObserverService _observer;
+    private readonly ISpreadsPostedNotificationService _spreadsPosted = Substitute.For<ISpreadsPostedNotificationService>();
 
     // Fixed, controlled "now" — not tied to the real wall clock, so lock-time boundary tests are
     // deterministic regardless of when the suite actually runs.
@@ -52,7 +53,7 @@ public class CfbSpreadJobTests
         _context.JobDetail.Returns(jobDetail);
     }
 
-    private CfbSpreadJob BuildJob() => new(_fetcher, _oddsService, _repo, _currentSlateService, _timeProvider, _observer);
+    private CfbSpreadJob BuildJob() => new(_fetcher, _oddsService, _repo, _currentSlateService, _timeProvider, _observer, _spreadsPosted);
 
     private static CfbSeasonWeekConfig BuildSlate(int slateId = 1) => new()
     {
@@ -375,5 +376,33 @@ public class CfbSpreadJobTests
         await BuildJob().Execute(_context);
 
         await _repo.Received(1).UpsertAsync(Arg.Is<IEnumerable<CfbSpreads>>(s => s.Count() == 1));
+    }
+
+    // -----------------------------------------------------------------------
+    // "Spreads are up" push
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Execute_WhenSpreadsSaved_NotifiesThatTheSlatesSpreadsAreUp()
+    {
+        var slate = BuildSlate();
+        SetCurrentSlate(slate);
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard());
+        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
+
+        await BuildJob().Execute(_context);
+
+        await _spreadsPosted.Received(1).NotifyAsync(LeagueType.Cfb, 2025, slate.SlateNumber, "Week 1", PastLockTime);
+    }
+
+    [Fact]
+    public async Task Execute_WhenNoSpreadsSaved_DoesNotNotify()
+    {
+        SetCurrentSlate(BuildSlate());
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusFinal));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildJob().Execute(_context));
+
+        await _spreadsPosted.DidNotReceiveWithAnyArgs().NotifyAsync(default, default, default, default!, default);
     }
 }

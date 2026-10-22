@@ -152,4 +152,20 @@ public class NotificationPreferencesServiceTests
             Assert.True((await service.GetAsync("alice", LeagueType.Nfl)).NotifyMineBloodyDuringGame);
         });
     }
+
+    [Fact]
+    public async Task UpsertAsync_SavesTheSpreadsPostedSetting()
+    {
+        var db = nameof(UpsertAsync_SavesTheSpreadsPostedSetting);
+        await SqliteTestDb.WithDb(db, async factory =>
+        {
+            await using (var seed = SqliteTestDb.Open(db))
+                await SqliteTestDb.SeedUser(seed, "alice");
+
+            await new NotificationPreferencesService(factory).UpsertAsync("alice", LeagueType.Cfb, new NotificationPreferencesDto { NotifySpreadsPosted = true });
+
+            Assert.True((await new NotificationPreferencesService(factory).GetAsync("alice", LeagueType.Cfb)).NotifySpreadsPosted);
+            Assert.False((await new NotificationPreferencesService(factory).GetAsync("alice", LeagueType.Nfl)).NotifySpreadsPosted);
+        });
+    }
 }

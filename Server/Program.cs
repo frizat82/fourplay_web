@@ -288,6 +288,7 @@ builder.Services.AddHttpClient<IPushSender, WebPushSender>();
 // trigger — WeekResultNotificationService now, the live-pick watcher later.
 builder.Services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
 builder.Services.AddScoped<IWeekResultNotificationService, WeekResultNotificationService>();
+builder.Services.AddScoped<ISpreadsPostedNotificationService, SpreadsPostedNotificationService>();
 
 // Phase 3: live per-pick transitions. LiveScoreSnapshotStore is the one piece of state that must
 // survive across the per-recompute DI scope LivePickNotificationWatcher creates; everything else

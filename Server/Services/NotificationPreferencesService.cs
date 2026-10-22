@@ -41,6 +41,7 @@ public class NotificationPreferencesService(IDbContextFactory<ApplicationDbConte
         existing.NotifyOthersCoveringDuringGame = preferences.NotifyOthersCoveringDuringGame;
         existing.NotifyOthersCoveringAtFinal = preferences.NotifyOthersCoveringAtFinal;
         existing.NotifyWeekResult = preferences.NotifyWeekResult;
+        existing.NotifySpreadsPosted = preferences.NotifySpreadsPosted;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync();
@@ -68,5 +69,6 @@ public class NotificationPreferencesService(IDbContextFactory<ApplicationDbConte
         NotifyOthersCoveringDuringGame = p.NotifyOthersCoveringDuringGame,
         NotifyOthersCoveringAtFinal = p.NotifyOthersCoveringAtFinal,
         NotifyWeekResult = p.NotifyWeekResult,
+        NotifySpreadsPosted = p.NotifySpreadsPosted,
     };
 }
