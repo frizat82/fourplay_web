@@ -11,7 +11,17 @@ const appVersion = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.VITE_APP_VER
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // version.json: the deployed website's own SHA, which useVersionCheck compares against the
+    // running build's. Only in builds that have a version (none in local dev).
+    {
+      name: 'version-json',
+      generateBundle() {
+        if (appVersion) this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ sha: appVersion }) });
+      },
+    },
+  ],
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
   },
