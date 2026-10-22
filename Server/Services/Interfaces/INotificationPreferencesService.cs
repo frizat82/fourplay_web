@@ -17,6 +17,6 @@ public interface INotificationPreferencesService
     /// </summary>
     Task<bool> AnyLiveNotificationPreferenceEnabledAsync();
 
-    /// <summary>Every user who turned on "spreads are up" for this sport.</summary>
+    /// <summary>Every user who turned on "spreads are up" for this sport and is an active member of one of its leagues.</summary>
     Task<List<string>> GetSpreadsPostedUserIdsAsync(LeagueType sport);
 }
