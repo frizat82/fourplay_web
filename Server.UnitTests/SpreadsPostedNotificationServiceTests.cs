@@ -62,9 +62,8 @@ public class SpreadsPostedNotificationServiceTests
     {
         _repo.TryRecordSpreadsPostedNotificationAsync(LeagueType.Nfl, 2026, 8).Returns(false);
 
-        var sent = await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", LockedAnHourAgo);
+        await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", LockedAnHourAgo);
 
-        Assert.Equal(0, sent);
         await _dispatcher.DidNotReceiveWithAnyArgs().DispatchAsync(default!, default!, default!, default);
     }
 
@@ -75,9 +74,8 @@ public class SpreadsPostedNotificationServiceTests
     {
         var lockedLongAgo = Now.UtcDateTime - SpreadsPostedNotificationService.PushWindowAfterLock - TimeSpan.FromMinutes(1);
 
-        var sent = await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", lockedLongAgo);
+        await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", lockedLongAgo);
 
-        Assert.Equal(0, sent);
         await _repo.Received(1).TryRecordSpreadsPostedNotificationAsync(LeagueType.Nfl, 2026, 8);
         await _dispatcher.DidNotReceiveWithAnyArgs().DispatchAsync(default!, default!, default!, default);
     }
@@ -86,9 +84,9 @@ public class SpreadsPostedNotificationServiceTests
     [Fact]
     public async Task NotifyAsync_PostedBeforeTheScheduledLock_Pushes()
     {
-        var sent = await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", Now.UtcDateTime.AddDays(1));
+        await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", Now.UtcDateTime.AddDays(1));
 
-        Assert.Equal(2, sent);
+        await _dispatcher.ReceivedWithAnyArgs(2).DispatchAsync(default!, default!, default!, default);
     }
 
     [Fact]
@@ -97,9 +95,8 @@ public class SpreadsPostedNotificationServiceTests
         _dispatcher.DispatchAsync("alice", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("push service down"));
 
-        var sent = await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", LockedAnHourAgo);
+        await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", LockedAnHourAgo);
 
-        Assert.Equal(1, sent);
         await _dispatcher.Received(1).DispatchAsync("bob", Arg.Any<Func<NotificationPreferencesDto, bool>>(), Arg.Any<PushPayload>(), Arg.Any<CancellationToken>());
     }
 
@@ -109,8 +106,19 @@ public class SpreadsPostedNotificationServiceTests
     {
         _repo.TryRecordSpreadsPostedNotificationAsync(default, default, default).ThrowsAsyncForAnyArgs(new InvalidOperationException("db down"));
 
-        var sent = await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", LockedAnHourAgo);
+        await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", LockedAnHourAgo);
 
-        Assert.Equal(0, sent);
+        await _dispatcher.DidNotReceiveWithAnyArgs().DispatchAsync(default!, default!, default!, default);
+    }
+
+    // A failed recipient read must leave the week unrecorded, so the next run still pushes it.
+    [Fact]
+    public async Task NotifyAsync_WhenReadingRecipientsFails_DoesNotRecordTheWeek()
+    {
+        _preferences.GetSpreadsPostedUserIdsAsync(LeagueType.Nfl).ThrowsAsync(new InvalidOperationException("db blip"));
+
+        await Build().NotifyAsync(LeagueType.Nfl, 2026, 8, "Week 8", LockedAnHourAgo);
+
+        await _repo.DidNotReceiveWithAnyArgs().TryRecordSpreadsPostedNotificationAsync(default, default, default);
     }
 }

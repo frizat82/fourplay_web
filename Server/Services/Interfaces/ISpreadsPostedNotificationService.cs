@@ -10,6 +10,5 @@ public interface ISpreadsPostedNotificationService
     /// Pushes "spreads are up" for this sport's week to every user who opted in, once per week.
     /// Never throws: the spreads are already saved, and a failed push must not fail the spread job.
     /// </summary>
-    /// <returns>How many users were notified.</returns>
-    Task<int> NotifyAsync(LeagueType sport, int season, int week, string weekLabel, DateTime spreadLockUtc);
+    Task NotifyAsync(LeagueType sport, int season, int week, string weekLabel, DateTime spreadLockUtc);
 }

@@ -466,12 +466,17 @@ public class LeagueRepository(IDbContextFactory<ApplicationDbContext> dbContextF
 
     public async Task<bool> TryRecordSpreadsPostedNotificationAsync(LeagueType sport, int season, int week) {
         await using var db = await dbContextFactory.CreateDbContextAsync();
-        // Only the spread jobs call this, and they never run concurrently, so check-then-insert can't race.
         if (await db.SpreadsPostedNotificationSent.AnyAsync(r => r.Sport == sport && r.Season == season && r.Week == week))
             return false;
         db.SpreadsPostedNotificationSent.Add(new SpreadsPostedNotificationSent { Sport = sport, Season = season, Week = week });
-        await db.SaveChangesAsync();
-        return true;
+        try {
+            await db.SaveChangesAsync();
+            return true;
+        } catch (DbUpdateException) {
+            // Two runs for the same week raced (e.g. an admin re-run alongside the scheduled one);
+            // the unique index let exactly one record it.
+            return false;
+        }
     }
 
     public async Task AddNflScoresAsync(IEnumerable<NflScores> scores) {
