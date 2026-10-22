@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import UpdateBanner from '../components/UpdateBanner';
@@ -24,7 +24,39 @@ describe('UpdateBanner', () => {
     render(<UpdateBanner mismatch />);
     await userEvent.click(screen.getByRole('button', { name: /refresh/i }));
 
-    expect(reload).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    vi.unstubAllGlobals();
+  });
+
+  // On a slow reload the service worker falls back to its saved page — the old build — and the
+  // banner comes straight back. Refresh drops that saved page first, so the reload waits for the
+  // new one. The cached build files stay (hashed, always correct).
+  it("drops the service worker's saved page, and only that, before reloading", async () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...window.location, reload });
+    const deleted: string[] = [];
+    vi.stubGlobal('caches', {
+      keys: vi.fn().mockResolvedValue(['ivl-shell-v1', 'ivl-assets-v1', 'other']),
+      delete: vi.fn(async (key: string) => { deleted.push(key); return true; }),
+    });
+
+    render(<UpdateBanner mismatch />);
+    await userEvent.click(screen.getByRole('button', { name: /refresh/i }));
+
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    expect(deleted).toEqual(['ivl-shell-v1']);
+    vi.unstubAllGlobals();
+  });
+
+  it('still reloads when the cache API fails', async () => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...window.location, reload });
+    vi.stubGlobal('caches', { keys: vi.fn().mockRejectedValue(new Error('blocked')), delete: vi.fn() });
+
+    render(<UpdateBanner mismatch />);
+    await userEvent.click(screen.getByRole('button', { name: /refresh/i }));
+
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     vi.unstubAllGlobals();
   });
 
