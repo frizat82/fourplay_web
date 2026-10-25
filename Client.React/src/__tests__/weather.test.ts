@@ -105,6 +105,21 @@ const iconFiles = new Set(
 );
 
 describe('toWeatherIconClass', () => {
+  // Two glyphs in the set don't match the rest — see the note on WEATHER_ICON_CLASS.
+  it('shows "mostly sunny/clear" with the full-size body-plus-cloud icons', () => {
+    expect(toWeatherIconClass(mapWeatherFromEspn('Mostly sunny', '2'))).toBe('wi-day-cloudy');
+    expect(toWeatherIconClass(mapWeatherFromEspn('Partly sunny', '3'))).toBe('wi-day-cloudy');
+    expect(toWeatherIconClass(mapWeatherFromEspn('Mostly clear', '34'))).toBe('wi-night-cloudy');
+    // No condition code (e.g. a stored CFB row): the text alone gets there too.
+    expect(toWeatherIconClass(mapWeatherFromEspn('Partly sunny', null))).toBe('wi-day-cloudy');
+    expect(toWeatherIconClass(mapWeatherFromEspn('Mostly sunny', null))).toBe('wi-day-cloudy');
+  });
+
+  it('never uses the undersized glyphs', () => {
+    expect(Object.values(WEATHER_ICON_CLASS)).not.toContain('wi-day-sunny-overcast');
+    expect(Object.values(WEATHER_ICON_CLASS)).not.toContain('wi-night-partly-cloudy');
+  });
+
   it('maps the real-payload keys to the expected icons', () => {
     expect(toWeatherIconClass('haze')).toBe('wi-day-haze');
     expect(toWeatherIconClass('partly-cloudy')).toBe('wi-day-cloudy');
