@@ -105,6 +105,21 @@ const iconFiles = new Set(
 );
 
 describe('toWeatherIconClass', () => {
+  // wi-day-sunny-overcast and wi-night-partly-cloudy are drawn at about half the size of the rest
+  // of the Erik Flowers set, with a near-full circle behind a small cloud, so at 32px they read as
+  // "a sun behind clouds" in a style that matches nothing else on the card. "Mostly sunny/clear"
+  // shows the full-size body-plus-cloud icon instead.
+  it('shows "mostly sunny/clear" with the full-size body-plus-cloud icons', () => {
+    expect(toWeatherIconClass(mapWeatherFromEspn('Mostly sunny', '2'))).toBe('wi-day-cloudy');
+    expect(toWeatherIconClass(mapWeatherFromEspn('Partly sunny', '3'))).toBe('wi-day-cloudy');
+    expect(toWeatherIconClass(mapWeatherFromEspn('Mostly clear', '34'))).toBe('wi-night-cloudy');
+  });
+
+  it('never uses the undersized glyphs', () => {
+    expect(Object.values(WEATHER_ICON_CLASS)).not.toContain('wi-day-sunny-overcast');
+    expect(Object.values(WEATHER_ICON_CLASS)).not.toContain('wi-night-partly-cloudy');
+  });
+
   it('maps the real-payload keys to the expected icons', () => {
     expect(toWeatherIconClass('haze')).toBe('wi-day-haze');
     expect(toWeatherIconClass('partly-cloudy')).toBe('wi-day-cloudy');

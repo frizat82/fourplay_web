@@ -1,8 +1,10 @@
 // Semantic weather key → local Erik Flowers icon (public/Icons/Weather/svg/<class>.svg).
 // Anything not listed (including 'indoor' and 'unknown') renders as wi-na.
+// Avoid wi-day-sunny-overcast and wi-night-partly-cloudy: they're drawn at about half the set's size,
+// so "mostly sunny/clear" uses the full-size body-plus-cloud icons (same as partly cloudy).
 export const WEATHER_ICON_CLASS = {
   'clear': 'wi-day-sunny',
-  'mostly-clear': 'wi-day-sunny-overcast',
+  'mostly-clear': 'wi-day-cloudy',
   'partly-cloudy': 'wi-day-cloudy',
   'cloudy': 'wi-cloudy',
   'rain-light': 'wi-day-rain',
@@ -18,7 +20,7 @@ export const WEATHER_ICON_CLASS = {
   'cold': 'wi-snowflake-cold',
   'windy': 'wi-strong-wind',
   'clear-night': 'wi-night-clear',
-  'mostly-clear-night': 'wi-night-partly-cloudy',
+  'mostly-clear-night': 'wi-night-cloudy',
   'partly-cloudy-night': 'wi-night-cloudy',
   'haze-night': 'wi-night-fog',
   'rain-light-night': 'wi-night-showers',
