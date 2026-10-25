@@ -5,8 +5,7 @@ Notable changes to IV League, most recent first. For admins — see the version 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
 ## 2026-10-25
-
-- Mostly sunny and mostly clear (night) games now show the same full-size sun-and-cloud or moon-and-cloud weather icon as the rest of the set, instead of a small mismatched sun-behind-clouds glyph
+- Mostly sunny and mostly clear (night) games now show the same sun-and-cloud or moon-and-cloud weather icon style as every other game, instead of two mismatched icons (a sun behind a small cloud by day, a shrunken moon behind a cloud at night)
 
 ## 2026-10-22
 - Fixed the "A new version is available" banner that never went away after tapping Refresh (installed app on Android): it now compares against the website's own deployed build, not the separately deployed backend.
