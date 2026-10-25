@@ -14,6 +14,7 @@ export default function WeatherIcon({ iconKey, conditionId, temperatureF, showTe
   if (!iconKey) return null;
 
   const semanticKey = mapWeatherFromEspn(iconKey, conditionId);
+  if (semanticKey === 'indoor' || semanticKey === 'unknown') return null;
   const iconClass = toWeatherIconClass(semanticKey);
   const iconSrc = `/Icons/Weather/svg/${iconClass}.svg`;
   const iconFilter = theme.palette.mode === 'dark' ? 'brightness(0) invert(1)' : 'brightness(0)';
