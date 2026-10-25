@@ -5,7 +5,7 @@ Notable changes to IV League, most recent first. For admins — see the version 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
 ## 2026-10-25
-- Fixed weather icon inconsistency on dome-stadium games (e.g. Cowboys home games at AT&T Stadium): indoor and unrecognized conditions no longer show a mismatched N/A icon — they now show nothing, matching games where no weather data is available.
+- Fixed weather icon inconsistency on dome-stadium games (e.g. Cowboys home games at AT&T Stadium): indoor games now show a stadium icon instead of a mismatched N/A cloud icon.
 
 ## 2026-10-22
 - Fixed the "A new version is available" banner that never went away after tapping Refresh (installed app on Android): it now compares against the website's own deployed build, not the separately deployed backend.
