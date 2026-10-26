@@ -133,6 +133,13 @@ describe('toWeatherIconClass', () => {
     expect(iconFiles.has('wi-na.svg')).toBe(true);
   });
 
+  // The vendored set is pruned to what the app can show: add an icon file only together with
+  // the mapping that uses it (license: public/Icons/Weather/LICENSE.md).
+  it('public/Icons/Weather/svg holds only the mapped icons and wi-na', () => {
+    const used = new Set([...Object.values(WEATHER_ICON_CLASS), 'wi-na'].map(c => `${c}.svg`));
+    expect([...iconFiles].filter(f => !used.has(f!)).sort()).toEqual([]);
+  });
+
   it('falls back to "wi-na" for an unknown, indoor, or prototype-name key', () => {
     expect(toWeatherIconClass('unknown')).toBe('wi-na');
     expect(toWeatherIconClass('indoor')).toBe('wi-na');
