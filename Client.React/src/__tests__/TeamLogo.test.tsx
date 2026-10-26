@@ -1,11 +1,23 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import TeamLogo from '../components/sports/TeamLogo';
 import { createAppTheme } from '../app/theme';
 
 const inDarkMode = (ui: React.ReactElement) => render(<ThemeProvider theme={createAppTheme('dark')}>{ui}</ThemeProvider>);
 
+// A load error is retried before moving on (see TeamArtImage), so "this src is really broken"
+// means failing it through every retry.
+const failForGood = (abbr: string) => {
+  for (let i = 0; i < 3; i++) {
+    fireEvent.error(screen.getByRole('img', { name: abbr }));
+    act(() => { vi.advanceTimersByTime(5000); });
+  }
+};
+
 describe('TeamLogo', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
   it('uses the downloaded ESPN logo PNG from the sport-scoped folder as the primary source', () => {
     render(<TeamLogo abbr="ne" sport="nfl" />);
     expect(screen.getByRole('img', { name: 'ne' })).toHaveAttribute('src', '/Icons/Logos/nfl/ne.png');
@@ -20,9 +32,8 @@ describe('TeamLogo', () => {
 
   it('falls back to the same text badge TeamHelmet uses when the logo 404s', () => {
     const { container } = render(<TeamLogo abbr="xyz" sport="nfl" showLabel={false} />);
-    const img = screen.getByRole('img', { name: 'xyz' });
 
-    fireEvent.error(img);
+    failForGood('xyz');
 
     expect(container.querySelector('img')).not.toBeInTheDocument();
     expect(screen.getByText('XYZ')).toBeInTheDocument();
@@ -53,10 +64,10 @@ describe('TeamLogo', () => {
   it('falls back to the regular logo when a dark one is missing, before the text badge', () => {
     const { container } = inDarkMode(<TeamLogo abbr="osu" sport="cfb" showLabel={false} />);
 
-    fireEvent.error(screen.getByRole('img', { name: 'osu' }));
+    failForGood('osu');
     expect(screen.getByRole('img', { name: 'osu' })).toHaveAttribute('src', '/Icons/Logos/cfb/osu.png');
 
-    fireEvent.error(screen.getByRole('img', { name: 'osu' }));
+    failForGood('osu');
     expect(container.querySelector('img')).not.toBeInTheDocument();
     expect(screen.getByText('OSU')).toBeInTheDocument();
   });
