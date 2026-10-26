@@ -1,4 +1,4 @@
-import { ACCUWEATHER_CONDITIONS, WEATHER_ICON_CLASS, mapWeatherFromEspn, toWeatherIconClass } from '../utils/weather';
+import { ACCUWEATHER_CONDITIONS, WEATHER_ICON_CLASS, WEATHER_ICON_FALLBACK, mapWeatherFromEspn, toWeatherIconClass } from '../utils/weather';
 
 describe('mapWeatherFromEspn', () => {
   it('returns "unknown" when displayValue is missing', () => {
@@ -100,12 +100,12 @@ describe('mapWeatherFromEspn', () => {
 });
 
 // Non-eager glob: only the matched file paths are needed, not their contents.
-const iconFiles = new Set(
-  Object.keys(import.meta.glob('../../public/Icons/Weather/svg/*.svg')).map(p => p.split('/').pop()),
-);
+// Every file under public/Icons/Weather, as a path relative to it (any type, any depth).
+const weatherFiles = Object.keys(import.meta.glob('../../public/Icons/Weather/**/*'))
+  .map(p => p.split('/public/Icons/Weather/')[1]);
 
 describe('toWeatherIconClass', () => {
-  // Two glyphs in the set don't match the rest — see the note on WEATHER_ICON_CLASS.
+  // See the note on WEATHER_ICON_CLASS for why "mostly" shares partly cloudy's icon.
   it('shows "mostly sunny/clear" with the full-size body-plus-cloud icons', () => {
     expect(toWeatherIconClass(mapWeatherFromEspn('Mostly sunny', '2'))).toBe('wi-day-cloudy');
     expect(toWeatherIconClass(mapWeatherFromEspn('Partly sunny', '3'))).toBe('wi-day-cloudy');
@@ -115,33 +115,24 @@ describe('toWeatherIconClass', () => {
     expect(toWeatherIconClass(mapWeatherFromEspn('Mostly sunny', null))).toBe('wi-day-cloudy');
   });
 
-  it('never uses the undersized glyphs', () => {
-    expect(Object.values(WEATHER_ICON_CLASS)).not.toContain('wi-day-sunny-overcast');
-    expect(Object.values(WEATHER_ICON_CLASS)).not.toContain('wi-night-partly-cloudy');
-  });
-
   it('maps the real-payload keys to the expected icons', () => {
     expect(toWeatherIconClass('haze')).toBe('wi-day-haze');
     expect(toWeatherIconClass('partly-cloudy')).toBe('wi-day-cloudy');
     expect(toWeatherIconClass('haze-night')).toBe('wi-night-fog');
   });
 
-  it('every icon class in the map exists in public/Icons/Weather/svg', () => {
-    for (const [key, iconClass] of Object.entries(WEATHER_ICON_CLASS)) {
-      expect(iconFiles.has(`${iconClass}.svg`), `${key} → ${iconClass}.svg`).toBe(true);
-    }
-    expect(iconFiles.has('wi-na.svg')).toBe(true);
-  });
-
-  // The vendored set is pruned to what the app can show: add an icon file only together with
-  // the mapping that uses it (license: public/Icons/Weather/LICENSE.md).
-  it('public/Icons/Weather/svg holds only the mapped icons and wi-na', () => {
-    const used = new Set([...Object.values(WEATHER_ICON_CLASS), 'wi-na'].map(c => `${c}.svg`));
-    expect([...iconFiles].filter(f => !used.has(f!)).sort()).toEqual([]);
+  // The vendored set is pruned to exactly what the app can show (plus its license): a mapped icon
+  // that's missing and a file nothing maps to both fail here — see public/Icons/Weather/LICENSE.md.
+  it('public/Icons/Weather holds exactly the mapped icons, the fallback and the license', () => {
+    const expected = new Set([
+      ...[...Object.values(WEATHER_ICON_CLASS), WEATHER_ICON_FALLBACK].map(c => `svg/${c}.svg`),
+      'LICENSE.md', 'OFL.txt',
+    ]);
+    expect([...weatherFiles].sort()).toEqual([...expected].sort());
   });
 
   it('falls back to "wi-na" for an unknown, indoor, or prototype-name key', () => {
-    expect(toWeatherIconClass('unknown')).toBe('wi-na');
+    expect(toWeatherIconClass('unknown')).toBe(WEATHER_ICON_FALLBACK);
     expect(toWeatherIconClass('indoor')).toBe('wi-na');
     expect(toWeatherIconClass('toString')).toBe('wi-na');
   });
