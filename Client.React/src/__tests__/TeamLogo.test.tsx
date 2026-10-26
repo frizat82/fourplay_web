@@ -1,22 +1,16 @@
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import TeamLogo from '../components/sports/TeamLogo';
 import { createAppTheme } from '../app/theme';
+import { failForGood, resetTeamArt, stubImageHead } from './testUtils/teamArt';
 
 const inDarkMode = (ui: React.ReactElement) => render(<ThemeProvider theme={createAppTheme('dark')}>{ui}</ThemeProvider>);
 
-// A load error is retried before moving on (see TeamArtImage), so "this src is really broken"
-// means failing it through every retry.
-const failForGood = (abbr: string) => {
-  for (let i = 0; i < 3; i++) {
-    fireEvent.error(screen.getByRole('img', { name: abbr }));
-    act(() => { vi.advanceTimersByTime(5000); });
-  }
-};
 
 describe('TeamLogo', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  // The logo files below don't exist in the test environment: their load errors end as "missing".
+  beforeEach(() => { vi.useFakeTimers(); stubImageHead('missing'); });
+  afterEach(() => { vi.useRealTimers(); resetTeamArt(); });
 
   it('uses the downloaded ESPN logo PNG from the sport-scoped folder as the primary source', () => {
     render(<TeamLogo abbr="ne" sport="nfl" />);
@@ -30,10 +24,10 @@ describe('TeamLogo', () => {
     expect(screen.getByRole('img', { name: 'mia' })).toHaveAttribute('src', '/Icons/Logos/cfb/mia.png');
   });
 
-  it('falls back to the same text badge TeamHelmet uses when the logo 404s', () => {
+  it('falls back to the same text badge TeamHelmet uses when the logo 404s', async () => {
     const { container } = render(<TeamLogo abbr="xyz" sport="nfl" showLabel={false} />);
 
-    failForGood('xyz');
+    await failForGood('xyz');
 
     expect(container.querySelector('img')).not.toBeInTheDocument();
     expect(screen.getByText('XYZ')).toBeInTheDocument();
@@ -61,13 +55,13 @@ describe('TeamLogo', () => {
     expect(screen.getByRole('img', { name: 'pit' })).toHaveAttribute('src', '/Icons/Logos/nfl-dark/pit.png');
   });
 
-  it('falls back to the regular logo when a dark one is missing, before the text badge', () => {
+  it('falls back to the regular logo when a dark one is missing, before the text badge', async () => {
     const { container } = inDarkMode(<TeamLogo abbr="osu" sport="cfb" showLabel={false} />);
 
-    failForGood('osu');
+    await failForGood('osu');
     expect(screen.getByRole('img', { name: 'osu' })).toHaveAttribute('src', '/Icons/Logos/cfb/osu.png');
 
-    failForGood('osu');
+    await failForGood('osu');
     expect(container.querySelector('img')).not.toBeInTheDocument();
     expect(screen.getByText('OSU')).toBeInTheDocument();
   });
