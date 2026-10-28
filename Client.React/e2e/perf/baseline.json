@@ -1,27 +1,27 @@
 {
   "dashboard": {
-    "jsBytes": 698762,
+    "jsBytes": 700605,
     "cssBytes": 15415,
     "thirdPartyRequests": 0,
-    "apiRequests": 11,
+    "apiRequests": 12,
     "apiChainDepth": 3,
     "cls": 0.001,
     "shiftsAfterReady": 0
   },
   "picks": {
-    "jsBytes": 698762,
-    "cssBytes": 15415,
-    "thirdPartyRequests": 0,
-    "apiRequests": 9,
-    "apiChainDepth": 3,
-    "cls": 0,
-    "shiftsAfterReady": 0
-  },
-  "scores": {
-    "jsBytes": 698762,
+    "jsBytes": 700605,
     "cssBytes": 15415,
     "thirdPartyRequests": 0,
     "apiRequests": 10,
+    "apiChainDepth": 3,
+    "cls": 0.001,
+    "shiftsAfterReady": 0
+  },
+  "scores": {
+    "jsBytes": 700605,
+    "cssBytes": 15415,
+    "thirdPartyRequests": 0,
+    "apiRequests": 11,
     "apiChainDepth": 3,
     "cls": 0.001,
     "shiftsAfterReady": 0
