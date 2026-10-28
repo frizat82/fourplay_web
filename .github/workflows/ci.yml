@@ -109,6 +109,7 @@ jobs:
         run: npm run test -- --run --coverage
 
       - name: Build
+        id: build
         run: npm run build
         env:
           VITE_API_BASE_URL: ''
@@ -127,6 +128,12 @@ jobs:
         # webServer in playwright.config.ts auto-starts Vite when CI=true.
         # All API calls are intercepted by page.route() — no real backend needed.
         run: npm run test:e2e -- --project=chromium
+
+      - name: Playwright (perf gate)
+        # Serves the Build step's dist/ via `vite preview`; gates each page against e2e/perf/baseline.json.
+        # Runs even if the mock e2e step failed, so both results show up in one CI run.
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: npm run test:perf:gate -- --reporter=line
 
   demo-e2e:
     name: Demo backend e2e tests
