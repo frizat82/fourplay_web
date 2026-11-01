@@ -252,6 +252,18 @@ export function computeUnderWins(
   return (homeScore + awayScore) < underThreshold;
 }
 
+/**
+ * Whether one pick is covering, straight off the adapter's already-computed GameView fields — never
+ * recomputed, and never by negating the other side (teased spreads and juiced totals aren't mirror
+ * images). Live games return "covering right now"; null until the game starts, or if it wasn't found.
+ */
+export function pickCovers(game: GameView | undefined, team: string, pickType: PickType): boolean | null {
+  if (!game) return null;
+  if (pickType === 'Over') return game.overWins ?? null;
+  if (pickType === 'Under') return game.underWins ?? null;
+  return (team === game.homeTeam ? game.homeCovers : game.awayCovers) ?? null;
+}
+
 export function isHomeAway(value: HomeAway, expected: 'home' | 'away') {
   if (typeof value === 'number') {
     return expected === 'away' ? value === 0 : value === 1;
