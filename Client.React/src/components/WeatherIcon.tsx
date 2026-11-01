@@ -15,12 +15,10 @@ export default function WeatherIcon({ iconKey, conditionId, temperatureF, showTe
   if (!iconKey) return null;
 
   const semanticKey = mapWeatherFromEspn(iconKey, conditionId);
-  if (semanticKey === 'unknown') return null;
-
   if (semanticKey === 'indoor') {
     return (
       <Stack direction="row" alignItems="center" spacing={1}>
-        <StadiumOutlinedIcon sx={{ width: 32, height: 32, opacity: 0.7 }} titleAccess="Indoor" />
+        <StadiumOutlinedIcon sx={{ width: 32, height: 32, color: 'text.primary' }} titleAccess="Indoor" />
       </Stack>
     );
   }

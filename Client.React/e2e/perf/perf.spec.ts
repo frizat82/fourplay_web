@@ -162,7 +162,9 @@ async function measure(page: Page, path: string, ready: (page: Page) => Promise<
 
 const results: Record<string, RouteMetrics> = {};
 
-test.describe.configure({ mode: 'serial' });
+// In order, in one worker (so afterAll sees every route when updating the baseline), but not
+// 'serial': one route failing its gate must not skip measuring the others.
+test.describe.configure({ mode: 'default' });
 
 for (const route of ROUTES) {
   test(`cold load: ${route.name}`, async ({ page }) => {

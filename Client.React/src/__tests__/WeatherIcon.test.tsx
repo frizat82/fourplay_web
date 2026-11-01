@@ -18,17 +18,16 @@ describe('WeatherIcon', () => {
     expect(img?.src).toContain('wi-day-cloudy.svg');
   });
 
-  // frizat: Cowboys home games at AT&T Stadium (dome) come back from ESPN as
-  // displayValue="Indoor". Previously this rendered wi-na.svg — a generic N/A
-  // icon that looked different from every other game card's weather icon.
+  // Dome games come back from ESPN as displayValue="Indoor" — a stadium icon reads better there
+  // than N/A, and every other card still has an icon in that spot.
   it('renders a stadium icon for an indoor game (dome stadium)', () => {
     const { container } = render(<WeatherIcon iconKey="Indoor" />);
     expect(container.firstChild).not.toBeNull();
     expect(container.querySelector('svg')).not.toBeNull();
   });
 
-  it('renders nothing for an unknown weather condition', () => {
+  it('keeps the N/A icon for an unrecognized condition', () => {
     const { container } = render(<WeatherIcon iconKey="Tornado Watch" />);
-    expect(container.firstChild).toBeNull();
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('wi-na.svg');
   });
 });

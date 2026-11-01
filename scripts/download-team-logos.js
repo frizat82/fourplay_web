@@ -77,11 +77,13 @@ async function loadEspnTeams(sportPath, { includeScoreboardAbbrs = false } = {})
 }
 
 // ESPN serves a few logos as 4096px originals (Jets, Davidson…); its image combiner returns every
-// logo at a consistent 500x500, which also keeps files under the repo's 500 KB pre-commit limit.
+// logo at a consistent size. Logos render at most 56px, so 168px covers a 3x iPhone screen —
+// teamLogoFiles.test.ts fails on anything larger.
+const LOGO_PX = 168;
 function sized(url) {
   const u = new URL(url);
   return u.hostname === 'a.espncdn.com' && u.pathname.startsWith('/i/')
-    ? `https://a.espncdn.com/combiner/i?img=${u.pathname}&w=500&h=500`
+    ? `https://a.espncdn.com/combiner/i?img=${u.pathname}&w=${LOGO_PX}&h=${LOGO_PX}`
     : url;
 }
 

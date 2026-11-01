@@ -6,9 +6,13 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-11-01
 - Scores matrix now shows who's still alive: live games show whether each pick is covering right now (striped, with the margin) instead of looking already final, members who are out are faded with a skull and listed last, and picks hidden until kickoff show a lock.
+- Indoor (dome) games now show a stadium icon where the weather icon goes, instead of an N/A icon.
+
+## 2026-10-26
+- Team logos load faster and no longer get stuck as a grey team-name badge after a weak-signal moment: a failed logo retries, and logos are now cached on your phone and a third of their old download size
 
 ## 2026-10-25
-- Fixed weather icon inconsistency on dome-stadium games (e.g. Cowboys home games at AT&T Stadium): indoor games now show a stadium icon instead of a mismatched N/A cloud icon.
+- Mostly sunny and mostly clear (night) games now show the same sun-and-cloud or moon-and-cloud weather icon style as every other game, instead of two mismatched icons (a sun behind a small cloud by day, a shrunken moon behind a cloud at night)
 
 ## 2026-10-22
 - Fixed the "A new version is available" banner that never went away after tapping Refresh (installed app on Android): it now compares against the website's own deployed build, not the separately deployed backend.
