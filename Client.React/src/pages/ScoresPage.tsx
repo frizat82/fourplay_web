@@ -22,8 +22,8 @@ import PickDialog from '../components/PickDialog';
 import FieldPosition from '../components/FieldPosition';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { isGameDecided, isGameFinal, isGameLive, isConsistentRedZone, spreadLabel, isWeekExcludedFromSeason, findGameIdForTeam } from '../utils/gameHelpers';
-import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
+import { isGameFinal, isGameLive, pickCovers, isConsistentRedZone, spreadLabel, isWeekExcludedFromSeason, findGameIdForTeam } from '../utils/gameHelpers';
+import type { SportAdapter, GameView, WeekState } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
@@ -33,23 +33,6 @@ import { useReconnectingEventSource } from '../utils/useReconnectingEventSource'
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
 
-function isDecided(game: GameView): boolean {
-  return isGameDecided(game.gameStatus);
-}
-
-function teamWins(game: GameView, team: string, pickType: PickType): boolean | null {
-  if (!isDecided(game)) return null;
-  if (pickType === 'Spread') {
-    // Teased spreads add juice per-team (see SpreadCalculator.GetSpread) — home/away spreads
-    // aren't mirror images, so the away side's result must come from its own computed value,
-    // never from negating homeCovers.
-    return team === game.homeTeam ? (game.homeCovers ?? null) : (game.awayCovers ?? null);
-  }
-  // Over/Under thresholds are juiced independently (see computeOverWins/computeUnderWins) — the
-  // Under result must come from its own computed value, never from negating overWins.
-  return pickType === 'Over' ? (game.overWins ?? null) : (game.underWins ?? null);
-}
-
 // frizat: 'info' (blue) means exactly one thing — "this is my own pick" (see didUserPick's own
 // unconditional 'info' below) — it must never appear here, since this function only ever colors
 // OTHER users' now-revealed picks. Returning 'info' for "not decided yet" used to make a
@@ -57,8 +40,7 @@ function teamWins(game: GameView, team: string, pickType: PickType): boolean | n
 // game's kickoff passed (even before ESPN's own status catches up — revealPicksForStartedGames
 // already reveals on kickoff time, independent of status).
 function badgeColor(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): 'success' | 'error' | 'default' {
-  if (!isDecided(game)) return 'default';
-  const wins = teamWins(game, team, pickType);
+  const wins = pickCovers(game, team, pickType);
   if (wins == null) return 'default';
   return wins ? 'success' : 'error';
 }
@@ -169,10 +151,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     });
   };
 
-  const users = useMemo(() => Array.from(new Set((data?.allPicks ?? []).map(p => p.userName))), [data?.allPicks]);
-
   // /code-review: this re-derives on every render otherwise, including live-game poll/SSE ticks
-  // that don't actually change data.games — memoized like matrixSpreads below.
+  // that don't actually change data.games.
   const sortedGames = useMemo(() => sortGamesByTimeThenRank(data?.games ?? []), [data?.games]);
 
   // Push notification deep link (/scores?team=KC, issue #461): once that team's game is on the
@@ -193,19 +173,6 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     const t = setTimeout(() => setFocusedGameId(null), 4000);
     return () => clearTimeout(t);
   }, [focusedGameId]);
-
-  /** Build spread result map for UserPicksMatrix from GameView cover data */
-  const matrixSpreads = useMemo(() => {
-    const result: Record<string, { isWinner: boolean; isOverWinner: boolean; isUnderWinner: boolean; spread: number | null; over: number | null; under: number | null }> = {};
-    for (const game of (data?.games ?? [])) {
-      if (game.homeCovers == null || game.awayCovers == null) continue; // not final
-      const ov = game.overWins ?? false;
-      const uv = game.underWins ?? false;
-      result[game.homeTeam] = { isWinner: game.homeCovers, isOverWinner: ov, isUnderWinner: uv, spread: game.homeSpread, over: game.overThreshold, under: game.underThreshold };
-      result[game.awayTeam] = { isWinner: game.awayCovers ?? false, isOverWinner: ov, isUnderWinner: uv, spread: game.awaySpread, over: game.overThreshold, under: game.underThreshold };
-    }
-    return result;
-  }, [data?.games]);
 
   // ─── Guard states ─────────────────────────────────────────────────────────
 
@@ -301,14 +268,10 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
             <Grid size={12}>
               <UserPicksMatrix
                 sport={adapter.sport}
-                users={users}
-                picks={(data.allPicks ?? []).map(p => ({
-                  id: 0, leagueId: 0, userId: p.userId, userName: p.userName,
-                  team: p.team, pick: p.pickType as 'Spread' | 'Over' | 'Under',
-                  nflWeek: data.week, season: data.season, dateCreated: '',
-                }))}
-                spreads={matrixSpreads as Record<string, import('../types/picks').SpreadCalculationResponse>}
-                requiredPicks={data?.requiredPicks ?? 4}
+                picks={data.allPicks}
+                games={data.games}
+                requiredPicks={data.requiredPicks}
+                currentUserId={user?.userId}
               />
             </Grid>
           ) : (
