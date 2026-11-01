@@ -160,10 +160,8 @@ describe('UserPicksMatrix — LIVE tag on picks in a game being played', () => {
     expect(screen.getAllByText('LIVE')).toHaveLength(2);
   });
 
-  it('does not tag final or not-started picks', () => {
-    renderMatrix([pick('alice', 'KC')], [kcFinal]);
-    expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
-    renderMatrix([pick('bob', 'KC')], [kcScheduled]);
+  it.each([['final', kcFinal], ['not-started', kcScheduled]])('does not tag a %s pick', (_label, game) => {
+    renderMatrix([pick('alice', 'KC')], [game]);
     expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
   });
 });
