@@ -46,11 +46,14 @@ interface UserPicksMatrixProps {
 // dimensions via a mocked window.matchMedia, which doesn't reliably drive real CSS @media rules
 // in jsdom, so a pure-CSS version would lose the ability to verify the fix.
 const MATRIX_SIZE = {
-  mobile: { badgeHeight: 50, badgeWidth: 44, borderRadius: 1.5, logoSize: 22, teamFontLong: 12, teamFontShort: 15, pickLabelFont: 8, liveTagFont: 7, cellPadding: { px: 0.5, py: 0.5 }, usernameFont: 13 },
+  mobile: { badgeHeight: 50, badgeWidth: 44, borderRadius: 1.5, logoSize: 22, teamFontLong: 12, teamFontShort: 15, pickLabelFont: 8, liveTagFont: 8, cellPadding: { px: 0.5, py: 0.5 }, usernameFont: 13 },
   desktop: { badgeHeight: 76, badgeWidth: 60, borderRadius: 2, logoSize: 32, teamFontLong: 16, teamFontShort: 22, pickLabelFont: 11, liveTagFont: 9, cellPadding: undefined, usernameFont: undefined },
 };
 
 const OUT_OPACITY = 0.45;
+const LIVE_TAG_LINE_HEIGHT = 1.2;
+// Share of the LIVE tag's height that hangs inside the badge; the rest sits above its top edge.
+const LIVE_TAG_INSIDE = 0.35;
 const LEGEND_SWATCH_SX = { width: 18, height: 14, borderRadius: 0.5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
 const STATUS_LABEL: Record<SurvivorStatus, string> = {
@@ -127,6 +130,8 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
+          // Keep the logo/text clear of the half of the LIVE tag that hangs inside the badge.
+          pt: isLive ? `${size.liveTagFont * LIVE_TAG_LINE_HEIGHT * LIVE_TAG_INSIDE}px` : undefined,
         }}
       >
         {/* frizat: the helmet logo + 9px label was hard to read at a glance against the
@@ -151,14 +156,14 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
             {subLabel}
           </Typography>
         )}
-        {/* Straddles the top edge. aria-hidden: the badge's own label already says "(live)". */}
+        {/* Mostly above the top edge. aria-hidden: the badge's own label already says "(live)". */}
         {isLive && (
           <Box
             aria-hidden
             sx={{
-              position: 'absolute', top: 0, left: '50%', transform: 'translate(-50%, -50%)',
-              bgcolor: 'error.main', color: 'common.white', borderRadius: '4px', px: 0.5,
-              fontSize: size.liveTagFont, fontWeight: 700, letterSpacing: '0.08em', lineHeight: 1.3,
+              position: 'absolute', top: 0, left: '50%', transform: `translate(-50%, -${(1 - LIVE_TAG_INSIDE) * 100}%)`,
+              bgcolor: 'error.main', color: 'error.contrastText', borderRadius: '4px', px: 0.5,
+              fontSize: size.liveTagFont, fontWeight: 700, letterSpacing: '0.08em', lineHeight: LIVE_TAG_LINE_HEIGHT,
             }}
           >
             LIVE

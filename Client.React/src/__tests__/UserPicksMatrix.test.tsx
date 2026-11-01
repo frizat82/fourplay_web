@@ -160,6 +160,12 @@ describe('UserPicksMatrix — LIVE tag on picks in a game being played', () => {
     expect(screen.getAllByText('LIVE')).toHaveLength(2);
   });
 
+  it('hides the tag from screen readers — the badge label already says "(live)"', () => {
+    renderMatrix([pick('alice', 'KC')], [kcLive]);
+    expect(screen.getByText('LIVE')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByLabelText('KC: covering +3.5 (live)')).toBeInTheDocument();
+  });
+
   it.each([['final', kcFinal], ['not-started', kcScheduled]])('does not tag a %s pick', (_label, game) => {
     renderMatrix([pick('alice', 'KC')], [game]);
     expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
