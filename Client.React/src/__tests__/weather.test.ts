@@ -126,18 +126,14 @@ describe('toWeatherIconClass', () => {
   it('public/Icons/Weather holds exactly the mapped icons, the fallback and the license', () => {
     const expected = new Set([
       ...[...Object.values(WEATHER_ICON_CLASS), WEATHER_ICON_FALLBACK].map(c => `svg/${c}.svg`),
-      'LICENSE.md', 'OFL.txt', 'APACHE-2.0.txt',
+      'LICENSE.md', 'OFL.txt',
     ]);
     expect([...weatherFiles].sort()).toEqual([...expected].sort());
   });
 
-  it('falls back to "wi-na" for an unknown or prototype-name key', () => {
+  it('falls back to "wi-na" for an unknown, indoor, or prototype-name key', () => {
     expect(toWeatherIconClass('unknown')).toBe(WEATHER_ICON_FALLBACK);
+    expect(toWeatherIconClass('indoor')).toBe('wi-na');
     expect(toWeatherIconClass('toString')).toBe('wi-na');
-  });
-
-  // A dome's forecast is the city's weather, not the field's — show a stadium, not N/A.
-  it('shows a stadium for an indoor game', () => {
-    expect(toWeatherIconClass(mapWeatherFromEspn('Indoor', '18'))).toBe('stadium');
   });
 });
