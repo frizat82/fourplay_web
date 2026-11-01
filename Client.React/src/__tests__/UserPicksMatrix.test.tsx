@@ -153,6 +153,21 @@ describe('UserPicksMatrix — Over/Under is an alternate pick type, not an addit
   });
 });
 
+describe('UserPicksMatrix — LIVE tag on picks in a game being played', () => {
+  // A red corner dot on a green "covering" pick read as "losing"; a labeled tag says what it means.
+  it('tags a live pick LIVE whether or not it is covering', () => {
+    renderMatrix([pick('alice', 'KC'), pick('bob', 'LV')], [kcLive]);
+    expect(screen.getAllByText('LIVE')).toHaveLength(2);
+  });
+
+  it('does not tag final or not-started picks', () => {
+    renderMatrix([pick('alice', 'KC')], [kcFinal]);
+    expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
+    renderMatrix([pick('bob', 'KC')], [kcScheduled]);
+    expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
+  });
+});
+
 describe('UserPicksMatrix — live games are distinct from final results', () => {
   // Before this, a live game's "covering right now" value was painted the same solid green/red
   // as a final result, so a Sunday-night pick looked already decided.

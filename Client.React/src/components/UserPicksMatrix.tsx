@@ -46,8 +46,8 @@ interface UserPicksMatrixProps {
 // dimensions via a mocked window.matchMedia, which doesn't reliably drive real CSS @media rules
 // in jsdom, so a pure-CSS version would lose the ability to verify the fix.
 const MATRIX_SIZE = {
-  mobile: { badgeHeight: 50, badgeWidth: 44, borderRadius: 1.5, logoSize: 22, teamFontLong: 12, teamFontShort: 15, pickLabelFont: 8, cellPadding: { px: 0.5, py: 0.5 }, usernameFont: 13 },
-  desktop: { badgeHeight: 76, badgeWidth: 60, borderRadius: 2, logoSize: 32, teamFontLong: 16, teamFontShort: 22, pickLabelFont: 11, cellPadding: undefined, usernameFont: undefined },
+  mobile: { badgeHeight: 50, badgeWidth: 44, borderRadius: 1.5, logoSize: 22, teamFontLong: 12, teamFontShort: 15, pickLabelFont: 8, liveTagFont: 7, cellPadding: { px: 0.5, py: 0.5 }, usernameFont: 13 },
+  desktop: { badgeHeight: 76, badgeWidth: 60, borderRadius: 2, logoSize: 32, teamFontLong: 16, teamFontShort: 22, pickLabelFont: 11, liveTagFont: 9, cellPadding: undefined, usernameFont: undefined },
 };
 
 const OUT_OPACITY = 0.45;
@@ -151,8 +151,18 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
             {subLabel}
           </Typography>
         )}
+        {/* Straddles the top edge. aria-hidden: the badge's own label already says "(live)". */}
         {isLive && (
-          <Box sx={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, borderRadius: '50%', bgcolor: 'error.main' }} />
+          <Box
+            aria-hidden
+            sx={{
+              position: 'absolute', top: 0, left: '50%', transform: 'translate(-50%, -50%)',
+              bgcolor: 'error.main', color: 'common.white', borderRadius: '4px', px: 0.5,
+              fontSize: size.liveTagFont, fontWeight: 700, letterSpacing: '0.08em', lineHeight: 1.3,
+            }}
+          >
+            LIVE
+          </Box>
         )}
       </Paper>
     );
