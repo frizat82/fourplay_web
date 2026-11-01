@@ -203,8 +203,14 @@ function computeCovers(
   opponentScore: number | null,
 ): boolean | null {
   if (!isGameDecided(status) || teamSpread == null || teamScore == null || opponentScore == null) return null;
-  return (teamScore + teamSpread) > opponentScore;
+  return spreadMargin(teamSpread, teamScore, opponentScore) > 0;
 }
+
+// Margins past the line (positive = covering). The cover functions and pickMargin share these, so
+// a displayed margin can never disagree with the covering result.
+const spreadMargin = (teamSpread: number, teamScore: number, opponentScore: number) => teamScore + teamSpread - opponentScore;
+const overMargin = (overThreshold: number, homeScore: number, awayScore: number) => homeScore + awayScore - overThreshold;
+const underMargin = (underThreshold: number, homeScore: number, awayScore: number) => underThreshold - (homeScore + awayScore);
 
 export function computeHomeCovers(
   status: GameStatusValue,
@@ -238,7 +244,7 @@ export function computeOverWins(
   awayScore: number | null,
 ): boolean | null {
   if (!isGameDecided(status) || overThreshold == null || homeScore == null || awayScore == null) return null;
-  return (homeScore + awayScore) > overThreshold;
+  return overMargin(overThreshold, homeScore, awayScore) > 0;
 }
 
 /** Returns whether the total is under the Under threshold, or null if unavailable. */
@@ -249,7 +255,32 @@ export function computeUnderWins(
   awayScore: number | null,
 ): boolean | null {
   if (!isGameDecided(status) || underThreshold == null || homeScore == null || awayScore == null) return null;
-  return (homeScore + awayScore) < underThreshold;
+  return underMargin(underThreshold, homeScore, awayScore) > 0;
+}
+
+/**
+ * Whether one pick is covering, straight off the adapter's already-computed GameView fields — never
+ * recomputed, and never by negating the other side (teased spreads and juiced totals aren't mirror
+ * images). Live games return "covering right now"; null until the game starts, or if it wasn't found.
+ */
+export function pickCovers(game: GameView | undefined, team: string, pickType: PickType): boolean | null {
+  if (!game) return null;
+  if (pickType === 'Over') return game.overWins ?? null;
+  if (pickType === 'Under') return game.underWins ?? null;
+  return (team === game.homeTeam ? game.homeCovers : game.awayCovers) ?? null;
+}
+
+// How far a pick is past its line (positive = covering). Display only: whether a pick covers
+// always comes from pickCovers.
+export function pickMargin(game: GameView | undefined, team: string, pickType: PickType): number | null {
+  if (!game || game.homeScore == null || game.awayScore == null) return null;
+  const { homeScore, awayScore } = game;
+  if (pickType === 'Over') return game.overThreshold == null ? null : overMargin(game.overThreshold, homeScore, awayScore);
+  if (pickType === 'Under') return game.underThreshold == null ? null : underMargin(game.underThreshold, homeScore, awayScore);
+  const isHome = team === game.homeTeam;
+  const spread = isHome ? game.homeSpread : game.awaySpread;
+  if (spread == null) return null;
+  return isHome ? spreadMargin(spread, homeScore, awayScore) : spreadMargin(spread, awayScore, homeScore);
 }
 
 export function isHomeAway(value: HomeAway, expected: 'home' | 'away') {

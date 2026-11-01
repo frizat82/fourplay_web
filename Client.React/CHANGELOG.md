@@ -4,6 +4,9 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-11-01
+- Scores matrix now shows who's still alive: live games show whether each pick is covering right now (striped, with the margin) instead of looking already final, members who are out are faded with a skull and listed last, and picks hidden until kickoff show a lock.
+
 ## 2026-10-26
 - Team logos load faster and no longer get stuck as a grey team-name badge after a weak-signal moment: a failed logo retries, and logos are now cached on your phone and a third of their old download size
 

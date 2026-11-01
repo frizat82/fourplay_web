@@ -2,6 +2,8 @@ import type { CfbSlateDto, NflCurrentWeekDto } from '../types/league';
 import type { Mock } from 'vitest';
 import type { Competition, EspnScores, Event } from '../types/espn';
 import type { NflPickDto, PickType, SpreadCalculationResponse, SpreadResponse } from '../types/picks';
+import type { GameStatusValue, GameView, PickView } from '../services/sportAdapter';
+import { computeAwayCovers, computeHomeCovers, computeOverWins, computeUnderWins } from '../utils/gameHelpers';
 
 /**
  * Resets a mocked `getLeagueJuice` and resolves it to no juice-mapping history, so
@@ -258,4 +260,29 @@ export function createLeaderboardEntry(overrides?: Partial<LeaderboardDto>): Lea
     weekResults: [createLeaderboardWeekResult()],
     ...overrides,
   };
+}
+
+/**
+ * A GameView as the NFL/CFB adapters hand it to ScoresPage: cover/over/under fields are derived
+ * from the scores by the same gameHelpers functions the adapters use, never set by hand.
+ */
+export function createGameView({
+  homeTeam, awayTeam, homeSpread, awaySpread, gameStatus, homeScore = null, awayScore = null,
+  gameTime = '2020-01-01T00:00:00Z', total = 45,
+}: {
+  homeTeam: string; awayTeam: string; homeSpread: number; awaySpread: number; gameStatus: GameStatusValue;
+  homeScore?: number | null; awayScore?: number | null; gameTime?: string; total?: number;
+}): GameView {
+  return {
+    id: `${homeTeam}vs${awayTeam}`, homeTeam, awayTeam, homeSpread, awaySpread,
+    overThreshold: total, underThreshold: total, homeScore, awayScore, gameStatus, gameTime,
+    homeCovers: computeHomeCovers(gameStatus, homeSpread, homeScore, awayScore),
+    awayCovers: computeAwayCovers(gameStatus, awaySpread, homeScore, awayScore),
+    overWins: computeOverWins(gameStatus, total, homeScore, awayScore),
+    underWins: computeUnderWins(gameStatus, total, homeScore, awayScore),
+  };
+}
+
+export function createPickView(userName: string, team: string, pickType: PickType = 'Spread', userId = `id-${userName}`): PickView {
+  return { gameId: '', team, pickType, userId, userName };
 }

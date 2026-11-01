@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
-import { isGameLocked, isWeekExcludedFromSeason } from '../utils/gameHelpers';
+import { isGameLocked, isWeekExcludedFromSeason, pickCovers } from '../utils/gameHelpers';
 import { picksQueryKey, type SportAdapter, type GameView, type PickView } from '../services/sportAdapter';
 
 interface PicksIslandProps {
@@ -57,18 +57,6 @@ function pickLabel(team: string, pickType: string): string {
   if (pickType === 'Over') return `${team} O`;
   if (pickType === 'Under') return `${team} U`;
   return team;
-}
-
-// Win/loss for a pick, straight off the adapter's already-computed GameView fields (homeCovers/
-// awayCovers/overWins/underWins — see gameHelpers.ts's computeHomeCovers/computeAwayCovers/
-// computeOverWins/computeUnderWins) — never recomputed here. null = not decided yet (or the pick's
-// game wasn't found, which shouldn't happen since pick.gameId is resolved from this same response's
-// games array at load time — see nflAdapter.ts's nflPickToPickView / cfbAdapter.ts's equivalent).
-function pickResult(game: GameView | undefined, pick: PickView): boolean | null {
-  if (!game) return null;
-  if (pick.pickType === 'Over') return game.overWins ?? null;
-  if (pick.pickType === 'Under') return game.underWins ?? null;
-  return (pick.team === game.homeTeam ? game.homeCovers : game.awayCovers) ?? null;
 }
 
 function LeaguePicksSummary({ adapter, leagueId, leagueName, userId }: LeaguePicksSummaryProps) {
@@ -177,7 +165,7 @@ const chipSx = {
 
 function PickChip({ pick, game }: PickChipProps) {
   const label = pickLabel(pick.team, pick.pickType);
-  const result = pickResult(game, pick);
+  const result = pickCovers(game, pick.team, pick.pickType);
   const locked = game ? isGameLocked(game) : false;
 
   if (result === true) return <Chip label={label} size="small" color="success" icon={<CheckIcon />} sx={chipSx} />;

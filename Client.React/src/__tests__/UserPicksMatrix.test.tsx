@@ -1,36 +1,42 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import UserPicksMatrix from '../components/UserPicksMatrix';
-import type { NflPickDto } from '../types/picks';
+import type { GameView, PickView } from '../services/sportAdapter';
+import { createGameView, createPickView as pick } from '../test/fixtures';
 
 vi.mock('../components/sports/TeamLogo', () => ({
   default: ({ abbr }: { abbr: string }) => <div data-testid={`team-art-${abbr}`}>{abbr}</div>,
 }));
 
-const picks: NflPickDto[] = [
-  { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Spread', season: 2025, nflWeek: 1, leagueId: 1, dateCreated: '2025-09-01T00:00:00Z' },
-];
+const FUTURE = '2099-01-01T00:00:00Z';
 
-function renderMatrix(mode: 'light' | 'dark') {
+// A game that hasn't kicked off: picks on it are revealed only to their owner, and it has no result.
+const kcScheduled = createGameView({ homeTeam: 'KC', awayTeam: 'LV', homeSpread: -6.5, awaySpread: 6.5, gameStatus: 'scheduled', gameTime: FUTURE });
+const kcLive = createGameView({ homeTeam: 'KC', awayTeam: 'LV', homeSpread: -6.5, awaySpread: 6.5, gameStatus: 'in_progress', homeScore: 20, awayScore: 10 });
+const kcFinal = createGameView({ homeTeam: 'KC', awayTeam: 'LV', homeSpread: -6.5, awaySpread: 6.5, gameStatus: 'final', homeScore: 20, awayScore: 10 });
+
+function renderMatrix(picks: PickView[], games: GameView[], requiredPicks = 1, mode: 'light' | 'dark' = 'light', currentUserId?: string) {
   return render(
     <ThemeProvider theme={createTheme({ palette: { mode } })}>
-      <UserPicksMatrix sport="nfl" users={['alice']} picks={picks} spreads={{}} requiredPicks={1} />
+      <UserPicksMatrix sport="nfl" picks={picks} games={games} requiredPicks={requiredPicks} currentUserId={currentUserId} />
     </ThemeProvider>,
   );
 }
+
+const renderOne = (mode: 'light' | 'dark' = 'light') => renderMatrix([pick('alice', 'KC')], [kcScheduled], 1, mode);
 
 describe('UserPicksMatrix — dark mode cell coloring', () => {
   // frizat: dark-mode neon logo assets are no longer used in the Matrix view at all (see the
   // "text-only badges" describe block below), but the cell background must still actually
   // change with the theme rather than staying a hardcoded light gray.
   it('uses a dark neutral cell background in dark mode, not the light-mode gray', () => {
-    const { getByText } = renderMatrix('dark');
+    const { getByText } = renderOne('dark');
     const cell = getByText('KC').parentElement;
     expect(cell).toHaveStyle({ backgroundColor: 'rgb(66, 66, 66)' }); // MUI grey.800
   });
 
   it('keeps the light neutral cell background in light mode', () => {
-    const { getByText } = renderMatrix('light');
+    const { getByText } = renderOne('light');
     const cell = getByText('KC').parentElement;
     expect(cell).toHaveStyle({ backgroundColor: 'rgb(238, 238, 238)' }); // MUI grey.200
   });
@@ -41,123 +47,66 @@ describe('UserPicksMatrix — text-only badges (no team logo)', () => {
   // Matrix view specifically (unlike GameCard, where the logo has room to breathe) — drop the
   // logo here and show only a much larger, bold team abbreviation.
   it('does not render a team helmet/logo image in the Matrix view', () => {
-    renderMatrix('light');
-    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    const { container } = renderOne();
+    expect(container.querySelector('img')).not.toBeInTheDocument();
   });
 
   it('renders the team abbreviation as large, readable text', () => {
-    renderMatrix('light');
-    const label = screen.getByText('KC');
-    expect(label).toHaveStyle({ fontSize: '22px', fontWeight: '800' });
+    renderOne();
+    expect(screen.getByText('KC')).toHaveStyle({ fontSize: '22px', fontWeight: '800' });
   });
 
   it('shrinks the text for 4-character CFB abbreviations so it fits the 60px badge (e.g. UTSA, UNLV, WASH)', () => {
     // frizat: this component is shared, unmodified, by CFB's ScoresPage Matrix view — CFB
-    // abbreviations run up to 4 characters, unlike NFL's 2-3, and the fixed 22px size below
-    // was only ever validated against NFL codes.
-    const cfbPicks: NflPickDto[] = [
-      { id: 1, userId: 'u1', userName: 'alice', team: 'UTSA', pick: 'Spread', season: 2025, nflWeek: 1, leagueId: 1, dateCreated: '' },
-    ];
-    render(
-      <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix sport="nfl" users={['alice']} picks={cfbPicks} spreads={{}} requiredPicks={1} />
-      </ThemeProvider>,
-    );
-    const label = screen.getByText('UTSA');
-    expect(label).toHaveStyle({ fontSize: '16px', fontWeight: '800' });
+    // abbreviations run up to 4 characters, unlike NFL's 2-3.
+    const utsa = createGameView({ homeTeam: 'UTSA', awayTeam: 'UNT', homeSpread: -3, awaySpread: 3, gameStatus: 'scheduled', gameTime: FUTURE });
+    renderMatrix([pick('alice', 'UTSA')], [utsa]);
+    expect(screen.getByText('UTSA')).toHaveStyle({ fontSize: '16px', fontWeight: '800' });
   });
 });
 
 describe('UserPicksMatrix — Over/Under shown as a bold word, not a small icon', () => {
   // frizat: a tiny corner arrow icon competing with the win/loss-colored badge background and
-  // the large team text was easy to miss — spell out OVER/UNDER instead, same size treatment
-  // as the team abbreviation label.
+  // the large team text was easy to miss — spell out OVER/UNDER instead.
   it('shows the word OVER for an Over pick', () => {
-    const overPick: NflPickDto[] = [
-      { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
-    ];
-    render(
-      <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix sport="nfl" users={['alice']} picks={overPick} spreads={{}} requiredPicks={1} />
-      </ThemeProvider>,
-    );
+    renderMatrix([pick('alice', 'KC', 'Over')], [kcScheduled]);
     expect(screen.getByText('OVER')).toBeInTheDocument();
   });
 
   it('shows the word UNDER for an Under pick', () => {
-    const underPick: NflPickDto[] = [
-      { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Under', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
-    ];
-    render(
-      <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix sport="nfl" users={['alice']} picks={underPick} spreads={{}} requiredPicks={1} />
-      </ThemeProvider>,
-    );
+    renderMatrix([pick('alice', 'KC', 'Under')], [kcScheduled]);
     expect(screen.getByText('UNDER')).toBeInTheDocument();
   });
 
   it('does not show an OVER/UNDER label for a Spread pick', () => {
-    renderMatrix('light');
+    renderOne();
     expect(screen.queryByText('OVER')).not.toBeInTheDocument();
     expect(screen.queryByText('UNDER')).not.toBeInTheDocument();
   });
 
   it('does not render an arrow icon anymore', () => {
-    const overPick: NflPickDto[] = [
-      { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
-    ];
-    const { container } = render(
-      <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix sport="nfl" users={['alice']} picks={overPick} spreads={{}} requiredPicks={1} />
-      </ThemeProvider>,
-    );
+    const { container } = renderMatrix([pick('alice', 'KC', 'Over')], [kcScheduled]);
     expect(container.querySelector('[data-testid="ArrowCircleUpIcon"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-testid="ArrowCircleDownIcon"]')).not.toBeInTheDocument();
   });
 
-  // frizat: the badge already encoded win/loss three different ways at once — the tinted
-  // background, a colored OVER/UNDER label, and a corner check/cancel icon — which read as
-  // cluttered rather than clear (user feedback: "hard to see w/ the check box"). The
-  // background alone now carries the win/loss signal; text stays a single neutral ink color,
-  // same as the team abbreviation, in every case (win, loss, or no result yet).
+  // frizat: the badge background alone carries the win/loss signal; text stays a single neutral
+  // ink color, same as the team abbreviation, in every case (win, loss, or no result yet).
+  const overWinner = createGameView({ homeTeam: 'KC', awayTeam: 'LV', homeSpread: -6.5, awaySpread: 6.5, gameStatus: 'final', homeScore: 30, awayScore: 24 });
   it.each([
-    ['light', 'a winning pick', { team: 'KC', isWinner: true, isOverWinner: true, isUnderWinner: false, spread: -3, over: 45, under: 45 }],
-    ['light', 'a losing pick', { team: 'KC', isWinner: false, isOverWinner: false, isUnderWinner: true, spread: -3, over: 45, under: 45 }],
-    ['light', 'a pick with no result yet', undefined],
-    ['dark', 'a winning pick', { team: 'KC', isWinner: true, isOverWinner: true, isUnderWinner: false, spread: -3, over: 45, under: 45 }],
-    ['dark', 'a losing pick', { team: 'KC', isWinner: false, isOverWinner: false, isUnderWinner: true, spread: -3, over: 45, under: 45 }],
-    ['dark', 'a pick with no result yet', undefined],
-  ] as const)('renders the OVER/UNDER label in the same neutral ink as the team name in %s mode for %s', (mode, _label, spread) => {
-    // frizat: /code-review caught that this only ever rendered in light mode — a future
-    // dark-mode-only color override on just one of the two labels would've silently passed.
-    const pick: NflPickDto[] = [
-      { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
-    ];
-    render(
-      <ThemeProvider theme={createTheme({ palette: { mode } })}>
-        <UserPicksMatrix sport="nfl" users={['alice']} picks={pick} spreads={spread ? { KC: spread } : {}} requiredPicks={1} />
-      </ThemeProvider>,
-    );
-    const teamLabel = screen.getByText('KC');
-    const ouLabel = screen.getByText('OVER');
-    expect(getComputedStyle(ouLabel).color).toBe(getComputedStyle(teamLabel).color);
+    ['light', 'a winning pick', overWinner],
+    ['light', 'a losing pick', kcFinal],
+    ['light', 'a pick with no result yet', kcScheduled],
+    ['dark', 'a winning pick', overWinner],
+    ['dark', 'a losing pick', kcFinal],
+    ['dark', 'a pick with no result yet', kcScheduled],
+  ] as const)('renders the OVER/UNDER label in the same neutral ink as the team name in %s mode for %s', (mode, _label, game) => {
+    renderMatrix([pick('alice', 'KC', 'Over')], [game], 1, mode);
+    expect(getComputedStyle(screen.getByText('OVER')).color).toBe(getComputedStyle(screen.getByText('KC')).color);
   });
 
   it('does not render a win/loss check or cancel icon — the badge background alone carries that signal', () => {
-    const picks: NflPickDto[] = [
-      { id: 1, userId: 'u1', userName: 'alice', team: 'KC', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
-    ];
-    const { container } = render(
-      <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix
-          sport="nfl"
-          users={['alice']}
-          picks={picks}
-          spreads={{ KC: { team: 'KC', isWinner: true, isOverWinner: true, isUnderWinner: false, spread: -3, over: 45, under: 45 } }}
-          requiredPicks={1}
-        />
-      </ThemeProvider>,
-    );
+    const { container } = renderMatrix([pick('alice', 'KC', 'Over')], [overWinner]);
     expect(container.querySelector('[data-testid="CheckCircleIcon"]')).not.toBeInTheDocument();
     expect(container.querySelector('[data-testid="CancelIcon"]')).not.toBeInTheDocument();
   });
@@ -168,12 +117,12 @@ describe('UserPicksMatrix — logos mode (VITE_TEAM_ART_MODE=logos)', () => {
 
   it('renders the team logo (TeamArt) instead of text-only badges when in logos mode', () => {
     vi.stubEnv('VITE_TEAM_ART_MODE', 'logos');
-    renderMatrix('light');
+    renderOne();
     expect(screen.getByTestId('team-art-KC')).toBeInTheDocument();
   });
 
   it('still renders text-only badges (no TeamArt) in the default badges mode', () => {
-    renderMatrix('light');
+    renderOne();
     expect(screen.queryByTestId('team-art-KC')).not.toBeInTheDocument();
     expect(screen.getByText('KC')).toBeInTheDocument();
   });
@@ -181,20 +130,17 @@ describe('UserPicksMatrix — logos mode (VITE_TEAM_ART_MODE=logos)', () => {
 
 describe('UserPicksMatrix — Over/Under is an alternate pick type, not an additional pick', () => {
   // frizat: AddPicks' server-side validation caps total picks (any type) at requiredPicks — a
-  // real user's Over/Under pick REPLACES one of their spread picks, it never adds a pick beyond
-  // requiredPicks. One badge per required-pick column; column count always equals requiredPicks.
-  const mixedPicks: NflPickDto[] = [
-    { id: 1, userId: 'u1', userName: 'bob', team: 'NE', pick: 'Over', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
-    { id: 2, userId: 'u1', userName: 'bob', team: 'KC', pick: 'Spread', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
-    { id: 3, userId: 'u1', userName: 'bob', team: 'BUF', pick: 'Spread', season: 2025, nflWeek: 19, leagueId: 1, dateCreated: '' },
+  // real user's Over/Under pick REPLACES one of their spread picks. One badge per required-pick
+  // column; column count always equals requiredPicks.
+  const games = [
+    createGameView({ homeTeam: 'NE', awayTeam: 'NYJ', homeSpread: -3, awaySpread: 3, gameStatus: 'scheduled', gameTime: FUTURE }),
+    kcScheduled,
+    createGameView({ homeTeam: 'BUF', awayTeam: 'MIA', homeSpread: -3, awaySpread: 3, gameStatus: 'scheduled', gameTime: FUTURE }),
   ];
+  const mixedPicks = [pick('bob', 'NE', 'Over'), pick('bob', 'KC'), pick('bob', 'BUF')];
 
   it('renders exactly one badge per required-pick column, regardless of pick type', () => {
-    render(
-      <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix sport="nfl" users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={3} />
-      </ThemeProvider>,
-    );
+    renderMatrix(mixedPicks, games, 3);
     expect(screen.getAllByRole('columnheader')).toHaveLength(4); // User + Pick 1-3
     expect(screen.getAllByText('NE')).toHaveLength(1);
     expect(screen.getAllByText('KC')).toHaveLength(1);
@@ -202,20 +148,90 @@ describe('UserPicksMatrix — Over/Under is an alternate pick type, not an addit
   });
 
   it('column count always equals requiredPicks', () => {
-    render(
-      <ThemeProvider theme={createTheme()}>
-        <UserPicksMatrix sport="nfl" users={['bob']} picks={mixedPicks} spreads={{}} requiredPicks={4} />
-      </ThemeProvider>,
-    );
+    renderMatrix(mixedPicks, games, 4);
     expect(screen.getAllByRole('columnheader')).toHaveLength(5); // User + Pick 1-4
   });
 });
 
+describe('UserPicksMatrix — live games are distinct from final results', () => {
+  // Before this, a live game's "covering right now" value was painted the same solid green/red
+  // as a final result, so a Sunday-night pick looked already decided.
+  it('labels a live pick that is covering with its margin, not as covered', () => {
+    renderMatrix([pick('alice', 'KC')], [kcLive]);
+    expect(screen.getByLabelText('KC: covering +3.5 (live)')).toBeInTheDocument();
+    expect(screen.getByText('+3.5')).toBeInTheDocument();
+  });
+
+  it('labels a live pick that is not covering with how far short it is', () => {
+    renderMatrix([pick('bob', 'LV')], [kcLive]);
+    expect(screen.getByLabelText('LV: not covering −3.5 (live)')).toBeInTheDocument();
+    expect(screen.getByText('−3.5')).toBeInTheDocument();
+  });
+
+  it('shows the live margin next to OVER/UNDER for a totals pick', () => {
+    renderMatrix([pick('alice', 'KC', 'Under')], [kcLive]); // total 30 vs 45
+    expect(screen.getByLabelText('KC under: covering +15 (live)')).toBeInTheDocument();
+    expect(screen.getByText('UNDER +15')).toBeInTheDocument();
+  });
+
+  it('labels final results as covered / didn\'t cover, with no margin', () => {
+    renderMatrix([pick('alice', 'KC'), pick('bob', 'LV')], [kcFinal]);
+    expect(screen.getByLabelText('KC: covered')).toBeInTheDocument();
+    expect(screen.getByLabelText("LV: didn't cover")).toBeInTheDocument();
+    expect(screen.queryByText('+3.5')).not.toBeInTheDocument();
+  });
+});
+
+describe('UserPicksMatrix — who is still alive', () => {
+  const buf = createGameView({ homeTeam: 'BUF', awayTeam: 'MIA', homeSpread: -3, awaySpread: 3, gameStatus: 'final', homeScore: 27, awayScore: 20 });
+  const picks = [
+    pick('carlos', 'MIA'), pick('carlos', 'KC'),
+    pick('bob', 'BUF'), pick('bob', 'LV'),
+    pick('alice', 'BUF'), pick('alice', 'KC'),
+  ];
+
+  it('marks each member alive, not covering right now, or out', () => {
+    renderMatrix(picks, [buf, kcLive], 2);
+    expect(screen.getByLabelText('alice: alive')).toBeInTheDocument();
+    expect(screen.getByLabelText('bob: alive, but not covering right now')).toBeInTheDocument();
+    expect(screen.getByLabelText('carlos: out')).toBeInTheDocument();
+  });
+
+  it('lists members still in it above members who are out', () => {
+    renderMatrix(picks, [buf, kcLive], 2);
+    const names = screen.getAllByRole('row').slice(1).map(r => within(r).getAllByRole('cell')[0].textContent);
+    expect(names).toEqual(['alice', 'bob', 'carlos']);
+  });
+
+  it("dims an out member's picks, but not their name or status", () => {
+    renderMatrix(picks, [buf, kcLive], 2);
+    const carlosRow = screen.getByLabelText('carlos: out').closest('tr')!;
+    const [nameCell, ...pickCells] = within(carlosRow).getAllByRole('cell');
+    expect(nameCell).not.toHaveStyle({ opacity: '0.45' });
+    pickCells.forEach(c => expect(c).toHaveStyle({ opacity: '0.45' }));
+  });
+
+  it('shows a lock for another member\'s pick that is hidden until kickoff', () => {
+    renderMatrix([pick('eve', 'BUF')], [buf, kcScheduled], 2, 'light', 'id-alice');
+    expect(screen.getByLabelText('Hidden until kickoff')).toBeInTheDocument();
+  });
+
+  it("never shows a lock on the viewer's own row", () => {
+    renderMatrix([pick('alice', 'BUF')], [buf, kcScheduled], 2, 'light', 'id-alice');
+    expect(screen.queryByLabelText('Hidden until kickoff')).not.toBeInTheDocument();
+  });
+
+  it('explains the live and hidden states in a legend', () => {
+    renderMatrix(picks, [buf, kcLive], 2);
+    expect(screen.getByText('Covering now (live)')).toBeInTheDocument();
+    expect(screen.getByText('Not covering now (live)')).toBeInTheDocument();
+    expect(screen.getByText('Hidden until kickoff')).toBeInTheDocument();
+  });
+});
+
 describe('UserPicksMatrix — mobile sizing (frizat-2aa)', () => {
-  // frizat-2aa: fixed 76x60 badges + a 32px logo + default table padding worked on a laptop but
-  // ate the whole 390px iOS viewport per column — only 2-3 of a real 4-pick week's columns fit
-  // before horizontal scroll kicked in. Badges (and the logo/font sizes inside them) now shrink
-  // on a mobile viewport via useMediaQuery, unchanged on desktop.
+  // frizat-2aa: fixed 76x60 badges ate the whole 390px iOS viewport per column — badges shrink on
+  // a mobile viewport via useMediaQuery, unchanged on desktop.
   const originalMatchMedia = window.matchMedia;
 
   afterEach(() => {
@@ -237,15 +253,13 @@ describe('UserPicksMatrix — mobile sizing (frizat-2aa)', () => {
 
   it('renders a smaller badge on a mobile viewport than on desktop', () => {
     mockViewport(true);
-    const { getByText } = renderMatrix('light');
-    const badge = getByText('KC').parentElement;
-    expect(badge).toHaveStyle({ width: '44px', height: '50px' });
+    const { getByText } = renderOne();
+    expect(getByText('KC').parentElement).toHaveStyle({ width: '44px', height: '50px' });
   });
 
   it('keeps the larger desktop badge size when not on a mobile viewport', () => {
     mockViewport(false);
-    const { getByText } = renderMatrix('light');
-    const badge = getByText('KC').parentElement;
-    expect(badge).toHaveStyle({ width: '60px', height: '76px' });
+    const { getByText } = renderOne();
+    expect(getByText('KC').parentElement).toHaveStyle({ width: '60px', height: '76px' });
   });
 });

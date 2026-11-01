@@ -126,7 +126,9 @@ export interface GameView {
   situation?: import('../types/liveGame').GameSituation | null;
   period?: number;
   displayClock?: string;
-  homeCovers?: boolean | null;  // null = not final / no odds
+  // Set once a game kicks off: final result once it's final, "covering right now" while it's live
+  // (check gameStatus before treating it as decided). null before kickoff or with no odds.
+  homeCovers?: boolean | null;
   awayCovers?: boolean | null;  // computed independently — NOT !homeCovers (teased spreads aren't mirror images)
   overWins?: boolean | null;
   underWins?: boolean | null;  // computed independently — NOT !overWins (see computeUnderWins)
