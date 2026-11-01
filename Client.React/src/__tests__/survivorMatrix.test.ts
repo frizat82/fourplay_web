@@ -105,10 +105,36 @@ describe('buildSurvivorRows — unrevealed slots', () => {
     expect(row.status).toBe('out');
   });
 
-  it('a game whose kickoff time has passed counts as kicked off even if ESPN still says scheduled', () => {
+  // Picks were filtered at fetch time; if the last game kicked off since, the member's pick is
+  // simply not fetched yet. Judge by the game status from that same fetch, never the clock now —
+  // otherwise a member with a live, still-hidden Monday-night pick is shown as out.
+  it('a game ESPN still lists as scheduled keeps the slot hidden, even past its kickoff time', () => {
     const stale = game('DAL', 'NYG', -3, 3, 'scheduled', null, null, PAST);
     const [row] = buildSurvivorRows([pick('eve', 'BUF')], [started, stale], 2, 'id-alice');
+    expect(row.slots.map(slotOf)).toEqual(['BUF:won', 'hidden']);
+    expect(row.status).toBe('alive');
+  });
+
+  it('treats a live game as kicked off', () => {
+    const live = game('DAL', 'NYG', -3, 3, 'in_progress', 7, 7);
+    const [row] = buildSurvivorRows([pick('eve', 'BUF')], [started, live], 2, 'id-alice');
     expect(row.slots.map(slotOf)).toEqual(['BUF:won', 'empty']);
+    expect(row.status).toBe('out');
+  });
+});
+
+describe('buildSurvivorRows — row identity and ordering edge cases', () => {
+  const buf = game('BUF', 'MIA', -3, 3, 'final', 27, 20);
+
+  it('keeps two members who share a display name in separate rows', () => {
+    const rows = buildSurvivorRows([pick('sam', 'BUF', 'Spread', 'id-1'), pick('sam', 'MIA', 'Spread', 'id-2')], [buf], 1);
+    expect(rows).toHaveLength(2);
+    expect(rows.map(r => r.status).sort()).toEqual(['alive', 'out']);
+  });
+
+  it('keeps picks whose game is missing in their original order, not an engine-dependent one', () => {
+    const [row] = buildSurvivorRows([pick('amy', 'XX'), pick('amy', 'YY'), pick('amy', 'BUF')], [buf], 3);
+    expect(row.slots.map(slotOf)).toEqual(['BUF:won', 'XX:pending', 'YY:pending']);
   });
 });
 

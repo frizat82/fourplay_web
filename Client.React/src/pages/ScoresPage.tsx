@@ -151,9 +151,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     });
   };
 
-
   // /code-review: this re-derives on every render otherwise, including live-game poll/SSE ticks
-  // that don't actually change data.games — memoized like matrixSpreads below.
+  // that don't actually change data.games.
   const sortedGames = useMemo(() => sortGamesByTimeThenRank(data?.games ?? []), [data?.games]);
 
   // Push notification deep link (/scores?team=KC, issue #461): once that team's game is on the
@@ -174,7 +173,6 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
     const t = setTimeout(() => setFocusedGameId(null), 4000);
     return () => clearTimeout(t);
   }, [focusedGameId]);
-
 
   // ─── Guard states ─────────────────────────────────────────────────────────
 

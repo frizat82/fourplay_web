@@ -182,10 +182,10 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
           </TableRow>
         </TableHead>
         <TableBody>
-          {rows.map(({ userName, status, slots }) => {
+          {rows.map(({ userId, userName, status, slots }) => {
             const isOut = status === 'out';
             return (
-              <TableRow key={userName}>
+              <TableRow key={userId}>
                 <TableCell sx={{ ...stickyColumnSx, ...size.cellPadding }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <Box role="img" aria-label={`${userName}: ${STATUS_LABEL[status]}`} sx={{ display: 'inline-flex', width: 14, justifyContent: 'center', flexShrink: 0 }}>

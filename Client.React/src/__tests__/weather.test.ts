@@ -126,7 +126,7 @@ describe('toWeatherIconClass', () => {
   it('public/Icons/Weather holds exactly the mapped icons, the fallback and the license', () => {
     const expected = new Set([
       ...[...Object.values(WEATHER_ICON_CLASS), WEATHER_ICON_FALLBACK].map(c => `svg/${c}.svg`),
-      'LICENSE.md', 'OFL.txt',
+      'LICENSE.md', 'OFL.txt', 'APACHE-2.0.txt',
     ]);
     expect([...weatherFiles].sort()).toEqual([...expected].sort());
   });

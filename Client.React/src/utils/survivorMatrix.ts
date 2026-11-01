@@ -1,6 +1,6 @@
 import type { GameView, PickView } from '../services/sportAdapter';
 import type { PickType } from '../types/picks';
-import { isGameFinal, isGameLocked, pickCovers, pickMargin } from './gameHelpers';
+import { isGameDecided, isGameFinal, pickCovers, pickMargin } from './gameHelpers';
 
 // won/lost = final. covering/trailing = live, "if it ended right now". pending = not started.
 export type MatrixPickState = 'won' | 'lost' | 'covering' | 'trailing' | 'pending';
@@ -16,6 +16,7 @@ type PickSlot = Extract<MatrixSlot, { kind: 'pick' }>;
 export type SurvivorStatus = 'alive' | 'onTheRopes' | 'out';
 
 export interface SurvivorRow {
+  userId: string;
   userName: string;
   status: SurvivorStatus;
   slots: MatrixSlot[];
@@ -47,20 +48,22 @@ export function buildSurvivorRows(picks: PickView[], games: GameView[], required
     for (const team of [g.homeTeam, g.awayTeam]) { gameByTeam.set(team, g); kickoffByTeam.set(team, kickoff); }
   }
   const kickoff = (team: string) => kickoffByTeam.get(team) ?? Number.POSITIVE_INFINITY;
-  // Until every game has kicked off, a missing slot may just be a pick we can't see yet.
-  const allKickedOff = games.every(isGameLocked);
+  // Until every game has kicked off, a missing slot may just be a pick we can't see yet. Judged by
+  // the status in the same fetch the picks came from (not the clock now), so a game that kicked off
+  // since that fetch still reads as hidden rather than as a missed pick.
+  const allKickedOff = games.every(g => isGameDecided(g.gameStatus));
 
   const byUser = new Map<string, PickView[]>();
   for (const p of picks) {
-    const list = byUser.get(p.userName) ?? [];
+    const list = byUser.get(p.userId) ?? [];
     list.push(p);
-    byUser.set(p.userName, list);
+    byUser.set(p.userId, list);
   }
 
-  const rows = [...byUser].map(([userName, userPicks]): SurvivorRow => {
-    const isViewer = userPicks.some(p => p.userId === currentUserId);
+  const rows = [...byUser].map(([userId, userPicks]): SurvivorRow => {
+    const isViewer = userId === currentUserId;
     const pickSlots: PickSlot[] = userPicks
-      .sort((a, b) => kickoff(a.team) - kickoff(b.team))
+      .sort((a, b) => kickoff(a.team) - kickoff(b.team) || 0) // || 0: Infinity - Infinity is NaN
       .slice(0, requiredPicks)
       .map((p): PickSlot => {
         const game = gameByTeam.get(p.team);
@@ -77,7 +80,7 @@ export function buildSurvivorRows(picks: PickView[], games: GameView[], required
     const status: SurvivorStatus = states.includes('lost') || missedPick ? 'out'
       : states.includes('trailing') ? 'onTheRopes'
       : 'alive';
-    return { userName, status, slots };
+    return { userId, userName: userPicks[0].userName, status, slots };
   });
 
   return rows.sort((a, b) =>

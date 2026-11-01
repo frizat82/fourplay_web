@@ -21,7 +21,7 @@ export default function WeatherIcon({ iconKey, conditionId, temperatureF, showTe
   return (
     <Stack direction="row" alignItems="center" spacing={1}>
       <img src={iconSrc} alt={iconKey} style={{ width: 32, height: 32, filter: iconFilter }} />
-      {showTemp && typeof temperatureF === 'number' && (
+      {showTemp && semanticKey !== 'indoor' && typeof temperatureF === 'number' && (
         <Typography variant="body2" sx={{ opacity: 0.9 }}>
           {temperatureF}°
         </Typography>
