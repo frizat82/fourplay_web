@@ -6,7 +6,7 @@ Format: `## ` release headings and single-line `- ` bullets only — no bold, li
 
 ## 2026-11-01
 - Scores matrix now shows who's still alive: live games show whether each pick is covering right now (striped, with the margin) instead of looking already final, members who are out are faded with a skull and listed last, and picks hidden until kickoff show a lock.
-- Indoor (dome) games now show a stadium icon where the weather icon goes, instead of an N/A icon.
+- Indoor (dome) games now show a stadium icon where the weather icon goes, instead of an N/A icon and the outside temperature.
 
 ## 2026-10-26
 - Team logos load faster and no longer get stuck as a grey team-name badge after a weak-signal moment: a failed logo retries, and logos are now cached on your phone and a third of their old download size
