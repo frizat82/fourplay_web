@@ -22,8 +22,7 @@ describe('WeatherIcon', () => {
   // than N/A, and every other card still has an icon in that spot.
   it('renders a stadium icon for an indoor game (dome stadium)', () => {
     const { container } = render(<WeatherIcon iconKey="Indoor" />);
-    expect(container.firstChild).not.toBeNull();
-    expect(container.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('stadium.svg');
   });
 
   it('keeps the N/A icon for an unrecognized condition', () => {

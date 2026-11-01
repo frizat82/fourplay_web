@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { alpha, type Theme } from '@mui/material/styles';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import { useMemo, type ReactNode } from 'react';
 import type { GameView, PickView } from '../services/sportAdapter';
 import { stickyColumnSx } from '../utils/tableStyles';
 import { buildSurvivorRows, formatMargin, type MatrixPickState, type MatrixSlot, type SurvivorStatus } from '../utils/survivorMatrix';
@@ -50,6 +51,7 @@ const MATRIX_SIZE = {
 };
 
 const OUT_OPACITY = 0.45;
+const LEGEND_SWATCH_SX = { width: 18, height: 14, borderRadius: 0.5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
 const STATUS_LABEL: Record<SurvivorStatus, string> = {
   alive: 'alive',
@@ -58,12 +60,12 @@ const STATUS_LABEL: Record<SurvivorStatus, string> = {
 };
 
 function describePick(state: MatrixPickState, margin: number | null): string {
-  const live = margin == null ? '' : ` ${formatMargin(margin)}`;
+  const marginText = margin == null ? '' : ` ${formatMargin(margin)}`;
   switch (state) {
     case 'won': return 'covered';
     case 'lost': return "didn't cover";
-    case 'covering': return `covering${live} (live)`;
-    case 'trailing': return `not covering${live} (live)`;
+    case 'covering': return `covering${marginText} (live)`;
+    case 'trailing': return `not covering${marginText} (live)`;
     default: return 'not started';
   }
 }
@@ -95,7 +97,7 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
   // Read once per render, not once per cell — VITE_TEAM_ART_MODE is a build-time constant that
   // can't change mid-render, and this table renders one cell per (user × requiredPicks).
   const isLogosMode = getTeamArtMode() === 'logos';
-  const rows = buildSurvivorRows(picks, games, requiredPicks, currentUserId);
+  const rows = useMemo(() => buildSurvivorRows(picks, games, requiredPicks, currentUserId), [picks, games, requiredPicks, currentUserId]);
   const neutralSx = stateSx('pending', theme);
 
   const renderSlot = (slot: MatrixSlot) => {
@@ -156,13 +158,16 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
     );
   };
 
-  const legendSwatchSx = { width: 18, height: 14, borderRadius: 0.5, flexShrink: 0 };
-  const legend: Array<[string, object, boolean?]> = [
-    ['Covered', stateSx('won', theme)],
-    ["Didn't cover", stateSx('lost', theme)],
-    ['Covering now (live)', stateSx('covering', theme)],
-    ['Not covering now (live)', stateSx('trailing', theme)],
-    ['Hidden until kickoff', neutralSx, true],
+  const swatch = (state: MatrixPickState, icon?: ReactNode) => (
+    <Box sx={{ ...LEGEND_SWATCH_SX, ...stateSx(state, theme) }}>{icon}</Box>
+  );
+  const legend: Array<{ label: string; swatch: ReactNode }> = [
+    { label: 'Covered', swatch: swatch('won') },
+    { label: "Didn't cover", swatch: swatch('lost') },
+    { label: 'Covering now (live)', swatch: swatch('covering') },
+    { label: 'Not covering now (live)', swatch: swatch('trailing') },
+    { label: 'Hidden until kickoff', swatch: swatch('pending', <LockOutlinedIcon sx={{ fontSize: 11, color: 'text.secondary' }} />) },
+    { label: 'Out (faded, listed last)', swatch: <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} /> },
   ];
 
   return (
@@ -209,18 +214,12 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
         </TableBody>
       </Table>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, px: 2, py: 1.5, borderTop: 1, borderColor: 'divider' }}>
-        {legend.map(([label, sx, isLock]) => (
+        {legend.map(({ label, swatch: icon }) => (
           <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Box sx={{ ...legendSwatchSx, ...sx, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {isLock && <LockOutlinedIcon sx={{ fontSize: 11, color: 'text.secondary' }} />}
-            </Box>
+            {icon}
             <Typography variant="caption" color="text.secondary">{label}</Typography>
           </Box>
         ))}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-          <Typography variant="caption" color="text.secondary">Out (faded, listed last)</Typography>
-        </Box>
       </Box>
     </Paper>
   );

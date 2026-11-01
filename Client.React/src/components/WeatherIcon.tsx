@@ -1,4 +1,3 @@
-import StadiumOutlinedIcon from '@mui/icons-material/StadiumOutlined';
 import { Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { mapWeatherFromEspn, toWeatherIconClass } from '../utils/weather';
@@ -15,14 +14,6 @@ export default function WeatherIcon({ iconKey, conditionId, temperatureF, showTe
   if (!iconKey) return null;
 
   const semanticKey = mapWeatherFromEspn(iconKey, conditionId);
-  if (semanticKey === 'indoor') {
-    return (
-      <Stack direction="row" alignItems="center" spacing={1}>
-        <StadiumOutlinedIcon sx={{ width: 32, height: 32, color: 'text.primary' }} titleAccess="Indoor" />
-      </Stack>
-    );
-  }
-
   const iconClass = toWeatherIconClass(semanticKey);
   const iconSrc = `/Icons/Weather/svg/${iconClass}.svg`;
   const iconFilter = theme.palette.mode === 'dark' ? 'brightness(0) invert(1)' : 'brightness(0)';

@@ -1,6 +1,6 @@
 import type { GameView, PickView } from '../services/sportAdapter';
 import type { PickType } from '../types/picks';
-import { isGameFinal, isGameLocked, pickCovers } from './gameHelpers';
+import { isGameFinal, isGameLocked, pickCovers, pickMargin } from './gameHelpers';
 
 // won/lost = final. covering/trailing = live, "if it ended right now". pending = not started.
 export type MatrixPickState = 'won' | 'lost' | 'covering' | 'trailing' | 'pending';
@@ -21,19 +21,6 @@ export interface SurvivorRow {
   slots: MatrixSlot[];
 }
 
-// How far a pick is past its line (positive = covering). Display only: covering itself always
-// comes from pickCovers, so this never decides a result.
-function pickMargin(game: GameView | undefined, team: string, pickType: PickType): number | null {
-  if (!game || game.homeScore == null || game.awayScore == null) return null;
-  const total = game.homeScore + game.awayScore;
-  if (pickType === 'Over') return game.overThreshold == null ? null : total - game.overThreshold;
-  if (pickType === 'Under') return game.underThreshold == null ? null : game.underThreshold - total;
-  const isHome = team === game.homeTeam;
-  const spread = isHome ? game.homeSpread : game.awaySpread;
-  if (spread == null) return null;
-  return isHome ? game.homeScore + spread - game.awayScore : game.awayScore + spread - game.homeScore;
-}
-
 function pickState(game: GameView | undefined, team: string, pickType: PickType): MatrixPickState {
   const covers = pickCovers(game, team, pickType);
   if (covers == null || !game) return 'pending';
@@ -41,6 +28,7 @@ function pickState(game: GameView | undefined, team: string, pickType: PickType)
   return covers ? 'covering' : 'trailing';
 }
 
+// Not spreadLabel: a margin of exactly 0 is "0" (on the line), not "PK", and uses a true minus sign.
 export function formatMargin(margin: number): string {
   if (margin > 0) return `+${margin}`;
   if (margin < 0) return `−${Math.abs(margin)}`;
@@ -53,20 +41,25 @@ export function formatMargin(margin: number): string {
  */
 export function buildSurvivorRows(picks: PickView[], games: GameView[], requiredPicks: number, currentUserId?: string): SurvivorRow[] {
   const gameByTeam = new Map<string, GameView>();
-  for (const g of games) { gameByTeam.set(g.homeTeam, g); gameByTeam.set(g.awayTeam, g); }
-  const kickoff = (team: string) => {
-    const g = gameByTeam.get(team);
-    return g ? Date.parse(g.gameTime) : Number.POSITIVE_INFINITY;
-  };
+  const kickoffByTeam = new Map<string, number>();
+  for (const g of games) {
+    const kickoff = Date.parse(g.gameTime);
+    for (const team of [g.homeTeam, g.awayTeam]) { gameByTeam.set(team, g); kickoffByTeam.set(team, kickoff); }
+  }
+  const kickoff = (team: string) => kickoffByTeam.get(team) ?? Number.POSITIVE_INFINITY;
   // Until every game has kicked off, a missing slot may just be a pick we can't see yet.
   const allKickedOff = games.every(isGameLocked);
 
   const byUser = new Map<string, PickView[]>();
-  for (const p of picks) byUser.set(p.userName, [...(byUser.get(p.userName) ?? []), p]);
+  for (const p of picks) {
+    const list = byUser.get(p.userName) ?? [];
+    list.push(p);
+    byUser.set(p.userName, list);
+  }
 
   const rows = [...byUser].map(([userName, userPicks]): SurvivorRow => {
     const isViewer = userPicks.some(p => p.userId === currentUserId);
-    const pickSlots: PickSlot[] = [...userPicks]
+    const pickSlots: PickSlot[] = userPicks
       .sort((a, b) => kickoff(a.team) - kickoff(b.team))
       .slice(0, requiredPicks)
       .map((p): PickSlot => {

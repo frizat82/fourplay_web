@@ -1,5 +1,5 @@
 // Semantic weather key → local Erik Flowers icon (public/Icons/Weather/svg/<class>.svg).
-// Anything not listed (including 'unknown') renders as wi-na; WeatherIcon draws a stadium for 'indoor'.
+// Anything not listed (including 'unknown') renders as wi-na. 'indoor' (a dome) shows a stadium.
 // wi-day-sunny-overcast (a full sun with a small cloud in front — a different style from the rest)
 // and wi-night-partly-cloudy (drawn noticeably smaller) were left out of the pruned set on purpose
 // — don't bring them back: "mostly sunny/clear" uses the same body-plus-cloud icons as partly cloudy.
@@ -27,6 +27,7 @@ export const WEATHER_ICON_CLASS = {
   'rain-light-night': 'wi-night-showers',
   'thunderstorm-night': 'wi-night-thunderstorm',
   'snow-night': 'wi-night-snow',
+  'indoor': 'stadium',
 } as const;
 
 type WeatherIconKey = keyof typeof WEATHER_ICON_CLASS;
@@ -55,7 +56,7 @@ export const ACCUWEATHER_CONDITIONS: Record<number, WeatherIconKey> = {
 export function mapWeatherFromEspn(
   displayValue?: string | null,
   conditionId?: string | null,
-): WeatherIconKey | 'indoor' | 'unknown' {
+): WeatherIconKey | 'unknown' {
   if (!displayValue) return 'unknown';
   // A dome game's forecast code is the city's weather, not the field's.
   if (displayValue.toLowerCase().includes('indoor')) return 'indoor';
@@ -87,7 +88,7 @@ export function mapWeatherFromEspn(
   return 'unknown';
 }
 
-// Shown for 'unknown' and anything unmapped ('indoor' gets WeatherIcon's stadium icon instead).
+// Shown for 'unknown' and anything unmapped.
 export const WEATHER_ICON_FALLBACK = 'wi-na';
 
 export function toWeatherIconClass(key: string) {

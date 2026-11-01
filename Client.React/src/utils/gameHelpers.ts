@@ -264,6 +264,19 @@ export function pickCovers(game: GameView | undefined, team: string, pickType: P
   return (team === game.homeTeam ? game.homeCovers : game.awayCovers) ?? null;
 }
 
+// How far a pick is past its line (positive = covering) — same arithmetic as computeCovers. Display
+// only: whether a pick covers always comes from pickCovers, so this never decides a result.
+export function pickMargin(game: GameView | undefined, team: string, pickType: PickType): number | null {
+  if (!game || game.homeScore == null || game.awayScore == null) return null;
+  const total = game.homeScore + game.awayScore;
+  if (pickType === 'Over') return game.overThreshold == null ? null : total - game.overThreshold;
+  if (pickType === 'Under') return game.underThreshold == null ? null : game.underThreshold - total;
+  const isHome = team === game.homeTeam;
+  const spread = isHome ? game.homeSpread : game.awaySpread;
+  if (spread == null) return null;
+  return isHome ? game.homeScore + spread - game.awayScore : game.awayScore + spread - game.homeScore;
+}
+
 export function isHomeAway(value: HomeAway, expected: 'home' | 'away') {
   if (typeof value === 'number') {
     return expected === 'away' ? value === 0 : value === 1;

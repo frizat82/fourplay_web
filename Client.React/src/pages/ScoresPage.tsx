@@ -22,7 +22,7 @@ import PickDialog from '../components/PickDialog';
 import FieldPosition from '../components/FieldPosition';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { isGameDecided, isGameFinal, isGameLive, pickCovers, isConsistentRedZone, spreadLabel, isWeekExcludedFromSeason, findGameIdForTeam } from '../utils/gameHelpers';
+import { isGameFinal, isGameLive, pickCovers, isConsistentRedZone, spreadLabel, isWeekExcludedFromSeason, findGameIdForTeam } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, WeekState } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
@@ -33,10 +33,6 @@ import { useReconnectingEventSource } from '../utils/useReconnectingEventSource'
 
 // ─── Icon + color helpers (use pre-computed adapter fields) ──────────────────
 
-function isDecided(game: GameView): boolean {
-  return isGameDecided(game.gameStatus);
-}
-
 // frizat: 'info' (blue) means exactly one thing — "this is my own pick" (see didUserPick's own
 // unconditional 'info' below) — it must never appear here, since this function only ever colors
 // OTHER users' now-revealed picks. Returning 'info' for "not decided yet" used to make a
@@ -44,7 +40,6 @@ function isDecided(game: GameView): boolean {
 // game's kickoff passed (even before ESPN's own status catches up — revealPicksForStartedGames
 // already reveals on kickoff time, independent of status).
 function badgeColor(game: GameView, team: string, pickType: 'Spread' | 'Over' | 'Under'): 'success' | 'error' | 'default' {
-  if (!isDecided(game)) return 'default';
   const wins = pickCovers(game, team, pickType);
   if (wins == null) return 'default';
   return wins ? 'success' : 'error';
