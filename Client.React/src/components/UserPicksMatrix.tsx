@@ -52,6 +52,8 @@ const MATRIX_SIZE = {
 };
 
 const OUT_OPACITY = 0.45;
+const WON_MARKER = <CheckIcon sx={{ fontSize: 16, color: 'success.main' }} />;
+const OUT_MARKER = <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} />;
 const LIVE_TAG_LINE_HEIGHT = 1.2;
 // Share of the LIVE tag's height that hangs inside the badge; the rest sits above its top edge.
 const LIVE_TAG_INSIDE = 0.35;
@@ -174,8 +176,8 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
     { label: 'Covering now (live)', swatch: swatch('covering') },
     { label: 'Not covering now (live)', swatch: swatch('trailing') },
     { label: 'Hidden until kickoff', swatch: swatch('pending', <LockOutlinedIcon sx={{ fontSize: 11, color: 'text.secondary' }} />) },
-    { label: 'Won (all picks covered)', swatch: <CheckIcon sx={{ fontSize: 16, color: 'success.main' }} /> },
-    { label: 'Out (faded, listed last)', swatch: <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} /> },
+    { label: 'Won (all picks covered)', swatch: WON_MARKER },
+    { label: 'Out (faded, listed last)', swatch: OUT_MARKER },
   ];
 
   return (
@@ -198,9 +200,9 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <Box role="img" aria-label={`${userName}: ${STATUS_LABEL[status]}`} sx={{ display: 'inline-flex', width: 14, justifyContent: 'center', flexShrink: 0 }}>
                       {isOut ? (
-                        <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                        OUT_MARKER
                       ) : status === 'won' ? (
-                        <CheckIcon sx={{ fontSize: 16, color: 'success.main' }} />
+                        WON_MARKER
                       ) : (
                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: status === 'alive' ? 'success.main' : 'error.main' }} />
                       )}

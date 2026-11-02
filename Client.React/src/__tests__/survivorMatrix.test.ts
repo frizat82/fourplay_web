@@ -143,6 +143,7 @@ describe('buildSurvivorRows — survivor status and row order', () => {
     game('BUF', 'MIA', -3, 3, 'final', 27, 20),
     game('KC', 'LV', -6.5, 6.5, 'in_progress', 20, 10),
   ];
+  const later = game('DAL', 'NYG', -3, 3, 'scheduled', null, null, FUTURE);
 
   it('any lost pick puts a member out, even if their live pick is covering', () => {
     const [row] = buildSurvivorRows([pick('carlos', 'MIA'), pick('carlos', 'KC')], games, 2);
@@ -178,7 +179,6 @@ describe('buildSurvivorRows — survivor status and row order', () => {
 
   // The top group is everyone you can still root against: games left or in progress.
   it('lists members with games still to play first, then members who already won, then members who are out', () => {
-    const later = game('DAL', 'NYG', -3, 3, 'scheduled', null, null, FUTURE);
     const rows = buildSurvivorRows([
       pick('abe', 'BUF'), pick('abe', 'MIA'), // out
       pick('ben', 'BUF'), pick('ben', 'BUF', 'Over'), // won: both final and covered
@@ -194,7 +194,6 @@ describe('buildSurvivorRows — survivor status and row order', () => {
   });
 
   it("the viewer's own unmade pick, with games left, keeps them in the top group", () => {
-    const later = game('DAL', 'NYG', -3, 3, 'scheduled', null, null, FUTURE);
     const [row] = buildSurvivorRows([pick('me', 'BUF', 'Spread', 'id-me')], [games[0], later], 2, 'id-me');
     expect(row.status).toBe('alive');
   });
