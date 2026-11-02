@@ -12,6 +12,7 @@ import {
   useMediaQuery,
 } from '@mui/material';
 import { alpha, type Theme } from '@mui/material/styles';
+import CheckIcon from '@mui/icons-material/Check';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useMemo, type ReactNode } from 'react';
 import type { GameView, PickView } from '../services/sportAdapter';
@@ -51,6 +52,12 @@ const MATRIX_SIZE = {
 };
 
 const OUT_OPACITY = 0.45;
+const STATUS_MARKER: Record<SurvivorStatus, ReactNode> = {
+  alive: <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />,
+  onTheRopes: <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'error.main' }} />,
+  won: <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />,
+  out: <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} />,
+};
 const LIVE_TAG_LINE_HEIGHT = 1.2;
 // Share of the LIVE tag's height that hangs inside the badge; the rest sits above its top edge.
 const LIVE_TAG_INSIDE = 0.35;
@@ -59,6 +66,7 @@ const LEGEND_SWATCH_SX = { width: 18, height: 14, borderRadius: 0.5, flexShrink:
 const STATUS_LABEL: Record<SurvivorStatus, string> = {
   alive: 'alive',
   onTheRopes: 'alive, but not covering right now',
+  won: 'won, all picks covered',
   out: 'out',
 };
 
@@ -172,7 +180,10 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
     { label: 'Covering now (live)', swatch: swatch('covering') },
     { label: 'Not covering now (live)', swatch: swatch('trailing') },
     { label: 'Hidden until kickoff', swatch: swatch('pending', <LockOutlinedIcon sx={{ fontSize: 11, color: 'text.secondary' }} />) },
-    { label: 'Out (faded, listed last)', swatch: <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} /> },
+    { label: 'Games left, on track', swatch: STATUS_MARKER.alive },
+    { label: 'Games left, not covering now', swatch: STATUS_MARKER.onTheRopes },
+    { label: 'Won (all picks covered)', swatch: STATUS_MARKER.won },
+    { label: 'Out (faded, listed last)', swatch: STATUS_MARKER.out },
   ];
 
   return (
@@ -194,11 +205,7 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
                 <TableCell sx={{ ...stickyColumnSx, ...size.cellPadding }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <Box role="img" aria-label={`${userName}: ${STATUS_LABEL[status]}`} sx={{ display: 'inline-flex', width: 14, justifyContent: 'center', flexShrink: 0 }}>
-                      {isOut ? (
-                        <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                      ) : (
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: status === 'alive' ? 'success.main' : 'error.main' }} />
-                      )}
+                      {STATUS_MARKER[status]}
                     </Box>
                     <Typography fontWeight={600} fontSize={size.usernameFont} color={isOut ? 'text.secondary' : undefined}>
                       {userName}

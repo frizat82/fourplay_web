@@ -240,11 +240,19 @@ describe('UserPicksMatrix — who is still alive', () => {
     expect(screen.queryByLabelText('Hidden until kickoff')).not.toBeInTheDocument();
   });
 
+  it('marks a member who already won the week with its own status', () => {
+    renderMatrix([pick('zed', 'BUF')], [buf], 1);
+    expect(screen.getByLabelText('zed: won, all picks covered')).toBeInTheDocument();
+  });
+
   it('explains the live and hidden states in a legend', () => {
     renderMatrix(picks, [buf, kcLive], 2);
     expect(screen.getByText('Covering now (live)')).toBeInTheDocument();
     expect(screen.getByText('Not covering now (live)')).toBeInTheDocument();
     expect(screen.getByText('Hidden until kickoff')).toBeInTheDocument();
+    expect(screen.getByText('Games left, on track')).toBeInTheDocument();
+    expect(screen.getByText('Games left, not covering now')).toBeInTheDocument();
+    expect(screen.getByText('Won (all picks covered)')).toBeInTheDocument();
   });
 });
 
