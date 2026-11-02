@@ -21,7 +21,7 @@ test.describe('Scores matrix — survivors', () => {
     await mockAuth(page, { navigateTo: '/scores', ...options });
     await page.getByRole('button', { name: 'Show As Matrix' }).click();
 
-    await expect(page.getByRole('img', { name: 'Zoe: alive' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Zoe: won, all picks covered' })).toBeVisible();
     await expect(page.getByRole('img', { name: 'Aaron: out' })).toBeVisible();
     await expect(page.getByLabel("MIA: didn't cover")).toBeVisible();
     await expect(page.getByLabel('BUF: covered')).toBeVisible();
