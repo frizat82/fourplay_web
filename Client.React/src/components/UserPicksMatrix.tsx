@@ -189,9 +189,9 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
       title: 'Players',
       items: [
         { label: 'Games left', swatch: STATUS_MARKER.alive },
-        { label: 'Games left, behind', swatch: STATUS_MARKER.onTheRopes },
+        { label: 'Live, not covering', swatch: STATUS_MARKER.onTheRopes },
         { label: 'Won the week', swatch: STATUS_MARKER.won },
-        { label: 'Out', swatch: STATUS_MARKER.out },
+        { label: 'Out (faded)', swatch: STATUS_MARKER.out },
       ],
     },
   ];
@@ -241,11 +241,12 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
             <Typography variant="overline" component="div" color="text.secondary" sx={{ lineHeight: 1.6, fontWeight: 700 }}>
               {title}
             </Typography>
-            {/* Two columns on a phone, more on wider screens; a fixed swatch column keeps labels aligned. */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', columnGap: 1.5, rowGap: 0.75 }}>
+            {/* Exactly two columns on a phone so matching pairs line up; roomier auto columns when wider.
+                A fixed swatch column keeps the labels aligned. */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(auto-fill, minmax(170px, 1fr))' }, columnGap: 1.5, rowGap: 0.75 }}>
               {items.map(({ label, swatch: icon }) => (
                 <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-                  <Box sx={{ width: 18, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{icon}</Box>
+                  <Box sx={{ width: LEGEND_SWATCH_SX.width, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{icon}</Box>
                   <Typography variant="caption" color="text.secondary">{label}</Typography>
                 </Box>
               ))}

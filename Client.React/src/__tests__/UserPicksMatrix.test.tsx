@@ -253,7 +253,7 @@ describe('UserPicksMatrix — who is still alive', () => {
     ['Covered', "Didn't cover", 'Covering (live)', 'Not covering (live)', 'Hidden till kickoff']
       .forEach(label => expect(picksKey.getByText(label)).toBeInTheDocument());
     const playersKey = within(screen.getByRole('group', { name: 'Players' }));
-    ['Games left', 'Games left, behind', 'Won the week', 'Out']
+    ['Games left', 'Live, not covering', 'Won the week', 'Out (faded)']
       .forEach(label => expect(playersKey.getByText(label)).toBeInTheDocument());
   });
 });
