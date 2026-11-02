@@ -13,7 +13,11 @@ export type MatrixSlot =
 
 type PickSlot = Extract<MatrixSlot, { kind: 'pick' }>;
 
-export type SurvivorStatus = 'alive' | 'onTheRopes' | 'out';
+// alive/onTheRopes: still has games to play (the people you can root against). won: every pick
+// final and covered. out: lost a pick or missed one.
+export type SurvivorStatus = 'alive' | 'onTheRopes' | 'won' | 'out';
+
+const GROUP_ORDER: Record<SurvivorStatus, number> = { alive: 0, onTheRopes: 0, won: 1, out: 2 };
 
 export interface SurvivorRow {
   userId: string;
@@ -50,7 +54,7 @@ export function describePick(state: MatrixPickState, margin: number | null): str
 
 /**
  * One row per member with a revealed pick: picks ordered by kickoff, unrevealed slots filled in,
- * and whether the member is still alive. Rows still in it come first, then rows that are out.
+ * and whether the member is still alive. Rows with games left come first, then winners, then out.
  */
 export function buildSurvivorRows(picks: PickView[], games: GameView[], requiredPicks: number, currentUserId?: string): SurvivorRow[] {
   const gameByTeam = new Map<string, GameView>();
@@ -91,10 +95,11 @@ export function buildSurvivorRows(picks: PickView[], games: GameView[], required
     const missedPick = unfilled > 0 && allKickedOff;
     const status: SurvivorStatus = states.includes('lost') || missedPick ? 'out'
       : states.includes('trailing') ? 'onTheRopes'
+      : unfilled === 0 && states.every(st => st === 'won') ? 'won'
       : 'alive';
     return { userId, userName: userPicks[0].userName, status, slots };
   });
 
   return rows.sort((a, b) =>
-    Number(a.status === 'out') - Number(b.status === 'out') || a.userName.localeCompare(b.userName));
+    GROUP_ORDER[a.status] - GROUP_ORDER[b.status] || a.userName.localeCompare(b.userName));
 }

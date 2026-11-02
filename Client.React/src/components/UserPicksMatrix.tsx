@@ -12,6 +12,7 @@ import {
   useMediaQuery,
 } from '@mui/material';
 import { alpha, type Theme } from '@mui/material/styles';
+import CheckIcon from '@mui/icons-material/Check';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useMemo, type ReactNode } from 'react';
 import type { GameView, PickView } from '../services/sportAdapter';
@@ -59,6 +60,7 @@ const LEGEND_SWATCH_SX = { width: 18, height: 14, borderRadius: 0.5, flexShrink:
 const STATUS_LABEL: Record<SurvivorStatus, string> = {
   alive: 'alive',
   onTheRopes: 'alive, but not covering right now',
+  won: 'won, all picks covered',
   out: 'out',
 };
 
@@ -172,6 +174,7 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
     { label: 'Covering now (live)', swatch: swatch('covering') },
     { label: 'Not covering now (live)', swatch: swatch('trailing') },
     { label: 'Hidden until kickoff', swatch: swatch('pending', <LockOutlinedIcon sx={{ fontSize: 11, color: 'text.secondary' }} />) },
+    { label: 'Won (all picks covered)', swatch: <CheckIcon sx={{ fontSize: 16, color: 'success.main' }} /> },
     { label: 'Out (faded, listed last)', swatch: <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} /> },
   ];
 
@@ -196,6 +199,8 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
                     <Box role="img" aria-label={`${userName}: ${STATUS_LABEL[status]}`} sx={{ display: 'inline-flex', width: 14, justifyContent: 'center', flexShrink: 0 }}>
                       {isOut ? (
                         <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                      ) : status === 'won' ? (
+                        <CheckIcon sx={{ fontSize: 16, color: 'success.main' }} />
                       ) : (
                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: status === 'alive' ? 'success.main' : 'error.main' }} />
                       )}
