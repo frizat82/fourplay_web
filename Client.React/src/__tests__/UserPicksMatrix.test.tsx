@@ -245,14 +245,16 @@ describe('UserPicksMatrix — who is still alive', () => {
     expect(screen.getByLabelText('zed: won, all picks covered')).toBeInTheDocument();
   });
 
-  it('explains the live and hidden states in a legend', () => {
+  // Two labeled groups, so on a phone the key reads as "what a badge means" then "what the marker
+  // by a name means", not one wrapped run of nine mixed items.
+  it('splits the legend into a Picks group and a Players group', () => {
     renderMatrix(picks, [buf, kcLive], 2);
-    expect(screen.getByText('Covering now (live)')).toBeInTheDocument();
-    expect(screen.getByText('Not covering now (live)')).toBeInTheDocument();
-    expect(screen.getByText('Hidden until kickoff')).toBeInTheDocument();
-    expect(screen.getByText('Games left, on track')).toBeInTheDocument();
-    expect(screen.getByText('Games left, not covering now')).toBeInTheDocument();
-    expect(screen.getByText('Won (all picks covered)')).toBeInTheDocument();
+    const picksKey = within(screen.getByRole('group', { name: 'Picks' }));
+    ['Covered', "Didn't cover", 'Covering (live)', 'Not covering (live)', 'Hidden till kickoff']
+      .forEach(label => expect(picksKey.getByText(label)).toBeInTheDocument());
+    const playersKey = within(screen.getByRole('group', { name: 'Players' }));
+    ['Games left', 'Live, not covering', 'Won the week', 'Out (faded)']
+      .forEach(label => expect(playersKey.getByText(label)).toBeInTheDocument());
   });
 });
 
