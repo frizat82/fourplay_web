@@ -174,16 +174,26 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
   const swatch = (state: MatrixPickState, icon?: ReactNode) => (
     <Box sx={{ ...LEGEND_SWATCH_SX, ...stateSx(state, theme) }}>{icon}</Box>
   );
-  const legend: Array<{ label: string; swatch: ReactNode }> = [
-    { label: 'Covered', swatch: swatch('won') },
-    { label: "Didn't cover", swatch: swatch('lost') },
-    { label: 'Covering now (live)', swatch: swatch('covering') },
-    { label: 'Not covering now (live)', swatch: swatch('trailing') },
-    { label: 'Hidden until kickoff', swatch: swatch('pending', <LockOutlinedIcon sx={{ fontSize: 11, color: 'text.secondary' }} />) },
-    { label: 'Games left, on track', swatch: STATUS_MARKER.alive },
-    { label: 'Games left, not covering now', swatch: STATUS_MARKER.onTheRopes },
-    { label: 'Won (all picks covered)', swatch: STATUS_MARKER.won },
-    { label: 'Out (faded, listed last)', swatch: STATUS_MARKER.out },
+  const legendGroups: Array<{ title: string; items: Array<{ label: string; swatch: ReactNode }> }> = [
+    {
+      title: 'Picks',
+      items: [
+        { label: 'Covered', swatch: swatch('won') },
+        { label: "Didn't cover", swatch: swatch('lost') },
+        { label: 'Covering (live)', swatch: swatch('covering') },
+        { label: 'Not covering (live)', swatch: swatch('trailing') },
+        { label: 'Hidden till kickoff', swatch: swatch('pending', <LockOutlinedIcon sx={{ fontSize: 11, color: 'text.secondary' }} />) },
+      ],
+    },
+    {
+      title: 'Players',
+      items: [
+        { label: 'Games left', swatch: STATUS_MARKER.alive },
+        { label: 'Games left, behind', swatch: STATUS_MARKER.onTheRopes },
+        { label: 'Won the week', swatch: STATUS_MARKER.won },
+        { label: 'Out', swatch: STATUS_MARKER.out },
+      ],
+    },
   ];
 
   return (
@@ -225,11 +235,21 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
           })}
         </TableBody>
       </Table>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, px: 2, py: 1.5, borderTop: 1, borderColor: 'divider' }}>
-        {legend.map(({ label, swatch: icon }) => (
-          <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            {icon}
-            <Typography variant="caption" color="text.secondary">{label}</Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, px: 2, py: 1.5, borderTop: 1, borderColor: 'divider' }}>
+        {legendGroups.map(({ title, items }) => (
+          <Box key={title} role="group" aria-label={title}>
+            <Typography variant="overline" component="div" color="text.secondary" sx={{ lineHeight: 1.6, fontWeight: 700 }}>
+              {title}
+            </Typography>
+            {/* Two columns on a phone, more on wider screens; a fixed swatch column keeps labels aligned. */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', columnGap: 1.5, rowGap: 0.75 }}>
+              {items.map(({ label, swatch: icon }) => (
+                <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                  <Box sx={{ width: 18, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{icon}</Box>
+                  <Typography variant="caption" color="text.secondary">{label}</Typography>
+                </Box>
+              ))}
+            </Box>
           </Box>
         ))}
       </Box>
