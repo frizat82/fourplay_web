@@ -46,15 +46,19 @@ function badgeColor(game: GameView, team: string, pickType: 'Spread' | 'Over' | 
   return wins ? 'success' : 'error';
 }
 
-// How far a side is past its line right now (same margin the Scores matrix shows). Live games only.
-function LiveMargin({ label, margin, prefix = '' }: { label: string; margin: number | null; prefix?: string }) {
-  if (margin == null) return null;
-  const covering = margin > 0;
+// How far a side is past its line right now (same margin as the Scores matrix). Live games only;
+// whether it's covering comes from pickCovers, the same authority the badges use.
+function LiveMargin({ game, team, pickType, label, prefix = '' }: { game: GameView; team: string; pickType: PickType; label: string; prefix?: string }) {
+  if (!isGameLive(game.gameStatus)) return null;
+  const margin = pickMargin(game, team, pickType);
+  const covers = pickCovers(game, team, pickType);
+  if (margin == null || covers == null) return null;
   return (
     <Typography
       variant="caption"
-      aria-label={`${label}: ${describePick(covering ? 'covering' : 'trailing', margin)}`}
-      sx={{ display: 'block', lineHeight: 1.1, fontWeight: 700, color: covering ? 'success.main' : 'error.main' }}
+      role="img"
+      aria-label={`${label}: ${describePick(covers ? 'covering' : 'trailing', margin)}`}
+      sx={{ display: 'block', lineHeight: 1.1, fontWeight: 700, color: covers ? 'success.main' : 'error.main' }}
     >
       {prefix}{formatMargin(margin)}
     </Typography>
@@ -309,7 +313,6 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                 const ov = game.overWins ?? null;
                 const uv = game.underWins ?? null;
                 const isCardRedZone = isLive && game.situation != null && isConsistentRedZone(game.situation);
-                const liveMargin = (team: string, pickType: PickType) => (isLive ? pickMargin(game, team, pickType) : null);
 
                 return (
                   <Grid size={{ xs: 12, md: 6, lg: 4 }} key={game.id}>
@@ -347,7 +350,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <Box sx={{ flexGrow: 1 }} />
                         <Box sx={{ minWidth: 56, textAlign: 'right' }}>
                           <Typography variant="subtitle1" className="spread-value">{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
-                          <LiveMargin label={game.awayTeam} margin={liveMargin(game.awayTeam, 'Spread')} />
+                          <LiveMargin game={game} team={game.awayTeam} pickType="Spread" label={game.awayTeam} />
                         </Box>
                         <Badge
                           data-testid={`badge-${game.awayTeam}-spread`}
@@ -389,7 +392,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <Box sx={{ flexGrow: 1 }} />
                         <Box sx={{ minWidth: 56, textAlign: 'right' }}>
                           <Typography variant="subtitle1" className="spread-value">{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>
-                          <LiveMargin label={game.homeTeam} margin={liveMargin(game.homeTeam, 'Spread')} />
+                          <LiveMargin game={game} team={game.homeTeam} pickType="Spread" label={game.homeTeam} />
                         </Box>
                         <Badge
                           data-testid={`badge-${game.homeTeam}-spread`}
@@ -435,8 +438,8 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                             <Typography variant="subtitle1">{game.overThreshold}/{game.underThreshold}</Typography>
                             {isLive && (
                               <Stack direction="row" spacing={0.75} justifyContent="center">
-                                <LiveMargin label="Over" prefix="O " margin={liveMargin(game.homeTeam, 'Over')} />
-                                <LiveMargin label="Under" prefix="U " margin={liveMargin(game.homeTeam, 'Under')} />
+                                <LiveMargin game={game} team={game.homeTeam} pickType="Over" label="Over" prefix="O " />
+                                <LiveMargin game={game} team={game.homeTeam} pickType="Under" label="Under" prefix="U " />
                               </Stack>
                             )}
                           </Box>

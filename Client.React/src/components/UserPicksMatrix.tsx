@@ -96,7 +96,7 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
     if (slot.kind === 'empty') return <Paper sx={{ ...badgeShellSx, ...neutralSx }} />;
     if (slot.kind === 'hidden') {
       return (
-        <Paper aria-label="Hidden until kickoff" sx={{ ...badgeShellSx, ...neutralSx, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Paper role="img" aria-label="Hidden until kickoff" sx={{ ...badgeShellSx, ...neutralSx, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <LockOutlinedIcon sx={{ fontSize: size.logoSize * 0.7, color: 'text.secondary' }} />
         </Paper>
       );
@@ -109,6 +109,7 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
 
     return (
       <Paper
+        role="img"
         aria-label={`${slot.team}${ariaType}: ${describePick(slot.state, slot.margin)}`}
         sx={{
           ...badgeShellSx,

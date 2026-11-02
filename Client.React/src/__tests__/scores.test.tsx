@@ -81,8 +81,10 @@ const SPREAD_RESPONSES = {
   NYG: createSpreadResponse('NYG', 3, 47.5, 47.5),
 };
 
-function makeScores(week: number, postSeason: boolean, gameStarted: boolean, live = false) {
-  const liveStatus = live ? { name: 'status_in_progress' as const, period: 3, displayClock: '8:42' } : undefined;
+type LiveStatusName = 'status_in_progress' | 'status_halftime';
+
+function makeScores(week: number, postSeason: boolean, gameStarted: boolean, live?: LiveStatusName) {
+  const liveStatus = live ? { name: live, period: 3, displayClock: '8:42' } : undefined;
   const bufComp = createCompetition({ homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10, gameStarted, liveStatus });
   const dalComp = createCompetition({ homeTeam: 'DAL', awayTeam: 'NYG', homeScore: 28, awayScore: 17, gameStarted });
   return createScores({ week, postSeason, events: [
@@ -93,7 +95,7 @@ function makeScores(week: number, postSeason: boolean, gameStarted: boolean, liv
 
 const setupDefaults = async (options?: {
   week?: number; postSeason?: boolean; gameStarted?: boolean;
-  oddsExist?: boolean; picks?: NflPickDto[]; live?: boolean;
+  oddsExist?: boolean; picks?: NflPickDto[]; live?: LiveStatusName;
 }) => {
   const week = options?.week ?? 2;
   const postSeason = options?.postSeason ?? false;
@@ -812,15 +814,15 @@ describe('ScoresPage — live cover margins', () => {
   });
 
   // BUF 24 – MIA 10, live. BUF −7: 24 − 7 − 10 = +7. MIA +7: 10 + 7 − 24 = −7. Total 34 vs 47.5.
-  it('shows how far each side is past its line while the game is live', async () => {
-    await setupDefaults({ live: true });
+  it.each<LiveStatusName>(['status_in_progress', 'status_halftime'])('shows how far each side is past its line while the game is live (%s)', async (live) => {
+    await setupDefaults({ live });
     await renderPage();
     expect(screen.getByLabelText('BUF: covering +7 (live)')).toHaveTextContent('+7');
     expect(screen.getByLabelText('MIA: not covering −7 (live)')).toHaveTextContent('−7');
   });
 
   it('shows the total against the Over and Under lines in the postseason', async () => {
-    await setupDefaults({ week: 19, postSeason: true, live: true });
+    await setupDefaults({ week: 19, postSeason: true, live: 'status_in_progress' });
     await renderPage();
     expect(screen.getByLabelText('Over: not covering −13.5 (live)')).toHaveTextContent('O −13.5');
     expect(screen.getByLabelText('Under: covering +13.5 (live)')).toHaveTextContent('U +13.5');
