@@ -4,6 +4,9 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-11-02
+- Scores page game cards now show how far each side is past its spread while a game is live (green +10 covering, red −3.5 short), and in the postseason the total against the Over and Under lines.
+
 ## 2026-11-01
 - Scores matrix: live picks now carry a red LIVE tag instead of a small corner dot, which on a green covering pick could read as losing.
 - Scores matrix now shows who's still alive: live games show whether each pick is covering right now (striped, with the margin) instead of looking already final, members who are out are faded with a skull and listed last, and picks hidden until kickoff show a lock.

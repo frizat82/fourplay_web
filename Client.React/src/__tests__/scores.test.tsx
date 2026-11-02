@@ -803,3 +803,50 @@ describe('ScoresPage', () => {
     });
   });
 });
+
+describe('ScoresPage — live cover margins', () => {
+  beforeEach(() => {
+    sessionState.currentLeague = 1;
+    vi.clearAllMocks();
+  });
+
+  // BUF 24 – MIA 10, live. BUF −7: 24 − 7 − 10 = +7. MIA +7: 10 + 7 − 24 = −7. Total 34 vs 47.5.
+  const setupLive = (week: number, postSeason: boolean) => {
+    const liveComp = createCompetition({
+      homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10,
+      liveStatus: { name: 'status_in_progress', period: 3, displayClock: '8:42' },
+    });
+    mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, postSeason));
+    mockedGetWeekScores.mockResolvedValue(createScores({
+      week, postSeason,
+      events: [{ id: '1', season: { year: 2024, type: postSeason ? 3 : 2 }, week: { number: week }, date: new Date().toISOString(), competitions: [liveComp] }],
+    }));
+    mockedGetLiveGames.mockResolvedValue([]);
+    mockedGetLeaguePicks.mockResolvedValue([]);
+    mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
+    mockLeagueJuiceEmpty(mockedGetLeagueJuice);
+  };
+
+  it('shows how far each side is past its line while the game is live', async () => {
+    setupLive(2, false);
+    await renderPage();
+    expect(screen.getByLabelText('BUF: covering +7 (live)')).toHaveTextContent('+7');
+    expect(screen.getByLabelText('MIA: not covering −7 (live)')).toHaveTextContent('−7');
+  });
+
+  it('shows the total against the Over and Under lines in the postseason', async () => {
+    setupLive(19, true);
+    await renderPage();
+    expect(screen.getByLabelText('Over: not covering −13.5 (live)')).toHaveTextContent('O −13.5');
+    expect(screen.getByLabelText('Under: covering +13.5 (live)')).toHaveTextContent('U +13.5');
+  });
+
+  it.each([
+    ['final', true],
+    ['not started', false],
+  ])('shows no margins for a %s game', async (_label, gameStarted) => {
+    await setupDefaults({ week: 19, postSeason: true, gameStarted });
+    await renderPage();
+    expect(screen.queryByLabelText(/\(live\)$/)).not.toBeInTheDocument();
+  });
+});

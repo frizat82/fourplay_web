@@ -22,9 +22,10 @@ import PickDialog from '../components/PickDialog';
 import FieldPosition from '../components/FieldPosition';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
-import { isGameFinal, isGameLive, pickCovers, isConsistentRedZone, spreadLabel, isWeekExcludedFromSeason, findGameIdForTeam } from '../utils/gameHelpers';
-import type { SportAdapter, GameView, WeekState } from '../services/sportAdapter';
+import { isGameFinal, isGameLive, pickCovers, pickMargin, isConsistentRedZone, spreadLabel, isWeekExcludedFromSeason, findGameIdForTeam } from '../utils/gameHelpers';
+import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
+import { formatMargin } from '../utils/survivorMatrix';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
@@ -43,6 +44,21 @@ function badgeColor(game: GameView, team: string, pickType: 'Spread' | 'Over' | 
   const wins = pickCovers(game, team, pickType);
   if (wins == null) return 'default';
   return wins ? 'success' : 'error';
+}
+
+// How far a side is past its line right now (same margin the Scores matrix shows). Live games only.
+function LiveMargin({ label, margin, prefix = '' }: { label: string; margin: number | null; prefix?: string }) {
+  if (margin == null) return null;
+  const covering = margin > 0;
+  return (
+    <Typography
+      variant="caption"
+      aria-label={`${label}: ${covering ? 'covering' : 'not covering'} ${formatMargin(margin)} (live)`}
+      sx={{ display: 'block', lineHeight: 1.1, fontWeight: 700, color: covering ? 'success.main' : 'error.main' }}
+    >
+      {prefix}{formatMargin(margin)}
+    </Typography>
+  );
 }
 
 // ─── Main component ──────────────────────────────────────────────────────────
@@ -293,6 +309,7 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                 const ov = game.overWins ?? null;
                 const uv = game.underWins ?? null;
                 const isCardRedZone = isLive && game.situation != null && isConsistentRedZone(game.situation);
+                const liveMargin = (team: string, pickType: PickType) => (isLive ? pickMargin(game, team, pickType) : null);
 
                 return (
                   <Grid size={{ xs: 12, md: 6, lg: 4 }} key={game.id}>
@@ -328,7 +345,10 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <RankBadge rank={game.awayRank} />
                         <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.awayTeam}</Typography>
                         <Box sx={{ flexGrow: 1 }} />
-                        <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
+                        <Box sx={{ minWidth: 56, textAlign: 'right' }}>
+                          <Typography variant="subtitle1" className="spread-value">{game.awaySpread != null ? spreadLabel(game.awaySpread) : ''}</Typography>
+                          <LiveMargin label={game.awayTeam} margin={liveMargin(game.awayTeam, 'Spread')} />
+                        </Box>
                         <Badge
                           data-testid={`badge-${game.awayTeam}-spread`}
                           data-tone={didUserPick(game.awayTeam) ? 'info' : badgeColor(game, game.awayTeam, 'Spread')}
@@ -367,7 +387,10 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                         <RankBadge rank={game.homeRank} />
                         <Typography sx={{ minWidth: 40, fontWeight: 600 }}>{game.homeTeam}</Typography>
                         <Box sx={{ flexGrow: 1 }} />
-                        <Typography variant="subtitle1" className="spread-value" sx={{ minWidth: 56, textAlign: 'right' }}>{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>
+                        <Box sx={{ minWidth: 56, textAlign: 'right' }}>
+                          <Typography variant="subtitle1" className="spread-value">{game.homeSpread != null ? spreadLabel(game.homeSpread) : ''}</Typography>
+                          <LiveMargin label={game.homeTeam} margin={liveMargin(game.homeTeam, 'Spread')} />
+                        </Box>
                         <Badge
                           data-testid={`badge-${game.homeTeam}-spread`}
                           data-tone={didUserPick(game.homeTeam) ? 'info' : badgeColor(game, game.homeTeam, 'Spread')}
@@ -408,7 +431,15 @@ export default function ScoresPage({ adapter }: ScoresPageProps) {
                           {/* Over and Under are independently juiced and not necessarily the same
                               number (see gameHelpers.ts's computeOverWins/computeUnderWins) — show
                               both rather than a single shared value. */}
-                          <Typography variant="subtitle1" sx={{ minWidth: 56, textAlign: 'center' }}>{game.overThreshold}/{game.underThreshold}</Typography>
+                          <Box sx={{ minWidth: 56, textAlign: 'center' }}>
+                            <Typography variant="subtitle1">{game.overThreshold}/{game.underThreshold}</Typography>
+                            {isLive && (
+                              <Stack direction="row" spacing={0.75} justifyContent="center">
+                                <LiveMargin label="Over" prefix="O " margin={liveMargin(game.homeTeam, 'Over')} />
+                                <LiveMargin label="Under" prefix="U " margin={liveMargin(game.homeTeam, 'Under')} />
+                              </Stack>
+                            )}
+                          </Box>
                           <ArrowCircleDownIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
                           <Badge data-testid={`badge-${game.homeTeam}-under`} color={didUserPick(game.homeTeam, 'Under') ? 'info' : badgeColor(game, game.homeTeam, 'Under')} overlap="circular"
                             badgeContent={pickCountForTeam(game.homeTeam, 'Under')}
