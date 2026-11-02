@@ -36,6 +36,18 @@ export function formatMargin(margin: number): string {
   return '0';
 }
 
+// Screen-reader wording for a pick's state, shared by the Scores matrix and the Scores cards.
+export function describePick(state: MatrixPickState, margin: number | null): string {
+  const marginText = margin == null ? '' : ` ${formatMargin(margin)}`;
+  switch (state) {
+    case 'won': return 'covered';
+    case 'lost': return "didn't cover";
+    case 'covering': return `covering${marginText} (live)`;
+    case 'trailing': return `not covering${marginText} (live)`;
+    default: return 'not started';
+  }
+}
+
 /**
  * One row per member with a revealed pick: picks ordered by kickoff, unrevealed slots filled in,
  * and whether the member is still alive. Rows still in it come first, then rows that are out.
