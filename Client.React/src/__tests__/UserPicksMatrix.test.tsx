@@ -250,6 +250,9 @@ describe('UserPicksMatrix — who is still alive', () => {
     expect(screen.getByText('Covering now (live)')).toBeInTheDocument();
     expect(screen.getByText('Not covering now (live)')).toBeInTheDocument();
     expect(screen.getByText('Hidden until kickoff')).toBeInTheDocument();
+    expect(screen.getByText('Games left, on track')).toBeInTheDocument();
+    expect(screen.getByText('Games left, not covering now')).toBeInTheDocument();
+    expect(screen.getByText('Won (all picks covered)')).toBeInTheDocument();
   });
 });
 

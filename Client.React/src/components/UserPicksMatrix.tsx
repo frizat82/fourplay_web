@@ -52,8 +52,12 @@ const MATRIX_SIZE = {
 };
 
 const OUT_OPACITY = 0.45;
-const WON_MARKER = <CheckIcon sx={{ fontSize: 16, color: 'success.main' }} />;
-const OUT_MARKER = <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} />;
+const STATUS_MARKER: Record<SurvivorStatus, ReactNode> = {
+  alive: <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />,
+  onTheRopes: <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'error.main' }} />,
+  won: <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />,
+  out: <SkullIcon sx={{ fontSize: 14, color: 'text.secondary' }} />,
+};
 const LIVE_TAG_LINE_HEIGHT = 1.2;
 // Share of the LIVE tag's height that hangs inside the badge; the rest sits above its top edge.
 const LIVE_TAG_INSIDE = 0.35;
@@ -176,8 +180,10 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
     { label: 'Covering now (live)', swatch: swatch('covering') },
     { label: 'Not covering now (live)', swatch: swatch('trailing') },
     { label: 'Hidden until kickoff', swatch: swatch('pending', <LockOutlinedIcon sx={{ fontSize: 11, color: 'text.secondary' }} />) },
-    { label: 'Won (all picks covered)', swatch: WON_MARKER },
-    { label: 'Out (faded, listed last)', swatch: OUT_MARKER },
+    { label: 'Games left, on track', swatch: STATUS_MARKER.alive },
+    { label: 'Games left, not covering now', swatch: STATUS_MARKER.onTheRopes },
+    { label: 'Won (all picks covered)', swatch: STATUS_MARKER.won },
+    { label: 'Out (faded, listed last)', swatch: STATUS_MARKER.out },
   ];
 
   return (
@@ -199,13 +205,7 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
                 <TableCell sx={{ ...stickyColumnSx, ...size.cellPadding }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <Box role="img" aria-label={`${userName}: ${STATUS_LABEL[status]}`} sx={{ display: 'inline-flex', width: 14, justifyContent: 'center', flexShrink: 0 }}>
-                      {isOut ? (
-                        OUT_MARKER
-                      ) : status === 'won' ? (
-                        WON_MARKER
-                      ) : (
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: status === 'alive' ? 'success.main' : 'error.main' }} />
-                      )}
+                      {STATUS_MARKER[status]}
                     </Box>
                     <Typography fontWeight={600} fontSize={size.usernameFont} color={isOut ? 'text.secondary' : undefined}>
                       {userName}
