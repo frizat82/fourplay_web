@@ -61,7 +61,7 @@ const STATUS_MARKER: Record<SurvivorStatus, ReactNode> = {
 const LIVE_TAG_LINE_HEIGHT = 1.2;
 // Share of the LIVE tag's height that hangs inside the badge; the rest sits above its top edge.
 const LIVE_TAG_INSIDE = 0.35;
-const LEGEND_SWATCH_SX = { width: 18, height: 14, borderRadius: 0.5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const LEGEND_SWATCH_SX = { width: 18, height: 14, borderRadius: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
 const STATUS_LABEL: Record<SurvivorStatus, string> = {
   alive: 'alive',
