@@ -80,7 +80,8 @@ jobs:
 
   frontend:
     name: Frontend build & test
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, where Playwright can't install Chromium yet.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: Client.React
@@ -137,7 +138,8 @@ jobs:
 
   demo-e2e:
     name: Demo backend e2e tests
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, where Playwright can't install Chromium yet.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
 
     services:
@@ -276,7 +278,8 @@ jobs:
 
   demo-replay-e2e:
     name: Demo replay e2e tests
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, where Playwright can't install Chromium yet.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
 
     # Job-level so both the backend-startup step and the Playwright step (which logs in as admin
