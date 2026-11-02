@@ -81,8 +81,11 @@ const SPREAD_RESPONSES = {
   NYG: createSpreadResponse('NYG', 3, 47.5, 47.5),
 };
 
-function makeScores(week: number, postSeason: boolean, gameStarted: boolean) {
-  const bufComp = createCompetition({ homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10, gameStarted });
+type LiveStatusName = 'status_in_progress' | 'status_halftime';
+
+function makeScores(week: number, postSeason: boolean, gameStarted: boolean, live?: LiveStatusName) {
+  const liveStatus = live ? { name: live, period: 3, displayClock: '8:42' } : undefined;
+  const bufComp = createCompetition({ homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10, gameStarted, liveStatus });
   const dalComp = createCompetition({ homeTeam: 'DAL', awayTeam: 'NYG', homeScore: 28, awayScore: 17, gameStarted });
   return createScores({ week, postSeason, events: [
     { id: '1', season: { year: 2024, type: postSeason ? 3 : 2 }, week: { number: week }, date: new Date().toISOString(), competitions: [bufComp] },
@@ -92,13 +95,13 @@ function makeScores(week: number, postSeason: boolean, gameStarted: boolean) {
 
 const setupDefaults = async (options?: {
   week?: number; postSeason?: boolean; gameStarted?: boolean;
-  oddsExist?: boolean; picks?: NflPickDto[];
+  oddsExist?: boolean; picks?: NflPickDto[]; live?: LiveStatusName;
 }) => {
   const week = options?.week ?? 2;
   const postSeason = options?.postSeason ?? false;
   const gameStarted = options?.gameStarted ?? true;
   mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, postSeason));
-  mockedGetWeekScores.mockResolvedValue(makeScores(week, postSeason, gameStarted));
+  mockedGetWeekScores.mockResolvedValue(makeScores(week, postSeason, gameStarted, options?.live));
   mockedGetLiveGames.mockResolvedValue([]);
   mockedGetLeaguePicks.mockResolvedValue(options?.picks ?? []);
   mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
@@ -801,5 +804,36 @@ describe('ScoresPage', () => {
       const card = screen.getByTestId('game-card-BUFvsMIA');
       expect(card).toHaveAttribute('data-redzone', 'false');
     });
+  });
+});
+
+describe('ScoresPage — live cover margins', () => {
+  beforeEach(() => {
+    sessionState.currentLeague = 1;
+    vi.clearAllMocks();
+  });
+
+  // BUF 24 – MIA 10, live. BUF −7: 24 − 7 − 10 = +7. MIA +7: 10 + 7 − 24 = −7. Total 34 vs 47.5.
+  it.each<LiveStatusName>(['status_in_progress', 'status_halftime'])('shows how far each side is past its line while the game is live (%s)', async (live) => {
+    await setupDefaults({ live });
+    await renderPage();
+    expect(screen.getByLabelText('BUF: covering +7 (live)')).toHaveTextContent('+7');
+    expect(screen.getByLabelText('MIA: not covering −7 (live)')).toHaveTextContent('−7');
+  });
+
+  it('shows the total against the Over and Under lines in the postseason', async () => {
+    await setupDefaults({ week: 19, postSeason: true, live: 'status_in_progress' });
+    await renderPage();
+    expect(screen.getByLabelText('Over: not covering −13.5 (live)')).toHaveTextContent('O −13.5');
+    expect(screen.getByLabelText('Under: covering +13.5 (live)')).toHaveTextContent('U +13.5');
+  });
+
+  it.each([
+    ['final', true],
+    ['not started', false],
+  ])('shows no margins for a %s game', async (_label, gameStarted) => {
+    await setupDefaults({ week: 19, postSeason: true, gameStarted });
+    await renderPage();
+    expect(screen.queryByLabelText(/\(live\)$/)).not.toBeInTheDocument();
   });
 });

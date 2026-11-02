@@ -16,7 +16,7 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useMemo, type ReactNode } from 'react';
 import type { GameView, PickView } from '../services/sportAdapter';
 import { stickyColumnSx } from '../utils/tableStyles';
-import { buildSurvivorRows, formatMargin, type MatrixPickState, type MatrixSlot, type SurvivorStatus } from '../utils/survivorMatrix';
+import { buildSurvivorRows, describePick, formatMargin, type MatrixPickState, type MatrixSlot, type SurvivorStatus } from '../utils/survivorMatrix';
 import TeamLogo from './sports/TeamLogo';
 import { getTeamArtMode } from '../utils/teamArt';
 
@@ -62,17 +62,6 @@ const STATUS_LABEL: Record<SurvivorStatus, string> = {
   out: 'out',
 };
 
-function describePick(state: MatrixPickState, margin: number | null): string {
-  const marginText = margin == null ? '' : ` ${formatMargin(margin)}`;
-  switch (state) {
-    case 'won': return 'covered';
-    case 'lost': return "didn't cover";
-    case 'covering': return `covering${marginText} (live)`;
-    case 'trailing': return `not covering${marginText} (live)`;
-    default: return 'not started';
-  }
-}
-
 // Final results are solid; live ones are striped and outlined so a Sunday-night pick never looks
 // already decided. TeamHelmet's dark-mode logos are neon assets designed to glow against a dark
 // background, so the solid tones come from the active theme rather than fixed light literals.
@@ -107,7 +96,7 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
     if (slot.kind === 'empty') return <Paper sx={{ ...badgeShellSx, ...neutralSx }} />;
     if (slot.kind === 'hidden') {
       return (
-        <Paper aria-label="Hidden until kickoff" sx={{ ...badgeShellSx, ...neutralSx, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Paper role="img" aria-label="Hidden until kickoff" sx={{ ...badgeShellSx, ...neutralSx, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <LockOutlinedIcon sx={{ fontSize: size.logoSize * 0.7, color: 'text.secondary' }} />
         </Paper>
       );
@@ -120,6 +109,7 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
 
     return (
       <Paper
+        role="img"
         aria-label={`${slot.team}${ariaType}: ${describePick(slot.state, slot.margin)}`}
         sx={{
           ...badgeShellSx,
