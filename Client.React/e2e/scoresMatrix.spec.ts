@@ -29,7 +29,7 @@ test.describe('Scores matrix — survivors', () => {
     const rows = page.locator('tbody tr');
     await expect(rows.nth(0)).toContainText('Zoe');
     await expect(rows.nth(1)).toContainText('Aaron');
-    await expect(page.getByText('Covering now (live)', { exact: true })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Picks' }).getByText('Covering (live)', { exact: true })).toBeVisible();
   });
 
   test('offers no matrix when nobody has a revealed pick', async ({ page }) => {
