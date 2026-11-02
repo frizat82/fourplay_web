@@ -25,7 +25,7 @@ import { useAuth } from '../services/auth';
 import { isGameFinal, isGameLive, pickCovers, pickMargin, isConsistentRedZone, spreadLabel, isWeekExcludedFromSeason, findGameIdForTeam } from '../utils/gameHelpers';
 import type { SportAdapter, GameView, WeekState, PickType } from '../services/sportAdapter';
 import { sortGamesByTimeThenRank } from '../services/sportAdapter';
-import { formatMargin } from '../utils/survivorMatrix';
+import { describePick, formatMargin } from '../utils/survivorMatrix';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
 import { useLeagueStartWeek } from '../utils/useLeagueStartWeek';
 import { useCurrentWeekNav } from '../utils/useCurrentWeekNav';
@@ -53,7 +53,7 @@ function LiveMargin({ label, margin, prefix = '' }: { label: string; margin: num
   return (
     <Typography
       variant="caption"
-      aria-label={`${label}: ${covering ? 'covering' : 'not covering'} ${formatMargin(margin)} (live)`}
+      aria-label={`${label}: ${describePick(covering ? 'covering' : 'trailing', margin)}`}
       sx={{ display: 'block', lineHeight: 1.1, fontWeight: 700, color: covering ? 'success.main' : 'error.main' }}
     >
       {prefix}{formatMargin(margin)}

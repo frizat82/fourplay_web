@@ -81,8 +81,9 @@ const SPREAD_RESPONSES = {
   NYG: createSpreadResponse('NYG', 3, 47.5, 47.5),
 };
 
-function makeScores(week: number, postSeason: boolean, gameStarted: boolean) {
-  const bufComp = createCompetition({ homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10, gameStarted });
+function makeScores(week: number, postSeason: boolean, gameStarted: boolean, live = false) {
+  const liveStatus = live ? { name: 'status_in_progress' as const, period: 3, displayClock: '8:42' } : undefined;
+  const bufComp = createCompetition({ homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10, gameStarted, liveStatus });
   const dalComp = createCompetition({ homeTeam: 'DAL', awayTeam: 'NYG', homeScore: 28, awayScore: 17, gameStarted });
   return createScores({ week, postSeason, events: [
     { id: '1', season: { year: 2024, type: postSeason ? 3 : 2 }, week: { number: week }, date: new Date().toISOString(), competitions: [bufComp] },
@@ -92,13 +93,13 @@ function makeScores(week: number, postSeason: boolean, gameStarted: boolean) {
 
 const setupDefaults = async (options?: {
   week?: number; postSeason?: boolean; gameStarted?: boolean;
-  oddsExist?: boolean; picks?: NflPickDto[];
+  oddsExist?: boolean; picks?: NflPickDto[]; live?: boolean;
 }) => {
   const week = options?.week ?? 2;
   const postSeason = options?.postSeason ?? false;
   const gameStarted = options?.gameStarted ?? true;
   mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, postSeason));
-  mockedGetWeekScores.mockResolvedValue(makeScores(week, postSeason, gameStarted));
+  mockedGetWeekScores.mockResolvedValue(makeScores(week, postSeason, gameStarted, options?.live));
   mockedGetLiveGames.mockResolvedValue([]);
   mockedGetLeaguePicks.mockResolvedValue(options?.picks ?? []);
   mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
@@ -811,31 +812,15 @@ describe('ScoresPage — live cover margins', () => {
   });
 
   // BUF 24 – MIA 10, live. BUF −7: 24 − 7 − 10 = +7. MIA +7: 10 + 7 − 24 = −7. Total 34 vs 47.5.
-  const setupLive = (week: number, postSeason: boolean) => {
-    const liveComp = createCompetition({
-      homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 24, awayScore: 10,
-      liveStatus: { name: 'status_in_progress', period: 3, displayClock: '8:42' },
-    });
-    mockedGetNflCurrentWeek.mockResolvedValue(createCurrentWeek(week, postSeason));
-    mockedGetWeekScores.mockResolvedValue(createScores({
-      week, postSeason,
-      events: [{ id: '1', season: { year: 2024, type: postSeason ? 3 : 2 }, week: { number: week }, date: new Date().toISOString(), competitions: [liveComp] }],
-    }));
-    mockedGetLiveGames.mockResolvedValue([]);
-    mockedGetLeaguePicks.mockResolvedValue([]);
-    mockedSpreadBatch.mockResolvedValue({ responses: SPREAD_RESPONSES });
-    mockLeagueJuiceEmpty(mockedGetLeagueJuice);
-  };
-
   it('shows how far each side is past its line while the game is live', async () => {
-    setupLive(2, false);
+    await setupDefaults({ live: true });
     await renderPage();
     expect(screen.getByLabelText('BUF: covering +7 (live)')).toHaveTextContent('+7');
     expect(screen.getByLabelText('MIA: not covering −7 (live)')).toHaveTextContent('−7');
   });
 
   it('shows the total against the Over and Under lines in the postseason', async () => {
-    setupLive(19, true);
+    await setupDefaults({ week: 19, postSeason: true, live: true });
     await renderPage();
     expect(screen.getByLabelText('Over: not covering −13.5 (live)')).toHaveTextContent('O −13.5');
     expect(screen.getByLabelText('Under: covering +13.5 (live)')).toHaveTextContent('U +13.5');

@@ -16,7 +16,7 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useMemo, type ReactNode } from 'react';
 import type { GameView, PickView } from '../services/sportAdapter';
 import { stickyColumnSx } from '../utils/tableStyles';
-import { buildSurvivorRows, formatMargin, type MatrixPickState, type MatrixSlot, type SurvivorStatus } from '../utils/survivorMatrix';
+import { buildSurvivorRows, describePick, formatMargin, type MatrixPickState, type MatrixSlot, type SurvivorStatus } from '../utils/survivorMatrix';
 import TeamLogo from './sports/TeamLogo';
 import { getTeamArtMode } from '../utils/teamArt';
 
@@ -61,17 +61,6 @@ const STATUS_LABEL: Record<SurvivorStatus, string> = {
   onTheRopes: 'alive, but not covering right now',
   out: 'out',
 };
-
-function describePick(state: MatrixPickState, margin: number | null): string {
-  const marginText = margin == null ? '' : ` ${formatMargin(margin)}`;
-  switch (state) {
-    case 'won': return 'covered';
-    case 'lost': return "didn't cover";
-    case 'covering': return `covering${marginText} (live)`;
-    case 'trailing': return `not covering${marginText} (live)`;
-    default: return 'not started';
-  }
-}
 
 // Final results are solid; live ones are striped and outlined so a Sunday-night pick never looks
 // already decided. TeamHelmet's dark-mode logos are neon assets designed to glow against a dark
