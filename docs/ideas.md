@@ -59,13 +59,63 @@ See the full design in [Weekly buy-back: fair design options](#weekly-buy-back-f
 - Effort: medium.
 
 ### 5. Shareable cards for group chats (growth)
-- Auto-generated images:
-  - "Week 4 winners 💰"
-  - "Bad beat of the week: lost by half a point"
-  - a player's locked picks
-- Invite links get rich previews (OpenGraph image with league name and pot size) instead of a bare URL.
 - Group chats are where leagues actually live, so that's where the app should show up.
-- Effort: small to medium, with server-rendered images.
+- **First deliverable: the weekly league recap card**, spec below. It's designed and decided, but not built yet.
+- Later, maybe:
+  - a per-player card (your 4 picks, margins, season record), mocked and deliberately deferred;
+  - invite links with rich previews (OpenGraph image with league name and pot size) instead of a bare URL.
+
+#### Weekly league recap card (future deliverable)
+
+![League recap card mock](design/weekly-recap/league-recap-mock.png)
+
+How it reaches new people: someone shares it, and a friend outside the league asks how to get in.
+See the [group chat mock](design/weekly-recap/group-chat-mock.png).
+
+**Decisions (2026-11-04)**
+- **League card only.** One card per league per week. No per-player card in v1.
+- **Money on the card.** Show winners' dollar amounts and the season leader's total.
+- **End of week only.** The Share button appears once every game in the week is final. There is no mid-week version.
+- **NFL and CFB share one implementation.** The card is built from `GameView`/`PickView` through the `SportAdapter`, so each sport only changes its labels (`NFL · WEEK 9` / `CFB · SLATE 9`).
+
+**What's on it**
+1. **Header.** Brand, sport and week, league name and player count.
+2. **Headline.** "*N* ran the table." Each winner gets a chip with their pick record and the amount they collect.
+   - If nobody won, the headline reads "Nobody ran the table." What happens to that week's money comes from the league's settlement rules; don't invent a carryover.
+3. **"Still alive after…" chart.** How many players were still alive at kickoff and after each kickoff window, ending with the last game.
+   - The windows come from the week's game times: Thu / 1 PM / 4 PM / SNF / MNF for NFL, and the matching slate windows for CFB.
+4. **Four story tiles.** Each tile is computed and skipped if no pick qualifies.
+   - **Heartbreaker:** the smallest losing margin. Prefer a player's last outstanding pick.
+   - **Lock of the week:** the most-picked pick that covered, with how many players had it.
+   - **Lone wolf:** a pick only one player made, and it covered.
+   - **First one out:** the first player eliminated.
+5. **Footer.** The season leader with their total and rank change, plus the `ivleague.xyz` call to action.
+
+**Data, all already available**
+- Margins come from `pickMargin` / `pickCovers` in `gameHelpers.ts`, the same source as the matrix and the live margins. A margin on the card can never disagree with the Scores page.
+- Winners and amounts come from `LeaderboardSettlementHelper`, the existing settlement math. The card must not recompute juice.
+- **"First one out" timing.** `NflScores`/`CfbScores` don't store when a game went final.
+  - `DateCreated` is roughly when the scores job saved the final. That's good enough for "done by 3:40 PM".
+  - If that proves unreliable, fall back to the game's kickoff window ("out in the 1 PM games").
+
+**Build notes**
+- Show the Share button on the Scores page for a fully final week.
+- On phones, use the Web Share API with the card as a 1080×1350 PNG. On desktop, fall back to a download.
+- Decide client-rendered vs. server-rendered when it's picked up:
+  - Client-side (render the card off-screen, then capture it) needs no new backend.
+  - Server-side also gives an OpenGraph image, so a shared link unfurls in the chat.
+
+**Tests when it's picked up (TDD)**
+- Vitest for the recap builder:
+  - winners and amounts;
+  - the funnel counts per window;
+  - each tile's selection rule, including ties and no qualifying pick;
+  - the nobody-won headline.
+- A mock-based Playwright test for:
+  - the Share button: hidden until the week is final, then shown;
+  - the rendered card.
+
+Effort: medium.
 
 ### 6. Season "Wrapped"
 - A Spotify-style year-end recap:
@@ -92,7 +142,7 @@ See the full design in [Weekly buy-back: fair design options](#weekly-buy-back-f
 
 ## Suggested order
 1. Push notifications (#1) and the Still Alive board (#2): they turn Sunday into an event.
-2. Share cards (#5): the cheapest growth channel.
+2. Share cards (#5): the cheapest growth channel. The league recap card is specced and mocked.
 3. Settle-up ledger (#4): happy commissioners keep leagues running.
 4. Redemption Round (#3), using the side-pot design below.
 
