@@ -160,15 +160,15 @@ describe('buildSurvivorRows — survivor status and row order', () => {
     expect(row.status).toBe('alive');
   });
 
-  it('lists everyone still in it first, then everyone out, each alphabetically', () => {
+  it('orders not covering a live game, then alive, then out; ties alphabetically', () => {
     const rows = buildSurvivorRows([
       pick('dana', 'MIA'), pick('dana', 'KC'),
       pick('bob', 'BUF'), pick('bob', 'LV'),
       pick('carlos', 'MIA'), pick('carlos', 'LV'),
       pick('alice', 'BUF'), pick('alice', 'KC'),
     ], games, 2);
-    expect(rows.map(r => r.userName)).toEqual(['alice', 'bob', 'carlos', 'dana']);
-    expect(rows.map(r => r.status)).toEqual(['alive', 'onTheRopes', 'out', 'out']);
+    expect(rows.map(r => r.userName)).toEqual(['bob', 'alice', 'carlos', 'dana']);
+    expect(rows.map(r => r.status)).toEqual(['onTheRopes', 'alive', 'out', 'out']);
   });
 
   it('a member whose every pick has covered is won — nothing left to root against', () => {
@@ -177,8 +177,9 @@ describe('buildSurvivorRows — survivor status and row order', () => {
     expect(rows.map(r => [r.userName, r.status])).toEqual([['zed', 'won'], ['amy', 'out']]);
   });
 
-  // The top group is everyone you can still root against: games left or in progress.
-  it('lists members with games still to play first, then members who already won, then members who are out', () => {
+  // The top group is everyone you can still root against: games left or in progress. Within it,
+  // whoever is losing a live game right now comes first — the people about to be knocked out.
+  it('lists members losing a live game first, then the rest with games to play, then winners, then members who are out', () => {
     const rows = buildSurvivorRows([
       pick('abe', 'BUF'), pick('abe', 'MIA'), // out
       pick('ben', 'BUF'), pick('ben', 'BUF', 'Over'), // won: both final and covered
@@ -187,10 +188,19 @@ describe('buildSurvivorRows — survivor status and row order', () => {
       pick('eve', 'BUF'), // second pick hidden until a later kickoff
     ], [...games, later], 2, 'id-viewer');
     expect(rows.map(r => [r.userName, r.status])).toEqual([
-      ['cat', 'alive'], ['dan', 'onTheRopes'], ['eve', 'alive'],
+      ['dan', 'onTheRopes'],
+      ['cat', 'alive'], ['eve', 'alive'],
       ['ben', 'won'],
       ['abe', 'out'],
     ]);
+  });
+
+  it('re-sorts live: a member moves to the top while their live pick is not covering, and back once it is', () => {
+    const picks = [pick('amy', 'BUF'), pick('amy', 'KC'), pick('zed', 'BUF'), pick('zed', 'LV')];
+    const at = (kc: number, lv: number) =>
+      buildSurvivorRows(picks, [games[0], game('KC', 'LV', -6.5, 6.5, 'in_progress', kc, lv)], 2).map(r => r.userName);
+    expect(at(20, 10)).toEqual(['zed', 'amy']); // KC by 10: zed's LV +6.5 is not covering
+    expect(at(14, 10)).toEqual(['amy', 'zed']); // KC by 4: zed covers, amy's KC −6.5 does not
   });
 
   it("the viewer's own unmade pick, with games left, keeps them in the top group", () => {
