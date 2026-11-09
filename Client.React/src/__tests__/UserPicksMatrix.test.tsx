@@ -256,6 +256,14 @@ describe('UserPicksMatrix — who is still alive', () => {
     ['Games left', 'Live, not covering', 'Won the week', 'Out (faded)']
       .forEach(label => expect(playersKey.getByText(label)).toBeInTheDocument());
   });
+
+  it('lists the Players key in the same order as the rows', () => {
+    renderMatrix(picks, [buf, kcLive], 2);
+    const players = screen.getByRole('group', { name: 'Players' });
+    const labels = ['Live, not covering', 'Games left', 'Won the week', 'Out (faded)'];
+    const positions = labels.map(l => players.textContent!.indexOf(l));
+    expect(positions).toEqual([...positions].sort((x, y) => x - y));
+  });
 });
 
 describe('UserPicksMatrix — mobile sizing (frizat-2aa)', () => {

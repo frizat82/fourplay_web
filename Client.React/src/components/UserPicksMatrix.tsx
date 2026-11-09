@@ -188,8 +188,8 @@ export default function UserPicksMatrix({ sport, picks, games, requiredPicks, cu
     {
       title: 'Players',
       items: [
-        { label: 'Games left', swatch: STATUS_MARKER.alive },
         { label: 'Live, not covering', swatch: STATUS_MARKER.onTheRopes },
+        { label: 'Games left', swatch: STATUS_MARKER.alive },
         { label: 'Won the week', swatch: STATUS_MARKER.won },
         { label: 'Out (faded)', swatch: STATUS_MARKER.out },
       ],

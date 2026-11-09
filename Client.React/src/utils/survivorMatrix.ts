@@ -13,12 +13,11 @@ export type MatrixSlot =
 
 type PickSlot = Extract<MatrixSlot, { kind: 'pick' }>;
 
-// alive/onTheRopes: still has games to play (the people you can root against). won: every pick
-// final and covered. out: lost a pick or missed one.
+// alive: still has games to play (the people you can root against). onTheRopes: alive, but not
+// covering a live game right now. won: every pick final and covered. out: lost a pick or missed one.
 export type SurvivorStatus = 'alive' | 'onTheRopes' | 'won' | 'out';
 
-// Rows re-sort on every live score update: whoever is not covering a live game right now rises to
-// the top, since they're the ones about to be knocked out.
+// Not covering a live game comes first: they're the ones about to be knocked out.
 const GROUP_ORDER: Record<SurvivorStatus, number> = { onTheRopes: 0, alive: 1, won: 2, out: 3 };
 
 export interface SurvivorRow {
@@ -56,7 +55,7 @@ export function describePick(state: MatrixPickState, margin: number | null): str
 
 /**
  * One row per member with a revealed pick: picks ordered by kickoff, unrevealed slots filled in,
- * and whether the member is still alive. Rows with games left come first, then winners, then out.
+ * and whether the member is still alive. Sorted by GROUP_ORDER, then name.
  */
 export function buildSurvivorRows(picks: PickView[], games: GameView[], requiredPicks: number, currentUserId?: string): SurvivorRow[] {
   const gameByTeam = new Map<string, GameView>();

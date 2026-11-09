@@ -160,7 +160,7 @@ describe('buildSurvivorRows — survivor status and row order', () => {
     expect(row.status).toBe('alive');
   });
 
-  it('lists everyone still in it first, then everyone out; within each, alphabetically', () => {
+  it('orders not covering a live game, then alive, then out; ties alphabetically', () => {
     const rows = buildSurvivorRows([
       pick('dana', 'MIA'), pick('dana', 'KC'),
       pick('bob', 'BUF'), pick('bob', 'LV'),
