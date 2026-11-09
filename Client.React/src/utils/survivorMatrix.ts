@@ -17,7 +17,9 @@ type PickSlot = Extract<MatrixSlot, { kind: 'pick' }>;
 // final and covered. out: lost a pick or missed one.
 export type SurvivorStatus = 'alive' | 'onTheRopes' | 'won' | 'out';
 
-const GROUP_ORDER: Record<SurvivorStatus, number> = { alive: 0, onTheRopes: 0, won: 1, out: 2 };
+// Rows re-sort on every live score update: whoever is not covering a live game right now rises to
+// the top, since they're the ones about to be knocked out.
+const GROUP_ORDER: Record<SurvivorStatus, number> = { onTheRopes: 0, alive: 1, won: 2, out: 3 };
 
 export interface SurvivorRow {
   userId: string;

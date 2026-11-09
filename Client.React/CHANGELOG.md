@@ -4,6 +4,9 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-11-09
+- Scores matrix re-sorts live: players whose live pick isn't covering right now move to the top, so you can see who's about to be knocked out.
+
 ## 2026-11-02
 - Scores matrix key is organized for phones: a Picks group and a Players group, each in two aligned columns with shorter labels.
 - Scores matrix lists members with games still to play first (the people you're rooting against), then members who already won the week (now marked with a check), then members who are out.

@@ -216,10 +216,10 @@ describe('UserPicksMatrix — who is still alive', () => {
     expect(screen.getByLabelText('carlos: out')).toBeInTheDocument();
   });
 
-  it('lists members still in it above members who are out', () => {
+  it('lists the member losing a live game first, then others still in it, then members who are out', () => {
     renderMatrix(picks, [buf, kcLive], 2);
     const names = screen.getAllByRole('row').slice(1).map(r => within(r).getAllByRole('cell')[0].textContent);
-    expect(names).toEqual(['alice', 'bob', 'carlos']);
+    expect(names).toEqual(['bob', 'alice', 'carlos']);
   });
 
   it("dims an out member's picks, but not their name or status", () => {
