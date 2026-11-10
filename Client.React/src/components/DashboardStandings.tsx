@@ -1,9 +1,9 @@
 import { Box, Paper, Stack, Typography } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { useSession } from '../services/session';
 import { useAuth } from '../services/auth';
 import { useSportContext } from '../services/sport';
-import { getLeaderboard } from '../api/leaderboard';
+import { useLeagueLeaderboards } from '../utils/useLeagueLeaderboards';
 import type { SportAdapter } from '../services/sportAdapter';
 
 interface LeagueStanding {
@@ -33,21 +33,11 @@ export default function DashboardStandings({ adapter }: DashboardStandingsProps)
   const { user } = useAuth();
   const { isCfb } = useSportContext();
 
-  const { data: standings } = useQuery({
-    queryKey: [adapter.sport, 'dashboard-standings', availableLeagues.map(l => l.leagueId), user?.userId],
-    queryFn: async (): Promise<LeagueStanding[]> => {
-      const season = await adapter.currentSeasonYear();
-      const rows = await Promise.all(availableLeagues.map(async (league): Promise<LeagueStanding | null> => {
-        const leaderboard = await getLeaderboard(league.leagueId, season);
-        const mine = leaderboard?.find(r => r.userId === user!.userId);
-        if (!mine) return null;
-        return { leagueId: league.leagueId, leagueName: league.leagueName ?? 'League', rank: mine.rank, total: mine.total };
-      }));
-      return rows.filter((r): r is LeagueStanding => r !== null);
-    },
-    enabled: leaguesLoaded && availableLeagues.length > 0 && !!user?.userId,
-    staleTime: 60_000,
-  });
+  const leaderboards = useLeagueLeaderboards(adapter);
+  const standings = useMemo(() => leaderboards?.flatMap((l): LeagueStanding[] => {
+    const mine = l.leaderboard.find(r => r.userId === user?.userId);
+    return mine ? [{ leagueId: l.leagueId, leagueName: l.leagueName, rank: mine.rank, total: mine.total }] : [];
+  }), [leaderboards, user?.userId]);
 
   // Still resolving session/auth state — avoid flashing an empty state before we know whether
   // the user has leagues in this sport.
