@@ -21,6 +21,13 @@ describe('isWeekFinal', () => {
 });
 
 describe('findLatestWeekWin', () => {
+  // A member who joined late can have fewer weekResults than the viewer; that must not hide the
+  // viewer's win or break the finality check.
+  it('copes with members whose weekResults are shorter or longer than the viewer\'s', () => {
+    expect(findLatestWeekWin([row('me', ['Lost', -10], ['Won', 20]), row('bob', ['Won', 10])], 'me')).toEqual({ week: 2, amount: 20 });
+    expect(findLatestWeekWin([row('me', ['Won', 10]), row('bob', ['Lost', -10], ['MissingGameResults'])], 'me')).toEqual({ week: 1, amount: 10 });
+  });
+
   it("returns the viewer's most recent final week when they won it, with what they collect", () => {
     const board = [row('me', ['Lost', -10], ['Won', 20]), row('bob', ['Won', 10], ['Lost', -20])];
     expect(findLatestWeekWin(board, 'me')).toEqual({ week: 2, amount: 20 });

@@ -6,9 +6,11 @@ import { useLeagueLeaderboards, type LeagueLeaderboard } from '../utils/useLeagu
 import { celebrationPicks, findLatestWeekWin, type CelebrationPick } from '../utils/weekWin';
 import { hasSeenWeekWin, markWeekWinSeen } from '../utils/weekWinSeen';
 
-// Only winners ever load the animation, so it stays out of the entry chunk.
+// Only winners ever load the animation, so it stays out of the entry chunk. It is a bonus, so a
+// chunk that fails to download (flaky signal, a deploy mid-session) shows nothing rather than
+// letting the lazy rejection take the whole dashboard down with it.
 const loadCelebration = () => import('./WeekWinCelebration');
-const WeekWinCelebration = lazy(loadCelebration);
+const WeekWinCelebration = lazy(() => loadCelebration().catch((): Awaited<ReturnType<typeof loadCelebration>> => ({ default: () => <></> })));
 
 /** The first league whose latest final week the viewer won and hasn't been shown yet. */
 function firstUnseenWin(leaderboards: LeagueLeaderboard[] | undefined, userId: string | undefined, dismissed: number[]) {

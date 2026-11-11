@@ -50,4 +50,16 @@ test.describe('Week win celebration', () => {
     await expect(page.getByTestId('dashboard-standings').getByText('-25')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
+
+  test('leaves the dashboard working when the animation fails to download', async ({ page }) => {
+    await mockAuth(page, { ...options, navigateTo: undefined, leaderboard: board('Won', 25) });
+    // Registered after the mocks, which win over earlier routes, so the chunk request is the one aborted.
+    await page.route(/\/WeekWinCelebration\.tsx(\?|$)/, route => route.abort());
+    await page.goto('/dashboard');
+    await waitForSpinner(page);
+
+    await expect(page.getByTestId('dashboard-standings').getByText('+25')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByText("Couldn't load this page")).toHaveCount(0);
+  });
 });

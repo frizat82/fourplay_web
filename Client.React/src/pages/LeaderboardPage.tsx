@@ -194,9 +194,6 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
     }
   };
 
-  // Reads false only for the current, still-in-progress week, never a past one.
-  const weekIsFinal = (weekIndex: number) => isWeekFinal(leaderboard, weekIndex);
-
   const rowClass = (row: LeaderboardDto) => {
     if (!user?.userId) return {};
     return row.userId === user.userId
@@ -320,7 +317,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
                       return (
                         <TableCell key={idx}>
                           {`W${maxWeek - idx}`}
-                          {!weekIsFinal(weekIndex) && (
+                          {!isWeekFinal(leaderboard, weekIndex) && (
                             <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                               Not Final
                             </Typography>
