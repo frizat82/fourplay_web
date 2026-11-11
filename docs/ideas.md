@@ -127,6 +127,35 @@ Effort: medium.
 - Extremely shareable, and it gets people to come back for next season.
 - All the data is already in the database. Effort: medium.
 
+## Follow-ups to shipped features
+
+### Week-win celebration: once per user, across all devices
+Shipped in #544/#545. It plays once per win, per league, but the "already seen" marker lives in
+the browser's localStorage (`Client.React/src/utils/weekWinSeen.ts`), so it is once per *device*:
+- a phone and a laptop each show it once;
+- on iPhone, the home-screen app and Safari keep separate storage, so both show it;
+- private browsing or clearing site data shows it again.
+
+Decided 2026-11-11 (repo owner): keep it per device for now; make it once per user across all
+devices later.
+
+**How:** store the latest seen win on the server, keyed by user and league.
+- A small table, e.g. `WeekWinSeen (UserId, LeagueId, Season, Week)`, holding only the latest
+  dismissed week per user and league. An EF migration is required, so it goes through the
+  `DB Migrate` workflow like any other.
+- `GET` the marker with the dashboard data and `POST` it on dismiss. Both are owner-scoped, with a
+  DTO in `Shared/Models/Data/Dtos/` and an xUnit 403 test for another user's marker.
+- Keep the "earlier weeks count as seen" rule: a later week's marker covers every earlier one, so
+  a corrected score can never replay an old win.
+- Keep failing closed: if the marker can't be read, treat the win as seen. If the `POST` fails,
+  still close the screen. At worst it shows once more, on that device only.
+- Keep the localStorage marker as a fast local cache, so a seen win doesn't flash while the
+  server marker loads.
+- Shared NFL/CFB: the marker is per league, and each league is one sport, so one table and one
+  endpoint serve both.
+
+Effort: small to medium (one table, one migration, two endpoints, tests).
+
 ## Quick wins
 - **League pick split after lock:** "70% on KC." A "Contrarian" badge when you fade the league and win.
 - **Reactions:** emoji reactions or trash talk on locked picks and results.
