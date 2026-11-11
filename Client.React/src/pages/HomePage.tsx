@@ -12,6 +12,7 @@ import { useAuth } from '../services/auth';
 import { useSportContext } from '../services/sport';
 import { RulesContent } from './RulesPage';
 import DashboardStandings from '../components/DashboardStandings';
+import WeekWinCelebrationHost from '../components/WeekWinCelebrationHost';
 import PicksIsland from '../components/PicksIsland';
 import OwnerCostSummary from '../components/OwnerCostSummary';
 import type { SportAdapter } from '../services/sportAdapter';
@@ -157,6 +158,7 @@ export default function HomePage({ adapter }: HomePageProps) {
                   <DashboardStandings adapter={adapter} />
                 </Stack>
               )}
+              {isAuthed && adapter && <WeekWinCelebrationHost adapter={adapter} />}
             </Grid>
             <Grid size={{ xs: 12, md: 6 }} className="hero-image-section">
               <Stack spacing={2}>

@@ -4,6 +4,9 @@ Notable changes to IV League, most recent first. For admins — see the version 
 
 Format: `## ` release headings and single-line `- ` bullets only — no bold, links, or multi-line/nested bullets. The admin Changelog page renders this with a small hand-rolled parser (`parseChangelog.ts`), not a full Markdown engine; anything outside this subset renders as literal syntax instead of being formatted. A test guards this file against drifting outside the subset.
 
+## 2026-11-11
+- Winners now see a short, silent celebration on the dashboard the first time they open it after winning a week that is fully final: a trophy, their covered picks with the margins, and the winnings counting up. A tap anywhere dismisses it, and it plays once per win.
+
 ## 2026-11-09
 - Scores matrix re-sorts live: players whose live pick isn't covering right now move to the top, so you can see who's about to be knocked out.
 

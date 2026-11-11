@@ -32,6 +32,7 @@ import { stickyColumnSx } from '../utils/tableStyles';
 import { useShareLink } from '../utils/useShareLink';
 import { useShareImage } from '../utils/useShareImage';
 import { useLeagueMinSeason } from '../utils/useLeagueMinSeason';
+import { isWeekFinal } from '../utils/weekWin';
 
 interface LeaderboardPageProps {
   adapter: SportAdapter;
@@ -193,13 +194,6 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
     }
   };
 
-  // A week is "not final" iff any league member's own pick for it is still MissingGameResults —
-  // the same signal the backend's settlement math keys off. True (and thus unlabeled) the instant
-  // that week is fully decided, so this only ever reads false for the current, still-in-progress
-  // week, never a past one.
-  const isWeekFinal = (weekIndex: number) =>
-    !leaderboard.some((row) => row.weekResults[weekIndex]?.weekResult === 'MissingGameResults');
-
   const rowClass = (row: LeaderboardDto) => {
     if (!user?.userId) return {};
     return row.userId === user.userId
@@ -323,7 +317,7 @@ export default function LeaderboardPage({ adapter }: LeaderboardPageProps) {
                       return (
                         <TableCell key={idx}>
                           {`W${maxWeek - idx}`}
-                          {!isWeekFinal(weekIndex) && (
+                          {!isWeekFinal(leaderboard, weekIndex) && (
                             <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                               Not Final
                             </Typography>
