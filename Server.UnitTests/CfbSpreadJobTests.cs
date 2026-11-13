@@ -306,6 +306,23 @@ public class CfbSpreadJobTests
     }
 
     [Fact]
+    public async Task Execute_ScheduledUnrankedTeam_ClearsItsEarlierRankForThatWeek()
+    {
+        // Same rule as CfbRankingCaptureJob (shared CfbRankingExtractor): a team that has dropped
+        // out of the poll must not keep the rank an earlier capture stored for this week.
+        SetCurrentSlate(BuildSlate());
+        _fetcher.FetchForSlateAsync(Arg.Any<CfbSeasonWeekConfig>(), Arg.Any<bool>()).Returns(BuildScoreboard(homeAbbr: "ORE", awayAbbr: "OSU", homeRank: 3, awayRank: 99));
+        _oddsService.GetCfbEventsWithOddsAsync(401677183, 100).Returns(BuildOdds());
+
+        IEnumerable<CfbUnrankedSighting>? cleared = null;
+        await _repo.RemoveRankingsAsync(Arg.Do<IEnumerable<CfbUnrankedSighting>>(u => cleared = u));
+
+        await BuildJob().Execute(_context);
+
+        Assert.Equal("OSU", cleared!.Single().TeamAbbreviation);
+    }
+
+    [Fact]
     public async Task Execute_PersistsRanking_EvenWhenOddsUnavailableAndRunThrows()
     {
         // frizat-4gn: rankings are a genuinely separate concern from spreads — a run that ends up

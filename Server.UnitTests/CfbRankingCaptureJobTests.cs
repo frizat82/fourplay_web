@@ -108,6 +108,67 @@ public class CfbRankingCaptureJobTests
     }
 
     [Fact]
+    public async Task Execute_ScheduledUnrankedTeam_ClearsItsEarlierRankForThatWeek()
+    {
+        // Prod 2026 wk 11: Northwestern's #20 from a Nov 1 capture stayed after it fell out of the
+        // poll, so it and Ohio State (the real #20) both showed #20. A still-scheduled game with
+        // an unranked team must clear that team's row for the week, not just leave it.
+        var slate = BuildSlate();
+        _repo.GetSlatesForSeasonAsync(2026).Returns([slate]);
+        _fetcher.FetchForSlateAsync(slate, Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 20, awayRank: 99));
+
+        IEnumerable<CfbUnrankedSighting>? cleared = null;
+        await _repo.RemoveRankingsAsync(Arg.Do<IEnumerable<CfbUnrankedSighting>>(u => cleared = u));
+
+        await BuildJob().Execute(_context);
+
+        Assert.Equal([new CfbUnrankedSighting(2026, slate.SlateNumber, "OSU", 401677183)], cleared!.ToList());
+    }
+
+    [Theory]
+    [InlineData(null)] // no curatedRank at all
+    [InlineData(0)]    // malformed
+    public async Task Execute_RankMissingOrMalformed_DoesNotClearIt(int? awayRank)
+    {
+        // Only ESPN's explicit 99 means "unranked": a gap or junk value in the response must never
+        // wipe a real rank, least of all on the last capture before picks lock.
+        var slate = BuildSlate();
+        _repo.GetSlatesForSeasonAsync(2026).Returns([slate]);
+        _fetcher.FetchForSlateAsync(slate, Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 20, awayRank: awayRank));
+
+        await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().RemoveRankingsAsync(Arg.Any<IEnumerable<CfbUnrankedSighting>>());
+    }
+
+    [Fact]
+    public async Task Execute_WeekWithNoRankedTeamsAtAll_ClearsNothing()
+    {
+        // A response where every team is 99 is a bad payload, not the whole poll dropping out.
+        var slate = BuildSlate();
+        _repo.GetSlatesForSeasonAsync(2026).Returns([slate]);
+        _fetcher.FetchForSlateAsync(slate, Arg.Any<bool>()).Returns(BuildScoreboard(homeRank: 99, awayRank: 99));
+
+        await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().RemoveRankingsAsync(Arg.Any<IEnumerable<CfbUnrankedSighting>>());
+    }
+
+    [Fact]
+    public async Task Execute_GameAlreadyUnderway_LeavesItsCapturedRanksAlone()
+    {
+        // Rank at kickoff is what counted for that game: once it's no longer scheduled, a newer
+        // poll must neither overwrite nor clear it.
+        var slate = BuildSlate();
+        _repo.GetSlatesForSeasonAsync(2026).Returns([slate]);
+        _fetcher.FetchForSlateAsync(slate, Arg.Any<bool>()).Returns(BuildScoreboard(status: TypeName.StatusInProgress, awayRank: 99));
+
+        await BuildJob().Execute(_context);
+
+        await _repo.DidNotReceive().RemoveRankingsAsync(Arg.Any<IEnumerable<CfbUnrankedSighting>>());
+    }
+
+    [Fact]
     public async Task Execute_NoRankedCompetitors_DoesNotPersist()
     {
         var slate = BuildSlate();

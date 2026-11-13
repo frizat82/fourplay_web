@@ -1,8 +1,8 @@
 namespace FourPlayWebApp.Server.Models.Data;
 
-// One row per (Season, WeekNumber, TeamAbbreviation) — AP Top 25 rank does not change once
-// captured for a given week, so later captures (CfbRankingCaptureJob, then CfbSpreadJob riding
-// along with its odds fetch) upsert this row rather than appending a new one. Only genuinely
+// One row per (Season, WeekNumber, TeamAbbreviation), kept current until that team's game kicks
+// off: later captures (CfbRankingCaptureJob, then CfbSpreadJob riding along with its odds fetch)
+// upsert this row, and remove it if the team has since dropped out of the poll. Only genuinely
 // ranked teams (1-25) get a row at all; ESPN's 99 "unranked" sentinel is filtered out before it
 // ever reaches this table (see CfbRankingExtractor / CfbSlateHelpers.RankOf).
 public class CfbRanking {
@@ -16,3 +16,7 @@ public class CfbRanking {
     public int CuratedRank { get; set; }
     public DateTimeOffset CapturedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
+
+// A team ESPN marks unranked in a still-scheduled game: the rank an earlier capture stored for
+// that same game is stale (the team dropped out of the poll since) and gets removed.
+public sealed record CfbUnrankedSighting(int Season, int WeekNumber, string TeamAbbreviation, int EspnEventId);
