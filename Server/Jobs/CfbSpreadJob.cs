@@ -47,7 +47,7 @@ public class CfbSpreadJob(
                 ?? throw new InvalidOperationException($"CfbSpreadJob: current slate {slateInfo.Id} is not a slate the repository serves");
 
             var spreads = new List<CfbSpreads>();
-            var rankings = new List<CfbRanking>();
+            var rankings = new CfbRankingCapture([], []);
 
             // slate was resolved from slateInfo.Id above, i.e. it IS the current slate.
             var scoreboard = await fetcher.FetchForSlateAsync(slate, isCurrentSlate: true);
@@ -57,7 +57,7 @@ public class CfbSpreadJob(
             }
 
             if (scoreboard.Events is not null) {
-                rankings.AddRange(CfbRankingExtractor.ExtractFrom(scoreboard.Events, slate));
+                rankings = CfbRankingExtractor.ExtractFrom(scoreboard.Events, slate);
                 await ProcessEventsForSpreads(spreads, slate, scoreboard.Events);
             }
 
@@ -69,9 +69,13 @@ public class CfbSpreadJob(
                 await repo.UpsertAsync(spreads);
                 Log.Information("CfbSpreadJob: saved {Count} CFB spreads", spreads.Count);
             }
-            if (rankings.Count > 0) {
-                await repo.AddRankingsAsync(rankings);
-                Log.Information("CfbSpreadJob: saved {Count} CFB rankings", rankings.Count);
+            if (rankings.Ranked.Count > 0) {
+                await repo.AddRankingsAsync(rankings.Ranked);
+                Log.Information("CfbSpreadJob: saved {Count} CFB rankings", rankings.Ranked.Count);
+            }
+            if (rankings.Unranked.Count > 0) {
+                var removed = await repo.RemoveRankingsAsync(rankings.Unranked);
+                Log.Information("CfbSpreadJob: cleared {Count} ranks of teams that dropped out of the poll", removed);
             }
             Log.Information("CfbSpreadJob: complete at {Time}", DateTime.UtcNow);
 
@@ -89,7 +93,7 @@ public class CfbSpreadJob(
             }
 
             await spreadsPosted.NotifyAsync(LeagueType.Cfb, slateInfo.Season, slateInfo.SlateNumber, slate.WeekLabel, slateInfo.SpreadLockDatetime);
-            await observer.RecordJobSuccessAsync(jobName, $"Saved {spreads.Count} spreads, {rankings.Count} rankings for {slate.WeekLabel}");
+            await observer.RecordJobSuccessAsync(jobName, $"Saved {spreads.Count} spreads, {rankings.Ranked.Count} rankings for {slate.WeekLabel}");
         } catch (Exception ex) {
             await observer.RecordAndRethrowAsync(jobName, ex);
         }

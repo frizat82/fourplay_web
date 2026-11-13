@@ -8,11 +8,10 @@ using Serilog;
 namespace FourPlayWebApp.Server.Jobs;
 
 // CFB-only (no NFL equivalent — ranking/eligibility is a CFB-specific concept, see CLAUDE.md).
-// Captures CfbRanking rows as soon as a week's schedule is known — this job runs at startup,
-// weekly Monday and daily, not gated on that week's spread lock like
-// CfbSpreadJob's capture is. AP rankings are typically available well before spread lock, and rank
-// is exactly what determines IsLeagueEligible — which games users can even see/pick that week.
-// Waiting until lock time meant eligibility data was only as fresh as the latest lock.
+// Captures the current week's CfbRanking rows from that week's poll — this job runs at startup,
+// weekly Monday and daily, not gated on that week's spread lock like CfbSpreadJob's capture is.
+// AP rankings are out well before spread lock, and rank is exactly what determines
+// IsLeagueEligible — which games users can even see/pick that week.
 //
 // CfbSpreadJob keeps its own (later) ranking capture too — it's "free" (rides along with the odds
 // fetch already being made) and lets a rank move between schedule-known and spread-locked time
@@ -33,27 +32,36 @@ public class CfbRankingCaptureJob(ICfbLiveScoreFetcher fetcher, ICfbRepository r
             return;
         }
 
-        // CfbRankingExtractor only emits rows for StatusScheduled competitions, so a slate whose
-        // games are all already final is a guaranteed zero-yield ESPN call — skip it.
-        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
-        var slates = allSlates.Where(s => s.WeekEndDate >= today).ToList();
-
-        // Each remaining slate's scoreboard fetch is an independent ESPN call — no data dependency
-        // between them, so fetch all slates concurrently rather than serializing the round-trips.
-        // isCurrentSlate: false for all of them — this job extracts AP rankings from real ESPN
-        // events, never wants the replay-mode snapshot merged in.
-        var scoreboards = await Task.WhenAll(slates.Select(async slate =>
-            (slate, scoreboard: await fetcher.FetchForSlateAsync(slate, isCurrentSlate: false))));
-
-        var rankings = new List<CfbRanking>();
-        foreach (var (slate, scoreboard) in scoreboards) {
-            if (scoreboard?.Events is null) continue;
-            rankings.AddRange(CfbRankingExtractor.ExtractFrom(scoreboard.Events, slate));
+        // Only the current week (the first unfinished slate, resolved the same way the rest of the
+        // app does): its ranks come from this week's poll. Capturing later weeks with today's poll
+        // was a guess that went stale (Northwestern's Nov 1 #20 sat in weeks 10-13 after it fell
+        // out of the Top 25). The first run after a week ends can still see last week's poll; the
+        // Monday run, after the new poll is out, upserts and clears to match it.
+        var windows = CfbCurrentSlateService.BuildSlateWindows(allSlates);
+        var current = SeasonWindowResolver.FirstUnfinishedWeek(
+            windows.Select(w => w.Window), Season, timeProvider.GetUtcNow().UtcDateTime);
+        if (current is not { } window) {
+            Log.Information("CfbRankingCaptureJob: season {Season} is over, nothing to capture", Season);
+            return;
         }
+        var slate = windows.First(w => w.Window == window).Slate;
 
-        if (rankings.Count > 0) {
-            await repo.AddRankingsAsync(rankings);
-            Log.Information("CfbRankingCaptureJob: saved {Count} CFB rankings", rankings.Count);
+        // isCurrentSlate: false — this job extracts AP rankings from real ESPN events, never wants
+        // the replay-mode snapshot merged in.
+        var scoreboard = await fetcher.FetchForSlateAsync(slate, isCurrentSlate: false);
+        if (scoreboard?.Events is null) {
+            Log.Warning("CfbRankingCaptureJob: ESPN returned no games for {Week}; ranks not refreshed", slate.WeekLabel);
+            return;
+        }
+        var capture = CfbRankingExtractor.ExtractFrom(scoreboard.Events, slate);
+
+        if (capture.Ranked.Count > 0) {
+            await repo.AddRankingsAsync(capture.Ranked);
+            Log.Information("CfbRankingCaptureJob: saved {Count} CFB rankings for {Week}", capture.Ranked.Count, slate.WeekLabel);
+        }
+        if (capture.Unranked.Count > 0) {
+            var removed = await repo.RemoveRankingsAsync(capture.Unranked);
+            Log.Information("CfbRankingCaptureJob: cleared {Count} ranks of teams that dropped out of the poll", removed);
         }
         Log.Information("CfbRankingCaptureJob: complete at {Time}", DateTime.UtcNow);
     }

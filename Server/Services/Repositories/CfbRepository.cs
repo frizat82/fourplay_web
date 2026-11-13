@@ -72,16 +72,16 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
         return await db.CfbSpreads.Where(s => s.CfbSlateId == cfbSlateId).ToListAsync();
     }
 
-    // Rank doesn't change once captured for a week, so a later capture (CfbRankingCaptureJob,
-    // then CfbSpreadJob riding along with its odds fetch) overwrites the same row rather than
-    // appending a new one — enforced by the unique index on (Season, WeekNumber, TeamAbbreviation).
+    // A later capture (CfbRankingCaptureJob daily, then CfbSpreadJob riding along with its odds
+    // fetch) overwrites the same row rather than appending a new one — enforced by the unique
+    // index on (Season, WeekNumber, TeamAbbreviation). Teams that dropped out: RemoveRankingsAsync.
     public async Task AddRankingsAsync(IEnumerable<CfbRanking> rankings) {
         await using var db = await dbFactory.CreateDbContextAsync();
         var rankingList = rankings.ToList();
         if (rankingList.Count == 0) return;
 
-        // Every caller (CfbRankingCaptureJob's whole-season sweep, CfbSpreadJob's single-slate
-        // capture) only ever produces rankings for one season per call — no need for a HashSet.
+        // Every caller (CfbRankingCaptureJob and CfbSpreadJob, each capturing one slate) only ever
+        // produces rankings for one season per call — no need for a HashSet.
         var season = rankingList[0].Season;
         var weeks = rankingList.Select(r => r.WeekNumber).ToHashSet();
         await UpsertByKeyAsync(
@@ -90,10 +90,29 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
             db.CfbRankings.Where(r => r.Season == season && weeks.Contains(r.WeekNumber)),
             (existing, ranking) => {
                 existing.CuratedRank   = ranking.CuratedRank;
-                existing.EspnEventId   = ranking.EspnEventId;
                 existing.CapturedAtUtc = ranking.CapturedAtUtc;
             });
         await db.SaveChangesAsync();
+    }
+
+    // A team that dropped out of the poll keeps whatever rank an earlier capture stored for a week
+    // unless it's removed here. Load + RemoveRange, not ExecuteDelete (CLAUDE.md's Npgsql gotcha).
+    // Returns how many rows went.
+    public async Task<int> RemoveRankingsAsync(IEnumerable<CfbUnrankedSighting> unranked) {
+        var keys = unranked.ToHashSet();
+        if (keys.Count == 0) return 0;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var seasons = keys.Select(k => k.Season).ToHashSet();
+        var weeks = keys.Select(k => k.WeekNumber).ToHashSet();
+        var teams = keys.Select(k => k.TeamAbbreviation).ToHashSet();
+        var candidates = await db.CfbRankings
+            .Where(r => seasons.Contains(r.Season) && weeks.Contains(r.WeekNumber) && teams.Contains(r.TeamAbbreviation))
+            .ToListAsync();
+        var stale = candidates.Where(r => keys.Contains(new CfbUnrankedSighting(r.Season, r.WeekNumber, r.TeamAbbreviation))).ToList();
+        db.CfbRankings.RemoveRange(stale);
+        await db.SaveChangesAsync();
+        return stale.Count;
     }
 
     public async Task<Dictionary<string, int>> GetLatestRankingsForWeekAsync(int season, int weekNumber) {
