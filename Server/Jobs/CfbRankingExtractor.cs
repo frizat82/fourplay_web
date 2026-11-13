@@ -10,7 +10,7 @@ namespace FourPlayWebApp.Server.Jobs;
 internal sealed record CfbRankingCapture(List<CfbRanking> Ranked, List<CfbUnrankedSighting> Unranked);
 
 // Shared by CfbSpreadJob (ranking capture riding along with its odds fetch, at spread-lock time)
-// and CfbRankingCaptureJob (earlier capture, as soon as a week's schedule is known) — one
+// and CfbRankingCaptureJob (earlier capture of the current week, from that week's poll) — one
 // implementation of "which CfbRanking rows does this batch of ESPN events produce for this slate."
 internal static class CfbRankingExtractor {
     private const int EspnUnranked = 99;

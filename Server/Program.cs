@@ -423,14 +423,14 @@ builder.Services.AddQuartz(q => {
             ("NFL Scores Tue 1am", "Fetches NFL scores early Tuesday after MNF at 1am CST", "0 0 1 ? * TUE"));
 
         // CFB Rankings — CFB-only, no NFL equivalent (rank/eligibility is a CFB-specific concept).
-        // Same cadence as the slate seeder: capture rankings as soon as a week's schedule is known,
-        // not gated on that week's spread lock like CfbSpreadJob's own (later) ranking capture is.
+        // Captures the current week's ranks from that week's poll, not gated on that week's spread
+        // lock like CfbSpreadJob's own (later) ranking capture is.
         q.ScheduleJob<CfbRankingCaptureJob>(trigger => trigger
             .WithIdentity("CFB Ranking Capture Startup")
-            .WithDescription("Captures CFB AP rankings as soon as each week's schedule is known")
+            .WithDescription("Captures the current week's CFB AP rankings")
             .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
         );
-        q.ScheduleCstCronJob<CfbRankingCaptureJob>("CFB Ranking Capture", "Captures CFB AP rankings as soon as each week's schedule is known", "0 0 5 ? * MON");
+        q.ScheduleCstCronJob<CfbRankingCaptureJob>("CFB Ranking Capture", "Captures the current week's CFB AP rankings from the new Monday poll", "0 0 5 ? * MON");
         // Daily catch-up, mirroring the spread schedulers' own daily pass below: a silently-failed
         // Monday run would otherwise leave IsLeagueEligible stale for a full week until the next
         // Monday. Also covers CFP committee rankings, which start replacing/supplementing the AP

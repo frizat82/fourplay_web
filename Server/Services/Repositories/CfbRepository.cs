@@ -80,8 +80,8 @@ public class CfbRepository(IDbContextFactory<ApplicationDbContext> dbFactory, IM
         var rankingList = rankings.ToList();
         if (rankingList.Count == 0) return;
 
-        // Every caller (CfbRankingCaptureJob's whole-season sweep, CfbSpreadJob's single-slate
-        // capture) only ever produces rankings for one season per call — no need for a HashSet.
+        // Every caller (CfbRankingCaptureJob and CfbSpreadJob, each capturing one slate) only ever
+        // produces rankings for one season per call — no need for a HashSet.
         var season = rankingList[0].Season;
         var weeks = rankingList.Select(r => r.WeekNumber).ToHashSet();
         await UpsertByKeyAsync(
