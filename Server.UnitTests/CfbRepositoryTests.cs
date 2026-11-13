@@ -176,7 +176,7 @@ public class CfbRepositoryTests
         var capturedAt = new DateTimeOffset(2026, 8, 26, 9, 0, 0, TimeSpan.FromHours(-5));
 
         await repo.AddRankingsAsync([
-            new CfbRanking { Season = 2026, WeekNumber = 1, EspnEventId = 1, TeamAbbreviation = "ALA", CuratedRank = 3, CapturedAtUtc = capturedAt },
+            new CfbRanking { Season = 2026, WeekNumber = 1, TeamAbbreviation = "ALA", CuratedRank = 3, CapturedAtUtc = capturedAt },
         ]);
 
         var saved = await factory.CreateDbContext().CfbRankings.SingleAsync(r => r.TeamAbbreviation == "ALA");
@@ -190,9 +190,9 @@ public class CfbRepositoryTests
         var repo = new CfbRepository(factory);
 
         await repo.AddRankingsAsync([
-            new CfbRanking { Season = 2026, WeekNumber = 1, EspnEventId = 1, TeamAbbreviation = "ALA", CuratedRank = 3 },
-            new CfbRanking { Season = 2026, WeekNumber = 2, EspnEventId = 2, TeamAbbreviation = "UGA", CuratedRank = 1 }, // different week
-            new CfbRanking { Season = 2025, WeekNumber = 1, EspnEventId = 3, TeamAbbreviation = "ORE", CuratedRank = 2 }, // different season
+            new CfbRanking { Season = 2026, WeekNumber = 1, TeamAbbreviation = "ALA", CuratedRank = 3 },
+            new CfbRanking { Season = 2026, WeekNumber = 2, TeamAbbreviation = "UGA", CuratedRank = 1 }, // different week
+            new CfbRanking { Season = 2025, WeekNumber = 1, TeamAbbreviation = "ORE", CuratedRank = 2 }, // different season
         ]);
 
         var result = await repo.GetLatestRankingsForWeekAsync(2026, 1);
@@ -214,16 +214,16 @@ public class CfbRepositoryTests
         var later = new DateTimeOffset(2026, 8, 27, 9, 0, 0, TimeSpan.Zero);
 
         await repo.AddRankingsAsync([
-            new CfbRanking { Season = 2026, WeekNumber = 1, EspnEventId = 1, TeamAbbreviation = "ALA", CuratedRank = 5, CapturedAtUtc = earlier },
+            new CfbRanking { Season = 2026, WeekNumber = 1, TeamAbbreviation = "ALA", CuratedRank = 5, CapturedAtUtc = earlier },
         ]);
         await repo.AddRankingsAsync([
-            new CfbRanking { Season = 2026, WeekNumber = 1, EspnEventId = 2, TeamAbbreviation = "ALA", CuratedRank = 3, CapturedAtUtc = later },
+            new CfbRanking { Season = 2026, WeekNumber = 1, TeamAbbreviation = "ALA", CuratedRank = 3, CapturedAtUtc = later },
         ]);
 
         var all = await factory.CreateDbContext().CfbRankings.Where(r => r.TeamAbbreviation == "ALA").ToListAsync();
         Assert.Single(all);
         Assert.Equal(3, all[0].CuratedRank);
-        Assert.Equal(2, all[0].EspnEventId);
+        Assert.Equal(later, all[0].CapturedAtUtc);
 
         var result = await repo.GetLatestRankingsForWeekAsync(2026, 1);
         Assert.Equal(3, result["ALA"]);

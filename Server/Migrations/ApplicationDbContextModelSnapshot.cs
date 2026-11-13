@@ -36,9 +36,6 @@ namespace FourPlayWebApp.Server.Migrations
                     b.Property<int>("CuratedRank")
                         .HasColumnType("integer");
 
-                    b.Property<int>("EspnEventId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("Season")
                         .HasColumnType("integer");
 

@@ -13,7 +13,7 @@ public class CfbRankingRemovalTests(PostgresFixture pg)
     private const int Season = 2091;
 
     private static CfbRanking Rank(int week, string team, int rank, int season = Season) =>
-        new() { Season = season, WeekNumber = week, EspnEventId = week * 100, TeamAbbreviation = team, CuratedRank = rank };
+        new() { Season = season, WeekNumber = week, TeamAbbreviation = team, CuratedRank = rank };
 
     [Fact]
     public async Task RemoveRankingsAsync_DeletesOnlyTheNamedTeamWeeks()
@@ -23,7 +23,7 @@ public class CfbRankingRemovalTests(PostgresFixture pg)
         // rank, which a week-11 capture must not touch.
         await repo.AddRankingsAsync([Rank(10, "NU", 20), Rank(11, "NU", 20), Rank(11, "OSU", 20)]);
 
-        var removed = await repo.RemoveRankingsAsync([new CfbUnrankedSighting(Season, 11, "NU", EspnEventId: 1100)]);
+        var removed = await repo.RemoveRankingsAsync([new CfbUnrankedSighting(Season, 11, "NU")]);
 
         await using var db = pg.OpenDb();
         var left = await db.CfbRankings.Where(r => r.Season == Season)
@@ -34,26 +34,12 @@ public class CfbRankingRemovalTests(PostgresFixture pg)
     }
 
     [Fact]
-    public async Task RemoveRankingsAsync_KeepsTheRankFromTheTeamsOtherGameThatWeek()
-    {
-        // A slate can hold two games for one team (Week 0 + Week 1). Unranked in the second must
-        // not erase the rank captured for the first, which may already have kicked off.
-        var repo = new CfbRepository(pg.Factory());
-        await repo.AddRankingsAsync([Rank(1, "UTAH", 18, season: Season + 2)]); // event 100
-
-        await repo.RemoveRankingsAsync([new CfbUnrankedSighting(Season + 2, 1, "UTAH", EspnEventId: 999)]);
-
-        await using var db = pg.OpenDb();
-        Assert.True(await db.CfbRankings.AnyAsync(r => r.Season == Season + 2 && r.TeamAbbreviation == "UTAH"));
-    }
-
-    [Fact]
     public async Task RemoveRankingsAsync_NoStoredRowForTheTeam_IsANoOp()
     {
         var repo = new CfbRepository(pg.Factory());
         await repo.AddRankingsAsync([Rank(5, "UGA", 1, season: Season + 1)]);
 
-        await repo.RemoveRankingsAsync([new CfbUnrankedSighting(Season + 1, 5, "NOPE", EspnEventId: 500)]);
+        await repo.RemoveRankingsAsync([new CfbUnrankedSighting(Season + 1, 5, "NOPE")]);
 
         await using var db = pg.OpenDb();
         Assert.True(await db.CfbRankings.AnyAsync(r => r.Season == Season + 1 && r.WeekNumber == 5 && r.TeamAbbreviation == "UGA"));
