@@ -16,5 +16,6 @@ public interface ICfbRepository : ISpreadRepository<CfbSpreads> {
     Task<List<CfbScores>> GetScoresForSeasonAsync(int season);
     Task AddWeekConfigsAsync(IEnumerable<CfbSeasonWeekConfig> configs);
     Task AddRankingsAsync(IEnumerable<CfbRanking> rankings);
+    Task<int> RemoveRankingsAsync(IEnumerable<CfbUnrankedSighting> unranked);
     Task<Dictionary<string, int>> GetLatestRankingsForWeekAsync(int season, int weekNumber);
 }

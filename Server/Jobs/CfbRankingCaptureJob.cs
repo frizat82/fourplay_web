@@ -45,15 +45,22 @@ public class CfbRankingCaptureJob(ICfbLiveScoreFetcher fetcher, ICfbRepository r
         var scoreboards = await Task.WhenAll(slates.Select(async slate =>
             (slate, scoreboard: await fetcher.FetchForSlateAsync(slate, isCurrentSlate: false))));
 
-        var rankings = new List<CfbRanking>();
+        var ranked = new List<CfbRanking>();
+        var unranked = new List<CfbUnrankedSighting>();
         foreach (var (slate, scoreboard) in scoreboards) {
             if (scoreboard?.Events is null) continue;
-            rankings.AddRange(CfbRankingExtractor.ExtractFrom(scoreboard.Events, slate));
+            var capture = CfbRankingExtractor.ExtractFrom(scoreboard.Events, slate);
+            ranked.AddRange(capture.Ranked);
+            unranked.AddRange(capture.Unranked);
         }
 
-        if (rankings.Count > 0) {
-            await repo.AddRankingsAsync(rankings);
-            Log.Information("CfbRankingCaptureJob: saved {Count} CFB rankings", rankings.Count);
+        if (ranked.Count > 0) {
+            await repo.AddRankingsAsync(ranked);
+            Log.Information("CfbRankingCaptureJob: saved {Count} CFB rankings", ranked.Count);
+        }
+        if (unranked.Count > 0) {
+            var removed = await repo.RemoveRankingsAsync(unranked);
+            Log.Information("CfbRankingCaptureJob: cleared {Count} ranks of teams that dropped out of the poll", removed);
         }
         Log.Information("CfbRankingCaptureJob: complete at {Time}", DateTime.UtcNow);
     }
