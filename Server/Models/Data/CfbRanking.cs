@@ -11,12 +11,12 @@ public class CfbRanking {
     // Our CFB week (the slate number) — ranks are read off the games fetched for that week's
     // dates, so they tie out by date, never by ESPN's own week numbering (frizat-b4g).
     public int WeekNumber { get; set; }
-    public int EspnEventId { get; set; }
     public string TeamAbbreviation { get; set; } = string.Empty;
     public int CuratedRank { get; set; }
     public DateTimeOffset CapturedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
 // A team ESPN marks unranked in a still-scheduled game: the rank an earlier capture stored for
-// that same game is stale (the team dropped out of the poll since) and gets removed.
-public sealed record CfbUnrankedSighting(int Season, int WeekNumber, string TeamAbbreviation, int EspnEventId);
+// that team-week is stale (the team dropped out of the poll since) and gets removed. Same natural
+// key as the table — a team plays at most one game per slate (#218).
+public sealed record CfbUnrankedSighting(int Season, int WeekNumber, string TeamAbbreviation);

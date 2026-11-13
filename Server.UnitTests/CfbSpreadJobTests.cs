@@ -302,7 +302,6 @@ public class CfbSpreadJobTests
         Assert.Single(rankings);
         Assert.Equal("ORE", rankings[0].TeamAbbreviation);
         Assert.Equal(3, rankings[0].CuratedRank);
-        Assert.Equal(401677183, rankings[0].EspnEventId);
     }
 
     [Fact]

@@ -24,27 +24,34 @@ internal static class CfbRankingExtractor {
             var comp = evt.Competitions.FirstOrDefault();
             if (comp is null || comp.Status.Type.Name != TypeName.StatusScheduled) continue;
 
-            var eventId = int.Parse(evt.Id);
             foreach (var c in comp.Competitors) {
                 if (CfbSlateHelpers.RankOf(c) is { } rank) {
                     capture.Ranked.Add(new CfbRanking {
                         Season           = slate.Season,
                         WeekNumber       = slate.SlateNumber,
-                        EspnEventId      = eventId,
                         TeamAbbreviation = c.Team.Abbreviation,
                         CuratedRank      = rank,
                     });
                 } else if (c.CuratedRank?.Current == EspnUnranked) {
                     // Only ESPN's explicit "unranked" clears a stored rank: a rank that's missing or
                     // malformed in the response says nothing, so it's left alone.
-                    capture.Unranked.Add(new CfbUnrankedSighting(slate.Season, slate.SlateNumber, c.Team.Abbreviation, eventId));
+                    capture.Unranked.Add(new CfbUnrankedSighting(slate.Season, slate.SlateNumber, c.Team.Abbreviation));
                 }
             }
         }
 
         // A real week always has ranked teams playing. A response with none is a bad payload (or a
         // poll mid-reset), not 25 teams dropping out at once — clear nothing on its word.
-        if (capture.Ranked.Count == 0) capture.Unranked.Clear();
-        return capture;
+        if (capture.Ranked.Count == 0) {
+            capture.Unranked.Clear();
+            return capture;
+        }
+
+        // One rank per team-week, and a team ESPN shows ranked anywhere this week is not cleared —
+        // a team plays once per slate (#218), but a duplicated ESPN event must not undo a rank.
+        var rankedTeams = capture.Ranked.Select(r => r.TeamAbbreviation).ToHashSet();
+        return new CfbRankingCapture(
+            capture.Ranked.DistinctBy(r => r.TeamAbbreviation).ToList(),
+            capture.Unranked.Where(u => !rankedTeams.Contains(u.TeamAbbreviation)).Distinct().ToList());
     }
 }

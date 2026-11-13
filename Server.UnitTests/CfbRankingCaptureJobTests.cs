@@ -122,7 +122,7 @@ public class CfbRankingCaptureJobTests
 
         await BuildJob().Execute(_context);
 
-        Assert.Equal([new CfbUnrankedSighting(2026, slate.SlateNumber, "OSU", 401677183)], cleared!.ToList());
+        Assert.Equal([new CfbUnrankedSighting(2026, slate.SlateNumber, "OSU")], cleared!.ToList());
     }
 
     [Theory]
@@ -139,6 +139,26 @@ public class CfbRankingCaptureJobTests
         await BuildJob().Execute(_context);
 
         await _repo.DidNotReceive().RemoveRankingsAsync(Arg.Any<IEnumerable<CfbUnrankedSighting>>());
+    }
+
+    [Fact]
+    public async Task Execute_TeamRankedInOneEventAndUnrankedInAnother_KeepsItsRank()
+    {
+        // A team plays once per slate (#218), but if ESPN ever lists it twice the rank must win —
+        // saving #18 and then clearing it in the same run would lose a real rank.
+        var slate = BuildSlate();
+        _repo.GetSlatesForSeasonAsync(2026).Returns([slate]);
+        var ranked = BuildScoreboard(eventId: "1", homeAbbr: "UTAH", awayAbbr: "BYU", homeRank: 18, awayRank: 10);
+        var unranked = BuildScoreboard(eventId: "2", homeAbbr: "UTAH", awayAbbr: "USU", homeRank: 99, awayRank: 99);
+        ranked.Events = [.. ranked.Events, .. unranked.Events];
+        _fetcher.FetchForSlateAsync(slate, Arg.Any<bool>()).Returns(ranked);
+
+        IEnumerable<CfbUnrankedSighting>? cleared = null;
+        await _repo.RemoveRankingsAsync(Arg.Do<IEnumerable<CfbUnrankedSighting>>(u => cleared = u));
+
+        await BuildJob().Execute(_context);
+
+        Assert.Equal(["USU"], cleared!.Select(u => u.TeamAbbreviation));
     }
 
     [Fact]
